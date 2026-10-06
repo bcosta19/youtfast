@@ -1,0 +1,88 @@
+[package]
+name = "youtfast"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+license = "MIT"
+description = "A native YouTube client built with Rust, egui and libmpv"
+keywords = ["youtube", "video", "egui", "mpv", "player"]
+categories = ["multimedia::video"]
+
+[[bin]]
+name = "youtfast"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+# The whole UI, as in Spotifast and ZapFast. glow, not wgpu: the video is
+# drawn by libmpv's OpenGL renderer into a texture egui_glow blits on screen.
+eframe = { version = "0.36", default-features = false, features = ["accesskit", "glow", "default_fonts", "wayland", "x11", "persistence"] }
+egui = "0.36"
+# `http` fetches thumbnails from i.ytimg.com through egui's image loaders.
+egui_extras = { version = "0.36", features = ["http", "image"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+# The wl_display or X11 Display handed to libmpv, so hardware decoding can
+# share frames with the GL context instead of copying them back.
+raw-window-handle = "0.6"
+# The backend runtime: yt-dlp runs as a child process off the UI thread.
+# `time` bounds credential-store calls; a locked keyring must not hang.
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "process", "io-util", "time"] }
+# Logs to stderr and a per-run file, the same logger the sibling apps use.
+fastframe-log = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
+# YouTube's own API (InnerTube): the signed-in account's feed, history,
+# subscriptions, playlists, liked videos and Watch later (`userdata`), and
+# channel RSS for the feed without an account (`rss`). rustls, as in the
+# sibling apps, so there is no OpenSSL to link.
+rustypipe = { version = "0.11.4", default-features = false, features = ["rustls-tls-native-roots", "userdata", "rss"] }
+# Where the library and caches live (XDG on Linux).
+directories = "6"
+# Google Takeout's RFC 3339 times.
+jiff = "0.2"
+# Native file selection (desktop portal on Linux) for Takeout and cookies.txt.
+rfd = "0.17.2"
+# The signed-in session's cookies live in the platform credential store,
+# never in a file. One API, with each target's native provider below.
+keyring-core = "1"
+
+# libmpv is linked from the system (src/mpv/ffi.rs). On Arch it comes with the
+# `mpv` package; Debian and Ubuntu need `libmpv-dev` to build.
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus-secret-service-keyring-store = { version = "1.0.1", features = ["rt-tokio-crypto-rust"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { version = "1.0.2", features = ["keychain"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-native-keyring-store = { version = "1.1", default-features = false }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+# Image decoding and immediate-mode layout are too slow at opt-level 0.
+[profile.dev.package."*"]
+opt-level = 2
+
+[patch.crates-io]
+# crmne/egui apps-0.36 and crmne/winit apps-0.30, the same revisions Spotifast
+# and ZapFast pin: Wayland frame pacing by the compositor's frame callbacks
+# (a window Hyprland hides never blocks in a vsync swap), plus the clipboard
+# and accessibility fixes listed in those projects' Cargo.toml. Move all of
+# them together with the sibling apps.
+ecolor = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
+eframe = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
+egui = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
+egui-winit = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
+egui_extras = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
+egui_glow = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
+emath = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
+epaint = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
+epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
+winit = { git = "https://github.com/crmne/winit", rev = "ed7caa9023f10b397f5b6ec8284a840cbd8a6f65" }
