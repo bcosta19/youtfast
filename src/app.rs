@@ -515,11 +515,21 @@ impl App {
                 self.state.source = source;
                 self.load(self.state.view, false);
             }
-            Action::TogglePause => self.with_player(|player| {
-                let paused = player.status().paused;
-                player.set_paused(!paused)
-            }),
-            Action::SetPaused(paused) => self.with_player(|player| player.set_paused(paused)),
+            Action::TogglePause => {
+                if let Some(paused) = self.player.as_ref().map(|player| player.status().paused) {
+                    // Unpausing shows the video: come back to its page.
+                    if paused {
+                        self.return_to_watch();
+                    }
+                    self.with_player(|player| player.set_paused(!paused));
+                }
+            }
+            Action::SetPaused(paused) => {
+                if !paused {
+                    self.return_to_watch();
+                }
+                self.with_player(|player| player.set_paused(paused));
+            }
             Action::SeekTo { seconds, exact } => {
                 self.with_player(|player| player.seek_to(seconds, exact));
                 self.media.seeked(seconds);
@@ -784,6 +794,15 @@ impl App {
             && let Err(error) = player.reload(&video.url(), status.position, status.paused)
         {
             log::warn!("mpv: {error}");
+        }
+    }
+
+    /// Playing while another page is on screen comes back to the watch
+    /// page: an undrawn render-API video output stalls.
+    fn return_to_watch(&mut self) {
+        if self.state.watching.is_some() && self.state.view != View::Watch {
+            self.back.push(self.state.view);
+            self.state.view = View::Watch;
         }
     }
 

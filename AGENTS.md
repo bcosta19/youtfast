@@ -83,7 +83,8 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
   render API needs. That is one more reason to stay on the shared egui and
   winit forks; move their revisions together with the sibling apps.
 - Leaving the watch page pauses the video: nothing draws it there, and an
-  undrawn render-API video output stalls.
+  undrawn render-API video output stalls. Playing again from the desktop's
+  media controls comes back to the watch page (`App::return_to_watch`).
 - `src/settings.rs` is what survives between runs (quality, volume, the
   theme choice and its palette caches), in one JSON file at
   `paths::Dirs::settings`. Loads and saves mirror `library.rs`; the backend
