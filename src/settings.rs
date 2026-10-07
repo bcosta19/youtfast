@@ -8,6 +8,10 @@ use serde::{Deserialize, Serialize};
 use crate::model::Quality;
 use crate::theme::{CustomTheme, Palette};
 
+fn on() -> bool {
+    true
+}
+
 fn default_volume() -> f64 {
     100.0
 }
@@ -51,6 +55,29 @@ pub struct Settings {
         skip_serializing_if = "Option::is_none"
     )]
     pub system_theme_cache: Option<CustomTheme>,
+    /// Check the subscriptions for new uploads on a timer.
+    #[serde(default = "on")]
+    pub alerts: bool,
+    /// Put the new uploads on the desktop too.
+    #[serde(default = "on")]
+    pub desktop_notifications: bool,
+    /// How often, in minutes: 5, 15, 30 or 60 (the nearest wins).
+    #[serde(default = "default_alerts_every")]
+    pub alerts_every_minutes: u32,
+}
+
+fn default_alerts_every() -> u32 {
+    15
+}
+
+/// The allowed check intervals; any other value clamps to the nearest.
+pub fn clamp_alerts_every(minutes: u32) -> u32 {
+    const CHOICES: [u32; 4] = [5, 15, 30, 60];
+    CHOICES
+        .iter()
+        .min_by_key(|choice| (choice.abs_diff(minutes), std::cmp::Reverse(**choice)))
+        .copied()
+        .unwrap_or(15)
 }
 
 impl Default for Settings {
@@ -61,6 +88,9 @@ impl Default for Settings {
             theme: ThemeChoice::default(),
             custom_theme_cache: None,
             system_theme_cache: None,
+            alerts: on(),
+            desktop_notifications: on(),
+            alerts_every_minutes: default_alerts_every(),
         }
     }
 }
@@ -128,6 +158,26 @@ mod tests {
             .unwrap_or_else(|_| format!("{}/target", env!("CARGO_MANIFEST_DIR")));
         std::fs::create_dir_all(&dir).unwrap();
         Path::new(&dir).join(format!("youtfast-{name}-{}.json", crate::util::now()))
+    }
+
+    #[test]
+    fn the_alerts_settings_clamp_and_default() {
+        assert_eq!(clamp_alerts_every(0), 5);
+        assert_eq!(clamp_alerts_every(7), 5);
+        assert_eq!(clamp_alerts_every(10), 15);
+        assert_eq!(clamp_alerts_every(45), 60);
+        assert_eq!(clamp_alerts_every(300), 60);
+        let settings = Settings::default();
+        assert!(settings.alerts);
+        assert!(settings.desktop_notifications);
+        assert_eq!(settings.alerts_every_minutes, 15);
+        // An older file (none of the new keys) loads them too.
+        let parsed: Settings =
+            serde_json::from_str(r#"{"volume": 40.0, "theme": "dark"}"#).unwrap();
+        assert_eq!(parsed.alerts_every_minutes, 15);
+        assert!(parsed.alerts);
+        assert!(parsed.desktop_notifications);
+        assert_eq!(parsed.volume, 40.0);
     }
 
     #[test]

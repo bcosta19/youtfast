@@ -9,6 +9,7 @@
 mod account;
 mod channel;
 mod library;
+mod notifications;
 mod results;
 mod settings;
 mod watch;
@@ -50,6 +51,7 @@ pub fn show(
         View::Liked => library::liked(ui, state, actions),
         View::Playlists => library::playlists(ui, state, actions),
         View::Playlist => library::page(ui, state, actions),
+        View::Notifications => notifications::show(ui, state, actions),
         View::Channel => {
             if let Some(crate::app::Page::Channel(channel)) = &state.page {
                 channel::show(ui, state, channel, actions);
@@ -130,12 +132,16 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
                             key: char,
                             view: Option<View>,
                             label: &str,
+                            count: Option<usize>,
                             selected: bool,
                             actions: &mut Vec<Action>| {
-                    let parts = [
+                    let mut parts = vec![
                         (format!("[{key}]"), state.palette.magenta),
                         (format!(" {label}"), state.palette.text),
                     ];
+                    if let Some(count) = count.filter(|count| *count > 0) {
+                        parts.push((format!("{count:>4}"), state.palette.accent));
+                    }
                     if widgets::row(ui, &state.palette, selected, &parts).clicked()
                         && let Some(view) = view
                     {
@@ -147,12 +153,21 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
                         || (view == View::Playlists && state.view == View::Playlist)
                         || (view == View::Subscriptions && state.view == View::Channel)
                 };
-                item(ui, '1', Some(View::Home), "Home", on(View::Home), actions);
+                item(
+                    ui,
+                    '1',
+                    Some(View::Home),
+                    "Home",
+                    None,
+                    on(View::Home),
+                    actions,
+                );
                 item(
                     ui,
                     '2',
                     Some(View::Subscriptions),
                     "Subscriptions",
+                    None,
                     on(View::Subscriptions),
                     actions,
                 );
@@ -161,6 +176,7 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
                     '3',
                     Some(View::History),
                     "History",
+                    None,
                     on(View::History),
                     actions,
                 );
@@ -169,6 +185,7 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
                     '4',
                     Some(View::WatchLater),
                     "Watch later",
+                    None,
                     on(View::WatchLater),
                     actions,
                 );
@@ -178,6 +195,7 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
                         '5',
                         Some(View::Liked),
                         "Liked",
+                        None,
                         on(View::Liked),
                         actions,
                     );
@@ -186,10 +204,20 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
                         '6',
                         Some(View::Playlists),
                         "Playlists",
+                        None,
                         on(View::Playlists),
                         actions,
                     );
                 }
+                item(
+                    ui,
+                    '7',
+                    Some(View::Notifications),
+                    "Notifications",
+                    Some(state.alerts.len()),
+                    on(View::Notifications),
+                    actions,
+                );
                 ui.add_space(widgets::line(ui));
                 let account = state
                     .active_account()
@@ -203,6 +231,7 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
                     '8',
                     Some(View::Account),
                     &account,
+                    None,
                     on(View::Account),
                     actions,
                 );
@@ -211,6 +240,7 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
                     '9',
                     Some(View::Settings),
                     "Settings",
+                    None,
                     on(View::Settings),
                     actions,
                 );
@@ -259,6 +289,18 @@ fn status_line(
                         .clicked()
                     {
                         actions.push(Action::DismissNotice);
+                    }
+                }
+                // `[ N new ]` in accent while alerts are unseen.
+                if !state.alerts.is_empty() {
+                    let button = widgets::bracket_button(
+                        ui,
+                        &palette,
+                        &format!("{} new", state.alerts.len()),
+                        widgets::ButtonStyle::Primary,
+                    );
+                    if button.clicked() {
+                        actions.push(Action::Navigate(View::Notifications));
                     }
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -351,6 +393,7 @@ pub fn cursor_key(state: &State) -> usize {
         View::Liked => tag(&state.liked),
         View::Playlists => tag(&state.playlists),
         View::Playlist => tag(&state.page_videos),
+        View::Notifications => 80 + state.alerts_visit.len().min(1),
         View::Channel => {
             let tab = match state.channel_tab {
                 ChannelTab::Videos => 0,
@@ -390,6 +433,7 @@ fn cursor_count(state: &State) -> usize {
         View::Liked => state.liked.items().len(),
         View::Playlists => state.playlists.items().len(),
         View::Playlist => state.page_videos.items().len(),
+        View::Notifications => state.alerts_visit.len(),
         View::Channel => match state.channel_tab {
             ChannelTab::Playlists => state.page_playlists.items().len(),
             ChannelTab::About => 0,
@@ -447,6 +491,7 @@ fn open_at(state: &State, index: usize) -> Option<Action> {
                 })
         }
         View::Playlist => video(state.page_videos.items()),
+        View::Notifications => video(&state.alerts_visit),
         View::Channel => match state.channel_tab {
             ChannelTab::Playlists => {
                 state
@@ -478,6 +523,7 @@ fn view_name(view: View) -> &'static str {
         View::Playlists => "playlists",
         View::Playlist => "playlist",
         View::Channel => "channel",
+        View::Notifications => "new",
         View::Account => "account",
         View::Settings => "settings",
     }
@@ -611,6 +657,7 @@ fn keys(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
             Key::Num4,
             Key::Num5,
             Key::Num6,
+            Key::Num7,
             Key::Num8,
             Key::Num9,
         ]
@@ -624,6 +671,7 @@ fn keys(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
                 View::WatchLater,
                 View::Liked,
                 View::Playlists,
+                View::Notifications,
                 View::Account,
                 View::Settings,
             ];

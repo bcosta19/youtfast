@@ -1,6 +1,7 @@
 //! YouTFast: YouTube, native and fast.
 
 mod account;
+mod alerts;
 mod app;
 mod backend;
 mod fonts;

@@ -86,6 +86,15 @@ verify itself, signed out, or suspended. A secondary account is the safe
 choice. Subscribing and saving to Watch later from YouTFast act on this
 computer; changing the account itself needs youtube.com.
 
+## New-upload alerts
+
+YouTube's own notifications have no API, so YouTFast checks your
+subscriptions on a timer instead (every 15 minutes by default; 5, 15, 30
+or 60 in Settings) and lists what's new under `[7] Notifications`. New
+uploads also come to the desktop as notifications. Both can be turned
+off there; the first run only starts the clock, so a fresh install
+doesn't flood you.
+
 ## Themes
 
 Settings → Appearance. **Automatic** follows the Omarchy desktop's theme

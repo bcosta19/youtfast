@@ -20,7 +20,7 @@ use crate::mpv::{self, Mpv, NativeDisplay, VideoSurface};
 use crate::paths::Dirs;
 use crate::settings::{Settings, ThemeChoice};
 use crate::theme::{self, Palette};
-use crate::{account, ui, util, youtube};
+use crate::{account, alerts, ui, util, youtube};
 
 /// The signed-in account, as the interface shows it.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -138,6 +138,14 @@ pub struct State {
     pub renaming: Option<(u32, String)>,
     /// The account row asking `remove?`.
     pub removing: Option<u32>,
+    /// Unseen uploads from the last check.
+    pub alerts: Vec<Video>,
+    /// The rows the Notifications view shows during this visit.
+    pub alerts_visit: Vec<Video>,
+    /// Unix seconds of the last check (the page's hint line).
+    pub last_checked: Option<i64>,
+    /// A check is in flight.
+    pub alerts_checking: bool,
 }
 
 impl State {
@@ -308,6 +316,7 @@ impl App {
             media: crate::now_playing::MediaControls::start(ctx),
             _instance: guard,
         };
+        app.set_alerts_timer();
         app.refresh_theme_list();
         if let Some(active) = app.state.library.active_account
             && let Some(account) = app
@@ -512,6 +521,7 @@ impl App {
                 }
                 self.load(self.state.view, true);
             }
+            Event::CheckAlerts => self.check_alerts(),
             Event::Notice(notice) => self.state.notice = Some(notice),
         }
     }
@@ -525,9 +535,11 @@ impl App {
             };
         }
         let state = &mut self.state;
+        let mut feed_page = None;
         match (slot, result) {
             (Slot::Search, Ok(Payload::Videos(videos))) => put(&mut state.results, Ok(videos)),
             (Slot::Feed, Ok(Payload::Feed { videos, more })) => {
+                feed_page = Some(videos.clone());
                 // Shorts leave the list for the shelf.
                 let (shorts, videos): (Vec<Video>, Vec<Video>) =
                     videos.into_iter().partition(|video| video.short);
@@ -627,6 +639,12 @@ impl App {
                 }
             }
             (Slot::Shorts, Err(_)) => {}
+            (Slot::Alerts, Ok(Payload::Feed { videos, .. })) => {
+                feed_page = Some(videos);
+            }
+            (Slot::Alerts, Err(error)) => {
+                log::warn!("the alerts check failed: {error}");
+            }
             (Slot::WatchLater, Err(error)) => put(&mut state.account_watch_later, Err(error)),
             (Slot::Liked, Err(error)) => put(&mut state.liked, Err(error)),
             (Slot::Page, Err(error)) => {
@@ -645,6 +663,9 @@ impl App {
             (Slot::History, Err(error)) => put(&mut state.account_history, Err(error)),
             (Slot::Playlists, Err(error)) => put(&mut state.playlists, Err(error)),
             (slot, Ok(_)) => log::error!("{slot:?} received another kind of list"),
+        }
+        if let Some(videos) = feed_page {
+            self.note_alerts(videos);
         }
     }
 
@@ -703,12 +724,75 @@ impl App {
             Slot::Playlists => state.playlists = Listing::Loading,
             Slot::Page => state.page_videos = Listing::Loading,
             Slot::Shorts => state.shorts = Listing::Loading,
+            Slot::Alerts => {}
         }
         self.backend.send(Command::Load {
             slot,
             generation: self.generation,
             request,
         });
+    }
+
+    /// The check the timer (or `[ check now ]`) runs: the feed's sources
+    /// again, on its own slot so Home's list is undisturbed.
+    fn check_alerts(&mut self) {
+        if !self.state.settings.alerts || self.state.alerts_checking {
+            return;
+        }
+        self.state.alerts_checking = true;
+        let account = self.state.signed_in();
+        let channels: Vec<Channel> = self
+            .state
+            .library
+            .subscriptions
+            .iter()
+            .filter(|channel| !self.state.subscribed_in_account(&channel.id))
+            .cloned()
+            .collect();
+        self.send_request(Slot::Alerts, Request::Alerts { channels, account });
+    }
+
+    /// What a check (or the feed's own load) found: keep the unseen,
+    /// notify the rest, stamp the library.
+    fn note_alerts(&mut self, videos: Vec<Video>) {
+        self.state.alerts_checking = false;
+        self.state.last_checked = Some(util::now());
+        let Some(found) = alerts::compute(
+            videos,
+            self.state.library.alerts_seen_at,
+            self.state.library.alerts_notified_at,
+            util::now(),
+        ) else {
+            return;
+        };
+        let changed = self.state.library.alerts_seen_at != Some(found.seen_at)
+            || self.state.library.alerts_notified_at != found.notified_at;
+        self.state.library.alerts_seen_at = Some(found.seen_at);
+        self.state.library.alerts_notified_at = found.notified_at;
+        if changed {
+            self.save_library();
+        }
+        //  is everything unseen since the last visit; replace, so a
+        // second check does not repeat the badge's rows.
+        self.state.alerts = found.new;
+        if self.state.settings.desktop_notifications
+            && self.state.settings.alerts
+            && !found.to_notify.is_empty()
+        {
+            self.backend.send(Command::Notify {
+                videos: found.to_notify,
+            });
+        }
+    }
+
+    /// Starts or stops the alerts timer to match the settings.
+    fn set_alerts_timer(&self) {
+        let minutes = if self.state.settings.alerts {
+            self.state.settings.alerts_every_minutes
+        } else {
+            0
+        };
+        self.backend.send(Command::SetAlertsEvery(minutes));
     }
 
     /// The account the add form describes:  must be set and new;
@@ -868,6 +952,16 @@ impl App {
                 self.leave_video(ctx);
                 self.back.clear();
                 self.state.view = view;
+                if view == View::Notifications {
+                    // Opening the page marks it all seen, but the rows
+                    // stay drawn for this visit.
+                    self.state.alerts_visit = self.state.alerts.clone();
+                    self.state.alerts.clear();
+                    if self.state.library.alerts_seen_at != Some(util::now()) {
+                        self.state.library.alerts_seen_at = Some(util::now());
+                        self.save_library();
+                    }
+                }
                 self.load(view, false);
             }
             Action::OpenChannel(channel) => {
@@ -1135,6 +1229,28 @@ impl App {
                         request,
                     });
                 }
+            }
+            Action::CheckAlertsNow => self.check_alerts(),
+            Action::MarkAlertsSeen => {
+                self.state.alerts.clear();
+                self.state.alerts_visit.clear();
+                self.state.library.alerts_seen_at = Some(util::now());
+                self.save_library();
+            }
+            Action::SetAlerts(on) => {
+                self.state.settings.alerts = on;
+                self.save_settings();
+                self.set_alerts_timer();
+            }
+            Action::SetDesktopNotifications(on) => {
+                self.state.settings.desktop_notifications = on;
+                self.save_settings();
+            }
+            Action::SetAlertsEvery(minutes) => {
+                self.state.settings.alerts_every_minutes =
+                    crate::settings::clamp_alerts_every(minutes);
+                self.save_settings();
+                self.set_alerts_timer();
             }
             Action::SetChannelQuery(text) => self.state.channel_query = text,
             Action::LoadMore => {

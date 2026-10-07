@@ -53,6 +53,14 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
   by `channel_shorts` (each device channel's Shorts tab). rustypipe has no
   posts or podcasts tabs, no write actions and no home recommendations:
   subscribing and Watch later act on the local library.
+- `src/alerts.rs` is the new-upload check's brain: a pure split of a
+  feed's videos into unseen (`alerts_seen_at`) and not-yet-notified
+  (`alerts_notified_at`) stamps the library keeps. A tokio timer in
+  `src/backend.rs` (restarted by `Command::SetAlertsEvery`; the feed's own
+  load runs the same computation without a request) fires
+  `Event::CheckAlerts`, and `Command::Notify` shows the result through
+  notify-rust on a blocking thread. YouTube's real notifications have no
+  API; this is the replacement the user chose.
 - `src/account.rs` holds the sessions: cookies.txt parsing, reading a
   browser's cookies through yt-dlp's `extract_cookies_from_browser` (a short
   Python script whose output is piped, never written; it tries each Linux

@@ -27,6 +27,12 @@ pub struct Library {
     pub accounts: Vec<Account>,
     /// The account the app is signed in as, if any.
     pub active_account: Option<u32>,
+    /// Unix seconds when the user last opened Notifications; uploads
+    /// newer than it are "new".
+    pub alerts_seen_at: Option<i64>,
+    /// Unix seconds of the newest upload already shown as a desktop
+    /// notification.
+    pub alerts_notified_at: Option<i64>,
     /// The single account older files carried; folded into `accounts` on
     /// load, then never written again.
     #[serde(skip_serializing)]

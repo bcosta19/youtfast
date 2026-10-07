@@ -420,6 +420,8 @@ pub enum View {
     Playlist,
     /// One channel's latest videos; `State::page` says which.
     Channel,
+    /// New uploads since the last look.
+    Notifications,
     Account,
     /// The choices between runs: the theme.
     Settings,
@@ -488,6 +490,14 @@ pub enum Action {
     MarkRemoving(u32),
     /// Dismiss the remove confirm.
     CancelRemoving,
+    /// `[ check now ]` on the Notifications page.
+    CheckAlertsNow,
+    /// `[ mark all seen ]` on the Notifications page.
+    MarkAlertsSeen,
+    /// The notifications settings pane's toggles.
+    SetAlerts(bool),
+    SetDesktopNotifications(bool),
+    SetAlertsEvery(u32),
     /// `[ sign out ]`: the session stays kept for switching back.
     SignOut,
     SetBrowser(String),

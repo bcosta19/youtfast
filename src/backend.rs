@@ -6,6 +6,7 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::sync::mpsc;
 
 use rustypipe::client::RustyPipe;
@@ -39,6 +40,8 @@ pub enum Slot {
     Page,
     /// Home's shorts shelf.
     Shorts,
+    /// The timer's new-upload check (same sources as the feed).
+    Alerts,
 }
 
 pub enum Request {
@@ -71,6 +74,11 @@ pub enum Request {
     },
     /// The next page of the account's feed.
     MoreFeed(crate::innertube::More),
+    /// The timer's check of the feed's sources.
+    Alerts {
+        channels: Vec<Channel>,
+        account: bool,
+    },
     /// The Shorts tabs of the feed's channels, for Home's shelf.
     Shorts {
         channels: Vec<String>,
@@ -128,6 +136,12 @@ pub enum Command {
     LoadDetails {
         generation: u64,
         id: String,
+    },
+    /// The alerts timer: 0 turns it off, a number of minutes restarts it.
+    SetAlertsEvery(u32),
+    /// Put new uploads on the desktop.
+    Notify {
+        videos: Vec<Video>,
     },
     /// A page of comments or replies.
     LoadComments {
@@ -189,6 +203,8 @@ pub enum Event {
     SignedOut,
     /// Something the user should know that belongs to no page.
     Notice(String),
+    /// The alerts timer fired; the app sends the check request.
+    CheckAlerts,
 }
 
 pub struct Backend {
@@ -203,6 +219,8 @@ struct Context {
     dirs: Dirs,
     events: mpsc::Sender<Event>,
     waker: egui::Context,
+    /// The running alerts timer, restarted when the interval changes.
+    alerts_timer: Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 impl Context {
@@ -228,6 +246,7 @@ impl Backend {
             dirs,
             events: outgoing,
             waker,
+            alerts_timer: Arc::new(tokio::sync::Mutex::new(None)),
         };
         std::thread::Builder::new()
             .name("youtfast-backend".into())
@@ -346,6 +365,43 @@ async fn handle(command: Command, context: Context) {
                 )));
             }
         }
+        Command::SetAlertsEvery(minutes) => {
+            // Replace the timer: an abort is safe for a task that only
+            // sleeps and sends.
+            let mut guard = context.alerts_timer.lock().await;
+            if let Some(timer) = guard.take() {
+                timer.abort();
+            }
+            if minutes > 0 {
+                let context = context.clone();
+                *guard = Some(tokio::spawn(async move {
+                    // The first check comes soon after start, not only
+                    // after a full interval.
+                    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                    context.send(Event::CheckAlerts);
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(u64::from(minutes) * 60))
+                            .await;
+                        context.send(Event::CheckAlerts);
+                    }
+                }));
+            }
+        }
+        Command::Notify { videos } => {
+            // notify-rust's zbus backend blocks on D-Bus; off the runtime.
+            tokio::task::spawn_blocking(move || {
+                let (summary, body) = crate::alerts::notify_text(&videos);
+                if let Err(error) = notify_rust::Notification::new()
+                    .appname("YouTFast")
+                    .summary(&summary)
+                    .body(&body)
+                    .icon("youtfast")
+                    .show()
+                {
+                    log::warn!("the desktop notification failed: {error}");
+                }
+            });
+        }
         Command::SaveLibrary(library) => {
             let path = context.dirs.library();
             match tokio::task::spawn_blocking(move || library.save(&path)).await {
@@ -392,6 +448,10 @@ async fn load(rp: &RustyPipe, request: Request) -> Result<Payload, String> {
         }
         Request::Shorts { channels } => {
             Payload::Videos(innertube::channel_shorts(rp, channels, 6).await)
+        }
+        Request::Alerts { channels, account } => {
+            let (videos, _) = innertube::feed(rp, channels, account).await?;
+            Payload::Feed { videos, more: None }
         }
         Request::Subscriptions => {
             Payload::Channels(innertube::subscriptions(rp).await.map_err(text)?)
