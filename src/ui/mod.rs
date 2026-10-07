@@ -2,6 +2,9 @@
 //! [`Action`]s; `App::apply` carries them out after the frame. The only
 //! state a view changes itself is its own (the search text, the seek bar
 //! while it is dragged).
+//!
+//! The shell is a terminal's: a command line on top, a sidebar pane, a
+//! status line at the bottom, and `?` for the keys overlay.
 
 mod account;
 mod library;
@@ -10,18 +13,20 @@ mod settings;
 mod watch;
 mod widgets;
 
-use egui::{
-    Button, Color32, CornerRadius, Frame, Key, Margin, RichText, Sense, Shape, Stroke, TextEdit,
-    vec2,
-};
+use egui::{Color32, Frame, Key, Margin, RichText, TextEdit};
 
 use crate::app::{AccountState, State};
-use crate::icons::Icon;
-use crate::model::{Action, View};
+use crate::model::{Action, Listing, View};
 use crate::mpv::{Status, VideoSurface};
 
 /// The logo's red: a brand mark, not the theme's accent.
+#[allow(dead_code)]
 pub const BRAND: Color32 = Color32::from_rgb(255, 0, 51);
+
+/// The command line's widget id, so `/` can focus it.
+fn command_line_id() -> egui::Id {
+    egui::Id::new("command-line")
+}
 
 pub fn show(
     ui: &mut egui::Ui,
@@ -30,26 +35,14 @@ pub fn show(
     surface: Option<&VideoSurface>,
     actions: &mut Vec<Action>,
 ) {
-    shortcuts(ui.ctx(), state, actions);
+    keys(ui.ctx(), state, actions);
     if state.view == View::Watch && state.fullscreen {
         watch::fullscreen(ui, state, status, surface, actions);
         return;
     }
-    top_bar(ui, state, actions);
-    if let Some(notice) = &state.notice {
-        egui::Panel::bottom("notice").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(notice);
-                if ui.button("Dismiss").clicked() {
-                    actions.push(Action::DismissNotice);
-                }
-            });
-        });
-    }
-    // The video gets the whole width, as on youtube.com.
-    if state.view != View::Watch {
-        sidebar(ui, state, actions);
-    }
+    command_line(ui, state, actions);
+    status_line(ui, state, status, actions);
+    sidebar(ui, state, actions);
     match state.view {
         View::Home => library::home(ui, state, actions),
         View::Results => results::show(ui, state, actions),
@@ -63,115 +56,426 @@ pub fn show(
         View::Account => account::show(ui, state, actions),
         View::Settings => settings::show(ui, state, actions),
     }
+    if state.keys_open {
+        keys_overlay(ui.ctx(), state);
+    }
 }
 
-fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
-    let fill = ui.visuals().panel_fill;
-    egui::Panel::left("sidebar")
-        .exact_size(220.0)
+/// `❯ search, or paste a link` — the borderless field under the prompt.
+fn command_line(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
+    let palette = state.palette.clone();
+    egui::Panel::top("command-line")
         .resizable(false)
         .show_separator_line(false)
         .frame(
             Frame::new()
-                .fill(fill)
-                .inner_margin(Margin::symmetric(12, 12)),
+                .fill(ui.visuals().panel_fill)
+                .inner_margin(Margin::symmetric(8, 6)),
         )
         .show(ui, |ui| {
-            let mut item = |ui: &mut egui::Ui, view: View, label: &str| {
-                let selected = state.view == view
-                    || (view == View::Playlists && state.view == View::Playlist)
-                    || (view == View::Subscriptions && state.view == View::Channel);
-                let button = Button::selectable(selected, RichText::new(label).size(15.0));
-                if ui.add_sized([ui.available_width(), 34.0], button).clicked() {
-                    actions.push(Action::Navigate(view));
-                }
-            };
-            item(ui, View::Home, "Home");
-            item(ui, View::Subscriptions, "Subscriptions");
-            item(ui, View::History, "History");
-            item(ui, View::WatchLater, "Watch later");
-            if state.signed_in() {
-                item(ui, View::Liked, "Liked videos");
-                item(ui, View::Playlists, "Playlists");
-            }
-            ui.separator();
-            let account = match &state.account {
-                AccountState::SignedIn(_) => "Account",
-                AccountState::SigningIn => "Signing in…",
-                AccountState::SignedOut | AccountState::Failed(_) => "Sign in",
-            };
-            item(ui, View::Account, account);
-            item(ui, View::Settings, "Settings");
-        });
-}
-
-fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
-    let fill = ui.visuals().panel_fill;
-    egui::Panel::top("top-bar")
-        .exact_size(56.0)
-        .resizable(false)
-        .show_separator_line(false)
-        .frame(
-            Frame::new()
-                .fill(fill)
-                .inner_margin(Margin::symmetric(16, 0)),
-        )
-        .show(ui, |ui| {
-            ui.horizontal_centered(|ui| {
-                let deeper = matches!(state.view, View::Watch | View::Channel | View::Playlist);
-                if deeper && widgets::icon_button(ui, Icon::Back, 18.0, "Back (Esc)").clicked() {
-                    actions.push(Action::Back);
-                }
-                logo(ui);
-                ui.add_space(24.0);
-                let width = (ui.available_width() - 100.0).clamp(160.0, 640.0);
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new("❯")
+                        .monospace()
+                        .color(palette.accent)
+                        .strong(),
+                );
                 let field = ui.add(
                     TextEdit::singleline(&mut state.query)
-                        .hint_text("Search, or paste a YouTube link")
-                        .desired_width(width)
-                        .margin(Margin::symmetric(12, 8)),
+                        .id(command_line_id())
+                        .hint_text(RichText::new("search, or paste a link").color(palette.dim))
+                        .desired_width(f32::INFINITY)
+                        .frame(egui::Frame::NONE),
                 );
+                // The field's underline, accent when it has the focus.
+                let underline = if field.has_focus() {
+                    palette.accent
+                } else {
+                    palette.outline
+                };
+                ui.painter().hline(
+                    field.rect.left()..=field.rect.right(),
+                    field.rect.bottom() - 1.0,
+                    egui::Stroke::new(1.0, underline),
+                );
+                if field.has_focus() && ui.input(|input| input.key_pressed(Key::Escape)) {
+                    field.surrender_focus();
+                }
                 let submitted =
                     field.lost_focus() && ui.input(|input| input.key_pressed(Key::Enter));
-                if ui.button("Search").clicked() || submitted {
+                if submitted {
                     actions.push(Action::Search(state.query.clone()));
+                }
+                if widgets::bracket_button(ui, &palette, "? keys", widgets::ButtonStyle::Normal)
+                    .clicked()
+                {
+                    state.keys_open = !state.keys_open;
                 }
             });
         });
 }
 
-fn logo(ui: &mut egui::Ui) {
-    let (rect, _) = ui.allocate_exact_size(vec2(30.0, 21.0), Sense::hover());
-    let painter = ui.painter();
-    painter.rect_filled(rect, CornerRadius::same(6), BRAND);
-    let center = rect.center();
-    painter.add(Shape::convex_polygon(
-        vec![
-            center + vec2(-4.0, -5.5),
-            center + vec2(6.0, 0.0),
-            center + vec2(-4.0, 5.5),
-        ],
-        Color32::WHITE,
-        Stroke::NONE,
-    ));
-    ui.label(RichText::new("YouTFast").strong().size(18.0));
+/// The sidebar: the `youtfast` pane with `[n] Label` items.
+fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
+    egui::Panel::left("sidebar")
+        .exact_size(176.0)
+        .resizable(false)
+        .show_separator_line(false)
+        .frame(Frame::new().inner_margin(Margin::symmetric(8, 6)))
+        .show(ui, |ui| {
+            widgets::pane(ui, &state.palette, "youtfast", None, false, |ui| {
+                let item = |ui: &mut egui::Ui,
+                            key: char,
+                            view: Option<View>,
+                            label: &str,
+                            selected: bool,
+                            actions: &mut Vec<Action>| {
+                    let parts = [
+                        (format!("[{key}]"), state.palette.magenta),
+                        (format!(" {label}"), state.palette.text),
+                    ];
+                    if widgets::row(ui, &state.palette, selected, &parts).clicked() {
+                        if let Some(view) = view {
+                            actions.push(Action::Navigate(view));
+                        }
+                    }
+                };
+                let on = |view: View| {
+                    state.view == view
+                        || (view == View::Playlists && state.view == View::Playlist)
+                        || (view == View::Subscriptions && state.view == View::Channel)
+                };
+                item(ui, '1', Some(View::Home), "Home", on(View::Home), actions);
+                item(
+                    ui,
+                    '2',
+                    Some(View::Subscriptions),
+                    "Subscriptions",
+                    on(View::Subscriptions),
+                    actions,
+                );
+                item(
+                    ui,
+                    '3',
+                    Some(View::History),
+                    "History",
+                    on(View::History),
+                    actions,
+                );
+                item(
+                    ui,
+                    '4',
+                    Some(View::WatchLater),
+                    "Watch later",
+                    on(View::WatchLater),
+                    actions,
+                );
+                if state.signed_in() {
+                    item(
+                        ui,
+                        '5',
+                        Some(View::Liked),
+                        "Liked",
+                        on(View::Liked),
+                        actions,
+                    );
+                    item(
+                        ui,
+                        '6',
+                        Some(View::Playlists),
+                        "Playlists",
+                        on(View::Playlists),
+                        actions,
+                    );
+                }
+                ui.add_space(widgets::line(ui));
+                let account = match &state.account {
+                    AccountState::SignedIn(_) => "Account",
+                    AccountState::SigningIn => "Signing in",
+                    AccountState::SignedOut | AccountState::Failed(_) => "Sign in",
+                };
+                item(
+                    ui,
+                    '8',
+                    Some(View::Account),
+                    account,
+                    on(View::Account),
+                    actions,
+                );
+                item(
+                    ui,
+                    '9',
+                    Some(View::Settings),
+                    "Settings",
+                    on(View::Settings),
+                    actions,
+                );
+            });
+        });
 }
 
-/// The player's keys, while nobody is typing.
-fn shortcuts(ctx: &egui::Context, state: &State, actions: &mut Vec<Action>) {
+/// The bottom line: the view's name inverted, what is loading or the
+/// last notice, then the session, quality and theme at the right.
+fn status_line(
+    ui: &mut egui::Ui,
+    state: &mut State,
+    status: Option<&Status>,
+    actions: &mut Vec<Action>,
+) {
+    let palette = state.palette.clone();
+    egui::Panel::bottom("status-line")
+        .resizable(false)
+        .show_separator_line(false)
+        .frame(
+            Frame::new()
+                .fill(ui.visuals().panel_fill)
+                .inner_margin(Margin::symmetric(8, 4)),
+        )
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                // ` HOME ` as an inverted block.
+                let name = format!(" {} ", view_name(state.view).to_uppercase());
+                ui.label(
+                    RichText::new(name)
+                        .monospace()
+                        .strong()
+                        .color(palette.window)
+                        .background_color(palette.accent),
+                );
+                let loading = loading(state, status);
+                if let Some(what) = loading {
+                    ui.label(
+                        RichText::new(format!("{} loading {what}", widgets::spinner_frame(ui)))
+                            .monospace()
+                            .color(palette.secondary),
+                    );
+                } else if let Some(notice) = &state.notice {
+                    ui.label(RichText::new(notice).monospace().color(palette.text));
+                    if widgets::bracket_button(ui, &palette, "x", widgets::ButtonStyle::Normal)
+                        .clicked()
+                    {
+                        actions.push(Action::DismissNotice);
+                    }
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if widgets::bracket_button(ui, &palette, "?", widgets::ButtonStyle::Normal)
+                        .clicked()
+                    {
+                        state.keys_open = !state.keys_open;
+                    }
+                    let parts = [
+                        session_label(state),
+                        quality_label(state),
+                        theme_label(state),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join(" · ");
+                    ui.label(RichText::new(parts).monospace().color(palette.secondary));
+                });
+            });
+        });
+}
+
+/// What the status line spins about, if anything.
+fn loading<'a>(state: &'a State, status: Option<&'a Status>) -> Option<&'static str> {
+    if matches!(state.account, AccountState::SigningIn) {
+        return Some("signing in");
+    }
+
+    match state.view {
+        View::Home if matches!(state.feed, Listing::Loading) => Some("feed"),
+        View::Results if matches!(state.results, Listing::Loading) => Some("results"),
+        View::Watch if state.watching.is_some() && status.is_none_or(|s| s.idle) => Some("video"),
+        View::Subscriptions if matches!(state.account_subscriptions, Listing::Loading) => {
+            Some("subscriptions")
+        }
+        View::History if matches!(state.account_history, Listing::Loading) => Some("history"),
+        View::WatchLater if matches!(state.account_watch_later, Listing::Loading) => {
+            Some("watch later")
+        }
+        View::Liked if matches!(state.liked, Listing::Loading) => Some("liked videos"),
+        View::Playlists if matches!(state.playlists, Listing::Loading) => Some("playlists"),
+        View::Playlist | View::Channel if matches!(state.page_videos, Listing::Loading) => {
+            Some("videos")
+        }
+        _ => None,
+    }
+}
+
+/// A name for the status line's inverted block.
+fn view_name(view: View) -> &'static str {
+    match view {
+        View::Home => "home",
+        View::Results => "results",
+        View::Watch => "watch",
+        View::Subscriptions => "subscriptions",
+        View::History => "history",
+        View::WatchLater => "watch later",
+        View::Liked => "liked",
+        View::Playlists => "playlists",
+        View::Playlist => "playlist",
+        View::Channel => "channel",
+        View::Account => "account",
+        View::Settings => "settings",
+    }
+}
+
+/// "signed in", or the local library's mode.
+fn session_label(state: &State) -> Option<String> {
+    match &state.account {
+        AccountState::SignedIn(_) => Some("signed in".to_owned()),
+        AccountState::SigningIn => None,
+        AccountState::SignedOut | AccountState::Failed(_) => Some("local".to_owned()),
+    }
+}
+
+/// The chosen quality: "auto" or "1080p".
+fn quality_label(state: &State) -> Option<String> {
+    Some(match state.settings.quality {
+        crate::model::Quality::Auto => "auto".to_owned(),
+        crate::model::Quality::Max(lines) => format!("{lines}p"),
+    })
+}
+
+/// The theme's display name: the picked palette's, "auto", dark, light.
+fn theme_label(state: &State) -> Option<String> {
+    Some(match &state.settings.theme {
+        crate::settings::ThemeChoice::Auto => {
+            if state.follows_omarchy {
+                state
+                    .themes
+                    .iter()
+                    .find(|(filename, _)| filename == fastframe_theme::omarchy::FILENAME)
+                    .map(|(_, name)| name.clone())
+                    .unwrap_or_else(|| "omarchy".to_owned())
+            } else {
+                "auto".to_owned()
+            }
+        }
+        crate::settings::ThemeChoice::Dark => "dark".to_owned(),
+        crate::settings::ThemeChoice::Light => "light".to_owned(),
+        crate::settings::ThemeChoice::Custom(filename) => state
+            .themes
+            .iter()
+            .find(|(file, _)| file == filename)
+            .map(|(_, name)| name.clone())
+            .unwrap_or_else(|| filename.clone()),
+    })
+}
+
+/// The `?` overlay: every binding in two columns.
+fn keys_overlay(ctx: &egui::Context, state: &State) {
+    egui::Area::new(egui::Id::new("keys"))
+        .order(egui::Order::Foreground)
+        .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+        .show(ctx, |ui| {
+            widgets::pane(ui, &state.palette, "keys", None, true, |ui| {
+                let p = &state.palette;
+                let column = |ui: &mut egui::Ui, bindings: &[(&str, &str)]| {
+                    for (key, what) in bindings {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(format!("{key:<7}"))
+                                    .monospace()
+                                    .color(p.magenta),
+                            );
+                            ui.label(RichText::new(*what).monospace().color(p.text));
+                        });
+                    }
+                };
+                ui.columns(2, |columns| {
+                    column(
+                        &mut columns[0],
+                        &[
+                            ("/", "the command line"),
+                            ("enter", "search, or open a link"),
+                            ("1-9", "the views"),
+                            ("?", "this list"),
+                            ("esc", "close, or go back"),
+                            ("r", "load the page again"),
+                            ("j / ↓", "next row"),
+                            ("k / ↑", "the row before"),
+                            ("g / G", "first / last row"),
+                            ("enter", "open the row"),
+                        ],
+                    );
+                    column(
+                        &mut columns[1],
+                        &[
+                            ("space / k", "play or pause"),
+                            ("← / →", "5 s back or ahead"),
+                            ("j / l", "10 s back or ahead"),
+                            ("f", "full screen"),
+                            ("esc", "leave full screen, back"),
+                        ],
+                    );
+                });
+            });
+        });
+}
+
+/// The shell's keys, while nobody is typing.
+fn keys(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
     if ctx.text_edit_focused() {
         return;
     }
-    if matches!(state.view, View::Channel | View::Playlist) {
-        if ctx.input(|input| input.key_pressed(Key::Escape)) {
-            actions.push(Action::Back);
-        }
-        return;
-    }
-    if state.view != View::Watch {
-        return;
-    }
     ctx.input(|input| {
+        if input.key_pressed(Key::Questionmark) {
+            state.keys_open = !state.keys_open;
+        }
+        if state.keys_open {
+            if input.key_pressed(Key::Escape) {
+                state.keys_open = false;
+            }
+            return;
+        }
+        if input.key_pressed(Key::Slash) {
+            ctx.memory_mut(|memory| memory.request_focus(command_line_id()));
+        }
+        // The number keys jump to the views.
+        let digit = [
+            Key::Num1,
+            Key::Num2,
+            Key::Num3,
+            Key::Num4,
+            Key::Num5,
+            Key::Num6,
+            Key::Num8,
+            Key::Num9,
+        ]
+        .into_iter()
+        .position(|key| input.key_pressed(key));
+        if let Some(digit) = digit {
+            let views = [
+                View::Home,
+                View::Subscriptions,
+                View::History,
+                View::WatchLater,
+                View::Liked,
+                View::Playlists,
+                View::Account,
+                View::Settings,
+            ];
+            let view = views[digit];
+            if matches!(view, View::Liked | View::Playlists) && !state.signed_in() {
+                return;
+            }
+            actions.push(Action::Navigate(view));
+        }
+        if input.key_pressed(Key::R) {
+            actions.push(Action::Refresh);
+        }
+        if matches!(state.view, View::Channel | View::Playlist) {
+            if input.key_pressed(Key::Escape) {
+                actions.push(Action::Back);
+            }
+            return;
+        }
+        if state.view != View::Watch {
+            return;
+        }
         if input.key_pressed(Key::Space) || input.key_pressed(Key::K) {
             actions.push(Action::TogglePause);
         }

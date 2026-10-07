@@ -64,6 +64,8 @@ pub struct State {
     pub browser: String,
     /// A message for the user that belongs to no page.
     pub notice: Option<String>,
+    /// The `?` overlay's bindings list is open.
+    pub keys_open: bool,
     pub watching: Option<Video>,
     /// The list the video being watched was opened from.
     pub up_next: Vec<Video>,

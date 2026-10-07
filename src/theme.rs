@@ -255,7 +255,30 @@ pub fn apply(ctx: &egui::Context, palette: &Palette) {
     visuals.text_cursor.stroke = Stroke::new(2.0, palette.accent);
     visuals.slider_trailing_fill = true;
     visuals.handle_shape = egui::style::HandleShape::Circle;
+    // Square everything: the terminal look has no rounded corners.
+    visuals.window_corner_radius = egui::CornerRadius::ZERO;
+    visuals.menu_corner_radius = egui::CornerRadius::ZERO;
+    for widget in [
+        &mut visuals.widgets.inactive,
+        &mut visuals.widgets.hovered,
+        &mut visuals.widgets.active,
+        &mut visuals.widgets.open,
+        &mut visuals.widgets.noninteractive,
+    ] {
+        widget.corner_radius = egui::CornerRadius::ZERO;
+    }
     ctx.set_visuals(visuals);
+    // Three sizes: secondary at 13, body at 14, titles at 16.
+    ctx.all_styles_mut(|style| {
+        style.text_styles = [
+            (egui::TextStyle::Heading, egui::FontId::proportional(16.0)),
+            (egui::TextStyle::Body, egui::FontId::proportional(14.0)),
+            (egui::TextStyle::Button, egui::FontId::proportional(14.0)),
+            (egui::TextStyle::Small, egui::FontId::proportional(13.0)),
+            (egui::TextStyle::Monospace, egui::FontId::monospace(14.0)),
+        ]
+        .into();
+    });
 }
 
 #[cfg(test)]
