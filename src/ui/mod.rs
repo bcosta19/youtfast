@@ -15,6 +15,7 @@ use egui::{
 };
 
 use crate::app::{AccountState, State};
+use crate::icons::Icon;
 use crate::model::{Action, View};
 use crate::mpv::{Status, VideoSurface};
 
@@ -114,12 +115,7 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
         .show(ui, |ui| {
             ui.horizontal_centered(|ui| {
                 let deeper = matches!(state.view, View::Watch | View::Channel | View::Playlist);
-                if deeper
-                    && ui
-                        .add(egui::Button::new(RichText::new("⬅").size(18.0)).frame(false))
-                        .on_hover_text("Back (Esc)")
-                        .clicked()
-                {
+                if deeper && widgets::icon_button(ui, Icon::Back, 18.0, "Back (Esc)").clicked() {
                     actions.push(Action::Back);
                 }
                 logo(ui);

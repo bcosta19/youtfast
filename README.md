@@ -77,4 +77,4 @@ Use it at your own risk.
 
 ## License
 
-MIT.
+MIT. The icons are [Lucide](https://lucide.dev) (ISC).

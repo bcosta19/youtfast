@@ -3,6 +3,7 @@
 mod account;
 mod app;
 mod backend;
+mod icons;
 mod innertube;
 mod library;
 mod model;

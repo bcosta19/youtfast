@@ -23,7 +23,8 @@ log = "0.4"
 eframe = { version = "0.36", default-features = false, features = ["accesskit", "glow", "default_fonts", "wayland", "x11", "persistence"] }
 egui = "0.36"
 # `http` fetches thumbnails from i.ytimg.com through egui's image loaders.
-egui_extras = { version = "0.36", features = ["http", "image"] }
+# `svg` draws the icons.
+egui_extras = { version = "0.36", features = ["http", "image", "svg"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 # The wl_display or X11 Display handed to libmpv, so hardware decoding can
 # share frames with the GL context instead of copying them back.
@@ -33,6 +34,8 @@ raw-window-handle = "0.6"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "process", "io-util", "time"] }
 # Logs to stderr and a per-run file, the same logger the sibling apps use.
 fastframe-log = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
+# The icons! table and the Lucide icons shared with the sibling apps.
+fastframe-icons = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
 # YouTube's own API (InnerTube): the signed-in account's feed, history,
 # subscriptions, playlists, liked videos and Watch later (`userdata`), and
 # channel RSS for the feed without an account (`rss`). rustls, as in the

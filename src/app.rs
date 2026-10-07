@@ -126,6 +126,7 @@ impl App {
     pub fn new(cc: &eframe::CreationContext<'_>, open: Option<String>) -> anyhow::Result<Self> {
         let ctx = &cc.egui_ctx;
         egui_extras::install_image_loaders(ctx);
+        fastframe_icons::install::<crate::icons::Icon>(ctx);
         ctx.set_theme(egui::Theme::Dark);
         let dirs = Dirs::new().context("could not make the data folders")?;
         let backend =

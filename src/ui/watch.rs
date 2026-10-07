@@ -7,6 +7,7 @@ use egui::{
 
 use super::{ACCENT, widgets};
 use crate::app::State;
+use crate::icons::Icon;
 use crate::model::{Action, Channel, Quality, Resolution};
 use crate::mpv::{Status, VideoSurface};
 use crate::util;
@@ -137,13 +138,19 @@ fn main_column(
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             let saved = state.library.in_watch_later(&watching.id);
-            let label = if saved {
-                "✔ Saved for later"
+            let button = if saved {
+                Button::selectable(
+                    true,
+                    (
+                        Icon::Check.image(ui.visuals().text_color(), 14.0),
+                        "Saved for later",
+                    ),
+                )
             } else {
-                "Watch later"
+                Button::selectable(false, "Watch later")
             };
             if ui
-                .selectable_label(saved, label)
+                .add(button)
                 .on_hover_text("Watch later on this computer")
                 .clicked()
             {
@@ -199,15 +206,15 @@ fn controls(ui: &mut Ui, state: &mut State, status: Option<&Status>, actions: &m
     };
     seek_bar(ui, state, status, actions);
     ui.horizontal(|ui| {
-        let icon = if status.paused { "▶" } else { "⏸" };
-        if ui
-            .add(Button::new(RichText::new(icon).size(20.0)).frame(false))
-            .on_hover_text("Play or pause (Space)")
-            .clicked()
-        {
+        let icon = if status.paused {
+            Icon::Play
+        } else {
+            Icon::Pause
+        };
+        if widgets::icon_button(ui, icon, 20.0, "Play or pause (Space)").clicked() {
             actions.push(Action::TogglePause);
         }
-        ui.label("🔊");
+        ui.add(Icon::Volume.image(ui.visuals().text_color(), 18.0));
         ui.spacing_mut().slider_width = 90.0;
         let mut volume = status.volume;
         if ui
@@ -228,16 +235,12 @@ fn controls(ui: &mut Ui, state: &mut State, status: Option<&Status>, actions: &m
         };
         ui.label(RichText::new(time).monospace());
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            let label = if state.fullscreen {
-                "Exit full screen (F)"
+            let (icon, label) = if state.fullscreen {
+                (Icon::ExitFullscreen, "Exit full screen (F)")
             } else {
-                "Full screen (F)"
+                (Icon::Fullscreen, "Full screen (F)")
             };
-            if ui
-                .add(Button::new(RichText::new("⛶").size(18.0)).frame(false))
-                .on_hover_text(label)
-                .clicked()
-            {
+            if widgets::icon_button(ui, icon, 18.0, label).clicked() {
                 actions.push(Action::ToggleFullscreen);
             }
             quality_menu(ui, state, status, actions);

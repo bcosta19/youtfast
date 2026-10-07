@@ -6,8 +6,15 @@ use egui::{
 };
 
 use crate::app::State;
+use crate::icons::Icon;
 use crate::model::{Action, Channel, Video};
 use crate::util;
+
+/// A frameless button that is just the icon.
+pub fn icon_button(ui: &mut Ui, icon: Icon, size: f32, hint: &str) -> Response {
+    ui.add(egui::Button::image(icon.image(ui.visuals().text_color(), size)).frame(false))
+        .on_hover_text(hint)
+}
 
 /// A thumbnail at `size`, with the length (or LIVE) in its corner.
 pub fn thumbnail(ui: &mut Ui, video: &Video, size: egui::Vec2) -> Response {
