@@ -9,15 +9,18 @@ use std::sync::Arc;
 use rustypipe::client::RustyPipe;
 use rustypipe::error::Error;
 use rustypipe::model::{
-    ChannelItem, ChannelRss, Comment, PlaylistItem, Thumbnail, UrlTarget, VideoDetails, VideoItem,
+    Channel as RpChannel, ChannelItem, ChannelRss, Comment, PlaylistItem, Thumbnail, UrlTarget,
+    VideoDetails, VideoItem, paginator::ContinuationEndpoint, paginator::Paginator,
     richtext::TextComponent,
 };
+use rustypipe::param::ChannelVideoTab;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::account::CacheFile;
 use crate::model::{
-    Channel, Chapter, CommentRow, Details, HistoryRow, PlaylistSummary, Span, Video,
+    Channel, ChannelAbout, ChannelHeader, ChannelTab, Chapter, CommentRow, Details, HistoryRow,
+    PlaylistSummary, Span, Video,
 };
 use crate::paths::Dirs;
 use crate::util;
@@ -118,14 +121,144 @@ pub async fn feed(
     Ok(videos)
 }
 
-/// A channel's 15 latest videos, from its RSS.
-pub async fn channel_videos(rp: &RustyPipe, channel_id: &str) -> Result<Vec<Video>, String> {
-    let feed = rp
+/// How to continue a paged list: YouTube's continuation token and the
+/// endpoint it came from.
+#[derive(Clone, Debug)]
+pub struct More {
+    pub ctoken: String,
+    pub endpoint: ContinuationEndpoint,
+    pub visitor_data: Option<String>,
+}
+
+impl More {
+    /// The next page's directions, when the paginator has one.
+    pub fn of<T>(paginator: &Paginator<T>) -> Option<More> {
+        paginator.ctoken.as_ref().map(|ctoken| More {
+            ctoken: ctoken.clone(),
+            endpoint: paginator.endpoint,
+            visitor_data: paginator.visitor_data.clone(),
+        })
+    }
+}
+
+/// The next page of videos.
+pub async fn more_videos(
+    rp: &RustyPipe,
+    more: &More,
+) -> Result<(Vec<Video>, Option<More>), String> {
+    let page = rp
         .query()
-        .channel_rss(channel_id)
+        .continuation::<VideoItem, _>(&more.ctoken, more.endpoint, more.visitor_data.as_deref())
         .await
         .map_err(|error| error.to_string())?;
-    Ok(rss_videos(feed, util::now()))
+    let more = More::of(&page);
+    Ok((page.items.into_iter().map(video).collect(), more))
+}
+
+/// The next page of playlists.
+pub async fn more_playlists(
+    rp: &RustyPipe,
+    more: &More,
+) -> Result<(Vec<PlaylistSummary>, Option<More>), String> {
+    let page = rp
+        .query()
+        .continuation::<PlaylistItem, _>(&more.ctoken, more.endpoint, more.visitor_data.as_deref())
+        .await
+        .map_err(|error| error.to_string())?;
+    let more = More::of(&page);
+    Ok((page.items.into_iter().map(playlist).collect(), more))
+}
+
+/// A channel's Videos, Shorts or Live tab, or its videos matching `query`.
+/// Returns the header every call sends along.
+pub async fn channel_tab(
+    rp: &RustyPipe,
+    id: &str,
+    tab: &ChannelTab,
+) -> Result<(ChannelHeader, Vec<Video>, Option<More>), String> {
+    let query = rp.query();
+    let result = match tab {
+        ChannelTab::Search(text) => query.channel_search(id, text).await,
+        ChannelTab::Videos => query.channel_videos_tab(id, ChannelVideoTab::Videos).await,
+        ChannelTab::Shorts => query.channel_videos_tab(id, ChannelVideoTab::Shorts).await,
+        ChannelTab::Live => query.channel_videos_tab(id, ChannelVideoTab::Live).await,
+        _ => unreachable!("channel_tab is for the video tabs"),
+    }
+    .map_err(|error| error.to_string())?;
+    let header = channel_header(&result);
+    let more = More::of(&result.content);
+    let shorts = *tab == ChannelTab::Shorts;
+    let videos = result
+        .content
+        .items
+        .into_iter()
+        .map(|item| {
+            let mut video = video(item);
+            // The Shorts tab does not mark its items.
+            video.short |= shorts;
+            video
+        })
+        .collect();
+    Ok((header, videos, more))
+}
+
+/// A channel's playlists tab.
+pub async fn channel_playlists_page(
+    rp: &RustyPipe,
+    id: &str,
+) -> Result<(ChannelHeader, Vec<PlaylistSummary>, Option<More>), String> {
+    let result = rp
+        .query()
+        .channel_playlists(id)
+        .await
+        .map_err(|error| error.to_string())?;
+    let header = channel_header(&result);
+    let more = More::of(&result.content);
+    Ok((
+        header,
+        result.content.items.into_iter().map(playlist).collect(),
+        more,
+    ))
+}
+
+/// A channel's About tab.
+pub async fn channel_about(rp: &RustyPipe, id: &str) -> Result<ChannelAbout, String> {
+    let info = rp
+        .query()
+        .channel_info(id)
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(ChannelAbout {
+        url: info.url,
+        description: info.description,
+        links: info.links,
+        views: info.view_count,
+        created: info.create_date.map(|date| {
+            format!(
+                "{:04}-{:02}-{:02}",
+                date.year(),
+                u8::from(date.month()),
+                date.day()
+            )
+        }),
+        country: info.country.map(|country| country.name().to_owned()),
+        subscribers: info.subscriber_count,
+        videos: info.video_count,
+    })
+}
+
+/// The header every channel response carries.
+fn channel_header<T>(channel: &RpChannel<T>) -> ChannelHeader {
+    ChannelHeader {
+        id: channel.id.clone(),
+        name: channel.name.clone(),
+        handle: channel.handle.clone(),
+        avatar: largest(&channel.avatar),
+        subscribers: channel.subscriber_count,
+        videos: channel.video_count,
+        has_shorts: channel.has_shorts,
+        has_live: channel.has_live,
+    }
 }
 
 pub async fn subscriptions(rp: &RustyPipe) -> Result<Vec<Channel>, Error> {
@@ -319,6 +452,7 @@ fn video(item: VideoItem) -> Video {
         live: item.is_live,
         published_at: item.publish_date.map(|date| date.unix_timestamp()),
         published: item.publish_date_txt,
+        short: item.is_short,
     }
 }
 
@@ -338,6 +472,7 @@ fn rss_videos(feed: ChannelRss, now: i64) -> Vec<Video> {
                 live: false,
                 published_at: Some(at),
                 published: Some(util::ago(at, now)),
+                short: false,
             }
         })
         .collect()

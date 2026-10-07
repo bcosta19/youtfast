@@ -46,8 +46,11 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
   subscriptions, history, Watch later, liked videos and playlists. The watch
   page's description, chapters, recommended videos and comments come from it
   too (`details`, `comments`; spans map YouTube links on the video itself to
-  seeks). rustypipe has no write actions and no home recommendations: subscribing and Watch
-  later act on the local library.
+  seeks), and channel pages are its tabs (`channel_tab`, `channel_about`):
+  videos, shorts, live, playlists and the channel's own search, paged through
+  `More` continuations (`more_videos`, `more_playlists`). rustypipe has no
+  posts or podcasts tabs, no write actions and no home recommendations:
+  subscribing and Watch later act on the local library.
 - `src/account.rs` holds the session: cookies.txt parsing, reading a
   browser's cookies through yt-dlp's `extract_cookies_from_browser` (a short
   Python script whose output is piped, never written; it tries each Linux

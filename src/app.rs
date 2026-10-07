@@ -6,12 +6,13 @@ use anyhow::Context as _;
 use eframe::glow;
 use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 
-use crate::backend::{Backend, Command, CommentsKey, Event, Payload, Request, Slot};
+use crate::backend::{Backend, Command, CommentsKey, Event, PageItems, Payload, Request, Slot};
+use crate::innertube;
 use crate::instance::{self, Queue as RemoteQueue};
 use crate::library::Library;
 use crate::model::{
-    AccountSource, Action, Channel, CommentRow, Details, Fetch, HistoryRow, Listing,
-    PlaylistSummary, Quality, Resolution, Results, Source, Video, View,
+    AccountSource, Action, Channel, ChannelAbout, ChannelHeader, ChannelTab, CommentRow, Details,
+    Fetch, HistoryRow, Listing, PlaylistSummary, Quality, Resolution, Results, Source, Video, View,
 };
 use crate::mpv::{self, Mpv, NativeDisplay, VideoSurface};
 use crate::paths::Dirs;
@@ -106,6 +107,20 @@ pub struct State {
     pub replies: HashMap<String, Fetch<Vec<CommentRow>>>,
     /// The description expanded past its first rows.
     pub description_open: bool,
+    /// The channel page's header, kept while the same channel is open.
+    pub channel_header: Option<ChannelHeader>,
+    /// Which tab the channel page shows.
+    pub channel_tab: ChannelTab,
+    /// The channel page's playlists tab.
+    pub page_playlists: Listing<PlaylistSummary>,
+    /// The channel page's About pane.
+    pub channel_about: Fetch<ChannelAbout>,
+    /// The channel tab's next page, when there is one.
+    pub page_more: Option<innertube::More>,
+    /// The continuation on its way, or its error.
+    pub page_more_state: Fetch<()>,
+    /// The channel page's own search field's text.
+    pub channel_query: String,
 }
 
 impl State {
@@ -152,6 +167,8 @@ pub struct App {
     details_generation: u64,
     /// The comments page in flight, to put its token back on failure.
     more_comments_token: Option<String>,
+    /// The channel the open page shows, to detect a channel switch.
+    open_channel: Option<String>,
     /// Where Back goes: the pages a video, channel or playlist was opened
     /// from.
     back: Vec<View>,
@@ -255,6 +272,7 @@ impl App {
             generations: HashMap::new(),
             details_generation: 0,
             more_comments_token: None,
+            open_channel: None,
             back: Vec::new(),
             custom_themes,
             theme_waker,
@@ -362,6 +380,7 @@ impl App {
                                 live: details.live,
                                 published_at: None,
                                 published: details.published.clone(),
+                                short: false,
                             };
                             watching.complete_from(&filled);
                             let watching = watching.clone();
@@ -475,6 +494,37 @@ impl App {
             }
             (Slot::Liked, Ok(Payload::Videos(videos))) => put(&mut state.liked, Ok(videos)),
             (Slot::Page, Ok(Payload::Videos(videos))) => put(&mut state.page_videos, Ok(videos)),
+            (
+                Slot::Page,
+                Ok(Payload::ChannelPage {
+                    header,
+                    items,
+                    more,
+                }),
+            ) => {
+                state.channel_header = Some(header);
+                state.page_more = more;
+                state.page_more_state = Fetch::Idle;
+                match items {
+                    PageItems::Videos(videos) => put(&mut state.page_videos, Ok(videos)),
+                    PageItems::Playlists(items) => put(&mut state.page_playlists, Ok(items)),
+                }
+            }
+            (Slot::Page, Ok(Payload::About(about))) => {
+                state.channel_about = Fetch::Ready(about);
+            }
+            (Slot::Page, Ok(Payload::More { items, more })) => {
+                state.page_more = more;
+                state.page_more_state = Fetch::Idle;
+                match items {
+                    PageItems::Videos(videos) => {
+                        state.page_videos.items_mut().extend(videos);
+                    }
+                    PageItems::Playlists(items) => {
+                        state.page_playlists.items_mut().extend(items);
+                    }
+                }
+            }
             (Slot::Subscriptions, Ok(Payload::Channels(channels))) => {
                 put(&mut state.account_subscriptions, Ok(channels));
             }
@@ -488,7 +538,18 @@ impl App {
             (Slot::Feed, Err(error)) => put(&mut state.feed, Err(error)),
             (Slot::WatchLater, Err(error)) => put(&mut state.account_watch_later, Err(error)),
             (Slot::Liked, Err(error)) => put(&mut state.liked, Err(error)),
-            (Slot::Page, Err(error)) => put(&mut state.page_videos, Err(error)),
+            (Slot::Page, Err(error)) => {
+                // A continuation failing keeps the rows already shown.
+                if matches!(state.page_more_state, Fetch::Loading) {
+                    state.page_more_state = Fetch::Failed(error);
+                } else {
+                    match state.channel_tab {
+                        ChannelTab::About => state.channel_about = Fetch::Failed(error),
+                        ChannelTab::Playlists => put(&mut state.page_playlists, Err(error)),
+                        _ => put(&mut state.page_videos, Err(error)),
+                    }
+                }
+            }
             (Slot::Subscriptions, Err(error)) => put(&mut state.account_subscriptions, Err(error)),
             (Slot::History, Err(error)) => put(&mut state.account_history, Err(error)),
             (Slot::Playlists, Err(error)) => put(&mut state.playlists, Err(error)),
@@ -523,6 +584,9 @@ impl App {
     fn load(&mut self, view: View, force: bool) {
         fn stale<T>(listing: &Listing<T>) -> bool {
             matches!(listing, Listing::Idle | Listing::Failed(_))
+        }
+        fn stale_fetch<T>(fetch: &Fetch<T>) -> bool {
+            matches!(fetch, Fetch::Idle | Fetch::Failed(_))
         }
         let account = self.state.source() == Source::Account;
         let state = &self.state;
@@ -563,13 +627,57 @@ impl App {
             View::Playlists if force || stale(&state.playlists) => {
                 self.request(Slot::Playlists, Request::Playlists);
             }
-            View::Channel | View::Playlist if force || stale(&state.page_videos) => {
-                let request = match &state.page {
-                    Some(Page::Channel(channel)) => Request::Channel(channel.id.clone()),
-                    Some(Page::Playlist { id, .. }) => Request::Playlist(id.clone()),
-                    None => return,
+            View::Playlist if force || stale(&state.page_videos) => {
+                if let Some(Page::Playlist { id, .. }) = &state.page {
+                    let request = Request::Playlist(id.clone());
+                    self.request(Slot::Page, request);
+                }
+            }
+            View::Channel => {
+                let Some(Page::Channel(channel)) = &state.page else {
+                    return;
                 };
-                self.request(Slot::Page, request);
+                let id = channel.id.clone();
+                match &self.state.channel_tab {
+                    // The About pane has no rows to refresh.
+                    ChannelTab::About => {
+                        if force || stale_fetch(&self.state.channel_about) {
+                            self.generation += 1;
+                            self.generations.insert(Slot::Page, self.generation);
+                            self.state.channel_about = Fetch::Loading;
+                            self.backend.send(Command::Load {
+                                slot: Slot::Page,
+                                generation: self.generation,
+                                request: Request::ChannelAbout(id),
+                            });
+                        }
+                    }
+                    ChannelTab::Playlists => {
+                        if force || stale(&self.state.page_playlists) {
+                            self.generation += 1;
+                            self.generations.insert(Slot::Page, self.generation);
+                            self.state.page_playlists = Listing::Loading;
+                            self.backend.send(Command::Load {
+                                slot: Slot::Page,
+                                generation: self.generation,
+                                request: Request::ChannelTab {
+                                    id,
+                                    tab: ChannelTab::Playlists,
+                                },
+                            });
+                        }
+                    }
+                    tab if force || stale(&self.state.page_videos) => {
+                        self.request(
+                            Slot::Page,
+                            Request::ChannelTab {
+                                id,
+                                tab: tab.clone(),
+                            },
+                        );
+                    }
+                    _ => {}
+                }
             }
             _ => {}
         }
@@ -774,6 +882,55 @@ impl App {
                     ctx.open_url(egui::OpenUrl::new_tab(url));
                 }
             }
+            Action::SetChannelTab(tab) => {
+                if self.state.channel_tab == tab {
+                    return;
+                }
+                self.state.channel_tab = tab;
+                self.state.page_more = None;
+                self.state.page_more_state = Fetch::Idle;
+                // The current tab's list reloads; the other tab keeps what
+                // it has but draws nothing until picked.
+                self.generation += 1;
+                self.generations.insert(Slot::Page, self.generation);
+                match &self.state.channel_tab {
+                    ChannelTab::About => self.state.channel_about = Fetch::Loading,
+                    ChannelTab::Playlists => self.state.page_playlists = Listing::Loading,
+                    _ => self.state.page_videos = Listing::Loading,
+                }
+                if let Some(Page::Channel(channel)) = &self.state.page {
+                    let request = match &self.state.channel_tab {
+                        ChannelTab::About => Request::ChannelAbout(channel.id.clone()),
+                        tab => Request::ChannelTab {
+                            id: channel.id.clone(),
+                            tab: tab.clone(),
+                        },
+                    };
+                    self.backend.send(Command::Load {
+                        slot: Slot::Page,
+                        generation: self.generation,
+                        request,
+                    });
+                }
+            }
+            Action::SetChannelQuery(text) => self.state.channel_query = text,
+            Action::LoadMore => {
+                // A running continuation cannot be asked twice.
+                if self.state.view == View::Channel
+                    && !matches!(self.state.page_more_state, Fetch::Loading)
+                    && let Some(more) = self.state.page_more.clone()
+                {
+                    self.state.page_more_state = Fetch::Loading;
+                    self.backend.send(Command::Load {
+                        slot: Slot::Page,
+                        generation: self.generation,
+                        request: Request::More {
+                            more,
+                            playlists: self.state.channel_tab == ChannelTab::Playlists,
+                        },
+                    });
+                }
+            }
         }
     }
 
@@ -829,7 +986,22 @@ impl App {
     fn open_page(&mut self, ctx: &egui::Context, view: View, page: Page) {
         if self.state.page.as_ref() != Some(&page) {
             self.state.page_videos = Listing::Idle;
+            self.state.page_more = None;
+            self.state.page_more_state = Fetch::Idle;
         }
+        // Another channel restarts its page: tabs, header, search field.
+        let channel_id = match &page {
+            Page::Channel(channel) => Some(channel.id.clone()),
+            _ => None,
+        };
+        if view == View::Channel && self.open_channel.as_deref() != channel_id.as_deref() {
+            self.state.channel_header = None;
+            self.state.channel_tab = ChannelTab::default();
+            self.state.page_playlists = Listing::Idle;
+            self.state.channel_about = Fetch::Idle;
+            self.state.channel_query.clear();
+        }
+        self.open_channel = channel_id;
         self.leave_video(ctx);
         if self.state.view != view {
             self.back.push(self.state.view);

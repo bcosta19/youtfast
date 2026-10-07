@@ -7,6 +7,7 @@
 //! status line at the bottom, and `?` for the keys overlay.
 
 mod account;
+mod channel;
 mod library;
 mod results;
 mod settings;
@@ -16,7 +17,7 @@ mod widgets;
 use egui::{Frame, Key, Margin, RichText, TextEdit};
 
 use crate::app::{AccountState, State};
-use crate::model::{Action, Listing, View};
+use crate::model::{Action, ChannelTab, Fetch, Listing, View};
 use crate::mpv::{Status, VideoSurface};
 
 /// The command line's widget id, so `/` can focus it.
@@ -48,7 +49,12 @@ pub fn show(
         View::WatchLater => library::watch_later(ui, state, actions),
         View::Liked => library::liked(ui, state, actions),
         View::Playlists => library::playlists(ui, state, actions),
-        View::Playlist | View::Channel => library::page(ui, state, actions),
+        View::Playlist => library::page(ui, state, actions),
+        View::Channel => {
+            if let Some(crate::app::Page::Channel(channel)) = &state.page {
+                channel::show(ui, state, channel, actions);
+            }
+        }
         View::Account => account::show(ui, state, actions),
         View::Settings => settings::show(ui, state, actions),
     }
@@ -293,9 +299,19 @@ fn loading<'a>(state: &'a State, status: Option<&'a Status>) -> Option<&'static 
         }
         View::Liked if matches!(state.liked, Listing::Loading) => Some("liked videos"),
         View::Playlists if matches!(state.playlists, Listing::Loading) => Some("playlists"),
-        View::Playlist | View::Channel if matches!(state.page_videos, Listing::Loading) => {
-            Some("videos")
-        }
+        View::Playlist if matches!(state.page_videos, Listing::Loading) => Some("videos"),
+        View::Channel => match state.channel_tab {
+            crate::model::ChannelTab::About if matches!(state.channel_about, Fetch::Loading) => {
+                Some("about")
+            }
+            crate::model::ChannelTab::Playlists
+                if matches!(state.page_playlists, Listing::Loading) =>
+            {
+                Some("playlists")
+            }
+            _ if matches!(state.page_videos, Listing::Loading) => Some("the channel"),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -321,7 +337,22 @@ pub fn cursor_key(state: &State) -> usize {
         View::WatchLater => tag(&state.account_watch_later) + source,
         View::Liked => tag(&state.liked),
         View::Playlists => tag(&state.playlists),
-        View::Playlist | View::Channel => tag(&state.page_videos),
+        View::Playlist => tag(&state.page_videos),
+        View::Channel => {
+            let tab = match state.channel_tab {
+                ChannelTab::Videos => 0,
+                ChannelTab::Shorts => 10,
+                ChannelTab::Live => 20,
+                ChannelTab::Playlists => 30,
+                ChannelTab::About => 40,
+                ChannelTab::Search(_) => 50,
+            };
+            match state.channel_tab {
+                ChannelTab::Playlists => tab + tag(&state.page_playlists),
+                ChannelTab::About => tab + matches!(state.channel_about, Fetch::Ready(_)) as usize,
+                _ => tab + tag(&state.page_videos),
+            }
+        }
         _ => 0,
     }
 }
@@ -345,7 +376,12 @@ fn cursor_count(state: &State) -> usize {
         },
         View::Liked => state.liked.items().len(),
         View::Playlists => state.playlists.items().len(),
-        View::Playlist | View::Channel => state.page_videos.items().len(),
+        View::Playlist => state.page_videos.items().len(),
+        View::Channel => match state.channel_tab {
+            ChannelTab::Playlists => state.page_playlists.items().len(),
+            ChannelTab::About => 0,
+            _ => state.page_videos.items().len(),
+        },
         _ => 0,
     }
 }
@@ -397,7 +433,21 @@ fn open_at(state: &State, index: usize) -> Option<Action> {
                     name: playlist.name.clone(),
                 })
         }
-        View::Playlist | View::Channel => video(state.page_videos.items()),
+        View::Playlist => video(state.page_videos.items()),
+        View::Channel => match state.channel_tab {
+            ChannelTab::Playlists => {
+                state
+                    .page_playlists
+                    .items()
+                    .get(index)
+                    .map(|playlist| Action::OpenPlaylist {
+                        id: playlist.id.clone(),
+                        name: playlist.name.clone(),
+                    })
+            }
+            ChannelTab::About => None,
+            _ => video(state.page_videos.items()),
+        },
         _ => None,
     }
 }
@@ -503,6 +553,7 @@ fn keys_overlay(ctx: &egui::Context, state: &State) {
                             ("k / ↑", "the row before"),
                             ("g / G", "first / last row"),
                             ("enter", "open the row"),
+                            ("h / l", "a channel's tabs"),
                         ],
                     );
                     column(
@@ -589,6 +640,24 @@ fn keys(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
                 && let Some(action) = open_at(state, state.cursor)
             {
                 actions.push(action);
+            }
+        }
+        if state.view == View::Channel {
+            // h/l walk the channel's tabs.
+            let visible = channel::tabs(state.channel_header.as_ref(), &state.channel_tab);
+            if input.key_pressed(Key::H) {
+                actions.push(Action::SetChannelTab(channel::cycle_tab(
+                    &visible,
+                    &state.channel_tab,
+                    -1,
+                )));
+            }
+            if input.key_pressed(Key::L) {
+                actions.push(Action::SetChannelTab(channel::cycle_tab(
+                    &visible,
+                    &state.channel_tab,
+                    1,
+                )));
             }
         }
         if matches!(state.view, View::Channel | View::Playlist) {

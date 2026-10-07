@@ -621,66 +621,19 @@ fn playlist_row(
 /// One channel's latest videos, or one playlist's.
 pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     egui::CentralPanel::default().show(ui, |ui| {
-        let (title, has_videos) = match &state.page {
-            Some(Page::Channel(channel)) => (channel.name.clone(), true),
-            Some(Page::Playlist { name, .. }) => (name.clone(), true),
-            None => return,
+        let Some(Page::Playlist { name, .. }) = &state.page else {
+            return;
         };
-        let _ = has_videos;
         widgets::pane(
             ui,
             &state.palette,
-            &title,
+            name,
             Some(state.page_videos.items().len()),
             true,
             None,
-            |ui| {
-                if let Some(Page::Channel(channel)) = &state.page {
-                    ui.horizontal(|ui| {
-                        subscribe(ui, state, channel, actions);
-                    });
-                    ui.add_space(widgets::line(ui) / 2.0);
-                }
-                rows_listing(ui, state, &state.page_videos, "no videos here", actions);
-            },
+            |ui| rows_listing(ui, state, &state.page_videos, "no videos here", actions),
         );
     });
-}
-
-/// Subscribe on this device, or show that the account already does.
-fn subscribe(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Action>) {
-    if state.subscribed_in_account(&channel.id) {
-        ui.label(
-            RichText::new("[ subscribed ]")
-                .monospace()
-                .color(state.palette.accent)
-                .strong(),
-        )
-        .on_hover_text("Your account is subscribed. Manage it on youtube.com.");
-        return;
-    }
-    let subscribed = state.library.is_subscribed(&channel.id);
-    let style = if subscribed {
-        widgets::ButtonStyle::Primary
-    } else {
-        widgets::ButtonStyle::Normal
-    };
-    let label = if subscribed {
-        "subscribed"
-    } else {
-        "subscribe"
-    };
-    let hint = if subscribed {
-        "Unsubscribe on this computer"
-    } else {
-        "Follow this channel on this computer: its videos join your feed"
-    };
-    if widgets::bracket_button(ui, &state.palette, label, style)
-        .on_hover_text(hint)
-        .clicked()
-    {
-        actions.push(Action::ToggleSubscription(channel.clone()));
-    }
 }
 
 use crate::util;

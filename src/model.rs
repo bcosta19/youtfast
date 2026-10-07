@@ -29,6 +29,9 @@ pub struct Video {
     /// YouTube's own wording ("2 days ago"), when it gave one.
     #[serde(default)]
     pub published: Option<String>,
+    /// A Shorts-tab item (vertical, under a minute).
+    #[serde(default)]
+    pub short: bool,
 }
 
 impl Video {
@@ -44,6 +47,7 @@ impl Video {
             live: false,
             published_at: None,
             published: None,
+            short: false,
         }
     }
 
@@ -207,6 +211,50 @@ pub struct CommentRow {
     pub hearted: bool,
 }
 
+/// The tab a channel page shows.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum ChannelTab {
+    #[default]
+    Videos,
+    Shorts,
+    Live,
+    Playlists,
+    About,
+    /// The channel's own search; the text is the query.
+    Search(String),
+}
+
+/// What a channel page's header shows.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ChannelHeader {
+    pub id: String,
+    pub name: String,
+    /// `@handle`
+    pub handle: Option<String>,
+    pub avatar: Option<String>,
+    pub subscribers: Option<u64>,
+    pub videos: Option<u64>,
+    /// Whether the channel has a Shorts tab.
+    pub has_shorts: bool,
+    /// Whether the channel has a Live tab.
+    pub has_live: bool,
+}
+
+/// The channel's About tab.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ChannelAbout {
+    pub url: String,
+    pub description: String,
+    /// `(title, url)` links to elsewhere.
+    pub links: Vec<(String, String)>,
+    pub views: Option<u64>,
+    /// "2013-08-02".
+    pub created: Option<String>,
+    pub country: Option<String>,
+    pub subscribers: Option<u64>,
+    pub videos: Option<u64>,
+}
+
 /// A line of history: the video, and when it was watched in words
 /// ("Today", "Yesterday", "3 days ago").
 #[derive(Clone, Debug, PartialEq)]
@@ -230,6 +278,17 @@ impl<T> Listing<T> {
         match self {
             Listing::Ready(items) => items,
             _ => &[],
+        }
+    }
+
+    /// The loaded items mutably, to append a continuation.
+    pub fn items_mut(&mut self) -> &mut Vec<T> {
+        if !matches!(self, Listing::Ready(_)) {
+            *self = Listing::Ready(Vec::new());
+        }
+        match self {
+            Listing::Ready(items) => items,
+            _ => unreachable!(),
         }
     }
 }
@@ -412,4 +471,10 @@ pub enum Action {
     /// A link in a description or comment: opens in the browser. Only
     /// http/https are honoured.
     OpenUrl(String),
+    /// Switch the channel page's tab.
+    SetChannelTab(ChannelTab),
+    /// The channel page's search field's text (a view-owned field).
+    SetChannelQuery(String),
+    /// The next page of the current channel tab's list.
+    LoadMore,
 }

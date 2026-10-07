@@ -12,7 +12,9 @@ use rustypipe::client::RustyPipe;
 use tokio::sync::mpsc as async_mpsc;
 
 use crate::library::{Import, Library};
-use crate::model::{AccountSource, Channel, HistoryRow, PlaylistSummary, Video};
+use crate::model::{
+    AccountSource, Channel, ChannelAbout, ChannelHeader, HistoryRow, PlaylistSummary, Video,
+};
 use crate::paths::Dirs;
 use crate::settings::Settings;
 use crate::{account, innertube, takeout, youtube};
@@ -50,13 +52,45 @@ pub enum Request {
     Liked,
     Playlists,
     Playlist(String),
-    Channel(String),
+    /// A channel page's tab: its videos, shorts or live list, its
+    /// playlists, or its search.
+    ChannelTab {
+        id: String,
+        tab: crate::model::ChannelTab,
+    },
+    /// A channel page's About pane.
+    ChannelAbout(String),
+    /// The next page of the channel tab's list.
+    More {
+        more: crate::innertube::More,
+        /// `true` to continue the playlists tab, `false` a video list.
+        playlists: bool,
+    },
 }
 
 pub enum Payload {
     Videos(Vec<Video>),
     Channels(Vec<Channel>),
     History(Vec<HistoryRow>),
+    Playlists(Vec<PlaylistSummary>),
+    /// A channel tab's first page: the header plus videos or playlists.
+    ChannelPage {
+        header: ChannelHeader,
+        items: PageItems,
+        more: Option<crate::innertube::More>,
+    },
+    /// A channel's About tab.
+    About(ChannelAbout),
+    /// A continued page of a channel tab's list.
+    More {
+        items: PageItems,
+        more: Option<crate::innertube::More>,
+    },
+}
+
+/// What a channel tab's rows are.
+pub enum PageItems {
+    Videos(Vec<Video>),
     Playlists(Vec<PlaylistSummary>),
 }
 
@@ -313,7 +347,40 @@ async fn load(rp: &RustyPipe, request: Request) -> Result<Payload, String> {
         Request::Playlist(id) => {
             Payload::Videos(innertube::playlist_videos(rp, &id).await.map_err(text)?)
         }
-        Request::Channel(id) => Payload::Videos(innertube::channel_videos(rp, &id).await?),
+        Request::ChannelTab { id, tab } => match tab {
+            crate::model::ChannelTab::Playlists => {
+                let (header, items, more) = innertube::channel_playlists_page(rp, &id).await?;
+                Payload::ChannelPage {
+                    header,
+                    items: PageItems::Playlists(items),
+                    more,
+                }
+            }
+            _ => {
+                let (header, items, more) = innertube::channel_tab(rp, &id, &tab).await?;
+                Payload::ChannelPage {
+                    header,
+                    items: PageItems::Videos(items),
+                    more,
+                }
+            }
+        },
+        Request::ChannelAbout(id) => Payload::About(innertube::channel_about(rp, &id).await?),
+        Request::More { more, playlists } => {
+            if playlists {
+                let (items, next) = innertube::more_playlists(rp, &more).await?;
+                Payload::More {
+                    items: PageItems::Playlists(items),
+                    more: next,
+                }
+            } else {
+                let (items, next) = innertube::more_videos(rp, &more).await?;
+                Payload::More {
+                    items: PageItems::Videos(items),
+                    more: next,
+                }
+            }
+        }
     })
 }
 

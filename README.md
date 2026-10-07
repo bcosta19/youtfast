@@ -43,7 +43,9 @@ cargo run --release -- "rust egui"                      # or search
 | Esc | Leave full screen, then go back to the results |
 
 The watch page also shows the description (timestamps seek), chapters
-and comments, loaded through rustypipe.
+and comments, loaded through rustypipe. Channel pages have tabs — videos,
+shorts, live, playlists and about — and a search of the channel's own
+videos.
 
 The desktop's media keys and panels (MPRIS, so `playerctl` works too)
 control playback, and a second launch hands a link or search to the

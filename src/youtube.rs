@@ -82,6 +82,7 @@ impl Entry {
             live: self.live_status.as_deref() == Some("is_live"),
             published_at: self.timestamp,
             published: None,
+            short: false,
         })
     }
 }
