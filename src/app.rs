@@ -141,6 +141,8 @@ pub struct App {
     theme_transition: fastframe_theme::Transition,
     /// What later launches ask the running copy, drained each frame.
     remote: RemoteQueue,
+    /// The desktop's media controls.
+    media: crate::now_playing::MediaControls,
 }
 
 impl App {
@@ -226,6 +228,7 @@ impl App {
             theme_waker,
             theme_transition: fastframe_theme::Transition::default(),
             remote: guard.commands(),
+            media: crate::now_playing::MediaControls::start(ctx),
         };
         app.refresh_theme_list();
         if let Some(source) = app.state.library.account.clone() {
@@ -512,10 +515,19 @@ impl App {
                 let paused = player.status().paused;
                 player.set_paused(!paused)
             }),
+            Action::SetPaused(paused) => self.with_player(|player| player.set_paused(paused)),
             Action::SeekTo { seconds, exact } => {
                 self.with_player(|player| player.seek_to(seconds, exact));
+                self.media.seeked(seconds);
             }
-            Action::SeekBy(seconds) => self.with_player(|player| player.seek_by(seconds)),
+            Action::SeekBy(seconds) => {
+                self.with_player(|player| player.seek_by(seconds));
+                let at = self
+                    .player
+                    .as_ref()
+                    .map_or(seconds, |player| player.status().position + seconds);
+                self.media.seeked(at);
+            }
             Action::SetVolume(volume) => {
                 // Kept in the settings, saved in `on_exit`: not per tick.
                 self.state.settings.volume = volume;
@@ -817,6 +829,18 @@ impl eframe::App for App {
                 instance::Remote::ReloadThemes => self.load_themes(),
             }
         }
+        // What the desktop's media controls asked for, and what they show.
+        for effect in self.media.commands(&self.state) {
+            match effect {
+                crate::now_playing::Effect::Action(action) => self.apply(ctx, action),
+                crate::now_playing::Effect::Raise => focus(ctx),
+                crate::now_playing::Effect::Quit => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close)
+                }
+            }
+        }
+        self.media
+            .update(&self.state, self.player.as_ref().map(Mpv::status));
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {

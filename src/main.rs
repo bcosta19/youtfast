@@ -9,6 +9,7 @@ mod instance;
 mod library;
 mod model;
 mod mpv;
+mod now_playing;
 mod paths;
 mod settings;
 mod takeout;

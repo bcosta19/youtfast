@@ -260,6 +260,8 @@ pub enum Action {
     Refresh,
     SetSource(Source),
     TogglePause,
+    /// The desktop's media controls ask for play or pause directly.
+    SetPaused(bool),
     /// Seconds from the start; `exact` once the seek bar is released.
     SeekTo {
         seconds: f64,

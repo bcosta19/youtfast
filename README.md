@@ -42,6 +42,10 @@ cargo run --release -- "rust egui"                      # or search
 | F, double click | Full screen |
 | Esc | Leave full screen, then go back to the results |
 
+The desktop's media keys and panels (MPRIS, so `playerctl` works too)
+control playback, and a second launch hands a link or search to the
+window already open instead of opening another.
+
 ## Your library, with or without an account
 
 **Without an account**, YouTFast keeps subscriptions, watch history (with
@@ -79,8 +83,7 @@ first run as plain JSON files you can edit, copy or delete; add your own
 there in the same format (a `base` plus named colours, see
 [fastframe-theme](https://github.com/crmne/fastframe)). A source build does
 not install the Omarchy hook (`contrib/omarchy/youtfast-theme`); packaged
-builds do, and following the desktop works either way. A second launch
-hands a link or search to the running window instead of opening another.
+builds do, and following the desktop works either way.
 
 ## Disclaimer
 

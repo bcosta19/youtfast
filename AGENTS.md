@@ -101,14 +101,17 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
   second launch hands `show`, `open <text>` or `reload-themes` to the
   window already open and exits; the handler only parses and queues, `App`
   drains the queue.
+- `src/now_playing.rs` is the desktop's media controls
+  (fastframe-now-playing; MPRIS on Linux): it maps their commands onto
+  `Action`s and reports what mpv plays; the units differ (`SeekBy` is
+  milliseconds, `SetVolume` is 0..1).
 
 ## Roadmap
 
 1. **Prototype (now):** search, watch page, in-window playback, full screen,
    keyboard shortcuts.
-2. **Make it an app:** fastframe-now-playing (MPRIS and media
-   keys), fastframe-i18n,
-   window persistence, the `demo` feature with sample data and screenshots.
+2. **Make it an app:** fastframe-i18n, window persistence, the `demo`
+   feature with sample data and screenshots.
 3. **Library and account (done, first version):** local subscriptions,
    history with resume, Watch later, Takeout import, RSS feed, channel
    pages; the account's feed, subscriptions, history, Watch later, liked
