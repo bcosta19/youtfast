@@ -7,6 +7,7 @@ use eframe::glow;
 use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 
 use crate::backend::{Backend, Command, Event, Payload, Request, Slot};
+use crate::instance::{self, Queue as RemoteQueue};
 use crate::library::Library;
 use crate::model::{
     AccountSource, Action, Channel, HistoryRow, Listing, PlaylistSummary, Quality, Resolution,
@@ -138,12 +139,19 @@ pub struct App {
     theme_waker: fastframe_theme::Waker,
     /// A change of palette revealed from the middle of the window outwards.
     theme_transition: fastframe_theme::Transition,
+    /// What later launches ask the running copy, drained each frame.
+    remote: RemoteQueue,
 }
 
 impl App {
     /// `open` is the command line's link or search, if any.
-    pub fn new(cc: &eframe::CreationContext<'_>, open: Option<String>) -> anyhow::Result<Self> {
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        open: Option<String>,
+        guard: &instance::Guard,
+    ) -> anyhow::Result<Self> {
         let ctx = &cc.egui_ctx;
+        guard.set_context(ctx);
         egui_extras::install_image_loaders(ctx);
         fastframe_icons::install::<crate::icons::Icon>(ctx);
         let dirs = Dirs::new().context("could not make the data folders")?;
@@ -217,6 +225,7 @@ impl App {
             custom_themes,
             theme_waker,
             theme_transition: fastframe_theme::Transition::default(),
+            remote: guard.commands(),
         };
         app.refresh_theme_list();
         if let Some(source) = app.state.library.account.clone() {
@@ -789,8 +798,25 @@ impl App {
 }
 
 impl eframe::App for App {
-    fn logic(&mut self, _ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll();
+        // What later launches sent to the running copy.
+        let remote: Vec<instance::Remote> = std::mem::take(
+            &mut *self
+                .remote
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
+        );
+        for remote in remote {
+            match remote {
+                instance::Remote::Show => focus(ctx),
+                instance::Remote::Open(text) => {
+                    focus(ctx);
+                    self.apply(ctx, Action::Search(text));
+                }
+                instance::Remote::ReloadThemes => self.load_themes(),
+            }
+        }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -834,6 +860,13 @@ impl eframe::App for App {
         }
         self.player = None;
     }
+}
+
+/// Brings the window up, as a second launch or a desktop click asks.
+fn focus(ctx: &egui::Context) {
+    ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
 }
 
 /// The palette filename a `Custom` theme choice selects, for a scan.

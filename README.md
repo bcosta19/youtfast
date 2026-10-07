@@ -77,7 +77,10 @@ own colours. The eight shared palettes (Catppuccin, Nord, Rosé Pine, Tokyo
 Night, and more) are installed into `~/.config/youtfast/themes` on the
 first run as plain JSON files you can edit, copy or delete; add your own
 there in the same format (a `base` plus named colours, see
-[fastframe-theme](https://github.com/crmne/fastframe)).
+[fastframe-theme](https://github.com/crmne/fastframe)). A source build does
+not install the Omarchy hook (`contrib/omarchy/youtfast-theme`); packaged
+builds do, and following the desktop works either way. A second launch
+hands a link or search to the running window instead of opening another.
 
 ## Disclaimer
 

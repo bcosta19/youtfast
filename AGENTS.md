@@ -94,14 +94,20 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
   mapping onto `egui::Visuals`, and the fastframe-theme catalogue's
   desktop integration (shared presets, Omarchy on Linux, followed live).
   `Settings::palette` resolves the choice through the caches; a change is
-  revealed by `fastframe_theme::Transition`.
+  revealed by `fastframe_theme::Transition`. The Omarchy hook
+  (`contrib/omarchy/youtfast-theme`) calls `youtfast reload-themes`; the
+  palette is also followed through filesystem notifications.
+- `src/instance.rs` is one running copy per user (fastframe-instance): a
+  second launch hands `show`, `open <text>` or `reload-themes` to the
+  window already open and exits; the handler only parses and queues, `App`
+  drains the queue.
 
 ## Roadmap
 
 1. **Prototype (now):** search, watch page, in-window playback, full screen,
    keyboard shortcuts.
 2. **Make it an app:** fastframe-now-playing (MPRIS and media
-   keys), fastframe-instance, fastframe-i18n,
+   keys), fastframe-i18n,
    window persistence, the `demo` feature with sample data and screenshots.
 3. **Library and account (done, first version):** local subscriptions,
    history with resume, Watch later, Takeout import, RSS feed, channel

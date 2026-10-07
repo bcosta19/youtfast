@@ -241,4 +241,12 @@ mod tests {
     fn the_omarchy_template_is_the_base_one() {
         assert_eq!(OMARCHY_TEMPLATE, fastframe_theme::omarchy::BASE_TEMPLATE);
     }
+
+    #[test]
+    fn the_omarchy_hook_is_the_crate_one() {
+        assert_eq!(
+            include_str!("../contrib/omarchy/youtfast-theme"),
+            fastframe_theme::omarchy::hook_script("youtfast")
+        );
+    }
 }

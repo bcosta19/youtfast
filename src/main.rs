@@ -5,6 +5,7 @@ mod app;
 mod backend;
 mod icons;
 mod innertube;
+mod instance;
 mod library;
 mod model;
 mod mpv;
@@ -16,20 +17,36 @@ mod ui;
 mod util;
 mod youtube;
 
+use std::sync::Arc;
+
 use clap::Parser;
 
 #[derive(Parser)]
-#[command(version, about)]
+#[command(version, about, args_conflicts_with_subcommands = true)]
 struct Cli {
     /// A YouTube link to open, or something to search for.
     open: Option<String>,
     /// Log debug messages.
     #[arg(long)]
     verbose: bool,
+    #[command(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(clap::Subcommand)]
+enum Command {
+    /// Asks the running copy to list its palettes again (the Omarchy hook
+    /// calls this). Does nothing when YouTFast is not running.
+    ReloadThemes,
 }
 
 fn main() -> eframe::Result {
     let cli = Cli::parse();
+    // A command-line action for the running copy never opens a window.
+    if matches!(cli.command, Some(Command::ReloadThemes)) {
+        instance::send("reload-themes");
+        return Ok(());
+    }
     let filter = if cli.verbose {
         "youtfast=debug,mpv=debug"
     } else {
@@ -52,10 +69,33 @@ fn main() -> eframe::Result {
         renderer: eframe::Renderer::Glow,
         ..Default::default()
     };
+    // One running copy: a later launch hands its link or search to the
+    // window already open and exits.
+    let request = cli
+        .open
+        .as_deref()
+        .map(|text| format!("open {text}"))
+        .unwrap_or_else(|| "show".to_owned());
+    let guard = match instance::launch(&request) {
+        instance::Launch::Only(guard) => guard,
+        instance::Launch::Handed => {
+            log::info!("another copy is running; handed the request to it");
+            return Ok(());
+        }
+        instance::Launch::Declined => {
+            log::info!("another copy is running but declined the request");
+            return Ok(());
+        }
+    };
+    // The instance guard is kept until the process exits.
+    let guard = Arc::new(guard);
     let open = cli.open;
     eframe::run_native(
         "YouTFast",
         options,
-        Box::new(move |cc| Ok(Box::new(app::App::new(cc, open)?))),
+        Box::new(move |cc| {
+            let guard = Arc::clone(&guard);
+            Ok(Box::new(app::App::new(cc, open, &guard)?))
+        }),
     )
 }
