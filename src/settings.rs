@@ -6,9 +6,23 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::model::Quality;
+use crate::theme::{CustomTheme, Palette};
 
 fn default_volume() -> f64 {
     100.0
+}
+
+/// Which colours the interface draws with.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemeChoice {
+    /// The desktop's palette where it has one (Omarchy), dark otherwise.
+    #[default]
+    Auto,
+    Dark,
+    Light,
+    /// A palette file from the themes folder, by its filename.
+    Custom(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -19,6 +33,24 @@ pub struct Settings {
     /// mpv's volume, 0 to 100.
     #[serde(default = "default_volume")]
     pub volume: f64,
+    #[serde(default)]
+    pub theme: ThemeChoice,
+    /// The last palette the selected file gave, so start-up draws it before
+    /// the scan finishes (and while the file is gone).
+    #[serde(
+        default,
+        deserialize_with = "fastframe_theme::read_cached_theme",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub custom_theme_cache: Option<CustomTheme>,
+    /// The desktop's last palette (Omarchy), so Automatic survives a
+    /// restart and the desktop's theme being unreadable.
+    #[serde(
+        default,
+        deserialize_with = "fastframe_theme::read_cached_theme",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub system_theme_cache: Option<CustomTheme>,
 }
 
 impl Default for Settings {
@@ -26,6 +58,9 @@ impl Default for Settings {
         Self {
             quality: Quality::default(),
             volume: default_volume(),
+            theme: ThemeChoice::default(),
+            custom_theme_cache: None,
+            system_theme_cache: None,
         }
     }
 }
@@ -60,6 +95,26 @@ impl Settings {
         let json = serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?;
         crate::paths::write_atomic(path, &json)
     }
+
+    /// The colours the interface draws with now: the selected palette's
+    /// cache when it has one, else a built-in.
+    pub fn palette(&self) -> Palette {
+        match &self.theme {
+            ThemeChoice::Custom(filename) => self
+                .custom_theme_cache
+                .as_ref()
+                .filter(|theme| &theme.filename == filename)
+                .map(|theme| theme.palette.clone())
+                .unwrap_or_else(Palette::dark),
+            ThemeChoice::Auto => self
+                .system_theme_cache
+                .as_ref()
+                .map(|theme| theme.palette.clone())
+                .unwrap_or_else(Palette::dark),
+            ThemeChoice::Dark => Palette::dark(),
+            ThemeChoice::Light => Palette::light(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -81,6 +136,7 @@ mod tests {
         let settings = Settings {
             quality: Quality::Max(720),
             volume: 40.0,
+            ..Settings::default()
         };
         settings.save(&path).unwrap();
         assert_eq!(Settings::load(&path), settings);
@@ -122,5 +178,74 @@ mod tests {
             .find(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
             .unwrap_or_else(|| panic!("{aside} should exist"));
         std::fs::remove_file(found.path()).unwrap();
+    }
+
+    #[test]
+    fn an_older_file_loads_as_auto() {
+        let settings: Settings =
+            serde_json::from_str(r#"{"quality":{"Max":720},"volume":40}"#).unwrap();
+        assert_eq!(settings.theme, ThemeChoice::Auto);
+        assert!(settings.custom_theme_cache.is_none());
+        assert!(settings.system_theme_cache.is_none());
+    }
+
+    #[test]
+    fn the_palette_follows_the_theme_choice() {
+        let with_theme = |theme| Settings {
+            theme,
+            ..Settings::default()
+        };
+        assert_eq!(with_theme(ThemeChoice::Auto).palette(), Palette::dark());
+        assert_eq!(with_theme(ThemeChoice::Light).palette(), Palette::light());
+        assert_eq!(with_theme(ThemeChoice::Dark).palette(), Palette::dark());
+        // Automatic picks the desktop's cached palette when there is one.
+        let mut omarchy = Palette::light();
+        omarchy.accent = egui::Color32::from_rgb(1, 2, 3);
+        let mut settings = Settings {
+            system_theme_cache: Some(CustomTheme {
+                filename: "omarchy.json".into(),
+                palette: omarchy.clone(),
+            }),
+            ..Settings::default()
+        };
+        assert_eq!(settings.palette(), omarchy);
+        // A custom palette comes from its cache, matching the filename.
+        let mut nord = Palette::dark();
+        nord.accent = egui::Color32::from_rgb(4, 5, 6);
+        settings.custom_theme_cache = Some(CustomTheme {
+            filename: "Nord.json".into(),
+            palette: nord.clone(),
+        });
+        settings.theme = ThemeChoice::Custom("Nord.json".into());
+        assert_eq!(settings.palette(), nord);
+        // A cache for another file does not count.
+        settings.theme = ThemeChoice::Custom("Gone.json".into());
+        assert_eq!(settings.palette(), Palette::dark());
+    }
+
+    #[test]
+    fn a_damaged_theme_cache_keeps_the_other_settings() {
+        let text = r#"{
+            "theme": {"custom": "gruvbox.json"},
+            "volume": 37,
+            "custom_theme_cache": {"palette": "broken"},
+            "system_theme_cache": {"filename": "omarchy.json"}
+        }"#;
+        let settings: Settings = serde_json::from_str(text).unwrap();
+        assert_eq!(settings.theme, ThemeChoice::Custom("gruvbox.json".into()));
+        assert_eq!(settings.volume, 37.0);
+        assert!(settings.custom_theme_cache.is_none());
+        assert!(settings.system_theme_cache.is_none());
+        // An intact cache survives, and round-trips.
+        let settings = Settings {
+            theme: ThemeChoice::Custom("Nord.json".into()),
+            custom_theme_cache: Some(CustomTheme {
+                filename: "Nord.json".into(),
+                palette: Palette::dark(),
+            }),
+            ..Settings::default()
+        };
+        let json = serde_json::to_string(&settings).unwrap();
+        assert_eq!(serde_json::from_str::<Settings>(&json).unwrap(), settings);
     }
 }

@@ -17,19 +17,19 @@ pub fn icon_button(ui: &mut Ui, icon: Icon, size: f32, hint: &str) -> Response {
 }
 
 /// A thumbnail at `size`, with the length (or LIVE) in its corner.
-pub fn thumbnail(ui: &mut Ui, video: &Video, size: egui::Vec2) -> Response {
+pub fn thumbnail(ui: &mut Ui, video: &Video, size: egui::Vec2, accent: Color32) -> Response {
     let response = ui.add(
         Image::new(video.thumbnail())
             .fit_to_exact_size(size)
             .corner_radius(CornerRadius::same(10)),
     );
-    badge(ui, response.rect, video);
+    badge(ui, response.rect, video, accent);
     response
 }
 
-fn badge(ui: &Ui, thumbnail: Rect, video: &Video) {
+fn badge(ui: &Ui, thumbnail: Rect, video: &Video, accent: Color32) {
     let (text, fill) = if video.live {
-        ("LIVE".to_owned(), super::ACCENT)
+        ("LIVE".to_owned(), accent)
     } else if let Some(seconds) = video.duration {
         (util::duration(seconds), Color32::from_black_alpha(200))
     } else {
@@ -69,9 +69,15 @@ pub fn meta(video: &Video) -> String {
 
 /// A video as a row: thumbnail on the left, title and details beside it.
 /// `note` is an extra line ("Watched 2 days ago").
-pub fn compact_card(ui: &mut Ui, video: &Video, note: Option<&str>, actions: &mut Vec<Action>) {
+pub fn compact_card(
+    ui: &mut Ui,
+    video: &Video,
+    note: Option<&str>,
+    accent: Color32,
+    actions: &mut Vec<Action>,
+) {
     let row = ui.horizontal_top(|ui| {
-        thumbnail(ui, video, vec2(168.0, 94.5));
+        thumbnail(ui, video, vec2(168.0, 94.5), accent);
         ui.vertical(|ui| {
             title(ui, &video.title, 14.0);
             if let Some(channel) = &video.channel {
@@ -154,7 +160,8 @@ pub fn subscribe_button(ui: &mut Ui, state: &State, channel: &Channel, actions: 
     let button = if subscribed {
         egui::Button::new("Subscribed on this device")
     } else {
-        egui::Button::new(RichText::new("Subscribe").color(Color32::WHITE)).fill(super::ACCENT)
+        egui::Button::new(RichText::new("Subscribe").color(state.palette.on_accent))
+            .fill(state.palette.accent)
     };
     let hint = if subscribed {
         "Unsubscribe on this computer"

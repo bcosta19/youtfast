@@ -84,14 +84,24 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
   winit forks; move their revisions together with the sibling apps.
 - Leaving the watch page pauses the video: nothing draws it there, and an
   undrawn render-API video output stalls.
+- `src/settings.rs` is what survives between runs (quality, volume, the
+  theme choice and its palette caches), in one JSON file at
+  `paths::Dirs::settings`. Loads and saves mirror `library.rs`; the backend
+  writes it (`Command::SaveSettings`), and `on_exit` saves directly.
+- `src/icons.rs` lists the Lucide icons fastframe-icons shares with the
+  sibling apps; `fastframe_icons::install` serves them to egui.
+- `src/theme.rs` is the palette: YouTube's dark and light defaults, the
+  mapping onto `egui::Visuals`, and the fastframe-theme catalogue's
+  desktop integration (shared presets, Omarchy on Linux, followed live).
+  `Settings::palette` resolves the choice through the caches; a change is
+  revealed by `fastframe_theme::Transition`.
 
 ## Roadmap
 
 1. **Prototype (now):** search, watch page, in-window playback, full screen,
    keyboard shortcuts.
-2. **Make it an app:** fastframe-theme (Omarchy themes), fastframe-icons
-   (Lucide instead of Unicode glyphs), fastframe-now-playing (MPRIS and media
-   keys), fastframe-instance, fastframe-i18n, settings file (quality, volume),
+2. **Make it an app:** fastframe-now-playing (MPRIS and media
+   keys), fastframe-instance, fastframe-i18n,
    window persistence, the `demo` feature with sample data and screenshots.
 3. **Library and account (done, first version):** local subscriptions,
    history with resume, Watch later, Takeout import, RSS feed, channel

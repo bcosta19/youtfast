@@ -97,6 +97,7 @@ pub fn home(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             ui,
             &state.feed,
             "No videos from your subscriptions yet",
+            state.palette.accent,
             actions,
         );
     });
@@ -173,7 +174,13 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                                 );
                                 ui.add_space(4.0);
                             }
-                            widgets::compact_card(ui, &row.video, None, actions);
+                            widgets::compact_card(
+                                ui,
+                                &row.video,
+                                None,
+                                state.palette.accent,
+                                actions,
+                            );
                             ui.add_space(8.0);
                         }
                     });
@@ -193,7 +200,13 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     if watched.position > 0.0 {
                         note.push_str(&format!(" · left at {}", util::duration(watched.position)));
                     }
-                    widgets::compact_card(ui, &watched.video, Some(&note), actions);
+                    widgets::compact_card(
+                        ui,
+                        &watched.video,
+                        Some(&note),
+                        state.palette.accent,
+                        actions,
+                    );
                     ui.add_space(8.0);
                 }
             });
@@ -209,13 +222,19 @@ pub fn watch_later(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     ui,
                     &state.account_watch_later,
                     "Nothing saved for later",
+                    state.palette.accent,
                     actions,
                 );
             }
             Source::Device if state.library.watch_later.is_empty() => {
                 hint(ui, "Save videos from their page to watch them later.");
             }
-            Source::Device => results::grid(ui, &state.library.watch_later, actions),
+            Source::Device => results::grid(
+                ui,
+                &state.library.watch_later,
+                state.palette.accent,
+                actions,
+            ),
         }
     });
 }
@@ -223,7 +242,13 @@ pub fn watch_later(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 pub fn liked(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     egui::CentralPanel::default().show(ui, |ui| {
         header(ui, state, "Liked videos", false, actions, |_, _| {});
-        results::videos(ui, &state.liked, "No liked videos", actions);
+        results::videos(
+            ui,
+            &state.liked,
+            "No liked videos",
+            state.palette.accent,
+            actions,
+        );
     });
 }
 
@@ -308,6 +333,12 @@ pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             }
             None => return,
         }
-        results::videos(ui, &state.page_videos, "No videos here", actions);
+        results::videos(
+            ui,
+            &state.page_videos,
+            "No videos here",
+            state.palette.accent,
+            actions,
+        );
     });
 }

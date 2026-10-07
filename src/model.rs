@@ -237,6 +237,8 @@ pub enum View {
     /// One channel's latest videos; `State::page` says which.
     Channel,
     Account,
+    /// The choices between runs: the theme.
+    Settings,
 }
 
 /// What a view asks the app to do. Views push these while drawing; the app
@@ -269,6 +271,7 @@ pub enum Action {
     ToggleFullscreen,
     ExitFullscreen,
     SetQuality(Quality),
+    SetTheme(crate::settings::ThemeChoice),
     /// Subscribes on this device, or unsubscribes.
     ToggleSubscription(Channel),
     /// Adds to this device's Watch later, or removes.

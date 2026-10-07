@@ -14,7 +14,8 @@ use crate::model::{
 };
 use crate::mpv::{self, Mpv, NativeDisplay, VideoSurface};
 use crate::paths::Dirs;
-use crate::settings::Settings;
+use crate::settings::{Settings, ThemeChoice};
+use crate::theme::{self, Palette};
 use crate::{account, ui, util, youtube};
 
 /// The signed-in account, as the interface shows it.
@@ -72,6 +73,16 @@ pub struct State {
     pub seek_preview: Option<f64>,
     /// The choices kept between runs (quality, volume).
     pub settings: Settings,
+    /// The colours the interface draws, resolved from the settings.
+    pub palette: Palette,
+    /// The palettes the settings page lists, as (filename, display name).
+    pub themes: Vec<(String, String)>,
+    /// Whether the desktop's palette is followed (Omarchy on Linux).
+    pub follows_omarchy: bool,
+    /// What the theme setting says under it; empty when all is well.
+    pub theme_status: String,
+    /// Where the palette files live, for the settings page to say.
+    pub themes_dir: String,
     /// What the video being watched offers, highest first; empty until it
     /// loads.
     pub resolutions: Vec<Resolution>,
@@ -119,6 +130,14 @@ pub struct App {
     /// Where Back goes: the pages a video, channel or playlist was opened
     /// from.
     back: Vec<View>,
+    /// The palettes the settings page offers, scanned off the interface
+    /// thread.
+    custom_themes: theme::Catalog,
+    /// Wakes the window when a theme scan finishes or a watched file
+    /// changes.
+    theme_waker: fastframe_theme::Waker,
+    /// A change of palette revealed from the middle of the window outwards.
+    theme_transition: fastframe_theme::Transition,
 }
 
 impl App {
@@ -127,7 +146,6 @@ impl App {
         let ctx = &cc.egui_ctx;
         egui_extras::install_image_loaders(ctx);
         fastframe_icons::install::<crate::icons::Icon>(ctx);
-        ctx.set_theme(egui::Theme::Dark);
         let dirs = Dirs::new().context("could not make the data folders")?;
         let backend =
             Backend::start(ctx.clone(), dirs.clone()).context("could not start the backend")?;
@@ -143,8 +161,26 @@ impl App {
         {
             settings.quality = quality;
         }
+        let mut custom_themes = theme::Catalog::default();
+        theme::enable_desktop_themes(&mut custom_themes);
+        let theme_ctx = ctx.clone();
+        let theme_waker = fastframe_theme::Waker::new(move || theme_ctx.request_repaint());
+        custom_themes.start(
+            dirs.config.join("themes"),
+            selected_theme(&settings),
+            &theme_waker,
+        );
+        let palette = settings.palette();
+        theme::apply(ctx, &palette);
+        ctx.set_theme(if palette.dark {
+            egui::Theme::Dark
+        } else {
+            egui::Theme::Light
+        });
         let mut state = State {
             library: Library::load(&dirs.library()),
+            themes_dir: dirs.config.join("themes").display().to_string(),
+            palette,
             settings,
             browser: browsers.first().copied().unwrap_or("chromium").to_owned(),
             browsers,
@@ -183,7 +219,11 @@ impl App {
             generation: 0,
             generations: HashMap::new(),
             back: Vec::new(),
+            custom_themes,
+            theme_waker,
+            theme_transition: fastframe_theme::Transition::default(),
         };
+        app.refresh_theme_list();
         if let Some(source) = app.state.library.account.clone() {
             app.state.account = AccountState::SigningIn;
             app.backend.send(Command::Restore(source));
@@ -198,6 +238,13 @@ impl App {
 
     /// Takes in what the backend and mpv have to say.
     fn poll(&mut self) {
+        // The themes folder or Omarchy's palette changed on disk.
+        if self.custom_themes.needs_reload() {
+            self.load_themes();
+        }
+        if self.custom_themes.poll() {
+            self.adopt_themes();
+        }
         for event in self.backend.poll() {
             self.handle(event);
         }
@@ -473,6 +520,16 @@ impl App {
             Action::ToggleFullscreen => self.set_fullscreen(ctx, !self.state.fullscreen),
             Action::ExitFullscreen => self.set_fullscreen(ctx, false),
             Action::SetQuality(quality) => self.set_quality(quality),
+            Action::SetTheme(choice) => {
+                self.state.settings.theme = choice;
+                self.save_settings();
+                // A custom choice scans again so its cache fills at once.
+                if matches!(self.state.settings.theme, ThemeChoice::Custom(_)) {
+                    self.load_themes();
+                } else {
+                    self.refresh_theme_list();
+                }
+            }
             Action::ToggleSubscription(channel) => {
                 self.state.library.toggle_subscription(channel);
                 self.save_library();
@@ -602,6 +659,88 @@ impl App {
             .send(Command::SaveLibrary(self.state.library.clone()));
     }
 
+    fn save_settings(&self) {
+        self.backend
+            .send(Command::SaveSettings(self.state.settings.clone()));
+    }
+
+    /// Lists the themes folder again, reading the selected palette first.
+    fn load_themes(&mut self) {
+        self.custom_themes.start(
+            self.dirs.config.join("themes"),
+            selected_theme(&self.state.settings),
+            &self.theme_waker,
+        );
+        self.refresh_theme_list();
+    }
+
+    /// Takes the selected and the desktop's palettes from a finished scan.
+    fn adopt_themes(&mut self) {
+        let mut changed = false;
+        if let ThemeChoice::Custom(filename) = &self.state.settings.theme
+            && let Some(theme) = self.custom_themes.find(filename)
+            && self.state.settings.custom_theme_cache.as_ref() != Some(theme)
+        {
+            self.state.settings.custom_theme_cache = Some(theme.clone());
+            changed = true;
+        }
+        if self.custom_themes.follows_omarchy() {
+            if let Some(theme) = self.custom_themes.system_theme()
+                && self.state.settings.system_theme_cache.as_ref() != Some(theme)
+            {
+                self.state.settings.system_theme_cache = Some(theme.clone());
+                changed = true;
+            }
+        } else if self.state.settings.system_theme_cache.take().is_some() {
+            changed = true;
+        }
+        if changed {
+            self.save_settings();
+        }
+        self.refresh_theme_list();
+    }
+
+    /// Applies the settings' palette when it differs from the one drawn,
+    /// revealing the change from the middle of the window outwards.
+    fn update_theme(&mut self, ctx: &egui::Context) {
+        let palette = self.state.settings.palette();
+        if palette == self.state.palette {
+            return;
+        }
+        self.theme_transition.begin(ctx);
+        if self.theme_transition.holding(ctx) {
+            return;
+        }
+        theme::apply(ctx, &palette);
+        ctx.set_theme(if palette.dark {
+            egui::Theme::Dark
+        } else {
+            egui::Theme::Light
+        });
+        self.state.palette = palette;
+    }
+
+    /// What the settings page lists and says under the theme setting.
+    fn refresh_theme_list(&mut self) {
+        let state = &mut self.state;
+        state.themes = self
+            .custom_themes
+            .picker_themes()
+            .map(|theme| {
+                (
+                    theme.filename.clone(),
+                    fastframe_theme::display_name(&theme.filename).to_owned(),
+                )
+            })
+            .collect();
+        state.follows_omarchy = self.custom_themes.follows_omarchy();
+        let selected = match &state.settings.theme {
+            ThemeChoice::Custom(filename) => Some(filename.as_str()),
+            _ => None,
+        };
+        state.theme_status = theme::catalog_status(&self.custom_themes, selected).into_owned();
+    }
+
     /// Bounds the streams from now on, and reloads the video being watched
     /// where it was, so the new quality shows at once.
     fn set_quality(&mut self, quality: Quality) {
@@ -610,8 +749,7 @@ impl App {
         }
         log::info!("quality set to {quality:?}");
         self.state.settings.quality = quality;
-        self.backend
-            .send(Command::SaveSettings(self.state.settings.clone()));
+        self.save_settings();
         let Some(player) = &self.player else {
             return;
         };
@@ -660,6 +798,7 @@ impl eframe::App for App {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.update_theme(ui.ctx());
         let mut actions = Vec::new();
         let status = self.player.as_ref().map(Mpv::status);
         ui::show(
@@ -669,6 +808,7 @@ impl eframe::App for App {
             self.surface.as_ref(),
             &mut actions,
         );
+        self.theme_transition.paint(ui.ctx());
         let ctx = ui.ctx().clone();
         for action in actions {
             self.apply(&ctx, action);
@@ -697,6 +837,14 @@ impl eframe::App for App {
             surface.destroy(gl);
         }
         self.player = None;
+    }
+}
+
+/// The palette filename a `Custom` theme choice selects, for a scan.
+fn selected_theme(settings: &Settings) -> Option<String> {
+    match &settings.theme {
+        ThemeChoice::Custom(filename) => Some(filename.clone()),
+        _ => None,
     }
 }
 

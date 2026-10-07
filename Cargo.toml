@@ -36,6 +36,9 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "proce
 fastframe-log = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
 # The icons! table and the Lucide icons shared with the sibling apps.
 fastframe-icons = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
+# Palette files, the shared palettes, and following the Omarchy desktop's
+# theme live.
+fastframe-theme = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
 # YouTube's own API (InnerTube): the signed-in account's feed, history,
 # subscriptions, playlists, liked videos and Watch later (`userdata`), and
 # channel RSS for the feed without an account (`rss`). rustls, as in the

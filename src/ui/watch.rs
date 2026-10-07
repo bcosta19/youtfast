@@ -5,7 +5,7 @@ use egui::{
     Slider, Ui, UiBuilder, pos2, vec2,
 };
 
-use super::{ACCENT, widgets};
+use super::widgets;
 use crate::app::State;
 use crate::icons::Icon;
 use crate::model::{Action, Channel, Quality, Resolution};
@@ -368,9 +368,13 @@ fn seek_bar(ui: &mut Ui, state: &mut State, status: &Status, actions: &mut Vec<A
     let buffered = Rect::from_min_max(track.min, pos2(x_at(status.cached_until), track.max.y));
     painter.rect_filled(buffered, radius, Color32::from_white_alpha(90));
     let played = Rect::from_min_max(track.min, pos2(x_at(position), track.max.y));
-    painter.rect_filled(played, radius, ACCENT);
+    painter.rect_filled(played, radius, state.palette.accent);
     if active && duration > 0.0 {
-        painter.circle_filled(pos2(x_at(position), track.center().y), 7.0, ACCENT);
+        painter.circle_filled(
+            pos2(x_at(position), track.center().y),
+            7.0,
+            state.palette.accent,
+        );
     }
 }
 
@@ -387,7 +391,7 @@ fn up_next(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     ui.label(RichText::new("Up next").strong().size(16.0));
     ui.add_space(8.0);
     for video in next {
-        widgets::compact_card(ui, video, None, actions);
+        widgets::compact_card(ui, video, None, state.palette.accent, actions);
         ui.add_space(8.0);
     }
 }

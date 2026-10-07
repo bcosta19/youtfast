@@ -6,6 +6,7 @@
 mod account;
 mod library;
 mod results;
+mod settings;
 mod watch;
 mod widgets;
 
@@ -19,7 +20,8 @@ use crate::icons::Icon;
 use crate::model::{Action, View};
 use crate::mpv::{Status, VideoSurface};
 
-pub const ACCENT: Color32 = Color32::from_rgb(255, 0, 51);
+/// The logo's red: a brand mark, not the theme's accent.
+pub const BRAND: Color32 = Color32::from_rgb(255, 0, 51);
 
 pub fn show(
     ui: &mut egui::Ui,
@@ -59,6 +61,7 @@ pub fn show(
         View::Playlists => library::playlists(ui, state, actions),
         View::Playlist | View::Channel => library::page(ui, state, actions),
         View::Account => account::show(ui, state, actions),
+        View::Settings => settings::show(ui, state, actions),
     }
 }
 
@@ -98,6 +101,7 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
                 AccountState::SignedOut | AccountState::Failed(_) => "Sign in",
             };
             item(ui, View::Account, account);
+            item(ui, View::Settings, "Settings");
         });
 }
 
@@ -139,7 +143,7 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
 fn logo(ui: &mut egui::Ui) {
     let (rect, _) = ui.allocate_exact_size(vec2(30.0, 21.0), Sense::hover());
     let painter = ui.painter();
-    painter.rect_filled(rect, CornerRadius::same(6), ACCENT);
+    painter.rect_filled(rect, CornerRadius::same(6), BRAND);
     let center = rect.center();
     painter.add(Shape::convex_polygon(
         vec![

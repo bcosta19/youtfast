@@ -69,6 +69,16 @@ verify itself, signed out, or suspended. A secondary account is the safe
 choice. Subscribing and saving to Watch later from YouTFast act on this
 computer; changing the account itself needs youtube.com.
 
+## Themes
+
+Settings → Appearance. **Automatic** follows the Omarchy desktop's theme
+live on Linux, and is dark elsewhere. **Dark** and **Light** are YouTube's
+own colours. The eight shared palettes (Catppuccin, Nord, Rosé Pine, Tokyo
+Night, and more) are installed into `~/.config/youtfast/themes` on the
+first run as plain JSON files you can edit, copy or delete; add your own
+there in the same format (a `base` plus named colours, see
+[fastframe-theme](https://github.com/crmne/fastframe)).
+
 ## Disclaimer
 
 YouTFast is an unofficial client and is not affiliated with YouTube or

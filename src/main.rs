@@ -11,6 +11,7 @@ mod mpv;
 mod paths;
 mod settings;
 mod takeout;
+mod theme;
 mod ui;
 mod util;
 mod youtube;
