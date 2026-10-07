@@ -6,12 +6,12 @@ use anyhow::Context as _;
 use eframe::glow;
 use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 
-use crate::backend::{Backend, Command, Event, Payload, Request, Slot};
+use crate::backend::{Backend, Command, CommentsKey, Event, Payload, Request, Slot};
 use crate::instance::{self, Queue as RemoteQueue};
 use crate::library::Library;
 use crate::model::{
-    AccountSource, Action, Channel, HistoryRow, Listing, PlaylistSummary, Quality, Resolution,
-    Results, Source, Video, View,
+    AccountSource, Action, Channel, CommentRow, Details, Fetch, HistoryRow, Listing,
+    PlaylistSummary, Quality, Resolution, Results, Source, Video, View,
 };
 use crate::mpv::{self, Mpv, NativeDisplay, VideoSurface};
 use crate::paths::Dirs;
@@ -91,6 +91,18 @@ pub struct State {
     /// What the video being watched offers, highest first; empty until it
     /// loads.
     pub resolutions: Vec<Resolution>,
+    /// rustypipe's view of the video: description, chapters, comments.
+    pub details: Fetch<Details>,
+    /// The comments loaded so far.
+    pub comments: Fetch<Vec<CommentRow>>,
+    /// The next comments page's token.
+    pub comments_next: Option<String>,
+    /// Visitor data the comments requests carry.
+    pub comments_visitor_data: Option<String>,
+    /// Each comment's replies by comment id, when opened.
+    pub replies: HashMap<String, Fetch<Vec<CommentRow>>>,
+    /// The description expanded past its first rows.
+    pub description_open: bool,
 }
 
 impl State {
@@ -132,6 +144,9 @@ pub struct App {
     /// answer to an older request is dropped.
     generation: u64,
     generations: HashMap<Slot, u64>,
+    /// The generation the details/comments requests of the video being
+    /// watched were sent with; a later `open` drops their answers.
+    details_generation: u64,
     /// Where Back goes: the pages a video, channel or playlist was opened
     /// from.
     back: Vec<View>,
@@ -233,6 +248,7 @@ impl App {
             surface,
             generation: 0,
             generations: HashMap::new(),
+            details_generation: 0,
             back: Vec::new(),
             custom_themes,
             theme_waker,
@@ -317,6 +333,75 @@ impl App {
             } => {
                 if self.generations.get(&slot) == Some(&generation) {
                     self.fill(slot, result);
+                }
+            }
+            Event::Details { generation, result } => {
+                let result = *result;
+                if generation != self.details_generation {
+                    return;
+                }
+                match result {
+                    Ok(details) => {
+                        // Complete what the watch page and the library know.
+                        if let Some(watching) = self.state.watching.as_mut()
+                            && watching.id == details.id
+                        {
+                            let filled = Video {
+                                id: details.id.clone(),
+                                title: details.title.clone(),
+                                channel: Some(details.channel.name.clone()),
+                                channel_id: Some(details.channel.id.clone()),
+                                duration: None,
+                                views: Some(details.views),
+                                live: details.live,
+                                published_at: None,
+                                published: details.published.clone(),
+                            };
+                            watching.complete_from(&filled);
+                            let watching = watching.clone();
+                            self.state.library.update_video(&watching);
+                            self.save_library();
+                        }
+                        // The first comments page comes right behind it.
+                        if let Some(token) = details.comments_token.clone() {
+                            self.state.comments = Fetch::Loading;
+                            self.state.comments_visitor_data = details.visitor_data.clone();
+                            self.backend.send(Command::LoadComments {
+                                generation: self.details_generation,
+                                key: CommentsKey::Top,
+                                token,
+                                visitor_data: details.visitor_data.clone(),
+                            });
+                        }
+                        self.state.details = Fetch::Ready(details);
+                    }
+                    Err(error) => self.state.details = Fetch::Failed(error),
+                }
+            }
+            Event::Comments {
+                generation,
+                key,
+                result,
+            } => {
+                if generation != self.details_generation {
+                    return;
+                }
+                match (key, result) {
+                    (CommentsKey::Top, Ok((rows, next))) => {
+                        let mut comments = self.state.comments.ready().cloned().unwrap_or_default();
+                        comments.extend(rows);
+                        self.state.comments = Fetch::Ready(comments);
+                        self.state.comments_next = next;
+                    }
+                    (CommentsKey::Top, Err(error)) => {
+                        self.state.comments = Fetch::Failed(error);
+                    }
+                    (CommentsKey::Replies(id), Ok((rows, _))) => {
+                        self.state.replies.insert(id, Fetch::Ready(rows));
+                    }
+                    (CommentsKey::Replies(id), Err(error)) => {
+                        self.state.replies.insert(id, Fetch::Failed(error));
+                    }
                 }
             }
             Event::Imported(Ok(import)) => {
@@ -518,7 +603,24 @@ impl App {
             Action::OpenPlaylist { id, name } => {
                 self.open_page(ctx, View::Playlist, Page::Playlist { id, name });
             }
-            Action::Refresh => self.load(self.state.view, true),
+            Action::Refresh => {
+                self.load(self.state.view, true);
+                // On the watch page, `r` also re-requests the details.
+                if self.state.view == View::Watch
+                    && let Some(video) = self.state.watching.clone()
+                {
+                    self.generation += 1;
+                    self.details_generation = self.generation;
+                    self.state.details = Fetch::Loading;
+                    self.state.comments = Fetch::Idle;
+                    self.state.comments_next = None;
+                    self.state.replies.clear();
+                    self.backend.send(Command::LoadDetails {
+                        generation: self.details_generation,
+                        id: video.id,
+                    });
+                }
+            }
             Action::SetSource(source) => {
                 self.state.source = source;
                 self.load(self.state.view, false);
@@ -608,6 +710,50 @@ impl App {
             Action::SignOut => self.backend.send(Command::SignOut),
             Action::SetBrowser(browser) => self.state.browser = browser,
             Action::DismissNotice => self.state.notice = None,
+            Action::LoadMoreComments => {
+                if let Some(token) = self.state.comments_next.clone() {
+                    self.backend.send(Command::LoadComments {
+                        generation: self.details_generation,
+                        key: CommentsKey::Top,
+                        token,
+                        visitor_data: self.state.comments_visitor_data.clone(),
+                    });
+                }
+            }
+            Action::ToggleReplies(id) => {
+                if self.state.replies.contains_key(&id) {
+                    self.state.replies.remove(&id);
+                } else {
+                    let token = self
+                        .state
+                        .comments
+                        .ready()
+                        .and_then(|comments| comments.iter().find(|row| row.id == id))
+                        .and_then(|row| row.replies_token.clone());
+                    self.state.replies.insert(id.clone(), Fetch::Loading);
+                    if let Some(token) = token {
+                        self.backend.send(Command::LoadComments {
+                            generation: self.details_generation,
+                            key: CommentsKey::Replies(id),
+                            token,
+                            visitor_data: self.state.comments_visitor_data.clone(),
+                        });
+                    } else {
+                        self.state.replies.insert(
+                            id,
+                            Fetch::Failed("the replies' token is missing".to_owned()),
+                        );
+                    }
+                }
+            }
+            Action::ToggleDescription => {
+                self.state.description_open = !self.state.description_open;
+            }
+            Action::OpenUrl(url) => {
+                if url.starts_with("https://") || url.starts_with("http://") {
+                    ctx.open_url(egui::OpenUrl::new_tab(url));
+                }
+            }
         }
     }
 
@@ -636,6 +782,19 @@ impl App {
         self.state.view = View::Watch;
         self.state.seek_preview = None;
         self.state.resolutions.clear();
+        // The watch page's other panes start fresh and fill as they load.
+        self.state.details = Fetch::Loading;
+        self.state.comments = Fetch::Idle;
+        self.state.comments_next = None;
+        self.state.comments_visitor_data = None;
+        self.state.replies.clear();
+        self.state.description_open = false;
+        self.generation += 1;
+        self.details_generation = self.generation;
+        self.backend.send(Command::LoadDetails {
+            generation: self.details_generation,
+            id: video.id.clone(),
+        });
         if let Some(player) = &self.player {
             self.state.player_error = player
                 .load(&video.url(), start)

@@ -60,11 +60,33 @@ pub enum Payload {
     Playlists(Vec<PlaylistSummary>),
 }
 
+/// Which comment list a [`Command::LoadComments`] fills.
+#[derive(Clone, Debug, PartialEq)]
+pub enum CommentsKey {
+    /// The video's own comments.
+    Top,
+    /// A comment's replies.
+    Replies(String),
+}
+
 pub enum Command {
     Load {
         slot: Slot,
         generation: u64,
         request: Request,
+    },
+    /// The watch page's metadata, description, chapters and the comments'
+    /// first token.
+    LoadDetails {
+        generation: u64,
+        id: String,
+    },
+    /// A page of comments or replies.
+    LoadComments {
+        generation: u64,
+        key: CommentsKey,
+        token: String,
+        visitor_data: Option<String>,
     },
     ImportTakeout(Picked),
     SignInWithFile(Picked),
@@ -81,6 +103,15 @@ pub enum Event {
         slot: Slot,
         generation: u64,
         result: Result<Payload, String>,
+    },
+    Details {
+        generation: u64,
+        result: Box<Result<crate::model::Details, String>>,
+    },
+    Comments {
+        generation: u64,
+        key: CommentsKey,
+        result: Result<(Vec<crate::model::CommentRow>, Option<String>), String>,
     },
     Imported(Result<Import, String>),
     SigningIn,
@@ -170,6 +201,32 @@ async fn handle(command: Command, context: Context) {
             context.send(Event::Loaded {
                 slot,
                 generation,
+                result,
+            });
+        }
+        Command::LoadDetails { generation, id } => {
+            let result = innertube::details(&context.rp, &id).await;
+            if let Err(error) = &result {
+                log::warn!("loading the details of {id} failed: {error}");
+            }
+            context.send(Event::Details {
+                generation,
+                result: Box::new(result),
+            });
+        }
+        Command::LoadComments {
+            generation,
+            key,
+            token,
+            visitor_data,
+        } => {
+            let result = innertube::comments(&context.rp, &token, visitor_data.as_deref()).await;
+            if let Err(error) = &result {
+                log::warn!("loading comments failed: {error}");
+            }
+            context.send(Event::Comments {
+                generation,
+                key,
                 result,
             });
         }

@@ -70,7 +70,7 @@ impl Video {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Channel {
     /// YouTube's `UC…` id.
     pub id: String,
@@ -88,6 +88,123 @@ pub struct PlaylistSummary {
     pub thumbnail: Option<String>,
     pub channel: Option<String>,
     pub videos: Option<u64>,
+}
+
+/// A single value being fetched, like [`Listing`] for a non-vec.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum Fetch<T> {
+    #[default]
+    Idle,
+    Loading,
+    Ready(T),
+    Failed(String),
+}
+
+impl<T> Fetch<T> {
+    /// The value when it is here.
+    pub fn ready(&self) -> Option<&T> {
+        match self {
+            Fetch::Ready(value) => Some(value),
+            _ => None,
+        }
+    }
+}
+
+/// A piece of a description or a comment: text, or a link that does
+/// something inside the app or in the browser.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Span {
+    Text(String),
+    /// A web link, opened in the browser.
+    Link {
+        text: String,
+        url: String,
+    },
+    /// A `12:34` timestamp in the video being watched.
+    Seek {
+        text: String,
+        seconds: u32,
+    },
+    /// A link to another video.
+    Video {
+        text: String,
+        id: String,
+    },
+    /// A link to a channel.
+    Channel {
+        text: String,
+        id: String,
+    },
+}
+
+impl Span {
+    /// What the span shows on screen.
+    pub fn text(&self) -> &str {
+        match self {
+            Span::Text(text)
+            | Span::Link { text, .. }
+            | Span::Seek { text, .. }
+            | Span::Video { text, .. }
+            | Span::Channel { text, .. } => text,
+        }
+    }
+}
+
+/// A chapter of the video: `[00:00] Intro`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Chapter {
+    pub name: String,
+    /// Where it starts, in seconds.
+    pub seconds: u32,
+}
+
+/// What rustypipe knows about the video being watched.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Details {
+    pub id: String,
+    pub title: String,
+    pub channel: Channel,
+    /// The channel's subscriber count.
+    pub subscribers: Option<u64>,
+    pub views: u64,
+    /// Hidden by the creator when `None`.
+    pub likes: Option<u32>,
+    /// YouTube's wording ("Aug 2, 2013").
+    pub published: Option<String>,
+    /// "2026-10-04", parsed from the date.
+    pub published_date: Option<String>,
+    pub live: bool,
+    pub description: Vec<Span>,
+    pub chapters: Vec<Chapter>,
+    /// The recommended videos.
+    pub related: Vec<Video>,
+    /// The first comments page's continuation token.
+    pub comments_token: Option<String>,
+    /// How many comments YouTube reports.
+    pub comment_count: Option<u64>,
+    /// Needed to fetch comments.
+    pub visitor_data: Option<String>,
+}
+
+/// A comment on the video, or a reply to one.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CommentRow {
+    pub id: String,
+    pub author: Option<String>,
+    /// The author's channel id, to open their page.
+    pub author_id: Option<String>,
+    pub text: Vec<Span>,
+    /// YouTube's wording ("3 days ago").
+    pub published: String,
+    pub likes: Option<u32>,
+    pub replies: u32,
+    /// The replies page's continuation token.
+    pub replies_token: Option<String>,
+    pub pinned: bool,
+    /// Written by the channel's owner.
+    pub by_owner: bool,
+    /// Hearted by the channel's owner.
+    pub hearted: bool,
 }
 
 /// A line of history: the video, and when it was watched in words
@@ -285,4 +402,14 @@ pub enum Action {
     SignOut,
     SetBrowser(String),
     DismissNotice,
+    /// The next page of comments.
+    LoadMoreComments,
+    /// Shows a comment's replies, loading them the first time; a second
+    /// time hides them.
+    ToggleReplies(String),
+    /// The description's `[ more ]`/`[ less ]`.
+    ToggleDescription,
+    /// A link in a description or comment: opens in the browser. Only
+    /// http/https are honoured.
+    OpenUrl(String),
 }

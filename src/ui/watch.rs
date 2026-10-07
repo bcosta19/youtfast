@@ -2,14 +2,14 @@
 //! and the Up next pane.
 
 use egui::{
-    Align, Align2, Color32, CornerRadius, FontId, Frame, Layout, Rect, RichText, Sense, Slider, Ui,
-    UiBuilder, pos2, vec2,
+    Align, Align2, Color32, CornerRadius, FontId, Frame, Layout, Rect, RichText, Sense, Slider,
+    Stroke, Ui, UiBuilder, pos2, vec2,
 };
 
 use super::{results, widgets};
 use crate::app::State;
 use crate::icons::Icon;
-use crate::model::{Action, Channel, Quality, Resolution};
+use crate::model::{Action, Channel, CommentRow, Fetch, Quality, Resolution, Video};
 use crate::mpv::{Status, VideoSurface};
 use crate::util;
 
@@ -44,12 +44,16 @@ pub fn show(
                         ui.vertical(|ui| {
                             ui.set_width(SIDEBAR_WIDTH);
                             up_next(ui, state, actions);
+                            ui.add_space(widgets::line(ui));
+                            related(ui, state, actions);
                         });
                     });
                 } else {
                     main_column(ui, state, status, surface, max_video_height, actions);
                     ui.add_space(widgets::line(ui));
                     up_next(ui, state, actions);
+                    ui.add_space(widgets::line(ui));
+                    related(ui, state, actions);
                 }
             });
     });
@@ -104,7 +108,7 @@ fn main_column(
         .or_else(|| watching.channel_id.clone())
         .unwrap_or_else(|| "watch".to_owned());
     let palette = state.palette.clone();
-    widgets::pane(ui, &palette, &pane_title, None, true, None, |ui| {
+    widgets::pane(ui, &palette, &pane_title, None, false, None, |ui| {
         let width = ui.available_width();
         let height = (width * 9.0 / 16.0).min(max_video_height);
         let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
@@ -121,15 +125,62 @@ fn main_column(
         .or_else(|| status.and_then(|status| status.title.as_deref()))
         .unwrap_or("Loading…")
         .to_owned();
-    widgets::pane(ui, &palette, &title, None, false, None, |ui| {
-        let channel = watching.channel_id.as_ref().map(|id| Channel {
-            id: id.clone(),
-            name: watching.channel.clone().unwrap_or_else(|| id.clone()),
-            avatar: None,
-        });
-        ui.horizontal(|ui| {
-            detail_line(ui, state, "channel", |ui| {
-                if let Some(channel) = &channel {
+    widgets::pane(ui, &palette, &title, None, true, None, |ui| {
+        details(ui, state, &watching, actions);
+    });
+    description(ui, state, actions);
+    chapters(ui, state, status, actions);
+    comments(ui, state, actions);
+}
+
+/// The details pane's rows: `channel ······ Name [ subscribe ]` and so
+/// on, filled from rustypipe's Details when it arrives.
+fn details(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Action>) {
+    match &state.details {
+        Fetch::Loading | Fetch::Idle => {
+            ui.horizontal(|ui| {
+                detail_line(ui, state, "channel", |ui| {
+                    if let Some(channel) = &watching.channel {
+                        ui.label(RichText::new(channel).monospace().color(state.palette.blue));
+                    }
+                });
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let saved = state.library.in_watch_later(&watching.id);
+                    watch_later_button(ui, state, watching, saved, actions);
+                });
+            });
+            if let Some(views) = watching.views {
+                kv(ui, state, "views", &util::thousands(views));
+            }
+            if let Some(published) = &watching.published {
+                kv(ui, state, "published", published);
+            }
+            ui.label(
+                RichText::new(format!("{} details", widgets::spinner_frame(ui)))
+                    .monospace()
+                    .color(state.palette.secondary),
+            );
+        }
+        Fetch::Failed(error) => {
+            ui.label(
+                RichText::new(error.as_str())
+                    .monospace()
+                    .color(state.palette.red),
+            );
+            if widgets::bracket_button(ui, &state.palette, "r retry", widgets::ButtonStyle::Normal)
+                .clicked()
+            {
+                actions.push(Action::Refresh);
+            }
+        }
+        Fetch::Ready(details) => {
+            let channel = Channel {
+                id: details.channel.id.clone(),
+                name: details.channel.name.clone(),
+                avatar: details.channel.avatar.clone(),
+            };
+            ui.horizontal(|ui| {
+                detail_line(ui, state, "channel", |ui| {
                     let link = ui.link(
                         RichText::new(&channel.name)
                             .monospace()
@@ -138,34 +189,275 @@ fn main_column(
                     if link.clicked() {
                         actions.push(Action::OpenChannel(channel.clone()));
                     }
-                } else if let Some(name) = &watching.channel {
-                    ui.label(RichText::new(name).monospace().color(state.palette.blue));
-                }
+                });
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let saved = state.library.in_watch_later(&watching.id);
+                    watch_later_button(ui, state, watching, saved, actions);
+                    subscribe(ui, state, &channel, actions);
+                });
             });
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if let Some(channel) = &channel {
-                    subscribe(ui, state, channel, actions);
+            if let Some(subscribers) = details.subscribers {
+                kv(ui, state, "subscribers", &util::compact(subscribers));
+            }
+            kv(ui, state, "views", &util::thousands(details.views));
+            if let Some(likes) = details.likes {
+                kv(ui, state, "likes", &util::compact(u64::from(likes)));
+            }
+            match (&details.published, &details.published_date) {
+                (Some(ago), Some(date)) => {
+                    kv(ui, state, "published", &format!("{ago} ({date})"));
                 }
-                let saved = state.library.in_watch_later(&watching.id);
-                let (label, style) = if saved {
-                    ("saved", widgets::ButtonStyle::On)
-                } else {
-                    ("watch later", widgets::ButtonStyle::Normal)
-                };
-                if widgets::bracket_button(ui, &state.palette, label, style)
-                    .on_hover_text("Watch later on this computer")
+                (Some(ago), None) => kv(ui, state, "published", ago),
+                (None, Some(date)) => kv(ui, state, "published", date),
+                (None, None) => {}
+            }
+        }
+    }
+}
+
+/// The watch-later bracket button.
+fn watch_later_button(
+    ui: &mut Ui,
+    state: &State,
+    watching: &Video,
+    saved: bool,
+    actions: &mut Vec<Action>,
+) {
+    let (label, style) = if saved {
+        ("saved", widgets::ButtonStyle::On)
+    } else {
+        ("watch later", widgets::ButtonStyle::Normal)
+    };
+    if widgets::bracket_button(ui, &state.palette, label, style)
+        .on_hover_text("Watch later on this computer")
+        .clicked()
+    {
+        actions.push(Action::ToggleWatchLater(watching.clone()));
+    }
+}
+
+/// The description pane: spans wrapped to the pane's width, collapsed to
+/// six rows with `[ more ]`.
+fn description(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let Fetch::Ready(details) = &state.details else {
+        return;
+    };
+    if details.description.is_empty() {
+        return;
+    }
+    ui.add_space(widgets::line(ui));
+    widgets::pane(ui, &state.palette, "description", None, false, None, |ui| {
+        let collapsed =
+            !state.description_open && widgets::spans_truncated(ui, &details.description, 6);
+        let max_rows = if collapsed { Some(6) } else { None };
+        if let Some(action) = widgets::rich_text(ui, &state.palette, &details.description, max_rows)
+        {
+            actions.push(action);
+        }
+        if collapsed || state.description_open {
+            let label = if collapsed { "more" } else { "less" };
+            if widgets::bracket_button(ui, &state.palette, label, widgets::ButtonStyle::Normal)
+                .clicked()
+            {
+                actions.push(Action::ToggleDescription);
+            }
+        }
+    });
+}
+
+/// The chapters pane: `[00:00] Intro` rows, the current one selected.
+fn chapters(ui: &mut Ui, state: &State, status: Option<&Status>, actions: &mut Vec<Action>) {
+    let Fetch::Ready(details) = &state.details else {
+        return;
+    };
+    if details.chapters.is_empty() {
+        return;
+    }
+    let position = status.map(|status| status.position).unwrap_or(0.0);
+    // The chapter the playhead is in: the last one that has started.
+    let current = details
+        .chapters
+        .iter()
+        .rposition(|chapter| f64::from(chapter.seconds) <= position);
+    ui.add_space(widgets::line(ui));
+    widgets::pane(
+        ui,
+        &state.palette,
+        "chapters",
+        Some(details.chapters.len()),
+        false,
+        None,
+        |ui| {
+            for (index, chapter) in details.chapters.iter().enumerate() {
+                let parts = [
+                    (
+                        format!("[{}]", util::duration(f64::from(chapter.seconds))),
+                        state.palette.yellow,
+                    ),
+                    (format!(" {}", chapter.name), state.palette.text),
+                ];
+                if widgets::row(ui, &state.palette, Some(index) == current, &parts).clicked() {
+                    actions.push(Action::SeekTo {
+                        seconds: f64::from(chapter.seconds),
+                        exact: true,
+                    });
+                }
+            }
+        },
+    );
+}
+
+/// The comments pane: `@author · 3d · ▲ 120 · pinned` under the title,
+/// the text under that, replies indented under a `│` rule.
+fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let Fetch::Ready(details) = &state.details else {
+        return;
+    };
+    if details.comments_token.is_none() && details.comment_count.is_none() {
+        return;
+    }
+    ui.add_space(widgets::line(ui));
+    let count = details
+        .comment_count
+        .map(|count| count as usize)
+        .or_else(|| state.comments.ready().map(|rows| rows.len()));
+    widgets::pane(
+        ui,
+        &state.palette,
+        "comments",
+        count,
+        false,
+        None,
+        |ui| match &state.comments {
+            Fetch::Idle => {}
+            Fetch::Loading => results::loading(ui, state, "comments"),
+            Fetch::Failed(error) => results::failed(ui, state, error, actions),
+            Fetch::Ready(rows) => {
+                if rows.is_empty() {
+                    ui.label(
+                        RichText::new("-- no comments --")
+                            .monospace()
+                            .color(state.palette.dim),
+                    );
+                }
+                for comment in rows.clone() {
+                    comment_row(ui, state, &comment, actions);
+                }
+                if state.comments_next.is_some()
+                    && widgets::bracket_button(
+                        ui,
+                        &state.palette,
+                        "load more",
+                        widgets::ButtonStyle::Normal,
+                    )
                     .clicked()
                 {
-                    actions.push(Action::ToggleWatchLater(watching.clone()));
+                    actions.push(Action::LoadMoreComments);
                 }
-            });
-        });
-        if let Some(views) = watching.views {
-            kv(ui, state, "views", &util::views(views));
+            }
+        },
+    );
+}
+
+/// One comment, and its replies under the `│` rule when open.
+fn comment_row(ui: &mut Ui, state: &State, comment: &CommentRow, actions: &mut Vec<Action>) {
+    // `@author · 3d · ▲ 120 · pinned`
+    ui.horizontal(|ui| {
+        let author = comment.author.as_deref().unwrap_or("someone");
+        let response = ui.link(
+            RichText::new(format!("@{author}"))
+                .monospace()
+                .color(state.palette.blue),
+        );
+        if response.clicked()
+            && let Some(id) = &comment.author_id
+        {
+            actions.push(Action::OpenChannel(Channel {
+                id: id.clone(),
+                name: author.to_owned(),
+                avatar: None,
+            }));
         }
-        if let Some(published) = &watching.published {
-            kv(ui, state, "published", published);
+        let mut meta = vec![comment.published.clone()];
+        if let Some(likes) = comment.likes.filter(|likes| *likes > 0) {
+            meta.push(format!("▲ {}", util::compact(u64::from(likes))));
         }
+        if comment.pinned {
+            meta.push("pinned".to_owned());
+        }
+        if comment.by_owner {
+            meta.push("by creator".to_owned());
+        }
+        if comment.hearted {
+            meta.push("♥".to_owned());
+        }
+        ui.label(
+            RichText::new(format!("· {}", meta.join(" · ")))
+                .monospace()
+                .small()
+                .color(state.palette.secondary),
+        );
+    });
+    if let Some(action) = widgets::rich_text(ui, &state.palette, &comment.text, None) {
+        actions.push(action);
+    }
+    if comment.replies > 0 {
+        let open = state.replies.contains_key(&comment.id);
+        let label = if open {
+            "hide replies".to_owned()
+        } else {
+            format!("{} replies", comment.replies)
+        };
+        if widgets::bracket_button(ui, &state.palette, &label, widgets::ButtonStyle::Normal)
+            .clicked()
+        {
+            actions.push(Action::ToggleReplies(comment.id.clone()));
+        }
+        if let Some(replies) = state.replies.get(&comment.id) {
+            ui.add_space(widgets::line(ui) / 2.0);
+            reply_column(ui, state, replies, actions);
+        }
+    }
+    ui.add_space(widgets::line(ui) / 2.0);
+}
+
+/// Replies two cells in, a 1 px `outline` rule at their left.
+fn reply_column(
+    ui: &mut Ui,
+    state: &State,
+    replies: &Fetch<Vec<CommentRow>>,
+    actions: &mut Vec<Action>,
+) {
+    let cell = widgets::cell(ui);
+    let width = ui.available_width() - 2.0 * cell;
+    ui.horizontal(|ui| {
+        let left = ui.cursor().left();
+        let top = ui.cursor().top();
+        let mut inner = ui.new_child(
+            UiBuilder::new()
+                .max_rect(Rect::from_min_size(
+                    pos2(left + 2.0 * cell, top),
+                    vec2(width, f32::INFINITY),
+                ))
+                .layout(Layout::top_down(Align::Min)),
+        );
+        match replies {
+            Fetch::Idle | Fetch::Loading => results::loading(&mut inner, state, "replies"),
+            Fetch::Failed(error) => results::failed(&mut inner, state, error, actions),
+            Fetch::Ready(rows) => {
+                for reply in rows.clone() {
+                    comment_row(&mut inner, state, &reply, actions);
+                }
+            }
+        }
+        let bottom = inner.min_rect().bottom();
+        // Leave the rule's column to the replies' left.
+        ui.allocate_space(vec2(2.0 * cell + width, bottom - top));
+        ui.painter().vline(
+            left + cell,
+            top..=bottom,
+            Stroke::new(1.0, state.palette.outline),
+        );
     });
 }
 
@@ -483,6 +775,34 @@ fn up_next(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         None,
         |ui| {
             results::video_rows(ui, state, &next, &|_| None, actions);
+        },
+    );
+}
+
+/// The recommended videos rustypipe sent with the details.
+fn related(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let Fetch::Ready(details) = &state.details else {
+        return;
+    };
+    let watching = state.watching.as_ref().map(|video| video.id.as_str());
+    let related: Vec<Video> = details
+        .related
+        .iter()
+        .filter(|video| Some(video.id.as_str()) != watching)
+        .cloned()
+        .collect();
+    if related.is_empty() {
+        return;
+    }
+    widgets::pane(
+        ui,
+        &state.palette,
+        "related",
+        Some(related.len()),
+        false,
+        None,
+        |ui| {
+            results::video_rows(ui, state, &related, &|_| None, actions);
         },
     );
 }

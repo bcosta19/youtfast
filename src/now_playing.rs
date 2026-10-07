@@ -59,14 +59,23 @@ impl MediaControls {
     }
 }
 
-/// The video after the one being watched in Up next, if there is one.
+/// The video after the one being watched in Up next, or the first related
+/// video when the list ran out.
 fn next_video(state: &State) -> Option<Video> {
     let watching = state.watching.as_ref()?;
-    let index = state
+    if let Some(index) = state
         .up_next
         .iter()
-        .position(|video| video.id == watching.id)?;
-    state.up_next.get(index + 1).cloned()
+        .position(|video| video.id == watching.id)
+        && let Some(next) = state.up_next.get(index + 1)
+    {
+        return Some(next.clone());
+    }
+    state
+        .details
+        .ready()
+        .and_then(|details| details.related.iter().find(|video| video.id != watching.id))
+        .cloned()
 }
 
 /// What a desktop command becomes, or `None` when it does not apply now.
@@ -189,12 +198,21 @@ mod tests {
         assert_eq!(shown.volume, Some(0.4));
         assert!(shown.controls.next);
         assert!(shown.controls.seek);
-        // Paused, and nothing after the last video in Up next.
+        // Paused, and Up next ran out: the next control falls back to the
+        // first related video the details brought.
         let mut status = playing();
         status.paused = true;
         state.up_next.pop();
+        state.details = crate::model::Fetch::Ready(crate::model::Details {
+            related: vec![Video::from_id("ccccccccccc".into())],
+            ..crate::model::Details::default()
+        });
         let shown = media_state(&state, Some(&status));
         assert_eq!(shown.playback, np::Playback::Paused);
+        assert!(shown.controls.next);
+        // And with no related videos either, Next greys out.
+        state.details = crate::model::Fetch::Idle;
+        let shown = media_state(&state, Some(&status));
         assert!(!shown.controls.next);
     }
 

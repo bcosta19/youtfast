@@ -38,6 +38,37 @@ pub fn views(count: u64) -> String {
     }
 }
 
+/// `34K`, `1.2M`: a count without its unit, shortened the way YouTube does.
+pub fn compact(count: u64) -> String {
+    let short = |value: f64, unit: &str| {
+        if value < 10.0 {
+            let text = format!("{value:.1}");
+            format!("{}{unit}", text.trim_end_matches(".0"))
+        } else {
+            format!("{}{unit}", value as u64)
+        }
+    };
+    match count {
+        0..1_000 => count.to_string(),
+        1_000..1_000_000 => short(count as f64 / 1e3, "K"),
+        1_000_000..1_000_000_000 => short(count as f64 / 1e6, "M"),
+        _ => short(count as f64 / 1e9, "B"),
+    }
+}
+
+/// `1,234,567`: a full number with thousands separators.
+pub fn thousands(count: u64) -> String {
+    let digits = count.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(digit);
+    }
+    out
+}
+
 /// The current time in Unix seconds.
 pub fn now() -> i64 {
     std::time::SystemTime::now()
@@ -101,5 +132,24 @@ mod tests {
         assert_eq!(views(12_400), "12K views");
         assert_eq!(views(1_200_000), "1.2M views");
         assert_eq!(views(3_000_000_000), "3B views");
+    }
+
+    #[test]
+    fn compact_counts() {
+        assert_eq!(compact(0), "0");
+        assert_eq!(compact(950), "950");
+        assert_eq!(compact(34_000), "34K");
+        assert_eq!(compact(1_250), "1.2K");
+        assert_eq!(compact(1_200_000), "1.2M");
+        assert_eq!(compact(3_000_000_000), "3B");
+    }
+
+    #[test]
+    fn thousands_separated() {
+        assert_eq!(thousands(0), "0");
+        assert_eq!(thousands(950), "950");
+        assert_eq!(thousands(1_000), "1,000");
+        assert_eq!(thousands(1_234_567), "1,234,567");
+        assert_eq!(thousands(12_345_678_901), "12,345,678,901");
     }
 }

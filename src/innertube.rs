@@ -8,12 +8,17 @@ use std::sync::Arc;
 
 use rustypipe::client::RustyPipe;
 use rustypipe::error::Error;
-use rustypipe::model::{ChannelItem, ChannelRss, PlaylistItem, Thumbnail, VideoItem};
+use rustypipe::model::{
+    ChannelItem, ChannelRss, Comment, PlaylistItem, Thumbnail, UrlTarget, VideoDetails, VideoItem,
+    richtext::TextComponent,
+};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::account::CacheFile;
-use crate::model::{Channel, HistoryRow, PlaylistSummary, Video};
+use crate::model::{
+    Channel, Chapter, CommentRow, Details, HistoryRow, PlaylistSummary, Span, Video,
+};
 use crate::paths::Dirs;
 use crate::util;
 
@@ -176,6 +181,132 @@ pub async fn playlist_videos(rp: &RustyPipe, id: &str) -> Result<Vec<Video>, Err
     Ok(playlist.videos.items.into_iter().map(video).collect())
 }
 
+/// The watch page's data: metadata, description, chapters, recommended
+/// videos and the comments' continuation token. Works signed in or out.
+pub async fn details(rp: &RustyPipe, id: &str) -> Result<Details, String> {
+    let details = rp
+        .query()
+        .video_details(id)
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(video_details(details, id))
+}
+
+fn video_details(item: VideoDetails, watching_id: &str) -> Details {
+    Details {
+        id: item.id,
+        title: item.name,
+        channel: Channel {
+            id: item.channel.id,
+            name: item.channel.name,
+            avatar: largest(&item.channel.avatar),
+        },
+        subscribers: item.channel.subscriber_count,
+        views: item.view_count,
+        likes: item.like_count,
+        published: item.publish_date_txt,
+        published_date: item.publish_date.map(|date| {
+            format!(
+                "{:04}-{:02}-{:02}",
+                date.year(),
+                u8::from(date.month()),
+                date.day()
+            )
+        }),
+        live: item.is_live,
+        description: item
+            .description
+            .0
+            .iter()
+            .map(|component| span(component, watching_id))
+            .collect(),
+        chapters: item
+            .chapters
+            .into_iter()
+            .map(|chapter| Chapter {
+                name: chapter.name,
+                seconds: chapter.position,
+            })
+            .collect(),
+        related: item.recommended.items.into_iter().map(video).collect(),
+        comments_token: item.top_comments.ctoken,
+        comment_count: item.top_comments.count,
+        visitor_data: item.visitor_data,
+    }
+}
+
+/// A page of comments (or of a comment's replies), and the next page's
+/// token when there is one.
+pub async fn comments(
+    rp: &RustyPipe,
+    ctoken: &str,
+    visitor_data: Option<&str>,
+) -> Result<(Vec<CommentRow>, Option<String>), String> {
+    let page = rp
+        .query()
+        .video_comments(ctoken, visitor_data)
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok((page.items.iter().map(comment).collect(), page.ctoken))
+}
+
+fn comment(item: &Comment) -> CommentRow {
+    CommentRow {
+        id: item.id.clone(),
+        author: item.author.as_ref().map(|author| author.name.clone()),
+        author_id: item.author.as_ref().map(|author| author.id.clone()),
+        text: item
+            .text
+            .0
+            .iter()
+            .map(|component| span(component, ""))
+            .collect(),
+        published: item.publish_date_txt.clone(),
+        likes: item.like_count,
+        replies: item.reply_count,
+        replies_token: item.replies.ctoken.clone(),
+        pinned: item.pinned,
+        by_owner: item.by_owner,
+        hearted: item.hearted,
+    }
+}
+
+/// One text component as a span. A link to the video being watched with a
+/// start time is a timestamp that seeks; to another video or a channel it
+/// opens there; anything else is a browser link.
+fn span(component: &TextComponent, watching_id: &str) -> Span {
+    let text = component.get_text().to_owned();
+    match component {
+        TextComponent::Text { .. } => Span::Text(text),
+        TextComponent::Web { url, .. } => Span::Link {
+            text,
+            url: url.clone(),
+        },
+        TextComponent::YouTube { target, .. } => match target {
+            UrlTarget::Video { id, start_time } if id == watching_id && *start_time > 0 => {
+                Span::Seek {
+                    text,
+                    seconds: *start_time,
+                }
+            }
+            UrlTarget::Video { id, .. } => Span::Video {
+                text,
+                id: id.clone(),
+            },
+            UrlTarget::Channel { id } => Span::Channel {
+                text,
+                id: id.clone(),
+            },
+            _ => Span::Link {
+                text,
+                url: target.to_url(),
+            },
+        },
+        // A variant this rustypipe version does not know yet.
+        _ => Span::Text(text),
+    }
+}
+
 fn video(item: VideoItem) -> Video {
     let channel = item.channel.as_ref().map(|channel| channel.name.clone());
     Video {
@@ -242,4 +373,88 @@ fn largest(thumbnails: &[Thumbnail]) -> Option<String> {
     } else {
         url.clone()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// TextComponent is non_exhaustive, so tests build it from JSON.
+    fn from_json(json: &str) -> TextComponent {
+        serde_json::from_str(json).unwrap()
+    }
+
+    #[test]
+    fn a_timestamp_on_the_video_being_watched_seeks() {
+        let component = from_json(
+            r#"{"YouTube":{"text":"12:34","target":{"Video":{"id":"aaaaaaaaaaa","start_time":754}}}}"#,
+        );
+        assert_eq!(
+            span(&component, "aaaaaaaaaaa"),
+            Span::Seek {
+                text: "12:34".to_owned(),
+                seconds: 754
+            }
+        );
+    }
+
+    #[test]
+    fn a_video_link_without_a_start_time_opens_the_video() {
+        let component = from_json(
+            r#"{"YouTube":{"text":"watch it","target":{"Video":{"id":"bbbbbbbbbbb","start_time":0}}}}"#,
+        );
+        assert_eq!(
+            span(&component, "aaaaaaaaaaa"),
+            Span::Video {
+                text: "watch it".to_owned(),
+                id: "bbbbbbbbbbb".to_owned()
+            }
+        );
+        // And the same video at its start is not a timestamp.
+        let component = from_json(
+            r#"{"YouTube":{"text":"0:00","target":{"Video":{"id":"aaaaaaaaaaa","start_time":0}}}}"#,
+        );
+        assert_eq!(
+            span(&component, "aaaaaaaaaaa"),
+            Span::Video {
+                text: "0:00".to_owned(),
+                id: "aaaaaaaaaaa".to_owned()
+            }
+        );
+    }
+
+    #[test]
+    fn channel_and_other_targets_become_their_spans() {
+        let component =
+            from_json(r#"{"YouTube":{"text":"the channel","target":{"Channel":{"id":"UCx"}}}}"#);
+        assert_eq!(
+            span(&component, ""),
+            Span::Channel {
+                text: "the channel".to_owned(),
+                id: "UCx".to_owned()
+            }
+        );
+        let component =
+            from_json(r#"{"YouTube":{"text":"a playlist","target":{"Playlist":{"id":"PLx"}}}}"#);
+        match span(&component, "") {
+            Span::Link { url, .. } => {
+                assert_eq!(url, "https://www.youtube.com/playlist?list=PLx")
+            }
+            other => panic!("a playlist link is a web link, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn text_and_web_stay_themselves() {
+        let component = from_json(r#"{"Text":{"text":"hello"}}"#);
+        assert_eq!(span(&component, ""), Span::Text("hello".to_owned()));
+        let component = from_json(r#"{"Web":{"text":"a page","url":"https://example.com"}}"#);
+        assert_eq!(
+            span(&component, ""),
+            Span::Link {
+                text: "a page".to_owned(),
+                url: "https://example.com".to_owned()
+            }
+        );
+    }
 }

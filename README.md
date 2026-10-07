@@ -42,6 +42,9 @@ cargo run --release -- "rust egui"                      # or search
 | F, double click | Full screen |
 | Esc | Leave full screen, then go back to the results |
 
+The watch page also shows the description (timestamps seek), chapters
+and comments, loaded through rustypipe.
+
 The desktop's media keys and panels (MPRIS, so `playerctl` works too)
 control playback, and a second launch hands a link or search to the
 window already open instead of opening another.

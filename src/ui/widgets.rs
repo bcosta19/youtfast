@@ -3,12 +3,12 @@
 
 use egui::text::LayoutJob;
 use egui::{
-    Color32, CornerRadius, CursorIcon, FontId, Image, Margin, Rect, Response, RichText, Sense,
-    Stroke, Ui, pos2, vec2,
+    Color32, CornerRadius, CursorIcon, FontId, Galley, Image, Margin, Pos2, Rect, Response,
+    RichText, Sense, Stroke, Ui, pos2, vec2,
 };
 
 use crate::icons::Icon;
-use crate::model::Video;
+use crate::model::{Action, Channel, Span, Video};
 use crate::theme::Palette;
 use crate::util;
 
@@ -309,6 +309,134 @@ pub fn video_row(
     let galley = painter.layout_job(job);
     painter.galley(pos2(text_x, y), galley.clone(), muted);
     response
+}
+
+/// What a span does when clicked.
+fn span_action(span: &Span) -> Option<Action> {
+    match span {
+        Span::Text(_) => None,
+        Span::Link { url, .. } => Some(Action::OpenUrl(url.clone())),
+        Span::Seek { seconds, .. } => Some(Action::SeekTo {
+            seconds: f64::from(*seconds),
+            exact: true,
+        }),
+        Span::Video { id, .. } => Some(Action::Open(Video::from_id(id.clone()))),
+        Span::Channel { id, text } => Some(Action::OpenChannel(Channel {
+            id: id.clone(),
+            name: text.clone(),
+            avatar: None,
+        })),
+    }
+}
+
+/// The spans laid out: each span one section, clickable ones remembered
+/// by their byte range in the job's text.
+fn span_job(
+    spans: &[Span],
+    palette: &Palette,
+    width: f32,
+    max_rows: Option<usize>,
+) -> (LayoutJob, Vec<(std::ops::Range<usize>, Action)>) {
+    let mut job = LayoutJob::default();
+    let mut links = Vec::new();
+    for span in spans {
+        let clickable = span_action(span).is_some();
+        let format = egui::TextFormat::simple(
+            FontId::monospace(14.0),
+            if clickable {
+                palette.cyan
+            } else {
+                palette.text
+            },
+        );
+        let start = job.text.len();
+        job.append(span.text(), 0.0, format);
+        if clickable && let Some(action) = span_action(span) {
+            links.push((start..job.text.len(), action));
+        }
+    }
+    job.wrap.max_width = width;
+    if let Some(rows) = max_rows {
+        job.wrap.max_rows = rows;
+        job.wrap.break_anywhere = false;
+        job.wrap.overflow_character = Some('…');
+    }
+    (job, links)
+}
+
+/// Whether `max_rows` would cut the spans at the caller's width.
+/// (Colours do not change where a row wraps, so a default palette is fine.)
+pub fn spans_truncated(ui: &Ui, spans: &[Span], max_rows: usize) -> bool {
+    let (job, _) = span_job(spans, &Palette::dark(), ui.available_width(), None);
+    let galley = ui.painter().layout_job(job);
+    galley.rows.len() > max_rows
+}
+
+/// The galley position of the span under `pos`, if it is clickable.
+fn span_at<'a>(
+    galley: &Galley,
+    at: Pos2,
+    links: &'a [(std::ops::Range<usize>, Action)],
+) -> Option<&'a (std::ops::Range<usize>, Action)> {
+    for row in &galley.rows {
+        for glyph in &row.row.glyphs {
+            let rect = Rect::from_min_size(
+                row.pos + glyph.pos.to_vec2(),
+                vec2(glyph.advance_width, glyph.line_height),
+            );
+            if rect.contains(at) {
+                let byte = glyph.cluster as usize;
+                return links.iter().find(|(range, _)| range.contains(&byte));
+            }
+        }
+    }
+    None
+}
+
+/// Descriptions and comments: spans wrapped to the pane's width, links in
+/// cyan and underlined on hover. Returns the action a clicked span wants.
+pub fn rich_text(
+    ui: &mut Ui,
+    palette: &Palette,
+    spans: &[Span],
+    max_rows: Option<usize>,
+) -> Option<Action> {
+    let (job, links) = span_job(spans, palette, ui.available_width(), max_rows);
+    let galley = ui.painter().layout_job(job);
+    let size = galley.size();
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    ui.painter().galley(rect.min, galley.clone(), palette.text);
+    if links.is_empty() {
+        return None;
+    }
+    if let Some(hover) = response.hover_pos()
+        && let Some((range, _)) = span_at(&galley, hover - rect.min.to_vec2(), &links)
+    {
+        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+        // Underline the hovered link's glyphs.
+        for row in &galley.rows {
+            for glyph in &row.row.glyphs {
+                if !range.contains(&(glyph.cluster as usize)) {
+                    continue;
+                }
+                let base = rect.min + row.pos.to_vec2() + glyph.pos.to_vec2();
+                ui.painter().line_segment(
+                    [
+                        pos2(base.x, base.y + glyph.font_height),
+                        pos2(base.x + glyph.advance_width, base.y + glyph.font_height),
+                    ],
+                    Stroke::new(1.0, palette.cyan),
+                );
+            }
+        }
+    }
+    if response.clicked()
+        && let Some(at) = response.interact_pointer_pos()
+        && let Some((_, action)) = span_at(&galley, at - rect.min.to_vec2(), &links)
+    {
+        return Some(action.clone());
+    }
+    None
 }
 
 /// "1.2M views · 2 days ago", or "Live now".

@@ -43,8 +43,10 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
 - `src/innertube.rs` is everything through rustypipe: the home feed (the
   account's subscription feed plus RSS for channels subscribed on this
   device, merged and deduplicated), a channel's RSS, and the account's
-  subscriptions, history, Watch later, liked videos and playlists. rustypipe
-  has no write actions and no home recommendations: subscribing and Watch
+  subscriptions, history, Watch later, liked videos and playlists. The watch
+  page's description, chapters, recommended videos and comments come from it
+  too (`details`, `comments`; spans map YouTube links on the video itself to
+  seeks). rustypipe has no write actions and no home recommendations: subscribing and Watch
   later act on the local library.
 - `src/account.rs` holds the session: cookies.txt parsing, reading a
   browser's cookies through yt-dlp's `extract_cookies_from_browser` (a short
