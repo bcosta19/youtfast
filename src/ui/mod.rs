@@ -360,7 +360,7 @@ pub fn cursor_key(state: &State) -> usize {
 /// How many rows the current view's list has (0 = no cursor there).
 fn cursor_count(state: &State) -> usize {
     match state.view {
-        View::Home => state.feed.items().len(),
+        View::Home => state.feed.items().len().min(state.feed_shown),
         View::Results => state.results.items().len(),
         View::Subscriptions => match state.source() {
             crate::model::Source::Account => state.account_subscriptions.items().len(),
@@ -390,7 +390,7 @@ fn cursor_count(state: &State) -> usize {
 fn open_at(state: &State, index: usize) -> Option<Action> {
     let video = |videos: &[crate::model::Video]| videos.get(index).cloned().map(Action::Open);
     match state.view {
-        View::Home => video(state.feed.items()),
+        View::Home => video(&state.feed.items()[..state.feed.items().len().min(state.feed_shown)]),
         View::Results => video(state.results.items()),
         View::Subscriptions => match state.source() {
             crate::model::Source::Account => state

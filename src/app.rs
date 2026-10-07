@@ -45,8 +45,16 @@ pub struct State {
     /// The search field's text.
     pub query: String,
     pub results: Results,
-    /// The home feed.
+    /// The home feed (long videos; shorts go to the shelf).
     pub feed: Listing<Video>,
+    /// How many feed rows are drawn; the rest sit behind scrolling.
+    pub feed_shown: usize,
+    /// The account feed's next page, when it has one.
+    pub feed_more: Option<innertube::More>,
+    /// A feed continuation on its way, or its error.
+    pub feed_more_state: Fetch<()>,
+    /// Home's shorts shelf.
+    pub shorts: Listing<Video>,
     /// The signed-in account's lists.
     pub account_subscriptions: Listing<Channel>,
     pub account_history: Listing<HistoryRow>,
@@ -488,7 +496,51 @@ impl App {
         let state = &mut self.state;
         match (slot, result) {
             (Slot::Search, Ok(Payload::Videos(videos))) => put(&mut state.results, Ok(videos)),
-            (Slot::Feed, Ok(Payload::Videos(videos))) => put(&mut state.feed, Ok(videos)),
+            (Slot::Feed, Ok(Payload::Feed { videos, more })) => {
+                // Shorts leave the list for the shelf.
+                let (shorts, videos): (Vec<Video>, Vec<Video>) =
+                    videos.into_iter().partition(|video| video.short);
+                if !shorts.is_empty() {
+                    state.shorts = Listing::Ready(shorts);
+                }
+                state.feed_more = more;
+                state.feed_more_state = Fetch::Idle;
+                state.feed_shown = 40;
+                put(&mut state.feed, Ok(videos));
+                self.ask_shelf();
+            }
+            (Slot::Feed, Ok(Payload::More { items, more })) => {
+                state.feed_more = more;
+                state.feed_more_state = Fetch::Idle;
+                if let PageItems::Videos(videos) = items {
+                    state.feed_shown +=
+                        merge_feed_page(state.feed.items_mut(), state.shorts.items_mut(), videos);
+                }
+            }
+            (Slot::Shorts, Ok(Payload::Videos(videos))) => {
+                // RSS shorts leave the list and join the shelf, after the
+                // account's, deduped.
+                let known: std::collections::HashSet<String> = state
+                    .shorts
+                    .items()
+                    .iter()
+                    .map(|video| video.id.clone())
+                    .collect();
+                state.shorts.items_mut().extend(
+                    videos
+                        .into_iter()
+                        .filter(|video| !known.contains(&video.id)),
+                );
+                let on_shelf: std::collections::HashSet<String> = state
+                    .shorts
+                    .items()
+                    .iter()
+                    .map(|video| video.id.clone())
+                    .collect();
+                if let Listing::Ready(rows) = &mut state.feed {
+                    rows.retain(|video| !on_shelf.contains(&video.id));
+                }
+            }
             (Slot::WatchLater, Ok(Payload::Videos(videos))) => {
                 put(&mut state.account_watch_later, Ok(videos));
             }
@@ -535,7 +587,15 @@ impl App {
                 put(&mut state.playlists, Ok(lists))
             }
             (Slot::Search, Err(error)) => put(&mut state.results, Err(error)),
-            (Slot::Feed, Err(error)) => put(&mut state.feed, Err(error)),
+            (Slot::Feed, Err(error)) => {
+                // A continuation failing keeps the feed already shown.
+                if matches!(state.feed_more_state, Fetch::Loading) {
+                    state.feed_more_state = Fetch::Failed(error);
+                } else {
+                    put(&mut state.feed, Err(error));
+                }
+            }
+            (Slot::Shorts, Err(_)) => {}
             (Slot::WatchLater, Err(error)) => put(&mut state.account_watch_later, Err(error)),
             (Slot::Liked, Err(error)) => put(&mut state.liked, Err(error)),
             (Slot::Page, Err(error)) => {
@@ -558,6 +618,33 @@ impl App {
     }
 
     /// Asks the backend for a list, marking it loading.
+    /// After the feed arrives, ask the Shorts tabs of the device
+    /// subscriptions it shows (up to 12, ordered by their newest video),
+    /// for Home's shelf.
+    fn ask_shelf(&mut self) {
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let channels: Vec<String> = self
+            .state
+            .feed
+            .items()
+            .iter()
+            .filter_map(|video| video.channel_id.clone())
+            .filter(|id| {
+                self.state
+                    .library
+                    .subscriptions
+                    .iter()
+                    .any(|channel| channel.id == *id)
+            })
+            .filter(|id| seen.insert(id.clone()))
+            .take(12)
+            .collect();
+        if channels.is_empty() {
+            return;
+        }
+        self.request(Slot::Shorts, Request::Shorts { channels });
+    }
+
     fn request(&mut self, slot: Slot, request: Request) {
         self.generation += 1;
         self.generations.insert(slot, self.generation);
@@ -571,6 +658,7 @@ impl App {
             Slot::Liked => state.liked = Listing::Loading,
             Slot::Playlists => state.playlists = Listing::Loading,
             Slot::Page => state.page_videos = Listing::Loading,
+            Slot::Shorts => state.shorts = Listing::Loading,
         }
         self.backend.send(Command::Load {
             slot,
@@ -600,6 +688,10 @@ impl App {
                     .filter(|channel| !state.subscribed_in_account(&channel.id))
                     .cloned()
                     .collect();
+                self.state.feed_shown = 40;
+                self.state.feed_more = None;
+                self.state.feed_more_state = Fetch::Idle;
+                self.state.shorts = Listing::Idle;
                 if channels.is_empty() && !signed_in {
                     self.state.feed = Listing::Ready(Vec::new());
                 } else {
@@ -915,15 +1007,36 @@ impl App {
             }
             Action::SetChannelQuery(text) => self.state.channel_query = text,
             Action::LoadMore => {
+                if self.state.view == View::Home {
+                    let len = self.state.feed.items().len();
+                    if self.state.feed_shown < len {
+                        // More rows are already here; draw them.
+                        self.state.feed_shown += 40;
+                    } else if !matches!(self.state.feed_more_state, Fetch::Loading)
+                        && let Some(more) = self.state.feed_more.clone()
+                    {
+                        self.state.feed_more_state = Fetch::Loading;
+                        let generation = self.generations.get(&Slot::Feed).copied().unwrap_or(0);
+                        self.backend.send(Command::Load {
+                            slot: Slot::Feed,
+                            generation,
+                            request: Request::MoreFeed(more),
+                        });
+                    }
+                    return;
+                }
                 // A running continuation cannot be asked twice.
                 if self.state.view == View::Channel
                     && !matches!(self.state.page_more_state, Fetch::Loading)
                     && let Some(more) = self.state.page_more.clone()
                 {
                     self.state.page_more_state = Fetch::Loading;
+                    // The slot's generation, not the latest anywhere: a
+                    // request on another slot must not strand this one.
+                    let generation = self.generations.get(&Slot::Page).copied().unwrap_or(0);
                     self.backend.send(Command::Load {
                         slot: Slot::Page,
-                        generation: self.generation,
+                        generation,
                         request: Request::More {
                             more,
                             playlists: self.state.channel_tab == ChannelTab::Playlists,
@@ -1301,5 +1414,53 @@ fn native_display(cc: &eframe::CreationContext<'_>) -> NativeDisplay {
             })
         }
         _ => NativeDisplay::None,
+    }
+}
+
+/// A feed continuation page: shorts to the shelf, the rest appended
+/// without repeats. Returns how many rows landed in the feed.
+fn merge_feed_page(feed: &mut Vec<Video>, shorts: &mut Vec<Video>, page: Vec<Video>) -> usize {
+    let (shelf, rest): (Vec<Video>, Vec<Video>) = page.into_iter().partition(|video| video.short);
+    shorts.extend(shelf);
+    let known: std::collections::HashSet<String> =
+        feed.iter().map(|video| video.id.clone()).collect();
+    let fresh: Vec<Video> = rest
+        .into_iter()
+        .filter(|video| !known.contains(&video.id))
+        .collect();
+    let landed = fresh.len();
+    feed.extend(fresh);
+    landed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_continuation_page_splits_shorts_and_skips_repeats() {
+        let mut feed = vec![Video::from_id("a".to_owned())];
+        let mut shorts = Vec::new();
+        let mut new = Video::from_id("b".to_owned());
+        new.short = true;
+        let page = vec![
+            Video::from_id("a".to_owned()),
+            new,
+            Video::from_id("c".to_owned()),
+        ];
+        assert_eq!(merge_feed_page(&mut feed, &mut shorts, page), 1);
+        assert_eq!(
+            feed.iter()
+                .map(|video| video.id.as_str())
+                .collect::<Vec<_>>(),
+            ["a", "c"]
+        );
+        assert_eq!(
+            shorts
+                .iter()
+                .map(|video| video.id.as_str())
+                .collect::<Vec<_>>(),
+            ["b"]
+        );
     }
 }

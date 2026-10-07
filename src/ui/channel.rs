@@ -302,37 +302,15 @@ fn videos(ui: &mut Ui, state: &State, tab: &ChannelTab, actions: &mut Vec<Action
     );
 }
 
-/// The tail row of a paged list: a spinner, an error's retry, or the
-/// button.
+/// The tab's paged list's tail row.
 fn more_row(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
-    match &state.page_more_state {
-        Fetch::Loading => results::loading(ui, state, "more"),
-        Fetch::Failed(error) => {
-            ui.label(
-                RichText::new(error.as_str())
-                    .monospace()
-                    .color(state.palette.red),
-            );
-            if widgets::bracket_button(ui, &state.palette, "retry", widgets::ButtonStyle::Normal)
-                .clicked()
-            {
-                actions.push(Action::LoadMore);
-            }
-        }
-        _ => {
-            if state.page_more.is_some()
-                && widgets::bracket_button(
-                    ui,
-                    &state.palette,
-                    "load more",
-                    widgets::ButtonStyle::Normal,
-                )
-                .clicked()
-            {
-                actions.push(Action::LoadMore);
-            }
-        }
-    }
+    widgets::more_row(
+        ui,
+        &state.palette,
+        &state.page_more_state,
+        state.page_more.is_some(),
+        actions,
+    );
 }
 
 /// The playlists tab: thumbnail, name, `N videos`.

@@ -4,7 +4,7 @@
 //! between the signed-in account and this device; each is one pane of
 //! rows.
 
-use egui::{Image, RichText, Sense, Ui, vec2};
+use egui::{Align2, CornerRadius, CursorIcon, Image, Rect, RichText, Sense, Ui, pos2, vec2};
 
 use super::{results, widgets};
 use crate::app::{AccountState, Page, State};
@@ -99,14 +99,164 @@ pub fn home(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             });
             return;
         }
-        results::videos(
+        shorts_shelf(ui, state, actions);
+        if matches!(state.shorts, Listing::Ready(ref s) if !s.is_empty()) {
+            ui.add_space(widgets::line(ui));
+        }
+        widgets::pane(
             ui,
-            state,
+            &state.palette,
             "Home",
-            &state.feed,
-            "nothing from your subscriptions yet",
-            actions,
+            Some(state.feed.items().len().min(state.feed_shown)),
+            true,
+            None,
+            |ui| feed_rows(ui, state, actions),
         );
+    });
+}
+
+/// The feed's rows, day-grouped, capped at `feed_shown`; the last row in
+/// view asks for more.
+fn feed_rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    match &state.feed {
+        Listing::Idle => {}
+        Listing::Loading => results::loading(ui, state, "feed"),
+        Listing::Failed(error) => results::failed(ui, state, error, actions),
+        Listing::Ready(videos) if videos.is_empty() => {
+            results::nothing(ui, state, "nothing from your subscriptions yet")
+        }
+        Listing::Ready(videos) => {
+            let now = crate::util::now();
+            let videos = videos[..videos.len().min(state.feed_shown)].to_vec();
+            egui::ScrollArea::vertical()
+                .auto_shrink(false)
+                .show(ui, |ui| {
+                    let mut bucket = "";
+                    for (index, video) in videos.iter().enumerate() {
+                        let day = crate::util::age_bucket(video.published_at, now);
+                        if day != bucket {
+                            bucket = day;
+                            ui.label(
+                                RichText::new(format!("── {day} ──"))
+                                    .monospace()
+                                    .color(state.palette.secondary),
+                            );
+                        }
+                        let selected = index == state.cursor;
+                        let watched = video
+                            .duration
+                            .and_then(|duration| {
+                                state
+                                    .library
+                                    .resume_position(&video.id)
+                                    .map(|left| left / duration)
+                            })
+                            .map(|fraction| fraction as f32);
+                        let response =
+                            widgets::video_row(ui, &state.palette, video, None, watched, selected);
+                        if selected {
+                            response.clone().scroll_to_me(None);
+                        }
+                        if index == videos.len() - 1 && ui.is_rect_visible(response.rect) {
+                            actions.push(Action::LoadMore);
+                        }
+                        if response.clicked() {
+                            actions.push(Action::Open(video.clone()));
+                        }
+                    }
+                    widgets::more_row(
+                        ui,
+                        &state.palette,
+                        &state.feed_more_state,
+                        state.feed_more.is_some() || state.feed_shown < state.feed.items().len(),
+                        actions,
+                    );
+                });
+        }
+    }
+}
+
+/// The shorts strip above the feed, when there are shorts.
+fn shorts_shelf(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let Listing::Ready(shorts) = &state.shorts else {
+        return;
+    };
+    if shorts.is_empty() {
+        return;
+    }
+    widgets::pane(
+        ui,
+        &state.palette,
+        "shorts",
+        Some(shorts.len()),
+        false,
+        None,
+        |ui| {
+            egui::ScrollArea::horizontal()
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        for video in shorts.clone() {
+                            short_card(ui, state, &video, actions);
+                        }
+                    });
+                });
+        },
+    );
+}
+
+/// A 108x192 card: the cropped thumbnail, a two-line title, views.
+fn short_card(ui: &mut Ui, state: &State, video: &Video, actions: &mut Vec<Action>) {
+    let palette = &state.palette;
+    let width = 108.0;
+    let thumb = vec2(width, 192.0);
+    let cell = widgets::cell(ui);
+    ui.vertical(|ui| {
+        let (rect, response) = ui.allocate_exact_size(
+            vec2(width, thumb.y + 2.0 * widgets::line(ui)),
+            Sense::click(),
+        );
+        if response.hovered() {
+            ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+            ui.painter()
+                .rect_filled(rect, CornerRadius::ZERO, palette.surface_hover);
+        }
+        let thumb_rect = Rect::from_min_size(rect.min, thumb);
+        Image::new(video.thumbnail())
+            .uv(widgets::short_uv())
+            .fit_to_exact_size(thumb)
+            .corner_radius(CornerRadius::ZERO)
+            .paint_at(ui, thumb_rect);
+        let painter = ui.painter();
+        let mut job = egui::text::LayoutJob::single_section(
+            video.title.clone(),
+            egui::TextFormat::simple(egui::FontId::monospace(13.0), palette.text),
+        );
+        job.wrap.max_width = width;
+        job.wrap.max_rows = 2;
+        job.wrap.overflow_character = Some('…');
+        let galley = painter.layout_job(job);
+        painter.galley(
+            pos2(rect.left(), thumb_rect.bottom() + 2.0),
+            galley,
+            palette.text,
+        );
+        if let Some(views) = video.views {
+            painter.text(
+                pos2(
+                    rect.left(),
+                    thumb_rect.bottom() + 2.0 + 1.5 * widgets::line(ui),
+                ),
+                Align2::LEFT_TOP,
+                crate::util::compact(views),
+                egui::FontId::monospace(12.0),
+                palette.secondary,
+            );
+        }
+        let _ = cell;
+        if response.clicked() {
+            actions.push(Action::Open(video.clone()));
+        }
     });
 }
 

@@ -69,6 +69,33 @@ pub fn thousands(count: u64) -> String {
     out
 }
 
+/// Which day-group a publish time belongs to, against `now`'s local
+/// clock: "today", "yesterday", "this week" (the last seven days),
+/// "this month", "earlier", and "undated" when the time is missing.
+pub fn age_bucket(published_at: Option<i64>, now: i64) -> &'static str {
+    let Some(at) = published_at else {
+        return "undated";
+    };
+    let Ok(then) =
+        jiff::Timestamp::from_second(at).map(|t| t.to_zoned(jiff::tz::TimeZone::system()).date())
+    else {
+        return "undated";
+    };
+    let Ok(today) =
+        jiff::Timestamp::from_second(now).map(|t| t.to_zoned(jiff::tz::TimeZone::system()).date())
+    else {
+        return "undated";
+    };
+    let days = (today - then).get_days();
+    match days {
+        ..=0 => "today",
+        1 => "yesterday",
+        2..=6 => "this week",
+        7..=30 => "this month",
+        _ => "earlier",
+    }
+}
+
 /// The current time in Unix seconds.
 pub fn now() -> i64 {
     std::time::SystemTime::now()
@@ -142,6 +169,19 @@ mod tests {
         assert_eq!(compact(1_250), "1.2K");
         assert_eq!(compact(1_200_000), "1.2M");
         assert_eq!(compact(3_000_000_000), "3B");
+    }
+
+    #[test]
+    fn age_buckets() {
+        // Use mid-day UTC times so the local zone cannot straddle a day.
+        let now = (jiff::Timestamp::now().as_second() / 86_400) * 86_400 + 43_200;
+        assert_eq!(age_bucket(Some(now), now), "today");
+        assert_eq!(age_bucket(Some(now - 3_600), now), "today");
+        assert_eq!(age_bucket(Some(now - 86_400), now), "yesterday");
+        assert_eq!(age_bucket(Some(now - 86_400 * 4), now), "this week");
+        assert_eq!(age_bucket(Some(now - 86_400 * 15), now), "this month");
+        assert_eq!(age_bucket(Some(now - 86_400 * 200), now), "earlier");
+        assert_eq!(age_bucket(None, now), "undated");
     }
 
     #[test]

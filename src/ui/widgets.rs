@@ -8,7 +8,7 @@ use egui::{
 };
 
 use crate::icons::Icon;
-use crate::model::{Action, Channel, Span, Video};
+use crate::model::{Action, Channel, Fetch, Span, Video};
 use crate::theme::Palette;
 use crate::util;
 
@@ -439,6 +439,45 @@ pub fn rich_text(
     None
 }
 
+/// The tail row of a paged list: the page on its way, a failed page's
+/// retry, or the `[ load more ]` button.
+pub fn more_row(
+    ui: &mut Ui,
+    palette: &Palette,
+    state: &Fetch<()>,
+    has_more: bool,
+    actions: &mut Vec<Action>,
+) {
+    match state {
+        Fetch::Loading => {
+            ui.label(
+                RichText::new(format!("{} loading", spinner_frame(ui)))
+                    .monospace()
+                    .color(palette.secondary),
+            );
+        }
+        Fetch::Failed(error) => {
+            ui.label(RichText::new(error.as_str()).monospace().color(palette.red));
+            if bracket_button(ui, palette, "retry", ButtonStyle::Normal).clicked() {
+                actions.push(Action::LoadMore);
+            }
+        }
+        _ => {
+            if has_more && bracket_button(ui, palette, "load more", ButtonStyle::Normal).clicked() {
+                actions.push(Action::LoadMore);
+            }
+        }
+    }
+}
+
+/// The uv rect that crops a 4:3 thumbnail to 9:16, centered.
+pub fn short_uv() -> Rect {
+    // A 4:3 source's width fraction for 9:16 tall is 9/16 * 3/4.
+    let width = 9.0 / 16.0 * 3.0 / 4.0;
+    let left = (1.0 - width) / 2.0;
+    Rect::from_min_max(pos2(left, 0.0), pos2(left + width, 1.0))
+}
+
 /// "1.2M views · 2 days ago", or "Live now".
 pub fn meta(video: &Video) -> String {
     if video.live {
@@ -449,4 +488,17 @@ pub fn meta(video: &Video) -> String {
         .flatten()
         .collect();
     parts.join(" · ")
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_shorts_crop_is_centered_9_of_16() {
+        let uv = super::short_uv();
+        // 9:16 tall in a 4:3 source is 27/64 of the width, centered.
+        assert!((uv.width() - 27.0 / 64.0).abs() < 1e-6);
+        assert!((uv.left() - (1.0 - 27.0 / 64.0) / 2.0).abs() < 1e-6);
+        assert_eq!(uv.top(), 0.0);
+        assert_eq!(uv.bottom(), 1.0);
+    }
 }

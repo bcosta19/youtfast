@@ -53,6 +53,11 @@ window already open instead of opening another.
 
 ## Your library, with or without an account
 
+**Home** is the newest of your subscriptions — the account's feed or the
+device's RSS channels — day-grouped and paged: scroll to the end and more
+arrives. Shorts sit on a shelf above the list: the account's are marked
+by YouTube, the device channels' come from their Shorts tabs.
+
 **Without an account**, YouTFast keeps subscriptions, watch history (with
 where each video was left, to resume it) and Watch later on this computer,
 in `~/.local/share/youtfast/library.json`, and its settings (video quality,

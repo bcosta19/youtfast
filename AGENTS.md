@@ -48,7 +48,9 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
   too (`details`, `comments`; spans map YouTube links on the video itself to
   seeks), and channel pages are its tabs (`channel_tab`, `channel_about`):
   videos, shorts, live, playlists and the channel's own search, paged through
-  `More` continuations (`more_videos`, `more_playlists`). rustypipe has no
+  `More` continuations (`more_videos`, `more_playlists`), as is the home
+  feed (`more_videos` again) — its shorts land on the shelf, filled further
+  by `channel_shorts` (each device channel's Shorts tab). rustypipe has no
   posts or podcasts tabs, no write actions and no home recommendations:
   subscribing and Watch later act on the local library.
 - `src/account.rs` holds the session: cookies.txt parsing, reading a

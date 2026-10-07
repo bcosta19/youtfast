@@ -29,7 +29,6 @@ use crate::util;
 /// subscriptions should not open hundreds of connections.
 const RSS_CONCURRENCY: usize = 8;
 /// The most videos the home feed shows.
-const FEED_LIMIT: usize = 200;
 /// The most items an account list (subscriptions, history, a playlist)
 /// pages through.
 const LIST_LIMIT: usize = 500;
@@ -69,12 +68,16 @@ pub async fn feed(
     rp: &RustyPipe,
     channels: Vec<Channel>,
     account: bool,
-) -> Result<Vec<Video>, String> {
+) -> Result<(Vec<Video>, Option<More>), String> {
     let mut videos = Vec::new();
     let mut problems = Vec::new();
+    let mut more = None;
     if account {
         match rp.query().subscription_feed().await {
-            Ok(page) => videos.extend(page.items.into_iter().map(video)),
+            Ok(page) => {
+                more = More::of(&page);
+                videos.extend(page.items.into_iter().map(video));
+            }
             Err(error) => problems.push(format!("your account's feed: {error}")),
         }
     }
@@ -117,8 +120,84 @@ pub async fn feed(
     // Undated videos go last; the sort is stable, so they keep the order
     // their source gave them.
     videos.sort_by_key(|video| Reverse(video.published_at));
-    videos.truncate(FEED_LIMIT);
-    Ok(videos)
+    Ok((videos, more))
+}
+
+/// The newest Shorts of the given channels, up to `per` each, interleaved
+/// so no channel floods the shelf. Channels that fail are skipped.
+pub async fn channel_shorts(rp: &RustyPipe, channels: Vec<String>, per: usize) -> Vec<Video> {
+    let semaphore = Arc::new(Semaphore::new(RSS_CONCURRENCY));
+    let mut tasks = JoinSet::new();
+    for id in channels {
+        let rp = rp.clone();
+        let semaphore = Arc::clone(&semaphore);
+        tasks.spawn(async move {
+            let _permit = semaphore.acquire_owned().await;
+            let result = rp
+                .query()
+                .channel_videos_tab(&id, ChannelVideoTab::Shorts)
+                .await;
+            (id, result)
+        });
+    }
+    let mut each = Vec::new();
+    while let Some(joined) = tasks.join_next().await {
+        match joined {
+            Ok((_, Ok(channel))) => {
+                let mut shorts: Vec<Video> = channel
+                    .content
+                    .items
+                    .into_iter()
+                    .take(per)
+                    .map(|item| {
+                        let mut video = video(item);
+                        video.short = true;
+                        video
+                    })
+                    .collect();
+                each.push(std::mem::take(&mut shorts));
+            }
+            Ok((id, Err(error))) => {
+                log::warn!("could not read the shorts of {id}: {error}");
+            }
+            Err(error) => {
+                log::warn!("a shorts task failed: {error}");
+            }
+        }
+    }
+    interleave(each)
+}
+
+/// Round-robin over the lists so every channel takes its turn: the first
+/// item of each, then the second of each, until all are spent.
+pub fn interleave<T>(mut lists: Vec<Vec<T>>) -> Vec<T> {
+    let mut out = Vec::new();
+    loop {
+        let mut any = false;
+        for list in &mut lists {
+            if let Some(item) = list.pop_at_front() {
+                out.push(item);
+                any = true;
+            }
+        }
+        if !any {
+            return out;
+        }
+    }
+}
+
+trait PopFront<T> {
+    fn pop_at_front(&mut self) -> Option<T>;
+}
+
+impl<T> PopFront<T> for Vec<T> {
+    fn pop_at_front(&mut self) -> Option<T> {
+        if self.is_empty() {
+            None
+        } else {
+            Some(self.remove(0))
+        }
+    }
 }
 
 /// How to continue a paged list: YouTube's continuation token and the
@@ -577,6 +656,15 @@ mod tests {
             }
             other => panic!("a playlist link is a web link, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn interleaving_gives_every_channel_a_turn() {
+        assert_eq!(
+            interleave(vec![vec!["a1", "a2", "a3"], vec!["b1"], vec!["c1", "c2"],]),
+            vec!["a1", "b1", "c1", "a2", "c2", "a3"]
+        );
+        assert!(interleave::<i32>(vec![vec![], vec![]]).is_empty());
     }
 
     #[test]

@@ -36,6 +36,8 @@ pub enum Slot {
     Playlists,
     /// A playlist's or a channel's videos.
     Page,
+    /// Home's shorts shelf.
+    Shorts,
 }
 
 pub enum Request {
@@ -66,10 +68,21 @@ pub enum Request {
         /// `true` to continue the playlists tab, `false` a video list.
         playlists: bool,
     },
+    /// The next page of the account's feed.
+    MoreFeed(crate::innertube::More),
+    /// The Shorts tabs of the feed's channels, for Home's shelf.
+    Shorts {
+        channels: Vec<String>,
+    },
 }
 
 pub enum Payload {
     Videos(Vec<Video>),
+    /// The feed's first page and its continuation.
+    Feed {
+        videos: Vec<Video>,
+        more: Option<crate::innertube::More>,
+    },
     Channels(Vec<Channel>),
     History(Vec<HistoryRow>),
     Playlists(Vec<PlaylistSummary>),
@@ -335,7 +348,18 @@ async fn load(rp: &RustyPipe, request: Request) -> Result<Payload, String> {
     Ok(match request {
         Request::Search(query) => Payload::Videos(youtube::search(&query).await?),
         Request::Feed { channels, account } => {
-            Payload::Videos(innertube::feed(rp, channels, account).await?)
+            let (videos, more) = innertube::feed(rp, channels, account).await?;
+            Payload::Feed { videos, more }
+        }
+        Request::MoreFeed(more) => {
+            let (videos, next) = innertube::more_videos(rp, &more).await?;
+            Payload::More {
+                items: PageItems::Videos(videos),
+                more: next,
+            }
+        }
+        Request::Shorts { channels } => {
+            Payload::Videos(innertube::channel_shorts(rp, channels, 6).await)
         }
         Request::Subscriptions => {
             Payload::Channels(innertube::subscriptions(rp).await.map_err(text)?)
