@@ -13,15 +13,11 @@ mod settings;
 mod watch;
 mod widgets;
 
-use egui::{Color32, Frame, Key, Margin, RichText, TextEdit};
+use egui::{Frame, Key, Margin, RichText, TextEdit};
 
 use crate::app::{AccountState, State};
 use crate::model::{Action, Listing, View};
 use crate::mpv::{Status, VideoSurface};
-
-/// The logo's red: a brand mark, not the theme's accent.
-#[allow(dead_code)]
-pub const BRAND: Color32 = Color32::from_rgb(255, 0, 51);
 
 /// The command line's widget id, so `/` can focus it.
 fn command_line_id() -> egui::Id {
@@ -123,7 +119,7 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
         .show_separator_line(false)
         .frame(Frame::new().inner_margin(Margin::symmetric(8, 6)))
         .show(ui, |ui| {
-            widgets::pane(ui, &state.palette, "youtfast", None, false, |ui| {
+            widgets::pane(ui, &state.palette, "youtfast", None, false, None, |ui| {
                 let item = |ui: &mut egui::Ui,
                             key: char,
                             view: Option<View>,
@@ -473,7 +469,13 @@ fn keys_overlay(ctx: &egui::Context, state: &State) {
         .order(egui::Order::Foreground)
         .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
         .show(ctx, |ui| {
-            widgets::pane(ui, &state.palette, "keys", None, true, |ui| {
+            // The overlay needs a body: panes are transparent otherwise.
+            let fill = if state.palette.overlay == state.palette.window {
+                state.palette.panel
+            } else {
+                state.palette.overlay
+            };
+            widgets::pane(ui, &state.palette, "keys", None, true, Some(fill), |ui| {
                 let p = &state.palette;
                 let column = |ui: &mut egui::Ui, bindings: &[(&str, &str)]| {
                     for (key, what) in bindings {

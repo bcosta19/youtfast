@@ -12,7 +12,7 @@ const WIDTH: f32 = 640.0;
 
 pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     egui::CentralPanel::default().show(ui, |ui| {
-        widgets::pane(ui, &state.palette, "Account", None, true, |ui| {
+        widgets::pane(ui, &state.palette, "Account", None, true, None, |ui| {
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .show(ui, |ui| {

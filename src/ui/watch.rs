@@ -104,7 +104,7 @@ fn main_column(
         .or_else(|| watching.channel_id.clone())
         .unwrap_or_else(|| "watch".to_owned());
     let palette = state.palette.clone();
-    widgets::pane(ui, &palette, &pane_title, None, true, |ui| {
+    widgets::pane(ui, &palette, &pane_title, None, true, None, |ui| {
         let width = ui.available_width();
         let height = (width * 9.0 / 16.0).min(max_video_height);
         let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
@@ -121,7 +121,7 @@ fn main_column(
         .or_else(|| status.and_then(|status| status.title.as_deref()))
         .unwrap_or("Loading…")
         .to_owned();
-    widgets::pane(ui, &palette, &title, None, false, |ui| {
+    widgets::pane(ui, &palette, &title, None, false, None, |ui| {
         let channel = watching.channel_id.as_ref().map(|id| Channel {
             id: id.clone(),
             name: watching.channel.clone().unwrap_or_else(|| id.clone()),
@@ -474,7 +474,15 @@ fn up_next(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         return;
     }
     let palette = state.palette.clone();
-    widgets::pane(ui, &palette, "Up next", Some(next.len()), false, |ui| {
-        results::video_rows(ui, state, &next, &|_| None, actions);
-    });
+    widgets::pane(
+        ui,
+        &palette,
+        "Up next",
+        Some(next.len()),
+        false,
+        None,
+        |ui| {
+            results::video_rows(ui, state, &next, &|_| None, actions);
+        },
+    );
 }

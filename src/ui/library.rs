@@ -62,7 +62,7 @@ pub fn home(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             && !state.signed_in()
             && state.account != AccountState::SigningIn;
         if follows_nothing {
-            widgets::pane(ui, &state.palette, "Home", None, true, |ui| {
+            widgets::pane(ui, &state.palette, "Home", None, true, None, |ui| {
                 results::centered(ui, |ui| {
                     ui.label(
                         RichText::new("-- nothing here --")
@@ -122,6 +122,7 @@ pub fn subscriptions(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             "Subscriptions",
             Some(count),
             true,
+            None,
             |ui| {
                 ui.horizontal(|ui| {
                     controls(ui, state, true, actions, |ui, actions| {
@@ -307,116 +308,126 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         } else {
             state.account_history.items().len()
         };
-        widgets::pane(ui, &state.palette, "History", Some(count), true, |ui| {
-            ui.horizontal(|ui| {
-                controls(ui, state, true, actions, |ui, actions| {
-                    if device
-                        && !state.library.history.is_empty()
-                        && widgets::bracket_button(
-                            ui,
-                            &state.palette,
-                            "clear",
-                            widgets::ButtonStyle::Normal,
-                        )
-                        .on_hover_text("Clear this computer's history and resume positions")
-                        .clicked()
-                    {
-                        actions.push(Action::ClearHistory);
-                    }
+        widgets::pane(
+            ui,
+            &state.palette,
+            "History",
+            Some(count),
+            true,
+            None,
+            |ui| {
+                ui.horizontal(|ui| {
+                    controls(ui, state, true, actions, |ui, actions| {
+                        if device
+                            && !state.library.history.is_empty()
+                            && widgets::bracket_button(
+                                ui,
+                                &state.palette,
+                                "clear",
+                                widgets::ButtonStyle::Normal,
+                            )
+                            .on_hover_text("Clear this computer's history and resume positions")
+                            .clicked()
+                        {
+                            actions.push(Action::ClearHistory);
+                        }
+                    });
                 });
-            });
-            if !device {
-                match &state.account_history {
-                    Listing::Idle => {}
-                    Listing::Loading => results::loading(ui, state, "history"),
-                    Listing::Failed(error) => results::failed(ui, state, error, actions),
-                    Listing::Ready(rows) if rows.is_empty() => {
-                        results::nothing(ui, state, "the account's watch history")
-                    }
-                    Listing::Ready(rows) => {
-                        egui::ScrollArea::vertical()
-                            .auto_shrink(false)
-                            .show(ui, |ui| {
-                                let mut day = None;
-                                for (index, row) in rows.iter().enumerate() {
-                                    // YouTube groups its history by day:
-                                    // "Today", "Yesterday", "Monday".
-                                    if row.when.is_some() && row.when != day {
-                                        day.clone_from(&row.when);
-                                        ui.add_space(widgets::line(ui));
-                                        ui.label(
-                                            RichText::new(row.when.as_deref().unwrap_or_default())
+                if !device {
+                    match &state.account_history {
+                        Listing::Idle => {}
+                        Listing::Loading => results::loading(ui, state, "history"),
+                        Listing::Failed(error) => results::failed(ui, state, error, actions),
+                        Listing::Ready(rows) if rows.is_empty() => {
+                            results::nothing(ui, state, "the account's watch history")
+                        }
+                        Listing::Ready(rows) => {
+                            egui::ScrollArea::vertical()
+                                .auto_shrink(false)
+                                .show(ui, |ui| {
+                                    let mut day = None;
+                                    for (index, row) in rows.iter().enumerate() {
+                                        // YouTube groups its history by day:
+                                        // "Today", "Yesterday", "Monday".
+                                        if row.when.is_some() && row.when != day {
+                                            day.clone_from(&row.when);
+                                            ui.add_space(widgets::line(ui));
+                                            ui.label(
+                                                RichText::new(
+                                                    row.when.as_deref().unwrap_or_default(),
+                                                )
                                                 .monospace()
                                                 .color(state.palette.dim),
+                                            );
+                                        }
+                                        let selected = index == state.cursor;
+                                        let video = &row.video;
+                                        let watched = video.duration.and_then(|duration| {
+                                            state
+                                                .library
+                                                .resume_position(&video.id)
+                                                .map(|left| left / duration)
+                                        });
+                                        let response = widgets::video_row(
+                                            ui,
+                                            &state.palette,
+                                            video,
+                                            None,
+                                            watched.map(|f| f as f32),
+                                            selected,
                                         );
+                                        if selected {
+                                            response.clone().scroll_to_me(None);
+                                        }
+                                        if response.clicked() {
+                                            actions.push(Action::Open(video.clone()));
+                                        }
                                     }
-                                    let selected = index == state.cursor;
-                                    let video = &row.video;
-                                    let watched = video.duration.and_then(|duration| {
-                                        state
-                                            .library
-                                            .resume_position(&video.id)
-                                            .map(|left| left / duration)
-                                    });
-                                    let response = widgets::video_row(
-                                        ui,
-                                        &state.palette,
-                                        video,
-                                        None,
-                                        watched.map(|f| f as f32),
-                                        selected,
-                                    );
-                                    if selected {
-                                        response.clone().scroll_to_me(None);
-                                    }
-                                    if response.clicked() {
-                                        actions.push(Action::Open(video.clone()));
-                                    }
-                                }
-                            });
+                                });
+                        }
                     }
+                    return;
                 }
-                return;
-            }
-            if state.library.history.is_empty() {
-                results::nothing(ui, state, "videos you watch appear here");
-                return;
-            }
-            let now = util::now();
-            egui::ScrollArea::vertical()
-                .auto_shrink(false)
-                .show(ui, |ui| {
-                    for (index, watched) in state.library.history.iter().enumerate() {
-                        let mut note = format!("watched {}", util::ago(watched.at, now));
-                        if watched.position > 0.0 {
-                            note.push_str(&format!(
-                                " · left at {}",
-                                util::duration(watched.position)
-                            ));
+                if state.library.history.is_empty() {
+                    results::nothing(ui, state, "videos you watch appear here");
+                    return;
+                }
+                let now = util::now();
+                egui::ScrollArea::vertical()
+                    .auto_shrink(false)
+                    .show(ui, |ui| {
+                        for (index, watched) in state.library.history.iter().enumerate() {
+                            let mut note = format!("watched {}", util::ago(watched.at, now));
+                            if watched.position > 0.0 {
+                                note.push_str(&format!(
+                                    " · left at {}",
+                                    util::duration(watched.position)
+                                ));
+                            }
+                            let video = &watched.video;
+                            let fraction = video
+                                .duration
+                                .map(|duration| watched.position / duration)
+                                .map(|f| f as f32);
+                            let selected = index == state.cursor;
+                            let response = widgets::video_row(
+                                ui,
+                                &state.palette,
+                                video,
+                                Some(&note),
+                                fraction,
+                                selected,
+                            );
+                            if selected {
+                                response.clone().scroll_to_me(None);
+                            }
+                            if response.clicked() {
+                                actions.push(Action::Open(video.clone()));
+                            }
                         }
-                        let video = &watched.video;
-                        let fraction = video
-                            .duration
-                            .map(|duration| watched.position / duration)
-                            .map(|f| f as f32);
-                        let selected = index == state.cursor;
-                        let response = widgets::video_row(
-                            ui,
-                            &state.palette,
-                            video,
-                            Some(&note),
-                            fraction,
-                            selected,
-                        );
-                        if selected {
-                            response.clone().scroll_to_me(None);
-                        }
-                        if response.clicked() {
-                            actions.push(Action::Open(video.clone()));
-                        }
-                    }
-                });
-        });
+                    });
+            },
+        );
     });
 }
 
@@ -426,26 +437,38 @@ pub fn watch_later(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             Source::Account => state.account_watch_later.items().len(),
             Source::Device => state.library.watch_later.len(),
         };
-        widgets::pane(ui, &state.palette, "Watch later", Some(count), true, |ui| {
-            ui.horizontal(|ui| {
-                controls(ui, state, true, actions, |_, _| {});
-            });
-            match state.source() {
-                Source::Account => rows_listing(
-                    ui,
-                    state,
-                    &state.account_watch_later,
-                    "the account's Watch later",
-                    actions,
-                ),
-                Source::Device if state.library.watch_later.is_empty() => {
-                    results::nothing(ui, state, "save videos from their page")
+        widgets::pane(
+            ui,
+            &state.palette,
+            "Watch later",
+            Some(count),
+            true,
+            None,
+            |ui| {
+                ui.horizontal(|ui| {
+                    controls(ui, state, true, actions, |_, _| {});
+                });
+                match state.source() {
+                    Source::Account => rows_listing(
+                        ui,
+                        state,
+                        &state.account_watch_later,
+                        "the account's Watch later",
+                        actions,
+                    ),
+                    Source::Device if state.library.watch_later.is_empty() => {
+                        results::nothing(ui, state, "save videos from their page")
+                    }
+                    Source::Device => results::video_rows(
+                        ui,
+                        state,
+                        &state.library.watch_later,
+                        &|_| None,
+                        actions,
+                    ),
                 }
-                Source::Device => {
-                    results::video_rows(ui, state, &state.library.watch_later, &|_| None, actions)
-                }
-            }
-        });
+            },
+        );
     });
 }
 
@@ -488,6 +511,7 @@ pub fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             "Playlists",
             Some(count),
             true,
+            None,
             |ui| match &state.playlists {
                 Listing::Idle => {}
                 Listing::Loading => results::loading(ui, state, "playlists"),
@@ -609,6 +633,7 @@ pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             &title,
             Some(state.page_videos.items().len()),
             true,
+            None,
             |ui| {
                 if let Some(Page::Channel(channel)) = &state.page {
                     ui.horizontal(|ui| {

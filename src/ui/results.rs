@@ -55,6 +55,7 @@ pub fn videos_noted(
         title,
         Some(count),
         true,
+        None,
         |ui| match listing {
             Listing::Idle => {}
             Listing::Loading => loading(ui, state, title),

@@ -55,6 +55,9 @@ pub fn pane<R>(
     title: &str,
     count: Option<usize>,
     focused: bool,
+    // What fills the pane (and masks the rule behind the title); `None`
+    // leaves it transparent, over `panel_fill`.
+    fill: Option<Color32>,
     add_contents: impl FnOnce(&mut Ui) -> R,
 ) -> egui::InnerResponse<R> {
     let font = FontId::monospace(14.0);
@@ -71,13 +74,15 @@ pub fn pane<R>(
     } else {
         palette.outline
     };
+    let fill = fill.unwrap_or_else(|| ui.visuals().panel_fill);
     let inner = egui::Frame::new()
+        .fill(fill)
         .stroke(Stroke::new(1.0, border))
         .inner_margin(margin)
         .show(ui, add_contents);
     let rect = inner.response.rect;
     let painter = ui.painter();
-    let behind = ui.visuals().panel_fill;
+    let behind = fill;
     // The title sits on the top rule at the left.
     let mut title = RichText::new(format!(" {title} ")).font(font.clone());
     if focused {
