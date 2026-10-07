@@ -642,7 +642,20 @@ impl App {
         if channels.is_empty() {
             return;
         }
-        self.request(Slot::Shorts, Request::Shorts { channels });
+        // The shelf keeps what the feed already put there.
+        self.send_request(Slot::Shorts, Request::Shorts { channels });
+    }
+
+    /// `request` without touching the listing: a request whose answer
+    /// augments what is already shown (the shelf's shorts).
+    fn send_request(&mut self, slot: Slot, request: Request) {
+        self.generation += 1;
+        self.generations.insert(slot, self.generation);
+        self.backend.send(Command::Load {
+            slot,
+            generation: self.generation,
+            request,
+        });
     }
 
     fn request(&mut self, slot: Slot, request: Request) {
@@ -1421,7 +1434,13 @@ fn native_display(cc: &eframe::CreationContext<'_>) -> NativeDisplay {
 /// without repeats. Returns how many rows landed in the feed.
 fn merge_feed_page(feed: &mut Vec<Video>, shorts: &mut Vec<Video>, page: Vec<Video>) -> usize {
     let (shelf, rest): (Vec<Video>, Vec<Video>) = page.into_iter().partition(|video| video.short);
-    shorts.extend(shelf);
+    let on_shelf: std::collections::HashSet<String> =
+        shorts.iter().map(|video| video.id.clone()).collect();
+    shorts.extend(
+        shelf
+            .into_iter()
+            .filter(|video| !on_shelf.contains(&video.id)),
+    );
     let known: std::collections::HashSet<String> =
         feed.iter().map(|video| video.id.clone()).collect();
     let fresh: Vec<Video> = rest
