@@ -664,8 +664,13 @@ impl App {
             (Slot::Playlists, Err(error)) => put(&mut state.playlists, Err(error)),
             (slot, Ok(_)) => log::error!("{slot:?} received another kind of list"),
         }
+        // The feed's own load doubles as a check, only while alerts are on.
         if let Some(videos) = feed_page {
-            self.note_alerts(videos);
+            if self.state.settings.alerts {
+                self.note_alerts(videos);
+            } else {
+                self.state.alerts_checking = false;
+            }
         }
     }
 
