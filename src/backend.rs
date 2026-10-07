@@ -342,7 +342,7 @@ async fn handle(command: Command, context: Context) {
         Command::RemoveAccount(id) => {
             if let Err(error) = account::delete_session(id).await {
                 context.send(Event::Notice(format!(
-                    "The account was removed, but its session could not be deleted                      from the keyring: {error}"
+                    "The account was removed, but its session could not be deleted from the keyring: {error}"
                 )));
             }
         }
