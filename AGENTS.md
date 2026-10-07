@@ -53,11 +53,14 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
   by `channel_shorts` (each device channel's Shorts tab). rustypipe has no
   posts or podcasts tabs, no write actions and no home recommendations:
   subscribing and Watch later act on the local library.
-- `src/account.rs` holds the session: cookies.txt parsing, reading a
+- `src/account.rs` holds the sessions: cookies.txt parsing, reading a
   browser's cookies through yt-dlp's `extract_cookies_from_browser` (a short
   Python script whose output is piped, never written; it tries each Linux
   keyring because yt-dlp guesses wrong on Hyprland), and the credential
-  store, called through `spawn_blocking` with a timeout. rustypipe's cache
+  store, called through `spawn_blocking` with a timeout. Each named account
+  (`library::Account`) has its own keyring entry `youtube-session-<id>`;
+  the single unnumbered entry of older files moves to account 1 on
+  restore. A browser source may carry a profile (`browser:profile`). rustypipe's cache
   goes through `account::CacheFile`, which strips `auth_cookie` and
   `oauth_token`; its error reports are off (`no_reporter`) because they hold
   whole responses. A session from a browser is read again from the browser

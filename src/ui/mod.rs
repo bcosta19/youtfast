@@ -191,16 +191,18 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
                     );
                 }
                 ui.add_space(widgets::line(ui));
-                let account = match &state.account {
-                    AccountState::SignedIn(_) => "Account",
-                    AccountState::SigningIn => "Signing in",
-                    AccountState::SignedOut | AccountState::Failed(_) => "Sign in",
-                };
+                let account = state
+                    .active_account()
+                    .map(|account| account.name.clone())
+                    .unwrap_or_else(|| match &state.account {
+                        AccountState::SigningIn => "Signing in".to_owned(),
+                        _ => "Sign in".to_owned(),
+                    });
                 item(
                     ui,
                     '8',
                     Some(View::Account),
-                    account,
+                    &account,
                     on(View::Account),
                     actions,
                 );
@@ -265,16 +267,27 @@ fn status_line(
                     {
                         state.keys_open = !state.keys_open;
                     }
-                    let parts = [
-                        session_label(state),
-                        quality_label(state),
-                        theme_label(state),
-                    ]
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<_>>()
-                    .join(" · ");
+                    let parts = [quality_label(state), theme_label(state)]
+                        .into_iter()
+                        .flatten()
+                        .collect::<Vec<_>>()
+                        .join(" · ");
                     ui.label(RichText::new(parts).monospace().color(palette.secondary));
+                    // The active account's name opens its page.
+                    if let Some(account) = state.active_account() {
+                        if ui
+                            .link(
+                                RichText::new(&account.name)
+                                    .monospace()
+                                    .color(palette.secondary),
+                            )
+                            .clicked()
+                        {
+                            actions.push(Action::Navigate(View::Account));
+                        }
+                    } else if let Some(mode) = session_label(state) {
+                        ui.label(RichText::new(mode).monospace().color(palette.secondary));
+                    }
                 });
             });
         });
@@ -554,6 +567,7 @@ fn keys_overlay(ctx: &egui::Context, state: &State) {
                             ("g / G", "first / last row"),
                             ("enter", "open the row"),
                             ("h / l", "a channel's tabs"),
+                            ("a", "the next account"),
                         ],
                     );
                     column(
@@ -621,6 +635,20 @@ fn keys(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
         }
         if input.key_pressed(Key::R) {
             actions.push(Action::Refresh);
+        }
+        // `a` switches to the next account.
+        if input.key_pressed(Key::A)
+            && state.view != View::Watch
+            && state.library.accounts.len() > 1
+        {
+            let accounts = &state.library.accounts;
+            let index = accounts
+                .iter()
+                .position(|account| Some(account.id) == state.library.active_account)
+                .map(|index| index + 1)
+                .unwrap_or(0)
+                % accounts.len();
+            actions.push(Action::SwitchAccount(accounts[index].id));
         }
         // The cursor: j/k or the arrows move it, g/G jump, Enter opens.
         let count = cursor_count(state);

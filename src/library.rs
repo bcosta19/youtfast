@@ -22,9 +22,24 @@ pub struct Library {
     pub history: Vec<Watched>,
     /// Most recently added first.
     pub watch_later: Vec<Video>,
-    /// How the account was signed in, if it is. The session itself is in
-    /// the credential store.
+    /// The YouTube accounts signed in here, named. The sessions
+    /// themselves are in the credential store, one entry per id.
+    pub accounts: Vec<Account>,
+    /// The account the app is signed in as, if any.
+    pub active_account: Option<u32>,
+    /// The single account older files carried; folded into `accounts` on
+    /// load, then never written again.
+    #[serde(skip_serializing)]
     pub account: Option<AccountSource>,
+}
+
+/// A named YouTube account; how its session was read is its `source`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Account {
+    /// This library's own number: the keyring key and the active marker.
+    pub id: u32,
+    pub name: String,
+    pub source: AccountSource,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -56,8 +71,21 @@ impl Library {
                 return Self::default();
             }
         };
-        match serde_json::from_str(&text) {
-            Ok(library) => library,
+        match serde_json::from_str::<Library>(&text) {
+            Ok(mut library) => {
+                // Older files' single `account` becomes account 1.
+                if library.accounts.is_empty()
+                    && let Some(source) = library.account.take()
+                {
+                    library.accounts.push(Account {
+                        id: 1,
+                        name: "My account".to_owned(),
+                        source,
+                    });
+                    library.active_account = Some(1);
+                }
+                library
+            }
             Err(error) => {
                 let mut aside = path.as_os_str().to_owned();
                 aside.push(format!(".unreadable-{}", crate::util::now()));
@@ -73,6 +101,11 @@ impl Library {
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let json = serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?;
         crate::paths::write_atomic(path, &json)
+    }
+
+    /// Whether `name` is already an account's; the add form refuses it.
+    pub fn account_name_taken(&self, name: &str) -> bool {
+        self.accounts.iter().any(|account| account.name == name)
     }
 
     pub fn is_subscribed(&self, channel_id: &str) -> bool {
@@ -293,6 +326,47 @@ mod tests {
     }
 
     #[test]
+    fn a_single_account_file_migrates_to_named_accounts() {
+        let dir = std::env::var("CARGO_TARGET_TMPDIR")
+            .unwrap_or_else(|_| format!("{}/target", env!("CARGO_MANIFEST_DIR")));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = Path::new(&dir).join(format!("library-migrate-{}.json", crate::util::now()));
+        std::fs::write(
+            &path,
+            r#"{"subscriptions":[],"history":[],"watch_later":[],"account":{"Browser":"chromium"}}"#,
+        )
+        .unwrap();
+        let library = Library::load(&path);
+        assert_eq!(
+            library.accounts,
+            vec![Account {
+                id: 1,
+                name: "My account".to_owned(),
+                source: AccountSource::Browser("chromium".into()),
+            }]
+        );
+        assert_eq!(library.active_account, Some(1));
+        // And saving writes accounts, never the old field again.
+        library.save(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains(r#""accounts""#));
+        assert!(!text.contains(r#""account":{"#));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn account_names_are_unique() {
+        let mut library = Library::default();
+        assert!(!library.account_name_taken("one"));
+        library.accounts.push(Account {
+            id: 1,
+            name: "one".to_owned(),
+            source: AccountSource::File,
+        });
+        assert!(library.account_name_taken("one"));
+    }
+
+    #[test]
     fn watch_later_toggles() {
         let mut library = Library::default();
         assert!(library.toggle_watch_later(video("aaaaaaaaaaa")));
@@ -336,11 +410,17 @@ mod tests {
     fn round_trips_and_reads_older_files() {
         let mut library = Library::default();
         library.toggle_subscription(channel("UC1", "Alpha"));
-        library.account = Some(AccountSource::Browser("chromium".into()));
+        library.accounts.push(Account {
+            id: 1,
+            name: "My account".to_owned(),
+            source: AccountSource::Browser("chromium".into()),
+        });
+        library.active_account = Some(1);
         let json = serde_json::to_string(&library).unwrap();
         let read: Library = serde_json::from_str(&json).unwrap();
         assert_eq!(read.subscriptions, library.subscriptions);
-        assert_eq!(read.account, library.account);
+        assert_eq!(read.accounts, library.accounts);
+        assert_eq!(read.active_account, library.active_account);
         // Fields added later default when an older file lacks them.
         let old: Library = serde_json::from_str(
             r#"{"history": [{"video": {"id": "aaaaaaaaaaa", "title": "Old"}, "at": 1}]}"#,

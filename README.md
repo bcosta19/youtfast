@@ -67,7 +67,10 @@ subscribed channel's RSS. Bring an existing library over from
 Music, with JSON as the history format, and import `subscriptions.csv` and
 `watch-history.json`. Nothing here touches a Google account.
 
-**With your YouTube account**, the feed, subscriptions, history, Watch later,
+**With your YouTube accounts**, each account is named and kept in the
+keyring under its own entry: add several, switch from the account page
+or with `a`, and point a browser sign-in at a profile (`Profile 1`,
+`Default`, …). The feed, subscriptions, history, Watch later,
 liked videos and playlists come from the account. YouTube has no sign-in for
 apps like this one, so YouTFast uses the session a browser already has:
 

@@ -311,7 +311,7 @@ impl AccountSource {
     pub fn label(&self) -> String {
         match self {
             AccountSource::File => "a cookies.txt file".to_owned(),
-            AccountSource::Browser(browser) => browser_label(browser).to_owned(),
+            AccountSource::Browser(browser) => browser_label(browser),
         }
     }
 }
@@ -321,8 +321,12 @@ pub const BROWSERS: [&str; 7] = [
     "chromium", "chrome", "brave", "firefox", "vivaldi", "edge", "opera",
 ];
 
-pub fn browser_label(browser: &str) -> &str {
-    match browser {
+pub fn browser_label(spec: &str) -> String {
+    let (browser, profile) = match spec.split_once(':') {
+        Some((browser, profile)) => (browser, Some(profile)),
+        None => (spec, None),
+    };
+    let name = match browser {
         "chromium" => "Chromium",
         "chrome" => "Google Chrome",
         "brave" => "Brave",
@@ -331,6 +335,10 @@ pub fn browser_label(browser: &str) -> &str {
         "edge" => "Microsoft Edge",
         "opera" => "Opera",
         other => other,
+    };
+    match profile {
+        Some(profile) => format!("{name} ({profile})"),
+        None => name.to_owned(),
     }
 }
 
@@ -456,8 +464,31 @@ pub enum Action {
     ToggleWatchLater(Video),
     ClearHistory,
     ImportTakeout,
-    SignInWithFile,
-    SignInWithBrowser(String),
+    /// "sign in with cookies.txt" for the account being added.
+    AddAccountFile,
+    /// "sign in with <browser>" for the account being added.
+    AddAccountBrowser,
+    /// The account name/profile fields of the add form (view-owned).
+    SetAccountName(String),
+    SetAccountProfile(String),
+    /// `[ switch ]` on an account row.
+    SwitchAccount(u32),
+    /// `[ rename ]` editing the name, then Enter saves.
+    RenameAccount {
+        id: u32,
+        name: String,
+    },
+    /// `[ remove ]` after the inline confirm.
+    RemoveAccount(u32),
+    /// Open an account row's inline rename field / remove confirm.
+    MarkRenaming {
+        id: u32,
+        name: String,
+    },
+    MarkRemoving(u32),
+    /// Dismiss the remove confirm.
+    CancelRemoving,
+    /// `[ sign out ]`: the session stays kept for switching back.
     SignOut,
     SetBrowser(String),
     DismissNotice,

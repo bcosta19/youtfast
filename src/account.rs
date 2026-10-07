@@ -17,6 +17,8 @@ use std::time::Duration;
 use tokio::process::Command;
 
 const SERVICE: &str = "youtfast";
+/// One entry per account: `youtube-session-<id>`. `youtube-session` was
+/// the single account's key before there were names.
 const COOKIE_KEY: &str = "youtube-session";
 /// How long a credential store may take before it counts as unavailable.
 const STORE_TIMEOUT: Duration = Duration::from_secs(20);
@@ -91,12 +93,13 @@ class Logger(YDLLogger):
         print(message, file=sys.stderr)
 
 browser = sys.argv[1]
+profile = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None
 keyrings = [None]
 if browser not in ("firefox", "safari"):
     keyrings += ["GNOMEKEYRING", "KWALLET6", "KWALLET5", "BASICTEXT"]
 for keyring in keyrings:
     try:
-        jar = extract_cookies_from_browser(browser, logger=Logger(), keyring=keyring)
+        jar = extract_cookies_from_browser(browser, profile, logger=Logger(), keyring=keyring)
     except Exception as error:
         print(f"{keyring}: {error}", file=sys.stderr)
         continue
@@ -109,11 +112,21 @@ for keyring in keyrings:
 sys.exit(3)
 "#;
 
-pub async fn cookies_from_browser(browser: &str) -> Result<String, String> {
+/// `browser` is yt-dlp's name, optionally `browser:profile`.
+pub fn split_browser(spec: &str) -> (String, Option<String>) {
+    match spec.split_once(':') {
+        Some((browser, profile)) => (browser.to_owned(), Some(profile.to_owned())),
+        None => (spec.to_owned(), None),
+    }
+}
+
+pub async fn cookies_from_browser(spec: &str) -> Result<String, String> {
+    let (browser, profile) = split_browser(spec);
     let output = Command::new("python3")
         .arg("-c")
         .arg(EXTRACT_COOKIES)
-        .arg(browser)
+        .arg(&browser)
+        .arg(profile.unwrap_or_default())
         .stdin(Stdio::null())
         .kill_on_drop(true)
         .output()
@@ -123,7 +136,7 @@ pub async fn cookies_from_browser(browser: &str) -> Result<String, String> {
     if !output.status.success() {
         // stderr names files and keyrings, never cookie values.
         log::warn!("reading {browser}'s cookies failed: {}", stderr.trim());
-        let browser = crate::model::browser_label(browser);
+        let browser = crate::model::browser_label(&browser);
         return Err(if stderr.contains("No module named 'yt_dlp'") {
             "yt-dlp is not installed for Python, so the browser cannot be read.".to_owned()
         } else if stderr.contains("secretstorage not available") {
@@ -191,10 +204,15 @@ fn store_error(error: keyring_core::Error) -> String {
     }
 }
 
-fn entry() -> Result<keyring_core::Entry, String> {
+fn entry(key: &str) -> Result<keyring_core::Entry, String> {
     credential_store()
-        .and_then(|store| store.build(SERVICE, COOKIE_KEY, None))
+        .and_then(|store| store.build(SERVICE, key, None))
         .map_err(store_error)
+}
+
+/// The account's keyring key.
+fn session_key(id: u32) -> String {
+    format!("{COOKIE_KEY}-{id}")
 }
 
 /// Runs a blocking credential-store call off the runtime's workers, and
@@ -210,12 +228,17 @@ async fn with_store<T: Send + 'static>(
     }
 }
 
-pub async fn save_session(cookie: String) -> Result<(), String> {
-    with_store(move || entry()?.set_secret(cookie.as_bytes()).map_err(store_error)).await
+pub async fn save_session(id: u32, cookie: String) -> Result<(), String> {
+    with_store(move || {
+        entry(&session_key(id))?
+            .set_secret(cookie.as_bytes())
+            .map_err(store_error)
+    })
+    .await
 }
 
-pub async fn load_session() -> Result<Option<String>, String> {
-    with_store(|| match entry()?.get_secret() {
+pub async fn load_session(id: u32) -> Result<Option<String>, String> {
+    with_store(move || match entry(&session_key(id))?.get_secret() {
         Ok(secret) => String::from_utf8(secret)
             .map(Some)
             .map_err(|_| "The stored session is damaged.".to_owned()),
@@ -225,12 +248,42 @@ pub async fn load_session() -> Result<Option<String>, String> {
     .await
 }
 
-pub async fn delete_session() -> Result<(), String> {
-    with_store(|| match entry()?.delete_credential() {
+pub async fn delete_session(id: u32) -> Result<(), String> {
+    with_store(move || match entry(&session_key(id))?.delete_credential() {
         Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
         Err(error) => Err(store_error(error)),
     })
     .await
+}
+
+/// The single account of older versions was `youtube-session`: move it
+/// under account 1's key. Reads back the moved session before removing
+/// the old entry, so a failure leaves it in place.
+pub async fn migrate_legacy_session() -> Result<Option<String>, String> {
+    if load_session(1).await?.is_some() {
+        return load_session(1).await;
+    }
+    let old = with_store(|| match entry(COOKIE_KEY)?.get_secret() {
+        Ok(secret) => String::from_utf8(secret)
+            .map(Some)
+            .map_err(|_| "The stored session is damaged.".to_owned()),
+        Err(keyring_core::Error::NoEntry) => Ok(None),
+        Err(error) => Err(store_error(error)),
+    })
+    .await?;
+    let Some(cookie) = old else {
+        return Ok(None);
+    };
+    save_session(1, cookie).await?;
+    let back = load_session(1).await?;
+    if back.is_some() {
+        with_store(|| match entry(COOKIE_KEY)?.delete_credential() {
+            Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
+            Err(error) => Err(store_error(error)),
+        })
+        .await?;
+    }
+    Ok(back)
 }
 
 /// rustypipe's cache file (client versions, the player's deobfuscation
@@ -268,6 +321,25 @@ fn without_credentials(data: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_browser_spec_splits_at_the_profile() {
+        assert_eq!(split_browser("chromium"), ("chromium".to_owned(), None));
+        assert_eq!(
+            split_browser("chromium:Profile 1"),
+            ("chromium".to_owned(), Some("Profile 1".to_owned()))
+        );
+    }
+
+    #[test]
+    fn the_label_names_the_browser_and_profile() {
+        assert_eq!(crate::model::browser_label("chromium"), "Chromium");
+        assert_eq!(
+            crate::model::browser_label("chromium:Profile 1"),
+            "Chromium (Profile 1)"
+        );
+        assert_eq!(crate::model::browser_label("firefox"), "Firefox");
+    }
 
     const COOKIES: &str = "# Netscape HTTP Cookie File\n\
         # This is a generated file! Do not edit.\n\

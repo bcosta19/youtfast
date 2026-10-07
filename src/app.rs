@@ -6,10 +6,12 @@ use anyhow::Context as _;
 use eframe::glow;
 use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 
-use crate::backend::{Backend, Command, CommentsKey, Event, PageItems, Payload, Request, Slot};
+use crate::backend::{
+    Backend, Command, CommentsKey, Event, PageItems, Payload, Request, SignInMethod, Slot,
+};
 use crate::innertube;
 use crate::instance::{self, Queue as RemoteQueue};
-use crate::library::Library;
+use crate::library::{Account, Library};
 use crate::model::{
     AccountSource, Action, Channel, ChannelAbout, ChannelHeader, ChannelTab, CommentRow, Details,
     Fetch, HistoryRow, Listing, PlaylistSummary, Quality, Resolution, Results, Source, Video, View,
@@ -26,7 +28,7 @@ pub enum AccountState {
     #[default]
     SignedOut,
     SigningIn,
-    SignedIn(AccountSource),
+    SignedIn(u32),
     /// Signing in failed, or the kept session stopped working.
     Failed(String),
 }
@@ -129,11 +131,26 @@ pub struct State {
     pub page_more_state: Fetch<()>,
     /// The channel page's own search field's text.
     pub channel_query: String,
+    /// The add-account form's fields.
+    pub account_name: String,
+    pub account_profile: String,
+    /// The account row being renamed, and the field's text.
+    pub renaming: Option<(u32, String)>,
+    /// The account row asking `remove?`.
+    pub removing: Option<u32>,
 }
 
 impl State {
     pub fn signed_in(&self) -> bool {
         matches!(self.account, AccountState::SignedIn(_))
+    }
+
+    /// The account the app is signed in as, by its library id.
+    pub fn active_account(&self) -> Option<&Account> {
+        self.library
+            .accounts
+            .iter()
+            .find(|account| Some(account.id) == self.library.active_account)
     }
 
     /// Where account-or-device pages take their list from now.
@@ -177,6 +194,7 @@ pub struct App {
     more_comments_token: Option<String>,
     /// The channel the open page shows, to detect a channel switch.
     open_channel: Option<String>,
+    /// The account the add form's name belongs to (id assigned on submit).
     /// Where Back goes: the pages a video, channel or playlist was opened
     /// from.
     back: Vec<View>,
@@ -291,9 +309,17 @@ impl App {
             _instance: guard,
         };
         app.refresh_theme_list();
-        if let Some(source) = app.state.library.account.clone() {
+        if let Some(active) = app.state.library.active_account
+            && let Some(account) = app
+                .state
+                .library
+                .accounts
+                .iter()
+                .find(|account| account.id == active)
+                .cloned()
+        {
             app.state.account = AccountState::SigningIn;
-            app.backend.send(Command::Restore(source));
+            app.backend.send(Command::Switch(account));
         }
         app.load(View::Home, false);
         if let Some(open) = open {
@@ -448,17 +474,20 @@ impl App {
             }
             Event::Imported(Err(error)) => self.state.notice = Some(error),
             Event::SigningIn => self.state.account = AccountState::SigningIn,
-            Event::SignedIn(source) => {
-                self.state.account = AccountState::SignedIn(source.clone());
+            Event::AccountAdded(account) => {
+                self.state.library.accounts.push(account);
+                self.save_library();
+            }
+            Event::SignedIn(id) => {
+                self.state.account = AccountState::SignedIn(id);
+                self.state.library.active_account = Some(id);
+                self.save_library();
                 self.state.source = Source::Account;
-                if self.state.library.account.as_ref() != Some(&source) {
-                    self.state.library.account = Some(source);
-                    self.save_library();
-                }
                 // The account's subscriptions keep their channels out of the
                 // RSS half of the feed, so they come first.
                 self.request(Slot::Subscriptions, Request::Subscriptions);
                 self.state.feed = Listing::Idle;
+                self.state.shorts = Listing::Idle;
                 self.load(self.state.view, true);
             }
             Event::SignInFailed(error) => self.state.account = AccountState::Failed(error),
@@ -468,7 +497,9 @@ impl App {
             }
             Event::SignedOut => {
                 self.state.account = AccountState::SignedOut;
-                self.state.library.account = None;
+                // The account stays listed: its session is kept to switch
+                // back.
+                self.state.library.active_account = None;
                 self.save_library();
                 self.state.account_subscriptions = Listing::Idle;
                 self.state.account_history = Listing::Idle;
@@ -678,6 +709,29 @@ impl App {
             generation: self.generation,
             request,
         });
+    }
+
+    /// The account the add form describes:  must be set and new;
+    /// its id is the first free one.
+    fn new_account(&self, source: AccountSource) -> Option<Account> {
+        let name = self.state.account_name.trim();
+        if name.is_empty() || self.state.library.account_name_taken(name) {
+            return None;
+        }
+        let id = self
+            .state
+            .library
+            .accounts
+            .iter()
+            .map(|account| account.id)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        Some(Account {
+            id,
+            name: name.to_owned(),
+            source,
+        })
     }
 
     /// Loads what a view shows: always when `force`d (Refresh, a new
@@ -918,15 +972,79 @@ impl App {
                     .pick_file();
                 self.backend.send(Command::ImportTakeout(Box::pin(picked)));
             }
-            Action::SignInWithFile => {
+            Action::AddAccountFile => {
+                // The name makes the account; the pick happens on the way.
+                let Some(account) = self.new_account(AccountSource::File) else {
+                    return;
+                };
                 let picked = rfd::AsyncFileDialog::new()
                     .set_title("Choose the cookies.txt exported from YouTube")
                     .add_filter("cookies.txt", &["txt"])
                     .pick_file();
-                self.backend.send(Command::SignInWithFile(Box::pin(picked)));
+                self.backend.send(Command::AddAccount {
+                    account,
+                    method: SignInMethod::File(Box::pin(picked)),
+                });
             }
-            Action::SignInWithBrowser(browser) => {
-                self.backend.send(Command::SignInWithBrowser(browser));
+            Action::AddAccountBrowser => {
+                let mut spec = self.state.browser.clone();
+                let profile = self.state.account_profile.trim();
+                if !profile.is_empty() {
+                    spec = format!("{spec}:{profile}");
+                }
+                let Some(account) = self.new_account(AccountSource::Browser(spec)) else {
+                    return;
+                };
+                self.backend.send(Command::AddAccount {
+                    account,
+                    method: SignInMethod::Browser,
+                });
+            }
+            Action::SetAccountName(name) => self.state.account_name = name,
+            Action::SetAccountProfile(profile) => self.state.account_profile = profile,
+            Action::SwitchAccount(id) => {
+                if self.state.library.active_account != Some(id)
+                    && let Some(account) = self
+                        .state
+                        .library
+                        .accounts
+                        .iter()
+                        .find(|account| account.id == id)
+                        .cloned()
+                {
+                    self.state.account = AccountState::SigningIn;
+                    self.backend.send(Command::Switch(account));
+                }
+            }
+            Action::RenameAccount { id, name } => {
+                let name = name.trim();
+                if !name.is_empty()
+                    && let Some(account) = self
+                        .state
+                        .library
+                        .accounts
+                        .iter_mut()
+                        .find(|account| account.id == id)
+                {
+                    account.name = name.to_owned();
+                    self.save_library();
+                }
+                self.state.renaming = None;
+            }
+            Action::MarkRenaming { id, name } => self.state.renaming = Some((id, name)),
+            Action::MarkRemoving(id) => self.state.removing = Some(id),
+            Action::CancelRemoving => self.state.removing = None,
+            Action::RemoveAccount(id) => {
+                if self.state.library.active_account == Some(id) {
+                    self.backend.send(Command::SignOut);
+                }
+                self.state
+                    .library
+                    .accounts
+                    .retain(|account| account.id != id);
+                self.save_library();
+                self.backend.send(Command::RemoveAccount(id));
+                self.state.removing = None;
             }
             Action::SignOut => self.backend.send(Command::SignOut),
             Action::SetBrowser(browser) => self.state.browser = browser,
