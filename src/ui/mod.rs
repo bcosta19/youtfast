@@ -134,10 +134,10 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
                         (format!("[{key}]"), state.palette.magenta),
                         (format!(" {label}"), state.palette.text),
                     ];
-                    if widgets::row(ui, &state.palette, selected, &parts).clicked() {
-                        if let Some(view) = view {
-                            actions.push(Action::Navigate(view));
-                        }
+                    if widgets::row(ui, &state.palette, selected, &parts).clicked()
+                        && let Some(view) = view
+                    {
+                        actions.push(Action::Navigate(view));
                     }
                 };
                 let on = |view: View| {

@@ -338,8 +338,7 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                             .auto_shrink(false)
                             .show(ui, |ui| {
                                 let mut day = None;
-                                let mut index = 0;
-                                for row in rows {
+                                for (index, row) in rows.iter().enumerate() {
                                     // YouTube groups its history by day:
                                     // "Today", "Yesterday", "Monday".
                                     if row.when.is_some() && row.when != day {
@@ -352,7 +351,6 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                                         );
                                     }
                                     let selected = index == state.cursor;
-                                    index += 1;
                                     let video = &row.video;
                                     let watched = video.duration.and_then(|duration| {
                                         state
