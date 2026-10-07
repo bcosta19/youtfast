@@ -3,6 +3,7 @@
 mod account;
 mod app;
 mod backend;
+mod fonts;
 mod icons;
 mod innertube;
 mod instance;
