@@ -1,96 +1,113 @@
-//! The settings page: the theme, and where palette files live.
+//! The settings page: the theme, and where palette files live. Rows use
+//! the selected-row style like everywhere else.
 
-use egui::{RichText, Ui};
+use egui::{Align2, RichText, Ui, vec2};
 
+use super::widgets;
 use crate::app::State;
 use crate::model::Action;
 use crate::settings::ThemeChoice;
 
 pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     egui::CentralPanel::default().show(ui, |ui| {
-        egui::ScrollArea::vertical()
-            .auto_shrink(false)
-            .show(ui, |ui| {
-                ui.add_space(8.0);
-                ui.label(RichText::new("Appearance").strong().size(20.0));
-                ui.add_space(8.0);
-                let auto_detail = if state.follows_omarchy {
-                    "Follows your Omarchy theme"
-                } else {
-                    "Dark"
-                };
-                row(
-                    ui,
-                    state.settings.theme == ThemeChoice::Auto,
-                    "Automatic",
-                    Some(auto_detail),
-                    actions,
-                    ThemeChoice::Auto,
-                );
-                row(
-                    ui,
-                    state.settings.theme == ThemeChoice::Dark,
-                    "Dark",
-                    None,
-                    actions,
-                    ThemeChoice::Dark,
-                );
-                row(
-                    ui,
-                    state.settings.theme == ThemeChoice::Light,
-                    "Light",
-                    None,
-                    actions,
-                    ThemeChoice::Light,
-                );
-                // The desktop's own palette: "Automatic" already covers it.
-                for (filename, name) in &state.themes {
-                    if filename == fastframe_theme::omarchy::FILENAME {
-                        continue;
-                    }
-                    let choice = ThemeChoice::Custom(filename.clone());
-                    row(
+        widgets::pane(ui, &state.palette, "Appearance", None, true, |ui| {
+            egui::ScrollArea::vertical()
+                .auto_shrink(false)
+                .show(ui, |ui| {
+                    let auto_detail = if state.follows_omarchy {
+                        "follows your Omarchy theme"
+                    } else {
+                        "dark"
+                    };
+                    choice(
                         ui,
-                        state.settings.theme == choice,
-                        name,
+                        state,
+                        state.settings.theme == ThemeChoice::Auto,
+                        "automatic",
+                        Some(auto_detail),
+                        actions,
+                        ThemeChoice::Auto,
+                    );
+                    choice(
+                        ui,
+                        state,
+                        state.settings.theme == ThemeChoice::Dark,
+                        "dark",
                         None,
                         actions,
-                        choice,
+                        ThemeChoice::Dark,
                     );
-                }
-                if !state.theme_status.is_empty() {
-                    ui.add_space(4.0);
-                    ui.label(RichText::new(&state.theme_status).weak());
-                }
-                ui.add_space(8.0);
-                ui.label(
-                    RichText::new(format!("Palettes are JSON files in {}.", state.themes_dir))
-                        .weak(),
-                );
-            });
+                    choice(
+                        ui,
+                        state,
+                        state.settings.theme == ThemeChoice::Light,
+                        "light",
+                        None,
+                        actions,
+                        ThemeChoice::Light,
+                    );
+                    // The desktop's own palette: "automatic" covers it.
+                    for (filename, name) in &state.themes {
+                        if filename == fastframe_theme::omarchy::FILENAME {
+                            continue;
+                        }
+                        let picked = ThemeChoice::Custom(filename.clone());
+                        choice(
+                            ui,
+                            state,
+                            state.settings.theme == picked,
+                            name,
+                            None,
+                            actions,
+                            picked,
+                        );
+                    }
+                    if !state.theme_status.is_empty() {
+                        ui.add_space(widgets::line(ui) / 2.0);
+                        ui.label(
+                            RichText::new(&state.theme_status)
+                                .monospace()
+                                .color(state.palette.secondary),
+                        );
+                    }
+                    ui.add_space(widgets::line(ui) / 2.0);
+                    ui.label(
+                        RichText::new(format!("palettes are JSON files in {}", state.themes_dir))
+                            .monospace()
+                            .small()
+                            .color(state.palette.dim),
+                    );
+                });
+        });
     });
 }
 
-fn row(
+/// A theme choice as a selectable row, with its detail at the right.
+fn choice(
     ui: &mut Ui,
+    state: &State,
     selected: bool,
     name: &str,
     detail: Option<&str>,
     actions: &mut Vec<Action>,
-    choice: ThemeChoice,
+    theme: ThemeChoice,
 ) {
-    let response = egui::Button::selectable(selected, RichText::new(name).size(15.0));
-    let response = ui.add_sized([ui.available_width(), 34.0], response);
+    let parts = [(name.to_owned(), state.palette.text)];
+    let response = widgets::row(ui, &state.palette, selected, &parts);
     if let Some(detail) = detail {
         ui.painter().text(
-            response.rect.right_center() - egui::vec2(12.0, 0.0),
-            egui::Align2::RIGHT_CENTER,
+            response.rect.right_center() - vec2(widgets::cell(ui), 0.0),
+            Align2::RIGHT_CENTER,
             detail,
-            egui::FontId::proportional(13.0),
-            ui.visuals().weak_text_color(),
+            egui::FontId::monospace(13.0),
+            if selected {
+                state.palette.window
+            } else {
+                state.palette.dim
+            },
         );
     }
     if response.clicked() {
-        actions.push(Action::SetTheme(choice));
+        actions.push(Action::SetTheme(theme));
     }
 }

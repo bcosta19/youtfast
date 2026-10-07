@@ -60,13 +60,13 @@ pub fn videos_noted(
             Listing::Loading => loading(ui, state, title),
             Listing::Failed(error) => failed(ui, state, error, actions),
             Listing::Ready(videos) if videos.is_empty() => nothing(ui, state, empty),
-            Listing::Ready(videos) => rows(ui, state, videos, note, actions),
+            Listing::Ready(videos) => video_rows(ui, state, videos, note, actions),
         },
     );
 }
 
 /// The rows themselves, in a scroll area.
-fn rows(
+pub fn video_rows(
     ui: &mut Ui,
     state: &State,
     videos: &[Video],

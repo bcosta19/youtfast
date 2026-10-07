@@ -7,9 +7,8 @@ use egui::{
     Stroke, Ui, pos2, vec2,
 };
 
-use crate::app::State;
 use crate::icons::Icon;
-use crate::model::{Action, Channel, Video};
+use crate::model::Video;
 use crate::theme::Palette;
 use crate::util;
 
@@ -122,6 +121,8 @@ pub fn pane<R>(
 pub enum ButtonStyle {
     /// `[ subscribe ]`: quiet until hovered.
     Normal,
+    /// `[ subscribed ]`: on, accent and bold.
+    On,
     /// Inverted: accent fill, window text.
     Primary,
 }
@@ -131,6 +132,7 @@ pub fn bracket_button(ui: &mut Ui, palette: &Palette, label: &str, style: Button
     let mut text = RichText::new(format!("[ {label} ]")).monospace();
     text = match style {
         ButtonStyle::Normal => text.color(palette.secondary),
+        ButtonStyle::On => text.color(palette.accent).strong(),
         ButtonStyle::Primary => text.color(palette.window),
     };
     let mut button = egui::Button::new(text).frame(false);
@@ -181,18 +183,6 @@ pub fn row(
     } else {
         ui.painter().galley(text_pos, galley, palette.text);
     }
-    response
-}
-
-/// A thumbnail at `size`, square, with the length (or LIVE) in its
-/// corner: yellow on black, LIVE in red.
-pub fn thumbnail(ui: &mut Ui, video: &Video, size: egui::Vec2, palette: &Palette) -> Response {
-    let response = ui.add(
-        Image::new(video.thumbnail())
-            .fit_to_exact_size(size)
-            .corner_radius(CornerRadius::ZERO),
-    );
-    badge(ui, response.rect, video, palette);
     response
 }
 
@@ -316,18 +306,6 @@ pub fn video_row(
     response
 }
 
-/// A title cut to two lines with an ellipsis.
-pub fn title(ui: &mut Ui, text: &str, size: f32) {
-    let mut job = LayoutJob::simple(
-        text.to_owned(),
-        FontId::proportional(size),
-        ui.visuals().strong_text_color(),
-        ui.available_width(),
-    );
-    job.wrap.max_rows = 2;
-    ui.label(job);
-}
-
 /// "1.2M views · 2 days ago", or "Live now".
 pub fn meta(video: &Video) -> String {
     if video.live {
@@ -338,69 +316,4 @@ pub fn meta(video: &Video) -> String {
         .flatten()
         .collect();
     parts.join(" · ")
-}
-
-/// A video as a row: thumbnail on the left, title and details beside it.
-/// `note` is an extra line ("Watched 2 days ago").
-pub fn compact_card(
-    ui: &mut Ui,
-    video: &Video,
-    note: Option<&str>,
-    palette: &Palette,
-    actions: &mut Vec<Action>,
-) {
-    let row = ui.horizontal_top(|ui| {
-        thumbnail(ui, video, vec2(168.0, 94.5), palette);
-        ui.vertical(|ui| {
-            title(ui, &video.title, 14.0);
-            if let Some(channel) = &video.channel {
-                ui.label(RichText::new(channel).weak().small());
-            }
-            let meta = meta(video);
-            if !meta.is_empty() {
-                ui.label(RichText::new(meta).weak().small());
-            }
-            if let Some(note) = note {
-                ui.label(RichText::new(note).weak().small());
-            }
-        });
-    });
-    open_on_click(ui, row.response.rect, video, actions);
-}
-
-/// Makes the area a finished card covers open its video when clicked.
-pub fn open_on_click(ui: &mut Ui, rect: Rect, video: &Video, actions: &mut Vec<Action>) {
-    let response = ui.interact(rect, ui.id().with(("video", &video.id)), Sense::click());
-    if response.hovered() {
-        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
-    }
-    if response.clicked() {
-        actions.push(Action::Open(video.clone()));
-    }
-}
-
-/// Subscribe on this device, or show that the account already does
-/// (subscribing the account itself needs youtube.com: rustypipe has no
-/// action for it).
-pub fn subscribe_button(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Action>) {
-    if state.subscribed_in_account(&channel.id) {
-        ui.add_enabled(false, egui::Button::new("Subscribed"))
-            .on_disabled_hover_text("Your account is subscribed. Manage it on youtube.com.");
-        return;
-    }
-    let subscribed = state.library.is_subscribed(&channel.id);
-    let button = if subscribed {
-        egui::Button::new("Subscribed on this device")
-    } else {
-        egui::Button::new(RichText::new("Subscribe").color(state.palette.on_accent))
-            .fill(state.palette.accent)
-    };
-    let hint = if subscribed {
-        "Unsubscribe on this computer"
-    } else {
-        "Follow this channel on this computer: its videos join your feed"
-    };
-    if ui.add(button).on_hover_text(hint).clicked() {
-        actions.push(Action::ToggleSubscription(channel.clone()));
-    }
 }

@@ -1,22 +1,22 @@
-//! The watch page: the video, its controls, and what to play next.
+//! The watch page: the video pane, the controls strip, the details pane
+//! and the Up next pane.
 
 use egui::{
-    Align, Align2, Button, Color32, CornerRadius, FontId, Frame, Layout, Rect, RichText, Sense,
-    Slider, Ui, UiBuilder, pos2, vec2,
+    Align, Align2, Color32, CornerRadius, FontId, Frame, Layout, Rect, RichText, Sense, Slider, Ui,
+    UiBuilder, pos2, vec2,
 };
 
-use super::widgets;
+use super::{results, widgets};
 use crate::app::State;
 use crate::icons::Icon;
 use crate::model::{Action, Channel, Quality, Resolution};
 use crate::mpv::{Status, VideoSurface};
 use crate::util;
 
-/// The "Up next" column beside the video in a wide window.
-const SIDEBAR_WIDTH: f32 = 400.0;
-/// Narrower than this, the column moves under the video.
+/// The "Up next" pane's width beside the video in a wide window.
+const SIDEBAR_WIDTH: f32 = 380.0;
+/// Narrower than this, the pane moves under the video.
 const WIDE: f32 = 1000.0;
-const GAP: f32 = 24.0;
 
 pub fn show(
     ui: &mut Ui,
@@ -34,12 +34,13 @@ pub fn show(
             .show(ui, |ui| {
                 if ui.available_width() >= WIDE {
                     ui.horizontal_top(|ui| {
-                        let main_width = ui.available_width() - SIDEBAR_WIDTH - GAP;
+                        let gap = widgets::cell(ui);
+                        let main_width = ui.available_width() - SIDEBAR_WIDTH - gap;
                         ui.vertical(|ui| {
                             ui.set_width(main_width);
                             main_column(ui, state, status, surface, max_video_height, actions);
                         });
-                        ui.add_space(GAP);
+                        ui.add_space(gap);
                         ui.vertical(|ui| {
                             ui.set_width(SIDEBAR_WIDTH);
                             up_next(ui, state, actions);
@@ -47,7 +48,7 @@ pub fn show(
                     });
                 } else {
                     main_column(ui, state, status, surface, max_video_height, actions);
-                    ui.add_space(GAP);
+                    ui.add_space(widgets::line(ui));
                     up_next(ui, state, actions);
                 }
             });
@@ -93,71 +94,130 @@ fn main_column(
     max_video_height: f32,
     actions: &mut Vec<Action>,
 ) {
-    let width = ui.available_width();
-    let height = (width * 9.0 / 16.0).min(max_video_height);
-    let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
-    video(ui, rect, state, status, surface, actions);
-    ui.add_space(8.0);
-    controls(ui, state, status, actions);
-    ui.add_space(12.0);
-
-    let Some(watching) = &state.watching else {
+    let Some(watching) = state.watching.clone() else {
         return;
     };
+    // The video pane takes the channel's name.
+    let pane_title = watching
+        .channel
+        .clone()
+        .or_else(|| watching.channel_id.clone())
+        .unwrap_or_else(|| "watch".to_owned());
+    let palette = state.palette.clone();
+    widgets::pane(ui, &palette, &pane_title, None, true, |ui| {
+        let width = ui.available_width();
+        let height = (width * 9.0 / 16.0).min(max_video_height);
+        let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
+        video(ui, rect, state, status, surface, actions);
+        ui.add_space(4.0);
+        controls(ui, state, status, actions);
+    });
+    ui.add_space(widgets::line(ui));
+
+    // The details pane is titled with the video's title.
     // A video opened from a link has no title until mpv reads it.
     let title = Some(watching.title.as_str())
         .filter(|title| !title.is_empty())
         .or_else(|| status.and_then(|status| status.title.as_deref()))
-        .unwrap_or("Loading…");
-    ui.label(RichText::new(title).strong().size(20.0));
-    ui.add_space(4.0);
-    ui.horizontal(|ui| {
+        .unwrap_or("Loading…")
+        .to_owned();
+    widgets::pane(ui, &palette, &title, None, false, |ui| {
         let channel = watching.channel_id.as_ref().map(|id| Channel {
             id: id.clone(),
             name: watching.channel.clone().unwrap_or_else(|| id.clone()),
             avatar: None,
         });
-        match (&channel, &watching.channel) {
-            (Some(channel), _) => {
-                let link = ui
-                    .link(RichText::new(&channel.name).strong())
-                    .on_hover_text("Open the channel");
-                if link.clicked() {
-                    actions.push(Action::OpenChannel(channel.clone()));
+        ui.horizontal(|ui| {
+            detail_line(ui, state, "channel", |ui| {
+                if let Some(channel) = &channel {
+                    let link = ui.link(
+                        RichText::new(&channel.name)
+                            .monospace()
+                            .color(state.palette.blue),
+                    );
+                    if link.clicked() {
+                        actions.push(Action::OpenChannel(channel.clone()));
+                    }
+                } else if let Some(name) = &watching.channel {
+                    ui.label(RichText::new(name).monospace().color(state.palette.blue));
                 }
-                widgets::subscribe_button(ui, state, channel, actions);
-            }
-            (None, Some(name)) => {
-                ui.label(RichText::new(name).strong());
-            }
-            (None, None) => {}
+            });
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if let Some(channel) = &channel {
+                    subscribe(ui, state, channel, actions);
+                }
+                let saved = state.library.in_watch_later(&watching.id);
+                let (label, style) = if saved {
+                    ("saved", widgets::ButtonStyle::On)
+                } else {
+                    ("watch later", widgets::ButtonStyle::Normal)
+                };
+                if widgets::bracket_button(ui, &state.palette, label, style)
+                    .on_hover_text("Watch later on this computer")
+                    .clicked()
+                {
+                    actions.push(Action::ToggleWatchLater(watching.clone()));
+                }
+            });
+        });
+        if let Some(views) = watching.views {
+            kv(ui, state, "views", &util::views(views));
         }
-        let meta = widgets::meta(watching);
-        if !meta.is_empty() {
-            ui.label(RichText::new(meta).weak());
+        if let Some(published) = &watching.published {
+            kv(ui, state, "published", published);
         }
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            let saved = state.library.in_watch_later(&watching.id);
-            let button = if saved {
-                Button::selectable(
-                    true,
-                    (
-                        Icon::Check.image(ui.visuals().text_color(), 14.0),
-                        "Saved for later",
-                    ),
-                )
-            } else {
-                Button::selectable(false, "Watch later")
-            };
-            if ui
-                .add(button)
-                .on_hover_text("Watch later on this computer")
-                .clicked()
-            {
-                actions.push(Action::ToggleWatchLater(watching.clone()));
-            }
+    });
+}
+
+/// A `key ··· value` line: the key in dim, leader dots, the value in text.
+fn kv(ui: &mut Ui, state: &State, key: &str, value: &str) {
+    ui.horizontal(|ui| {
+        detail_line(ui, state, key, |ui| {
+            ui.label(RichText::new(value).monospace().color(state.palette.text));
         });
     });
+}
+
+/// The left half of a key/value line: `key` in dim followed by leader
+/// dots, then `value` drawn by `add`.
+fn detail_line(ui: &mut Ui, state: &State, key: &str, add: impl FnOnce(&mut Ui)) {
+    ui.label(
+        RichText::new(format!("{key:·<12}"))
+            .monospace()
+            .color(state.palette.dim),
+    );
+    add(ui);
+}
+
+/// Subscribe on this device, or show that the account already does.
+fn subscribe(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Action>) {
+    if state.subscribed_in_account(&channel.id) {
+        ui.label(
+            RichText::new("[ subscribed ]")
+                .monospace()
+                .color(state.palette.accent)
+                .strong(),
+        )
+        .on_hover_text("Your account is subscribed. Manage it on youtube.com.");
+        return;
+    }
+    let subscribed = state.library.is_subscribed(&channel.id);
+    let (label, style) = if subscribed {
+        ("subscribed", widgets::ButtonStyle::On)
+    } else {
+        ("subscribe", widgets::ButtonStyle::Normal)
+    };
+    let hint = if subscribed {
+        "Unsubscribe on this computer"
+    } else {
+        "Follow this channel on this computer: its videos join your feed"
+    };
+    if widgets::bracket_button(ui, &state.palette, label, style)
+        .on_hover_text(hint)
+        .clicked()
+    {
+        actions.push(Action::ToggleSubscription(channel.clone()));
+    }
 }
 
 /// The picture, with the spinner or the error over it. A click pauses; a
@@ -181,7 +241,7 @@ fn video(
             rect.center(),
             Align2::CENTER_CENTER,
             error,
-            FontId::proportional(16.0),
+            FontId::monospace(16.0),
             Color32::WHITE,
         );
     } else if status.is_some_and(|status| {
@@ -204,7 +264,6 @@ fn controls(ui: &mut Ui, state: &mut State, status: Option<&Status>, actions: &m
     let Some(status) = status else {
         return;
     };
-    seek_bar(ui, state, status, actions);
     ui.horizontal(|ui| {
         let icon = if status.paused {
             Icon::Play
@@ -223,17 +282,6 @@ fn controls(ui: &mut Ui, state: &mut State, status: Option<&Status>, actions: &m
         {
             actions.push(Action::SetVolume(volume));
         }
-        let position = state.seek_preview.unwrap_or(status.position);
-        let time = if status.duration > 0.0 {
-            format!(
-                "{} / {}",
-                util::duration(position),
-                util::duration(status.duration)
-            )
-        } else {
-            util::duration(position)
-        };
-        ui.label(RichText::new(time).monospace());
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             let (icon, label) = if state.fullscreen {
                 (Icon::ExitFullscreen, "Exit full screen (F)")
@@ -246,6 +294,7 @@ fn controls(ui: &mut Ui, state: &mut State, status: Option<&Status>, actions: &m
             quality_menu(ui, state, status, actions);
         });
     });
+    seek_bar(ui, state, status, actions);
 }
 
 /// The quality chosen and the resolution playing, with the decoding details
@@ -274,7 +323,7 @@ fn quality_menu(ui: &mut Ui, state: &State, status: &Status, actions: &mut Vec<A
         state.resolutions.clone()
     };
     let menu = egui::ComboBox::from_id_salt("quality")
-        .selected_text(text)
+        .selected_text(RichText::new(text).monospace())
         .width(130.0)
         .show_ui(ui, |ui| {
             let auto = format!("Auto (up to {}p)", Quality::AUTO);
@@ -316,66 +365,101 @@ fn playback_details(status: &Status) -> String {
     parts.join(" · ")
 }
 
-/// YouTube's red bar: played, buffered, and the rest. Dragging previews
-/// the position and seeks to keyframes; releasing seeks exactly.
+/// The seek bar: a 1-line strip, played in accent, buffered in
+/// surface_active, the rest in surface; a 1-cell block marks the position
+/// while hovered or dragged. Times are `00:00 / 12:04` at its right.
 fn seek_bar(ui: &mut Ui, state: &mut State, status: &Status, actions: &mut Vec<Action>) {
-    let (rect, response) =
-        ui.allocate_exact_size(vec2(ui.available_width(), 18.0), Sense::click_and_drag());
-    let duration = status.duration;
-    if duration > 0.0 {
-        let pointer = response.interact_pointer_pos().map(|pointer| {
-            f64::from(((pointer.x - rect.left()) / rect.width()).clamp(0.0, 1.0)) * duration
-        });
-        if response.drag_stopped() || response.clicked() {
-            if let Some(seconds) = pointer.or(state.seek_preview) {
-                actions.push(Action::SeekTo {
-                    seconds,
-                    exact: true,
-                });
+    let palette = state.palette.clone();
+    ui.horizontal(|ui| {
+        let time = {
+            let position = state.seek_preview.unwrap_or(status.position);
+            if status.duration > 0.0 {
+                format!(
+                    "{} / {}",
+                    util::duration(position),
+                    util::duration(status.duration)
+                )
+            } else {
+                util::duration(position)
             }
-            state.seek_preview = None;
-        } else if response.dragged()
-            && let Some(seconds) = pointer
-        {
-            if state
-                .seek_preview
-                .is_none_or(|shown| (shown - seconds).abs() >= 0.5)
-            {
-                actions.push(Action::SeekTo {
-                    seconds,
-                    exact: false,
-                });
-            }
-            state.seek_preview = Some(seconds);
-        }
-    }
-
-    let active = response.hovered() || response.dragged();
-    let thickness = if active { 6.0 } else { 4.0 };
-    let track = Rect::from_center_size(rect.center(), vec2(rect.width(), thickness));
-    let fraction = |seconds: f64| {
+        };
+        let time_width = ui
+            .painter()
+            .layout_no_wrap(
+                "00:00 / 00:00".to_owned(),
+                FontId::monospace(13.0),
+                Color32::WHITE,
+            )
+            .size()
+            .x
+            + widgets::cell(ui);
+        let width = ui.available_width() - time_width;
+        let (rect, response) =
+            ui.allocate_exact_size(vec2(width, widgets::line(ui)), Sense::click_and_drag());
+        let duration = status.duration;
         if duration > 0.0 {
-            (seconds / duration).clamp(0.0, 1.0) as f32
-        } else {
-            0.0
+            let pointer = response.interact_pointer_pos().map(|pointer| {
+                f64::from(((pointer.x - rect.left()) / rect.width()).clamp(0.0, 1.0)) * duration
+            });
+            if response.drag_stopped() || response.clicked() {
+                if let Some(seconds) = pointer.or(state.seek_preview) {
+                    actions.push(Action::SeekTo {
+                        seconds,
+                        exact: true,
+                    });
+                }
+                state.seek_preview = None;
+            } else if response.dragged()
+                && let Some(seconds) = pointer
+            {
+                if state
+                    .seek_preview
+                    .is_none_or(|shown| (shown - seconds).abs() >= 0.5)
+                {
+                    actions.push(Action::SeekTo {
+                        seconds,
+                        exact: false,
+                    });
+                }
+                state.seek_preview = Some(seconds);
+            }
         }
-    };
-    let x_at = |seconds: f64| track.left() + track.width() * fraction(seconds);
-    let position = state.seek_preview.unwrap_or(status.position);
-    let painter = ui.painter();
-    let radius = CornerRadius::same(3);
-    painter.rect_filled(track, radius, Color32::from_white_alpha(50));
-    let buffered = Rect::from_min_max(track.min, pos2(x_at(status.cached_until), track.max.y));
-    painter.rect_filled(buffered, radius, Color32::from_white_alpha(90));
-    let played = Rect::from_min_max(track.min, pos2(x_at(position), track.max.y));
-    painter.rect_filled(played, radius, state.palette.accent);
-    if active && duration > 0.0 {
-        painter.circle_filled(
-            pos2(x_at(position), track.center().y),
-            7.0,
-            state.palette.accent,
+
+        let track = Rect::from_center_size(rect.center(), vec2(rect.width(), 6.0));
+        let fraction = |seconds: f64| {
+            if duration > 0.0 {
+                (seconds / duration).clamp(0.0, 1.0) as f32
+            } else {
+                0.0
+            }
+        };
+        let x_at = |seconds: f64| track.left() + track.width() * fraction(seconds);
+        let position = state.seek_preview.unwrap_or(status.position);
+        let painter = ui.painter();
+        painter.rect_filled(track, CornerRadius::ZERO, palette.surface);
+        let buffered = Rect::from_min_max(track.min, pos2(x_at(status.cached_until), track.max.y));
+        painter.rect_filled(buffered, CornerRadius::ZERO, palette.surface_active);
+        let played = Rect::from_min_max(track.min, pos2(x_at(position), track.max.y));
+        painter.rect_filled(played, CornerRadius::ZERO, palette.accent);
+        if (response.hovered() || response.dragged()) && duration > 0.0 {
+            // A 1-cell block at the position.
+            let cell = widgets::cell(ui);
+            let block = Rect::from_center_size(
+                pos2(
+                    x_at(position).clamp(track.left() + cell / 2.0, track.right() - cell / 2.0),
+                    track.center().y,
+                ),
+                vec2(cell, track.height() + 4.0),
+            );
+            painter.rect_filled(block, CornerRadius::ZERO, palette.accent);
+        }
+        ui.label(
+            RichText::new(time)
+                .monospace()
+                .small()
+                .color(palette.secondary),
         );
-    }
+    });
 }
 
 fn up_next(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
@@ -384,14 +468,13 @@ fn up_next(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         .up_next
         .iter()
         .filter(|video| Some(video.id.as_str()) != watching)
+        .cloned()
         .collect();
     if next.is_empty() {
         return;
     }
-    ui.label(RichText::new("Up next").strong().size(16.0));
-    ui.add_space(8.0);
-    for video in next {
-        widgets::compact_card(ui, video, None, &state.palette, actions);
-        ui.add_space(8.0);
-    }
+    let palette = state.palette.clone();
+    widgets::pane(ui, &palette, "Up next", Some(next.len()), false, |ui| {
+        results::video_rows(ui, state, &next, &|_| None, actions);
+    });
 }

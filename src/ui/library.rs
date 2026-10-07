@@ -441,7 +441,9 @@ pub fn watch_later(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 Source::Device if state.library.watch_later.is_empty() => {
                     results::nothing(ui, state, "save videos from their page")
                 }
-                Source::Device => device_rows(ui, state, &state.library.watch_later, actions),
+                Source::Device => {
+                    results::video_rows(ui, state, &state.library.watch_later, &|_| None, actions)
+                }
             }
         });
     });
@@ -460,52 +462,8 @@ fn rows_listing(
         Listing::Loading => results::loading(ui, state, "videos"),
         Listing::Failed(error) => results::failed(ui, state, error, actions),
         Listing::Ready(videos) if videos.is_empty() => results::nothing(ui, state, empty),
-        Listing::Ready(videos) => video_rows(ui, state, videos, &|_| None, actions),
+        Listing::Ready(videos) => results::video_rows(ui, state, videos, &|_| None, actions),
     }
-}
-
-/// Video rows with the cursor, for lists drawn outside `results::videos`.
-fn video_rows(
-    ui: &mut Ui,
-    state: &State,
-    videos: &[Video],
-    note: &dyn Fn(&Video) -> Option<String>,
-    actions: &mut Vec<Action>,
-) {
-    egui::ScrollArea::vertical()
-        .auto_shrink(false)
-        .show(ui, |ui| {
-            for (index, video) in videos.iter().enumerate() {
-                let selected = index == state.cursor;
-                let watched = video
-                    .duration
-                    .and_then(|duration| {
-                        state
-                            .library
-                            .resume_position(&video.id)
-                            .map(|left| left / duration)
-                    })
-                    .map(|f| f as f32);
-                let response = widgets::video_row(
-                    ui,
-                    &state.palette,
-                    video,
-                    note(video).as_deref(),
-                    watched,
-                    selected,
-                );
-                if selected {
-                    response.clone().scroll_to_me(None);
-                }
-                if response.clicked() {
-                    actions.push(Action::Open(video.clone()));
-                }
-            }
-        });
-}
-
-fn device_rows(ui: &mut Ui, state: &State, videos: &[Video], actions: &mut Vec<Action>) {
-    video_rows(ui, state, videos, &|_| None, actions);
 }
 
 pub fn liked(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
