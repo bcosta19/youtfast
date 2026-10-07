@@ -97,6 +97,9 @@ pub struct State {
     pub comments: Fetch<Vec<CommentRow>>,
     /// The next comments page's token.
     pub comments_next: Option<String>,
+    /// The next comments page on its way, or its error; a double click on
+    /// `[ load more ]` cannot send the same page twice.
+    pub comments_more: Fetch<()>,
     /// Visitor data the comments requests carry.
     pub comments_visitor_data: Option<String>,
     /// Each comment's replies by comment id, when opened.
@@ -147,6 +150,8 @@ pub struct App {
     /// The generation the details/comments requests of the video being
     /// watched were sent with; a later `open` drops their answers.
     details_generation: u64,
+    /// The comments page in flight, to put its token back on failure.
+    more_comments_token: Option<String>,
     /// Where Back goes: the pages a video, channel or playlist was opened
     /// from.
     back: Vec<View>,
@@ -249,6 +254,7 @@ impl App {
             generation: 0,
             generations: HashMap::new(),
             details_generation: 0,
+            more_comments_token: None,
             back: Vec::new(),
             custom_themes,
             theme_waker,
@@ -614,6 +620,8 @@ impl App {
                     self.state.details = Fetch::Loading;
                     self.state.comments = Fetch::Idle;
                     self.state.comments_next = None;
+                    self.state.comments_more = Fetch::Idle;
+                    self.more_comments_token = None;
                     self.state.replies.clear();
                     self.backend.send(Command::LoadDetails {
                         generation: self.details_generation,
@@ -711,7 +719,19 @@ impl App {
             Action::SetBrowser(browser) => self.state.browser = browser,
             Action::DismissNotice => self.state.notice = None,
             Action::LoadMoreComments => {
-                if let Some(token) = self.state.comments_next.clone() {
+                // Take the token so a second click asks for the same page
+                // again only after a retry.
+                if matches!(self.state.comments_more, Fetch::Loading) {
+                    return;
+                }
+                if let Some(token) = self
+                    .state
+                    .comments_next
+                    .take()
+                    .or_else(|| self.more_comments_token.clone())
+                {
+                    self.more_comments_token = Some(token.clone());
+                    self.state.comments_more = Fetch::Loading;
                     self.backend.send(Command::LoadComments {
                         generation: self.details_generation,
                         key: CommentsKey::Top,
@@ -786,6 +806,8 @@ impl App {
         self.state.details = Fetch::Loading;
         self.state.comments = Fetch::Idle;
         self.state.comments_next = None;
+        self.state.comments_more = Fetch::Idle;
+        self.more_comments_token = None;
         self.state.comments_visitor_data = None;
         self.state.replies.clear();
         self.state.description_open = false;

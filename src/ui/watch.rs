@@ -343,16 +343,40 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 for comment in rows.clone() {
                     comment_row(ui, state, &comment, actions);
                 }
-                if state.comments_next.is_some()
-                    && widgets::bracket_button(
-                        ui,
-                        &state.palette,
-                        "load more",
-                        widgets::ButtonStyle::Normal,
-                    )
-                    .clicked()
-                {
-                    actions.push(Action::LoadMoreComments);
+                // The tail row: the page on its way, a failed page's
+                // retry, or the button.
+                match &state.comments_more {
+                    Fetch::Loading => results::loading(ui, state, "comments"),
+                    Fetch::Failed(error) => {
+                        ui.label(
+                            RichText::new(error.as_str())
+                                .monospace()
+                                .color(state.palette.red),
+                        );
+                        if widgets::bracket_button(
+                            ui,
+                            &state.palette,
+                            "retry",
+                            widgets::ButtonStyle::Normal,
+                        )
+                        .clicked()
+                        {
+                            actions.push(Action::LoadMoreComments);
+                        }
+                    }
+                    _ => {
+                        if state.comments_next.is_some()
+                            && widgets::bracket_button(
+                                ui,
+                                &state.palette,
+                                "load more",
+                                widgets::ButtonStyle::Normal,
+                            )
+                            .clicked()
+                        {
+                            actions.push(Action::LoadMoreComments);
+                        }
+                    }
                 }
             }
         },
