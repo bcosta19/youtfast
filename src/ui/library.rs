@@ -1,103 +1,110 @@
 //! The pages of what the user follows and keeps: the home feed,
 //! subscriptions, history, Watch later, liked videos, playlists, and one
 //! channel's or playlist's videos. Pages that exist both ways switch
-//! between the signed-in account and this device.
+//! between the signed-in account and this device; each is one pane of
+//! rows.
 
-use egui::{Align, CornerRadius, Image, Layout, RichText, Sense, Ui, vec2};
+use egui::{Image, RichText, Sense, Ui, vec2};
 
 use super::{results, widgets};
 use crate::app::{AccountState, Page, State};
-use crate::model::{Action, Channel, Listing, PlaylistSummary, Source, View};
-use crate::util;
+use crate::model::{Action, Channel, Listing, PlaylistSummary, Source, Video, View};
 
-/// A page's title row: the title, the account/device switch when signed in
-/// (`both_ways`), Refresh, and any `extra` controls.
-fn header(
+/// The account/device switch and a page's extra controls, as bracket
+/// buttons on one line inside the pane.
+fn controls(
     ui: &mut Ui,
     state: &State,
-    title: &str,
     both_ways: bool,
     actions: &mut Vec<Action>,
     extra: impl FnOnce(&mut Ui, &mut Vec<Action>),
 ) {
-    ui.horizontal(|ui| {
-        ui.heading(title);
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if ui.button("Refresh").clicked() {
-                actions.push(Action::Refresh);
+    let mut used = false;
+    if both_ways && state.signed_in() {
+        let source = state.source();
+        let style = |on: bool| {
+            if on {
+                widgets::ButtonStyle::Primary
+            } else {
+                widgets::ButtonStyle::Normal
             }
-            extra(ui, actions);
-            if both_ways && state.signed_in() {
-                ui.add_space(12.0);
-                // Right to left: the device comes first so it shows second.
-                let source = state.source();
-                if ui
-                    .selectable_label(source == Source::Device, "This device")
-                    .clicked()
-                {
-                    actions.push(Action::SetSource(Source::Device));
-                }
-                if ui
-                    .selectable_label(source == Source::Account, "Your account")
-                    .clicked()
-                {
-                    actions.push(Action::SetSource(Source::Account));
-                }
-            }
-        });
-    });
-    ui.add_space(12.0);
-}
-
-/// A loaded list, or the spinner or error standing in for it.
-fn loaded<T>(ui: &mut Ui, listing: &Listing<T>, show: impl FnOnce(&mut Ui, &[T])) {
-    match listing {
-        Listing::Idle | Listing::Loading => results::centered(ui, |ui| {
-            ui.spinner();
-        }),
-        Listing::Failed(error) => results::failed(ui, error),
-        Listing::Ready(items) => show(ui, items.as_slice()),
+        };
+        if widgets::bracket_button(
+            ui,
+            &state.palette,
+            "account",
+            style(source == Source::Account),
+        )
+        .clicked()
+        {
+            actions.push(Action::SetSource(Source::Account));
+        }
+        if widgets::bracket_button(
+            ui,
+            &state.palette,
+            "device",
+            style(source == Source::Device),
+        )
+        .clicked()
+        {
+            actions.push(Action::SetSource(Source::Device));
+        }
+        used = true;
     }
-}
-
-fn hint(ui: &mut Ui, text: &str) {
-    results::centered(ui, |ui| {
-        ui.label(RichText::new(text).weak());
-    });
+    extra(ui, actions);
+    let _ = used;
+    ui.add_space(widgets::line(ui) / 2.0);
 }
 
 pub fn home(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     egui::CentralPanel::default().show(ui, |ui| {
-        header(ui, state, "Home", false, actions, |_, _| {});
         let follows_nothing = state.library.subscriptions.is_empty()
             && !state.signed_in()
             && state.account != AccountState::SigningIn;
         if follows_nothing {
-            results::centered(ui, |ui| {
-                ui.heading("Your feed is empty");
-                ui.add_space(8.0);
-                ui.label(
-                    RichText::new(
-                        "Subscribe to channels from a video's page, bring your subscriptions \
-                         over from Google Takeout, or sign in with your YouTube account.",
+            widgets::pane(ui, &state.palette, "Home", None, true, |ui| {
+                results::centered(ui, |ui| {
+                    ui.label(
+                        RichText::new("-- nothing here --")
+                            .monospace()
+                            .color(state.palette.dim),
+                    );
+                    ui.label(
+                        RichText::new("subscribe to channels to fill your feed")
+                            .monospace()
+                            .color(state.palette.secondary),
+                    );
+                    ui.add_space(widgets::line(ui));
+                    if widgets::bracket_button(
+                        ui,
+                        &state.palette,
+                        "import from Google Takeout",
+                        widgets::ButtonStyle::Normal,
                     )
-                    .weak(),
-                );
-                ui.add_space(16.0);
-                if ui.button("Import from Google Takeout").clicked() {
-                    actions.push(Action::ImportTakeout);
-                }
-                if ui.button("Sign in").clicked() {
-                    actions.push(Action::Navigate(View::Account));
-                }
+                    .clicked()
+                    {
+                        actions.push(Action::ImportTakeout);
+                    }
+                    if widgets::bracket_button(
+                        ui,
+                        &state.palette,
+                        "sign in",
+                        widgets::ButtonStyle::Normal,
+                    )
+                    .clicked()
+                    {
+                        actions.push(Action::Navigate(View::Account));
+                    }
+                });
             });
             return;
         }
         results::videos(
             ui,
+            state,
+            "Home",
             &state.feed,
-            "No videos from your subscriptions yet",
-            state.palette.accent,
+            "nothing from your subscriptions yet",
             actions,
         );
     });
@@ -105,148 +112,412 @@ pub fn home(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 
 pub fn subscriptions(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     egui::CentralPanel::default().show(ui, |ui| {
-        header(ui, state, "Subscriptions", true, actions, |ui, actions| {
-            if ui
-                .button("Import from Google Takeout")
-                .on_hover_text("Adds the channels in a Takeout subscriptions.csv to this device")
-                .clicked()
-            {
-                actions.push(Action::ImportTakeout);
-            }
-        });
-        match state.source() {
-            Source::Account => loaded(ui, &state.account_subscriptions, |ui, channels| {
-                channel_list(ui, channels, false, actions);
-            }),
-            Source::Device if state.library.subscriptions.is_empty() => hint(
-                ui,
-                "No subscriptions on this device yet. Subscribe from a video's page, or \
-                 import them from Google Takeout.",
-            ),
-            Source::Device => channel_list(ui, &state.library.subscriptions, true, actions),
-        }
+        let count = match state.source() {
+            Source::Account => state.account_subscriptions.items().len(),
+            Source::Device => state.library.subscriptions.len(),
+        };
+        widgets::pane(
+            ui,
+            &state.palette,
+            "Subscriptions",
+            Some(count),
+            true,
+            |ui| {
+                ui.horizontal(|ui| {
+                    controls(ui, state, true, actions, |ui, actions| {
+                        if widgets::bracket_button(
+                            ui,
+                            &state.palette,
+                            "import takeout",
+                            widgets::ButtonStyle::Normal,
+                        )
+                        .on_hover_text(
+                            "Adds the channels in a Takeout subscriptions.csv to this device",
+                        )
+                        .clicked()
+                        {
+                            actions.push(Action::ImportTakeout);
+                        }
+                    });
+                });
+                match state.source() {
+                    Source::Account => channel_listing(
+                        ui,
+                        state,
+                        &state.account_subscriptions,
+                        "the account's subscriptions",
+                        false,
+                        actions,
+                    ),
+                    Source::Device if state.library.subscriptions.is_empty() => results::nothing(
+                        ui,
+                        state,
+                        "subscribe from a video's page, or import a Takeout",
+                    ),
+                    Source::Device => {
+                        channel_rows(ui, state, &state.library.subscriptions, true, actions)
+                    }
+                }
+            },
+        );
     });
 }
 
-fn channel_list(ui: &mut Ui, channels: &[Channel], removable: bool, actions: &mut Vec<Action>) {
+/// Channels as rows, or the listing's spinner/error in their place.
+fn channel_listing(
+    ui: &mut Ui,
+    state: &State,
+    listing: &Listing<Channel>,
+    empty: &str,
+    removable: bool,
+    actions: &mut Vec<Action>,
+) {
+    match listing {
+        Listing::Idle => {}
+        Listing::Loading => results::loading(ui, state, "subscriptions"),
+        Listing::Failed(error) => results::failed(ui, state, error, actions),
+        Listing::Ready(channels) if channels.is_empty() => results::nothing(ui, state, empty),
+        Listing::Ready(channels) => channel_rows(ui, state, channels, removable, actions),
+    }
+}
+
+fn channel_rows(
+    ui: &mut Ui,
+    state: &State,
+    channels: &[Channel],
+    removable: bool,
+    actions: &mut Vec<Action>,
+) {
     egui::ScrollArea::vertical()
         .auto_shrink(false)
         .show(ui, |ui| {
-            for channel in channels {
-                widgets::channel_row(ui, channel, actions, |ui, actions| {
-                    if removable && ui.button("Unsubscribe").clicked() {
-                        actions.push(Action::ToggleSubscription(channel.clone()));
-                    }
-                });
-                ui.add_space(6.0);
+            for (index, channel) in channels.iter().enumerate() {
+                channel_row(
+                    ui,
+                    state,
+                    channel,
+                    index == state.cursor,
+                    removable,
+                    actions,
+                );
             }
         });
+}
+
+/// A channel as a row: its square avatar, its name in blue, controls at
+/// the end.
+fn channel_row(
+    ui: &mut Ui,
+    state: &State,
+    channel: &Channel,
+    selected: bool,
+    removable: bool,
+    actions: &mut Vec<Action>,
+) {
+    let palette = &state.palette;
+    let size = vec2(40.0, 40.0);
+    let height = size.y + 4.0;
+    let (rect, response) =
+        ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
+    if response.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    let fill = if selected {
+        palette.accent
+    } else if response.hovered() {
+        palette.surface_hover
+    } else {
+        egui::Color32::TRANSPARENT
+    };
+    if fill != egui::Color32::TRANSPARENT {
+        ui.painter()
+            .rect_filled(rect, egui::CornerRadius::ZERO, fill);
+    }
+    if selected {
+        response.clone().scroll_to_me(None);
+    }
+    let avatar_rect = egui::Rect::from_min_size(rect.min + vec2(widgets::cell(ui), 2.0), size);
+    match &channel.avatar {
+        Some(avatar) => {
+            Image::new(avatar.clone())
+                .fit_to_exact_size(size)
+                .corner_radius(egui::CornerRadius::ZERO)
+                .paint_at(ui, avatar_rect);
+        }
+        None => {
+            ui.painter()
+                .rect_filled(avatar_rect, egui::CornerRadius::ZERO, palette.surface);
+            let initial: String = channel.name.chars().take(1).collect();
+            ui.painter().text(
+                avatar_rect.center(),
+                egui::Align2::CENTER_CENTER,
+                initial.to_uppercase(),
+                egui::FontId::monospace(18.0),
+                palette.dim,
+            );
+        }
+    }
+    let name_color = if selected {
+        palette.window
+    } else {
+        palette.blue
+    };
+    ui.painter().text(
+        pos_at(rect, avatar_rect.right() + widgets::cell(ui), 0.0),
+        egui::Align2::LEFT_CENTER,
+        &channel.name,
+        egui::FontId::monospace(14.0),
+        name_color,
+    );
+    if removable {
+        let button = egui::Rect::from_center_size(
+            egui::pos2(rect.right() - 96.0, rect.center().y),
+            vec2(92.0, 22.0),
+        );
+        let mut inner = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(button)
+                .layout(egui::Layout::default()),
+        );
+        if widgets::bracket_button(
+            &mut inner,
+            palette,
+            "unsubscribe",
+            widgets::ButtonStyle::Normal,
+        )
+        .clicked()
+        {
+            actions.push(Action::ToggleSubscription(channel.clone()));
+        }
+    }
+    if response.clicked() {
+        actions.push(Action::OpenChannel(channel.clone()));
+    }
+}
+
+fn pos_at(rect: egui::Rect, x: f32, _y: f32) -> egui::Pos2 {
+    egui::pos2(x, rect.center().y)
 }
 
 pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     egui::CentralPanel::default().show(ui, |ui| {
         let device = state.source() == Source::Device;
-        header(ui, state, "History", true, actions, |ui, actions| {
-            if device
-                && !state.library.history.is_empty()
-                && ui
-                    .button("Clear")
-                    .on_hover_text("Clear this computer's history and resume positions")
-                    .clicked()
-            {
-                actions.push(Action::ClearHistory);
-            }
-        });
-        if !device {
-            loaded(ui, &state.account_history, |ui, rows| {
-                egui::ScrollArea::vertical()
-                    .auto_shrink(false)
-                    .show(ui, |ui| {
-                        let mut day = None;
-                        for row in rows {
-                            // YouTube groups its history by day: "Today",
-                            // "Yesterday", "Monday".
-                            if row.when.is_some() && row.when != day {
-                                day.clone_from(&row.when);
-                                ui.add_space(8.0);
-                                ui.label(
-                                    RichText::new(row.when.as_deref().unwrap_or_default()).strong(),
-                                );
-                                ui.add_space(4.0);
-                            }
-                            widgets::compact_card(
-                                ui,
-                                &row.video,
-                                None,
-                                state.palette.accent,
-                                actions,
-                            );
-                            ui.add_space(8.0);
-                        }
-                    });
-            });
-            return;
-        }
-        if state.library.history.is_empty() {
-            hint(ui, "Videos you watch here appear in this list.");
-            return;
-        }
-        let now = util::now();
-        egui::ScrollArea::vertical()
-            .auto_shrink(false)
-            .show(ui, |ui| {
-                for watched in &state.library.history {
-                    let mut note = format!("Watched {}", util::ago(watched.at, now));
-                    if watched.position > 0.0 {
-                        note.push_str(&format!(" · left at {}", util::duration(watched.position)));
+        let count = if device {
+            state.library.history.len()
+        } else {
+            state.account_history.items().len()
+        };
+        widgets::pane(ui, &state.palette, "History", Some(count), true, |ui| {
+            ui.horizontal(|ui| {
+                controls(ui, state, true, actions, |ui, actions| {
+                    if device
+                        && !state.library.history.is_empty()
+                        && widgets::bracket_button(
+                            ui,
+                            &state.palette,
+                            "clear",
+                            widgets::ButtonStyle::Normal,
+                        )
+                        .on_hover_text("Clear this computer's history and resume positions")
+                        .clicked()
+                    {
+                        actions.push(Action::ClearHistory);
                     }
-                    widgets::compact_card(
-                        ui,
-                        &watched.video,
-                        Some(&note),
-                        state.palette.accent,
-                        actions,
-                    );
-                    ui.add_space(8.0);
-                }
+                });
             });
+            if !device {
+                match &state.account_history {
+                    Listing::Idle => {}
+                    Listing::Loading => results::loading(ui, state, "history"),
+                    Listing::Failed(error) => results::failed(ui, state, error, actions),
+                    Listing::Ready(rows) if rows.is_empty() => {
+                        results::nothing(ui, state, "the account's watch history")
+                    }
+                    Listing::Ready(rows) => {
+                        egui::ScrollArea::vertical()
+                            .auto_shrink(false)
+                            .show(ui, |ui| {
+                                let mut day = None;
+                                let mut index = 0;
+                                for row in rows {
+                                    // YouTube groups its history by day:
+                                    // "Today", "Yesterday", "Monday".
+                                    if row.when.is_some() && row.when != day {
+                                        day.clone_from(&row.when);
+                                        ui.add_space(widgets::line(ui));
+                                        ui.label(
+                                            RichText::new(row.when.as_deref().unwrap_or_default())
+                                                .monospace()
+                                                .color(state.palette.dim),
+                                        );
+                                    }
+                                    let selected = index == state.cursor;
+                                    index += 1;
+                                    let video = &row.video;
+                                    let watched = video.duration.and_then(|duration| {
+                                        state
+                                            .library
+                                            .resume_position(&video.id)
+                                            .map(|left| left / duration)
+                                    });
+                                    let response = widgets::video_row(
+                                        ui,
+                                        &state.palette,
+                                        video,
+                                        None,
+                                        watched.map(|f| f as f32),
+                                        selected,
+                                    );
+                                    if selected {
+                                        response.clone().scroll_to_me(None);
+                                    }
+                                    if response.clicked() {
+                                        actions.push(Action::Open(video.clone()));
+                                    }
+                                }
+                            });
+                    }
+                }
+                return;
+            }
+            if state.library.history.is_empty() {
+                results::nothing(ui, state, "videos you watch appear here");
+                return;
+            }
+            let now = util::now();
+            egui::ScrollArea::vertical()
+                .auto_shrink(false)
+                .show(ui, |ui| {
+                    for (index, watched) in state.library.history.iter().enumerate() {
+                        let mut note = format!("watched {}", util::ago(watched.at, now));
+                        if watched.position > 0.0 {
+                            note.push_str(&format!(
+                                " · left at {}",
+                                util::duration(watched.position)
+                            ));
+                        }
+                        let video = &watched.video;
+                        let fraction = video
+                            .duration
+                            .map(|duration| watched.position / duration)
+                            .map(|f| f as f32);
+                        let selected = index == state.cursor;
+                        let response = widgets::video_row(
+                            ui,
+                            &state.palette,
+                            video,
+                            Some(&note),
+                            fraction,
+                            selected,
+                        );
+                        if selected {
+                            response.clone().scroll_to_me(None);
+                        }
+                        if response.clicked() {
+                            actions.push(Action::Open(video.clone()));
+                        }
+                    }
+                });
+        });
     });
 }
 
 pub fn watch_later(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     egui::CentralPanel::default().show(ui, |ui| {
-        header(ui, state, "Watch later", true, actions, |_, _| {});
-        match state.source() {
-            Source::Account => {
-                results::videos(
+        let count = match state.source() {
+            Source::Account => state.account_watch_later.items().len(),
+            Source::Device => state.library.watch_later.len(),
+        };
+        widgets::pane(ui, &state.palette, "Watch later", Some(count), true, |ui| {
+            ui.horizontal(|ui| {
+                controls(ui, state, true, actions, |_, _| {});
+            });
+            match state.source() {
+                Source::Account => rows_listing(
                     ui,
+                    state,
                     &state.account_watch_later,
-                    "Nothing saved for later",
-                    state.palette.accent,
+                    "the account's Watch later",
                     actions,
-                );
+                ),
+                Source::Device if state.library.watch_later.is_empty() => {
+                    results::nothing(ui, state, "save videos from their page")
+                }
+                Source::Device => device_rows(ui, state, &state.library.watch_later, actions),
             }
-            Source::Device if state.library.watch_later.is_empty() => {
-                hint(ui, "Save videos from their page to watch them later.");
-            }
-            Source::Device => results::grid(
-                ui,
-                &state.library.watch_later,
-                state.palette.accent,
-                actions,
-            ),
-        }
+        });
     });
+}
+
+/// A `Listing<Video>` as rows inside the already-open pane.
+fn rows_listing(
+    ui: &mut Ui,
+    state: &State,
+    listing: &Listing<Video>,
+    empty: &str,
+    actions: &mut Vec<Action>,
+) {
+    match listing {
+        Listing::Idle => {}
+        Listing::Loading => results::loading(ui, state, "videos"),
+        Listing::Failed(error) => results::failed(ui, state, error, actions),
+        Listing::Ready(videos) if videos.is_empty() => results::nothing(ui, state, empty),
+        Listing::Ready(videos) => video_rows(ui, state, videos, &|_| None, actions),
+    }
+}
+
+/// Video rows with the cursor, for lists drawn outside `results::videos`.
+fn video_rows(
+    ui: &mut Ui,
+    state: &State,
+    videos: &[Video],
+    note: &dyn Fn(&Video) -> Option<String>,
+    actions: &mut Vec<Action>,
+) {
+    egui::ScrollArea::vertical()
+        .auto_shrink(false)
+        .show(ui, |ui| {
+            for (index, video) in videos.iter().enumerate() {
+                let selected = index == state.cursor;
+                let watched = video
+                    .duration
+                    .and_then(|duration| {
+                        state
+                            .library
+                            .resume_position(&video.id)
+                            .map(|left| left / duration)
+                    })
+                    .map(|f| f as f32);
+                let response = widgets::video_row(
+                    ui,
+                    &state.palette,
+                    video,
+                    note(video).as_deref(),
+                    watched,
+                    selected,
+                );
+                if selected {
+                    response.clone().scroll_to_me(None);
+                }
+                if response.clicked() {
+                    actions.push(Action::Open(video.clone()));
+                }
+            }
+        });
+}
+
+fn device_rows(ui: &mut Ui, state: &State, videos: &[Video], actions: &mut Vec<Action>) {
+    video_rows(ui, state, videos, &|_| None, actions);
 }
 
 pub fn liked(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     egui::CentralPanel::default().show(ui, |ui| {
-        header(ui, state, "Liked videos", false, actions, |_, _| {});
         results::videos(
             ui,
+            state,
+            "Liked",
             &state.liked,
-            "No liked videos",
-            state.palette.accent,
+            "the account's liked videos",
             actions,
         );
     });
@@ -254,60 +525,110 @@ pub fn liked(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 
 pub fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     egui::CentralPanel::default().show(ui, |ui| {
-        header(ui, state, "Playlists", false, actions, |_, _| {});
-        loaded(ui, &state.playlists, |ui, playlists| {
-            if playlists.is_empty() {
-                hint(ui, "No playlists in your library.");
-                return;
-            }
-            egui::ScrollArea::vertical()
-                .auto_shrink(false)
-                .show(ui, |ui| {
-                    for playlist in playlists {
-                        playlist_row(ui, playlist, actions);
-                        ui.add_space(8.0);
-                    }
-                });
-        });
+        let count = state.playlists.items().len();
+        widgets::pane(
+            ui,
+            &state.palette,
+            "Playlists",
+            Some(count),
+            true,
+            |ui| match &state.playlists {
+                Listing::Idle => {}
+                Listing::Loading => results::loading(ui, state, "playlists"),
+                Listing::Failed(error) => results::failed(ui, state, error, actions),
+                Listing::Ready(playlists) if playlists.is_empty() => {
+                    results::nothing(ui, state, "the account's playlists")
+                }
+                Listing::Ready(playlists) => {
+                    egui::ScrollArea::vertical()
+                        .auto_shrink(false)
+                        .show(ui, |ui| {
+                            for (index, playlist) in playlists.iter().enumerate() {
+                                playlist_row(ui, state, playlist, index == state.cursor, actions);
+                            }
+                        });
+                }
+            },
+        );
     });
 }
 
-fn playlist_row(ui: &mut Ui, playlist: &PlaylistSummary, actions: &mut Vec<Action>) {
-    let row = ui.horizontal_top(|ui| {
-        let size = vec2(160.0, 90.0);
-        match &playlist.thumbnail {
-            Some(url) => {
-                ui.add(
-                    Image::new(url.clone())
-                        .fit_to_exact_size(size)
-                        .corner_radius(CornerRadius::same(8)),
-                );
-            }
-            None => {
-                let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
-                ui.painter()
-                    .rect_filled(rect, CornerRadius::same(8), ui.visuals().faint_bg_color);
-            }
-        }
-        ui.vertical(|ui| {
-            widgets::title(ui, &playlist.name, 15.0);
-            let details: Vec<String> = [
-                playlist.videos.map(|count| format!("{count} videos")),
-                playlist.channel.clone(),
-            ]
-            .into_iter()
-            .flatten()
-            .collect();
-            ui.label(RichText::new(details.join(" · ")).weak().small());
-        });
-    });
-    let response = ui.interact(
-        row.response.rect,
-        ui.id().with(("playlist", &playlist.id)),
-        Sense::click(),
-    );
+fn playlist_row(
+    ui: &mut Ui,
+    state: &State,
+    playlist: &PlaylistSummary,
+    selected: bool,
+    actions: &mut Vec<Action>,
+) {
+    let palette = &state.palette;
+    let pad = widgets::cell(ui);
+    let size = vec2(120.0, 68.0);
+    let height = size.y + pad;
+    let (rect, response) =
+        ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
     if response.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    let fill = if selected {
+        palette.accent
+    } else if response.hovered() {
+        palette.surface_hover
+    } else {
+        egui::Color32::TRANSPARENT
+    };
+    if fill != egui::Color32::TRANSPARENT {
+        ui.painter()
+            .rect_filled(rect, egui::CornerRadius::ZERO, fill);
+    }
+    if selected {
+        response.clone().scroll_to_me(None);
+    }
+    let thumb_rect = egui::Rect::from_min_size(rect.min + vec2(pad, pad / 2.0), size);
+    match &playlist.thumbnail {
+        Some(url) => {
+            Image::new(url.clone())
+                .fit_to_exact_size(size)
+                .corner_radius(egui::CornerRadius::ZERO)
+                .paint_at(ui, thumb_rect);
+        }
+        None => {
+            ui.painter()
+                .rect_filled(thumb_rect, egui::CornerRadius::ZERO, palette.surface);
+        }
+    }
+    let name_color = if selected {
+        palette.window
+    } else {
+        palette.text
+    };
+    let muted = if selected {
+        palette.window
+    } else {
+        palette.secondary
+    };
+    let text_x = thumb_rect.right() + pad;
+    let painter = ui.painter();
+    let name = painter.layout_no_wrap(
+        playlist.name.clone(),
+        egui::FontId::monospace(14.0),
+        name_color,
+    );
+    painter.galley(egui::pos2(text_x, thumb_rect.top()), name, name_color);
+    let details: Vec<String> = [
+        playlist.videos.map(|count| format!("{count} videos")),
+        playlist.channel.clone(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    if !details.is_empty() {
+        let galley =
+            painter.layout_no_wrap(details.join(" · "), egui::FontId::monospace(13.0), muted);
+        painter.galley(
+            egui::pos2(text_x, thumb_rect.top() + widgets::line(ui)),
+            galley,
+            muted,
+        );
     }
     if response.clicked() {
         actions.push(Action::OpenPlaylist {
@@ -320,25 +641,65 @@ fn playlist_row(ui: &mut Ui, playlist: &PlaylistSummary, actions: &mut Vec<Actio
 /// One channel's latest videos, or one playlist's.
 pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     egui::CentralPanel::default().show(ui, |ui| {
-        match &state.page {
-            Some(Page::Channel(channel)) => {
-                header(ui, state, &channel.name, false, actions, |ui, actions| {
-                    widgets::subscribe_button(ui, state, channel, actions);
-                });
-                ui.label(RichText::new("The channel's latest videos").weak().small());
-                ui.add_space(8.0);
-            }
-            Some(Page::Playlist { name, .. }) => {
-                header(ui, state, name, false, actions, |_, _| {});
-            }
+        let (title, has_videos) = match &state.page {
+            Some(Page::Channel(channel)) => (channel.name.clone(), true),
+            Some(Page::Playlist { name, .. }) => (name.clone(), true),
             None => return,
-        }
-        results::videos(
+        };
+        let _ = has_videos;
+        widgets::pane(
             ui,
-            &state.page_videos,
-            "No videos here",
-            state.palette.accent,
-            actions,
+            &state.palette,
+            &title,
+            Some(state.page_videos.items().len()),
+            true,
+            |ui| {
+                if let Some(Page::Channel(channel)) = &state.page {
+                    ui.horizontal(|ui| {
+                        subscribe(ui, state, channel, actions);
+                    });
+                    ui.add_space(widgets::line(ui) / 2.0);
+                }
+                rows_listing(ui, state, &state.page_videos, "no videos here", actions);
+            },
         );
     });
 }
+
+/// Subscribe on this device, or show that the account already does.
+fn subscribe(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Action>) {
+    if state.subscribed_in_account(&channel.id) {
+        ui.label(
+            RichText::new("[ subscribed ]")
+                .monospace()
+                .color(state.palette.accent)
+                .strong(),
+        )
+        .on_hover_text("Your account is subscribed. Manage it on youtube.com.");
+        return;
+    }
+    let subscribed = state.library.is_subscribed(&channel.id);
+    let style = if subscribed {
+        widgets::ButtonStyle::Primary
+    } else {
+        widgets::ButtonStyle::Normal
+    };
+    let label = if subscribed {
+        "subscribed"
+    } else {
+        "subscribe"
+    };
+    let hint = if subscribed {
+        "Unsubscribe on this computer"
+    } else {
+        "Follow this channel on this computer: its videos join your feed"
+    };
+    if widgets::bracket_button(ui, &state.palette, label, style)
+        .on_hover_text(hint)
+        .clicked()
+    {
+        actions.push(Action::ToggleSubscription(channel.clone()));
+    }
+}
+
+use crate::util;

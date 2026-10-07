@@ -184,31 +184,136 @@ pub fn row(
     response
 }
 
-/// A thumbnail at `size`, with the length (or LIVE) in its corner.
-pub fn thumbnail(ui: &mut Ui, video: &Video, size: egui::Vec2, accent: Color32) -> Response {
+/// A thumbnail at `size`, square, with the length (or LIVE) in its
+/// corner: yellow on black, LIVE in red.
+pub fn thumbnail(ui: &mut Ui, video: &Video, size: egui::Vec2, palette: &Palette) -> Response {
     let response = ui.add(
         Image::new(video.thumbnail())
             .fit_to_exact_size(size)
-            .corner_radius(CornerRadius::same(10)),
+            .corner_radius(CornerRadius::ZERO),
     );
-    badge(ui, response.rect, video, accent);
+    badge(ui, response.rect, video, palette);
     response
 }
 
-fn badge(ui: &Ui, thumbnail: Rect, video: &Video, accent: Color32) {
-    let (text, fill) = if video.live {
-        ("LIVE".to_owned(), accent)
+fn badge(ui: &Ui, thumbnail: Rect, video: &Video, palette: &Palette) {
+    let (text, color) = if video.live {
+        ("LIVE".to_owned(), palette.red)
     } else if let Some(seconds) = video.duration {
-        (util::duration(seconds), Color32::from_black_alpha(200))
+        (util::duration(seconds), palette.yellow)
     } else {
         return;
     };
     let painter = ui.painter();
-    let galley = painter.layout_no_wrap(text, FontId::proportional(12.0), Color32::WHITE);
-    let size = galley.size() + vec2(8.0, 4.0);
-    let rect = Rect::from_min_size(thumbnail.right_bottom() - size - vec2(6.0, 6.0), size);
-    painter.rect_filled(rect, CornerRadius::same(4), fill);
-    painter.galley(rect.min + vec2(4.0, 2.0), galley, Color32::WHITE);
+    let galley = painter.layout_no_wrap(text, FontId::monospace(12.0), color);
+    let size = galley.size() + vec2(6.0, 2.0);
+    let rect = Rect::from_min_size(thumbnail.right_bottom() - size - vec2(4.0, 4.0), size);
+    painter.rect_filled(rect, CornerRadius::ZERO, Color32::BLACK);
+    painter.galley(rect.min + vec2(3.0, 1.0), galley, color);
+}
+
+/// A video as a list row: a 120x68 thumbnail, the title on one line,
+/// `channel · views · age` under it, and a note line when there is one.
+/// `watched` is the part watched (0..1), drawn as a green bar under the
+/// thumbnail. `selected` draws the TUI cursor.
+pub fn video_row(
+    ui: &mut Ui,
+    palette: &Palette,
+    video: &Video,
+    note: Option<&str>,
+    watched: Option<f32>,
+    selected: bool,
+) -> Response {
+    let font = FontId::monospace(14.0);
+    let small = FontId::monospace(13.0);
+    let pad = cell(ui);
+    let thumb = vec2(120.0, 68.0);
+    let height = thumb.y + pad;
+    let (rect, response) =
+        ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
+    if response.hovered() {
+        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+    }
+    let fill = if selected {
+        palette.accent
+    } else if response.hovered() {
+        palette.surface_hover
+    } else {
+        Color32::TRANSPARENT
+    };
+    if fill != Color32::TRANSPARENT {
+        ui.painter().rect_filled(rect, CornerRadius::ZERO, fill);
+    }
+    let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad / 2.0), thumb);
+    Image::new(video.thumbnail())
+        .fit_to_exact_size(thumb)
+        .corner_radius(CornerRadius::ZERO)
+        .paint_at(ui, thumb_rect);
+    badge(ui, thumb_rect, video, palette);
+    if let Some(watched) = watched {
+        let bar = Rect::from_min_size(
+            thumb_rect.left_bottom() + vec2(0.0, 1.0),
+            vec2(thumb.x * watched.clamp(0.0, 1.0), 2.0),
+        );
+        ui.painter()
+            .rect_filled(bar, CornerRadius::ZERO, palette.green);
+    }
+    // The text beside the thumbnail: title, then channel · views · age.
+    let painter = ui.painter();
+    let text_x = thumb_rect.right() + pad;
+    let width = (rect.right() - text_x - pad).max(20.0);
+    let text_color = if selected {
+        palette.window
+    } else {
+        palette.text
+    };
+    let muted = if selected {
+        palette.window
+    } else {
+        palette.secondary
+    };
+    let truncate = |text: &str, font: FontId, color: Color32| {
+        let mut job = LayoutJob::default();
+        job.append(text, 0.0, egui::TextFormat::simple(font, color));
+        job.wrap.max_width = width;
+        job.wrap.max_rows = 1;
+        job.wrap.overflow_character = Some('…');
+        painter.layout_job(job)
+    };
+    let mut y = thumb_rect.top();
+    let galley = truncate(&video.title, font, text_color);
+    painter.galley(pos2(text_x, y), galley.clone(), text_color);
+    y += galley.rect.height();
+    let channel = video.channel.as_deref().unwrap_or_default();
+    let mut details = vec![meta(video)];
+    if let Some(note) = note {
+        details.push(note.to_owned());
+    }
+    let rest = details
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ");
+    let mut job = LayoutJob::default();
+    if !channel.is_empty() {
+        job.append(
+            channel,
+            0.0,
+            egui::TextFormat::simple(small.clone(), palette.blue),
+        );
+        if !rest.is_empty() {
+            job.append(" · ", 0.0, egui::TextFormat::simple(small.clone(), muted));
+        }
+    }
+    if !rest.is_empty() {
+        job.append(&rest, 0.0, egui::TextFormat::simple(small, muted));
+    }
+    job.wrap.max_width = width;
+    job.wrap.max_rows = 1;
+    job.wrap.overflow_character = Some('…');
+    let galley = painter.layout_job(job);
+    painter.galley(pos2(text_x, y), galley.clone(), muted);
+    response
 }
 
 /// A title cut to two lines with an ellipsis.
@@ -241,11 +346,11 @@ pub fn compact_card(
     ui: &mut Ui,
     video: &Video,
     note: Option<&str>,
-    accent: Color32,
+    palette: &Palette,
     actions: &mut Vec<Action>,
 ) {
     let row = ui.horizontal_top(|ui| {
-        thumbnail(ui, video, vec2(168.0, 94.5), accent);
+        thumbnail(ui, video, vec2(168.0, 94.5), palette);
         ui.vertical(|ui| {
             title(ui, &video.title, 14.0);
             if let Some(channel) = &video.channel {
@@ -261,47 +366,6 @@ pub fn compact_card(
         });
     });
     open_on_click(ui, row.response.rect, video, actions);
-}
-
-/// A channel as a row: its avatar when known, and its name, which opens it.
-/// `trailing` adds controls at the end of the row.
-pub fn channel_row(
-    ui: &mut Ui,
-    channel: &Channel,
-    actions: &mut Vec<Action>,
-    trailing: impl FnOnce(&mut Ui, &mut Vec<Action>),
-) {
-    ui.horizontal(|ui| {
-        let size = vec2(40.0, 40.0);
-        match &channel.avatar {
-            Some(avatar) => {
-                ui.add(
-                    Image::new(avatar.clone())
-                        .fit_to_exact_size(size)
-                        .corner_radius(CornerRadius::same(20)),
-                );
-            }
-            None => {
-                let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
-                ui.painter()
-                    .circle_filled(rect.center(), 20.0, ui.visuals().faint_bg_color);
-                let initial: String = channel.name.chars().take(1).collect();
-                ui.painter().text(
-                    rect.center(),
-                    egui::Align2::CENTER_CENTER,
-                    initial.to_uppercase(),
-                    FontId::proportional(18.0),
-                    ui.visuals().strong_text_color(),
-                );
-            }
-        }
-        if ui.link(RichText::new(&channel.name).size(15.0)).clicked() {
-            actions.push(Action::OpenChannel(channel.clone()));
-        }
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            trailing(ui, actions);
-        });
-    });
 }
 
 /// Makes the area a finished card covers open its video when clicked.

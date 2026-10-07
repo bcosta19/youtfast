@@ -304,6 +304,108 @@ fn loading<'a>(state: &'a State, status: Option<&'a Status>) -> Option<&'static 
     }
 }
 
+/// The cursor's reset key: which view's listing it is on, and whether it
+/// is still coming in. A switch of view, source or listing state restarts
+/// it at the top.
+pub fn cursor_key(state: &State) -> usize {
+    fn tag<T>(listing: &Listing<T>) -> usize {
+        match listing {
+            Listing::Idle => 0,
+            Listing::Loading => 1,
+            Listing::Ready(_) => 2,
+            Listing::Failed(_) => 3,
+        }
+    }
+    let source = usize::from(state.source() == crate::model::Source::Device) * 10;
+    match state.view {
+        View::Home => tag(&state.feed),
+        View::Results => tag(&state.results),
+        View::Subscriptions => tag(&state.account_subscriptions) + source,
+        View::History => tag(&state.account_history) + source,
+        View::WatchLater => tag(&state.account_watch_later) + source,
+        View::Liked => tag(&state.liked),
+        View::Playlists => tag(&state.playlists),
+        View::Playlist | View::Channel => tag(&state.page_videos),
+        _ => 0,
+    }
+}
+
+/// How many rows the current view's list has (0 = no cursor there).
+fn cursor_count(state: &State) -> usize {
+    match state.view {
+        View::Home => state.feed.items().len(),
+        View::Results => state.results.items().len(),
+        View::Subscriptions => match state.source() {
+            crate::model::Source::Account => state.account_subscriptions.items().len(),
+            crate::model::Source::Device => state.library.subscriptions.len(),
+        },
+        View::History => match state.source() {
+            crate::model::Source::Account => state.account_history.items().len(),
+            crate::model::Source::Device => state.library.history.len(),
+        },
+        View::WatchLater => match state.source() {
+            crate::model::Source::Account => state.account_watch_later.items().len(),
+            crate::model::Source::Device => state.library.watch_later.len(),
+        },
+        View::Liked => state.liked.items().len(),
+        View::Playlists => state.playlists.items().len(),
+        View::Playlist | View::Channel => state.page_videos.items().len(),
+        _ => 0,
+    }
+}
+
+/// What Enter does on the cursor's row.
+fn open_at(state: &State, index: usize) -> Option<Action> {
+    let video = |videos: &[crate::model::Video]| videos.get(index).cloned().map(Action::Open);
+    match state.view {
+        View::Home => video(state.feed.items()),
+        View::Results => video(state.results.items()),
+        View::Subscriptions => match state.source() {
+            crate::model::Source::Account => state
+                .account_subscriptions
+                .items()
+                .get(index)
+                .cloned()
+                .map(Action::OpenChannel),
+            crate::model::Source::Device => state
+                .library
+                .subscriptions
+                .get(index)
+                .cloned()
+                .map(Action::OpenChannel),
+        },
+        View::History => match state.source() {
+            crate::model::Source::Account => state
+                .account_history
+                .items()
+                .get(index)
+                .map(|row| Action::Open(row.video.clone())),
+            crate::model::Source::Device => state
+                .library
+                .history
+                .get(index)
+                .map(|watched| Action::Open(watched.video.clone())),
+        },
+        View::WatchLater => match state.source() {
+            crate::model::Source::Account => video(state.account_watch_later.items()),
+            crate::model::Source::Device => video(&state.library.watch_later),
+        },
+        View::Liked => video(state.liked.items()),
+        View::Playlists => {
+            state
+                .playlists
+                .items()
+                .get(index)
+                .map(|playlist| Action::OpenPlaylist {
+                    id: playlist.id.clone(),
+                    name: playlist.name.clone(),
+                })
+        }
+        View::Playlist | View::Channel => video(state.page_videos.items()),
+        _ => None,
+    }
+}
+
 /// A name for the status line's inverted block.
 fn view_name(view: View) -> &'static str {
     match view {
@@ -466,6 +568,26 @@ fn keys(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
         }
         if input.key_pressed(Key::R) {
             actions.push(Action::Refresh);
+        }
+        // The cursor: j/k or the arrows move it, g/G jump, Enter opens.
+        let count = cursor_count(state);
+        if count > 0 && state.view != View::Watch {
+            if input.key_pressed(Key::J) || input.key_pressed(Key::ArrowDown) {
+                state.cursor = (state.cursor + 1).min(count - 1);
+            }
+            if input.key_pressed(Key::K) || input.key_pressed(Key::ArrowUp) {
+                state.cursor = state.cursor.saturating_sub(1);
+            }
+            if input.key_pressed(Key::G) && input.modifiers.shift {
+                state.cursor = count - 1;
+            } else if input.key_pressed(Key::G) {
+                state.cursor = 0;
+            }
+            if input.key_pressed(Key::Enter)
+                && let Some(action) = open_at(state, state.cursor)
+            {
+                actions.push(action);
+            }
         }
         if matches!(state.view, View::Channel | View::Playlist) {
             if input.key_pressed(Key::Escape) {

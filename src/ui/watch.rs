@@ -391,7 +391,7 @@ fn up_next(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     ui.label(RichText::new("Up next").strong().size(16.0));
     ui.add_space(8.0);
     for video in next {
-        widgets::compact_card(ui, video, None, state.palette.accent, actions);
+        widgets::compact_card(ui, video, None, &state.palette, actions);
         ui.add_space(8.0);
     }
 }

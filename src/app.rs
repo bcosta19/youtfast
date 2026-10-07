@@ -66,6 +66,8 @@ pub struct State {
     pub notice: Option<String>,
     /// The `?` overlay's bindings list is open.
     pub keys_open: bool,
+    /// The keyboard cursor: the selected row in the current view's list.
+    pub cursor: usize,
     pub watching: Option<Video>,
     /// The list the video being watched was opened from.
     pub up_next: Vec<Video>,
@@ -141,6 +143,8 @@ pub struct App {
     theme_waker: fastframe_theme::Waker,
     /// A change of palette revealed from the middle of the window outwards.
     theme_transition: fastframe_theme::Transition,
+    /// The cursor's reset marker: the view and listing it was zeroed for.
+    cursor_key: (View, usize),
     /// What later launches ask the running copy, drained each frame.
     remote: RemoteQueue,
     /// The desktop's media controls.
@@ -233,6 +237,7 @@ impl App {
             custom_themes,
             theme_waker,
             theme_transition: fastframe_theme::Transition::default(),
+            cursor_key: (View::default(), 0),
             remote: guard.commands(),
             media: crate::now_playing::MediaControls::start(ctx),
             _instance: guard,
@@ -867,6 +872,12 @@ impl eframe::App for App {
         }
         self.media
             .update(&self.state, self.player.as_ref().map(Mpv::status));
+        // The keyboard cursor restarts at the top of a changed list.
+        let key = (self.state.view, ui::cursor_key(&self.state));
+        if key != self.cursor_key {
+            self.state.cursor = 0;
+            self.cursor_key = key;
+        }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
