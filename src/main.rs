@@ -8,6 +8,7 @@ mod library;
 mod model;
 mod mpv;
 mod paths;
+mod settings;
 mod takeout;
 mod ui;
 mod util;

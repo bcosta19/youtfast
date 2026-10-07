@@ -256,7 +256,7 @@ fn quality_menu(ui: &mut Ui, state: &State, status: &Status, actions: &mut Vec<A
             status.fps.round() as u32,
         )
     });
-    let text = match (state.quality, playing) {
+    let text = match (state.settings.quality, playing) {
         (Quality::Auto, Some(playing)) => format!("Auto · {}", playing.label()),
         (Quality::Auto, None) => "Auto".to_owned(),
         (_, Some(playing)) => playing.label(),
@@ -276,7 +276,7 @@ fn quality_menu(ui: &mut Ui, state: &State, status: &Status, actions: &mut Vec<A
         .show_ui(ui, |ui| {
             let auto = format!("Auto (up to {}p)", Quality::AUTO);
             if ui
-                .selectable_label(state.quality == Quality::Auto, auto)
+                .selectable_label(state.settings.quality == Quality::Auto, auto)
                 .clicked()
             {
                 actions.push(Action::SetQuality(Quality::Auto));
@@ -284,7 +284,7 @@ fn quality_menu(ui: &mut Ui, state: &State, status: &Status, actions: &mut Vec<A
             for resolution in offered {
                 let quality = Quality::Max(resolution.lines);
                 if ui
-                    .selectable_label(state.quality == quality, resolution.label())
+                    .selectable_label(state.settings.quality == quality, resolution.label())
                     .clicked()
                 {
                     actions.push(Action::SetQuality(quality));

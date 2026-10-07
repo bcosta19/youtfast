@@ -14,6 +14,7 @@ use crate::model::{
 };
 use crate::mpv::{self, Mpv, NativeDisplay, VideoSurface};
 use crate::paths::Dirs;
+use crate::settings::Settings;
 use crate::{account, ui, util, youtube};
 
 /// The signed-in account, as the interface shows it.
@@ -69,7 +70,8 @@ pub struct State {
     pub fullscreen: bool,
     /// The seek bar's position while it is dragged.
     pub seek_preview: Option<f64>,
-    pub quality: Quality,
+    /// The choices kept between runs (quality, volume).
+    pub settings: Settings,
     /// What the video being watched offers, highest first; empty until it
     /// loads.
     pub resolutions: Vec<Resolution>,
@@ -99,7 +101,8 @@ impl State {
     }
 }
 
-/// Where the chosen quality is kept in eframe's storage.
+/// Where the chosen quality was kept in eframe's storage before the
+/// settings file; read once to bring it over.
 const QUALITY_KEY: &str = "quality";
 
 pub struct App {
@@ -129,37 +132,46 @@ impl App {
             Backend::start(ctx.clone(), dirs.clone()).context("could not start the backend")?;
 
         let browsers = account::installed_browsers();
-        let mut state = State {
-            quality: cc
+        let mut settings = Settings::load(&dirs.settings());
+        // The quality eframe's storage kept before the settings file
+        // existed moves over once.
+        if !dirs.settings().exists()
+            && let Some(quality) = cc
                 .storage
-                .and_then(|storage| eframe::get_value(storage, QUALITY_KEY))
-                .unwrap_or_default(),
+                .and_then(|storage| eframe::get_value::<Quality>(storage, QUALITY_KEY))
+        {
+            settings.quality = quality;
+        }
+        let mut state = State {
             library: Library::load(&dirs.library()),
+            settings,
             browser: browsers.first().copied().unwrap_or("chromium").to_owned(),
             browsers,
             ..State::default()
         };
-        let (player, surface) = match Mpv::new(ctx, state.quality.limit()) {
-            Ok(player) => {
-                let surface = cc.get_proc_address.clone().map(|get_proc_address| {
-                    VideoSurface::new(
-                        player.handle(),
-                        get_proc_address,
-                        native_display(cc),
-                        ctx.clone(),
-                    )
-                });
-                if surface.is_none() {
-                    state.player_error = Some("This window has no OpenGL context for video".into());
+        let (player, surface) =
+            match Mpv::new(ctx, state.settings.quality.limit(), state.settings.volume) {
+                Ok(player) => {
+                    let surface = cc.get_proc_address.clone().map(|get_proc_address| {
+                        VideoSurface::new(
+                            player.handle(),
+                            get_proc_address,
+                            native_display(cc),
+                            ctx.clone(),
+                        )
+                    });
+                    if surface.is_none() {
+                        state.player_error =
+                            Some("This window has no OpenGL context for video".into());
+                    }
+                    (Some(player), surface)
                 }
-                (Some(player), surface)
-            }
-            Err(error) => {
-                log::error!("could not start mpv: {error}");
-                state.player_error = Some(format!("Could not start mpv ({error})"));
-                (None, None)
-            }
-        };
+                Err(error) => {
+                    log::error!("could not start mpv: {error}");
+                    state.player_error = Some(format!("Could not start mpv ({error})"));
+                    (None, None)
+                }
+            };
 
         let mut app = Self {
             state,
@@ -452,7 +464,11 @@ impl App {
                 self.with_player(|player| player.seek_to(seconds, exact));
             }
             Action::SeekBy(seconds) => self.with_player(|player| player.seek_by(seconds)),
-            Action::SetVolume(volume) => self.with_player(|player| player.set_volume(volume)),
+            Action::SetVolume(volume) => {
+                // Kept in the settings, saved in `on_exit`: not per tick.
+                self.state.settings.volume = volume;
+                self.with_player(|player| player.set_volume(volume));
+            }
             Action::ToggleFullscreen => self.set_fullscreen(ctx, !self.state.fullscreen),
             Action::ExitFullscreen => self.set_fullscreen(ctx, false),
             Action::SetQuality(quality) => self.set_quality(quality),
@@ -588,11 +604,13 @@ impl App {
     /// Bounds the streams from now on, and reloads the video being watched
     /// where it was, so the new quality shows at once.
     fn set_quality(&mut self, quality: Quality) {
-        if quality == self.state.quality {
+        if quality == self.state.settings.quality {
             return;
         }
         log::info!("quality set to {quality:?}");
-        self.state.quality = quality;
+        self.state.settings.quality = quality;
+        self.backend
+            .send(Command::SaveSettings(self.state.settings.clone()));
         let Some(player) = &self.player else {
             return;
         };
@@ -656,10 +674,6 @@ impl eframe::App for App {
         }
     }
 
-    fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, QUALITY_KEY, &self.state.quality);
-    }
-
     fn on_exit(&mut self, gl: Option<&glow::Context>) {
         // The position of the video playing, written here and now: the
         // backend may not get to a queued save before the process ends.
@@ -671,6 +685,10 @@ impl eframe::App for App {
         }
         if let Err(error) = self.state.library.save(&self.dirs.library()) {
             log::error!("could not save the library: {error}");
+        }
+        // The volume only lands here: the slider updates it without saving.
+        if let Err(error) = self.state.settings.save(&self.dirs.settings()) {
+            log::error!("could not save the settings: {error}");
         }
         // The renderer goes first, with the GL context current, and mpv
         // after it, as libmpv requires.

@@ -141,8 +141,8 @@ impl Mpv {
     /// Starts mpv with its video output set to the render API, so nothing
     /// shows until a [`VideoSurface`] draws it.
     /// `max_resolution` bounds the streams picked, as
-    /// [`Mpv::set_max_resolution`] does.
-    pub fn new(repaint: &egui::Context, max_resolution: u32) -> Result<Self, Error> {
+    /// [`Mpv::set_max_resolution`] does; `volume` is where it starts.
+    pub fn new(repaint: &egui::Context, max_resolution: u32, volume: f64) -> Result<Self, Error> {
         // SAFETY: plain constructor. It returns null when the locale's
         // LC_NUMERIC is not "C"; Rust programs keep "C" unless something
         // calls setlocale, which YouTFast does not.
@@ -152,7 +152,9 @@ impl Mpv {
         }
         let handle = Arc::new(Handle(ptr));
         let format_sort = format_sort(max_resolution);
-        let options: [(&CStr, &str); 13] = [
+        let volume = volume.clamp(0.0, 100.0);
+        let initial_volume = format!("{volume:.0}");
+        let options: [(&CStr, &str); 14] = [
             (c"vo", "libmpv"),
             (c"hwdec", "auto-safe"),
             (c"ytdl", "yes"),
@@ -170,6 +172,7 @@ impl Mpv {
             // 1080p that is far more than smooth playback needs.
             (c"demuxer-max-bytes", "50MiB"),
             (c"demuxer-max-back-bytes", "20MiB"),
+            (c"volume", &initial_volume),
         ];
         for (name, value) in options {
             let value = CString::new(value).expect("option values have no NUL");
@@ -222,7 +225,7 @@ impl Mpv {
             handle,
             status: Status {
                 idle: true,
-                volume: 100.0,
+                volume,
                 ..Status::default()
             },
             wakeup,

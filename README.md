@@ -46,7 +46,8 @@ cargo run --release -- "rust egui"                      # or search
 
 **Without an account**, YouTFast keeps subscriptions, watch history (with
 where each video was left, to resume it) and Watch later on this computer,
-in `~/.local/share/youtfast/library.json`. The home feed comes from each
+in `~/.local/share/youtfast/library.json`, and its settings (video quality,
+volume) in `~/.config/youtfast/settings.json`. The home feed comes from each
 subscribed channel's RSS. Bring an existing library over from
 [Google Takeout](https://takeout.google.com): choose YouTube and YouTube
 Music, with JSON as the history format, and import `subscriptions.csv` and

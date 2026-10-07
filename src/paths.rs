@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 pub struct Dirs {
     /// The library (`~/.local/share/youtfast` on Linux).
     pub data: PathBuf,
+    /// The settings (`~/.config/youtfast` on Linux).
+    pub config: PathBuf,
     /// rustypipe's client data, never credentials (`~/.cache/youtfast`).
     pub cache: PathBuf,
 }
@@ -17,15 +19,21 @@ impl Dirs {
             .ok_or_else(|| anyhow::anyhow!("no home directory to keep the library in"))?;
         let dirs = Self {
             data: project.data_dir().to_owned(),
+            config: project.config_dir().to_owned(),
             cache: project.cache_dir().to_owned(),
         };
         std::fs::create_dir_all(&dirs.data)?;
+        std::fs::create_dir_all(&dirs.config)?;
         std::fs::create_dir_all(&dirs.cache)?;
         Ok(dirs)
     }
 
     pub fn library(&self) -> PathBuf {
         self.data.join("library.json")
+    }
+
+    pub fn settings(&self) -> PathBuf {
+        self.config.join("settings.json")
     }
 
     pub fn youtube_cache(&self) -> PathBuf {

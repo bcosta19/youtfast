@@ -14,6 +14,7 @@ use tokio::sync::mpsc as async_mpsc;
 use crate::library::{Import, Library};
 use crate::model::{AccountSource, Channel, HistoryRow, PlaylistSummary, Video};
 use crate::paths::Dirs;
+use crate::settings::Settings;
 use crate::{account, innertube, takeout, youtube};
 
 /// A file the user is choosing in the native dialog. Made on the interface
@@ -72,6 +73,7 @@ pub enum Command {
     Restore(AccountSource),
     SignOut,
     SaveLibrary(Library),
+    SaveSettings(Settings),
 }
 
 pub enum Event {
@@ -219,6 +221,19 @@ async fn handle(command: Command, context: Context) {
                     )));
                 }
                 Err(error) => log::error!("saving the library failed: {error}"),
+            }
+        }
+        Command::SaveSettings(settings) => {
+            let path = context.dirs.settings();
+            match tokio::task::spawn_blocking(move || settings.save(&path)).await {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    log::error!("could not save the settings: {error}");
+                    context.send(Event::Notice(format!(
+                        "Could not save the settings: {error}"
+                    )));
+                }
+                Err(error) => log::error!("saving the settings failed: {error}"),
             }
         }
     }
