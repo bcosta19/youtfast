@@ -772,7 +772,7 @@ impl App {
         if changed {
             self.save_library();
         }
-        //  is everything unseen since the last visit; replace, so a
+        // `new` is everything unseen since the last visit; replace, so a
         // second check does not repeat the badge's rows.
         self.state.alerts = found.new;
         if self.state.settings.desktop_notifications
