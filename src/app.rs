@@ -172,11 +172,6 @@ impl App {
         );
         let palette = settings.palette();
         theme::apply(ctx, &palette);
-        ctx.set_theme(if palette.dark {
-            egui::Theme::Dark
-        } else {
-            egui::Theme::Light
-        });
         let mut state = State {
             library: Library::load(&dirs.library()),
             themes_dir: dirs.config.join("themes").display().to_string(),
@@ -521,6 +516,12 @@ impl App {
             Action::ExitFullscreen => self.set_fullscreen(ctx, false),
             Action::SetQuality(quality) => self.set_quality(quality),
             Action::SetTheme(choice) => {
+                // The listed palette is drawn at once, not after the rescan.
+                if let ThemeChoice::Custom(filename) = &choice
+                    && let Some(theme) = self.custom_themes.find(filename)
+                {
+                    self.state.settings.custom_theme_cache = Some(theme.clone());
+                }
                 self.state.settings.theme = choice;
                 self.save_settings();
                 // A custom choice scans again so its cache fills at once.
@@ -712,11 +713,6 @@ impl App {
             return;
         }
         theme::apply(ctx, &palette);
-        ctx.set_theme(if palette.dark {
-            egui::Theme::Dark
-        } else {
-            egui::Theme::Light
-        });
         self.state.palette = palette;
     }
 

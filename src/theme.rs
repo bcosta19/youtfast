@@ -164,11 +164,13 @@ pub fn catalog_status(catalog: &Catalog, selected: Option<&str>) -> Cow<'static,
 /// Applies the palette to egui's own widgets so dialogs, menus, and text
 /// fields agree with the views. Corner radii and spacing keep egui's own.
 pub fn apply(ctx: &egui::Context, palette: &Palette) {
-    let mut visuals = if palette.dark {
-        egui::Visuals::dark()
+    let (theme, mut visuals) = if palette.dark {
+        (egui::Theme::Dark, egui::Visuals::dark())
     } else {
-        egui::Visuals::light()
+        (egui::Theme::Light, egui::Visuals::light())
     };
+    // First: `set_visuals` writes the style of the theme in effect.
+    ctx.set_theme(theme);
     visuals.dark_mode = palette.dark;
     visuals.panel_fill = palette.panel;
     visuals.window_fill = palette.overlay;
