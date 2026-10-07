@@ -112,15 +112,15 @@ mod tests {
         assert_eq!(Settings::load(&path), Settings::default());
         assert!(!path.exists());
         let aside = format!("{}.unreadable-*", path.display());
+        let prefix = format!(
+            "{}.unreadable-",
+            path.file_name().unwrap().to_string_lossy()
+        );
         let found = std::fs::read_dir(path.parent().unwrap())
             .unwrap()
             .filter_map(Result::ok)
-            .any(|entry| {
-                entry.file_name().to_string_lossy().starts_with(&format!(
-                    "{}.unreadable-",
-                    path.file_name().unwrap().to_string_lossy()
-                ))
-            });
-        assert!(found, "{aside} should exist");
+            .find(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+            .unwrap_or_else(|| panic!("{aside} should exist"));
+        std::fs::remove_file(found.path()).unwrap();
     }
 }
