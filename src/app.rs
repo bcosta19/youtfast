@@ -143,6 +143,9 @@ pub struct App {
     remote: RemoteQueue,
     /// The desktop's media controls.
     media: crate::now_playing::MediaControls,
+    /// Held so the instance lock and channel outlive the app; the app
+    /// creator closure is dropped once it has run.
+    _instance: std::sync::Arc<instance::Guard>,
 }
 
 impl App {
@@ -150,7 +153,7 @@ impl App {
     pub fn new(
         cc: &eframe::CreationContext<'_>,
         open: Option<String>,
-        guard: &instance::Guard,
+        guard: std::sync::Arc<instance::Guard>,
     ) -> anyhow::Result<Self> {
         let ctx = &cc.egui_ctx;
         guard.set_context(ctx);
@@ -229,6 +232,7 @@ impl App {
             theme_transition: fastframe_theme::Transition::default(),
             remote: guard.commands(),
             media: crate::now_playing::MediaControls::start(ctx),
+            _instance: guard,
         };
         app.refresh_theme_list();
         if let Some(source) = app.state.library.account.clone() {

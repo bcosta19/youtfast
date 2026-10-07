@@ -49,9 +49,9 @@ fn main() -> eframe::Result {
         return Ok(());
     }
     let filter = if cli.verbose {
-        "youtfast=debug,mpv=debug"
+        "info,youtfast=debug,mpv=debug"
     } else {
-        "youtfast=info,mpv=warn"
+        "warn,youtfast=info,mpv=warn"
     };
     if let Err(error) = fastframe_log::Logging::new("youtfast", env!("CARGO_PKG_VERSION"))
         .filter(filter)
@@ -88,15 +88,13 @@ fn main() -> eframe::Result {
             return Ok(());
         }
     };
-    // The instance guard is kept until the process exits.
+    // The app holds the instance guard for the run; the creator closure is
+    // dropped as soon as it returns, so it cannot keep it.
     let guard = Arc::new(guard);
     let open = cli.open;
     eframe::run_native(
         "YouTFast",
         options,
-        Box::new(move |cc| {
-            let guard = Arc::clone(&guard);
-            Ok(Box::new(app::App::new(cc, open, &guard)?))
-        }),
+        Box::new(move |cc| Ok(Box::new(app::App::new(cc, open, guard)?))),
     )
 }
