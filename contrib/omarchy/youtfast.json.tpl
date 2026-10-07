@@ -14,6 +14,12 @@
     "accent_hover": "{{ mix accent foreground 15% }}",
     "on_accent": "{{ background }}",
     "danger": "{{ red }}",
-    "warning": "{{ yellow }}"
+    "warning": "{{ yellow }}",
+    "red": "{{ red }}",
+    "green": "{{ green }}",
+    "yellow": "{{ yellow }}",
+    "blue": "{{ blue }}",
+    "magenta": "{{ magenta }}",
+    "cyan": "{{ cyan }}"
   }
 }

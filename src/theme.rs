@@ -35,6 +35,16 @@ pub struct Palette {
     pub warning: Color32,
     pub overlay: Color32,
     pub shadow: Color32,
+    /// ANSI colours for data, the way `ls --color` uses them: LIVE and
+    /// errors, watched progress, durations, channels, key hints, links.
+    /// `red` and `yellow` follow `danger` and `warning` unless a file says
+    /// otherwise (see `derive`).
+    pub red: Color32,
+    pub green: Color32,
+    pub yellow: Color32,
+    pub blue: Color32,
+    pub magenta: Color32,
+    pub cyan: Color32,
 }
 
 impl Palette {
@@ -58,6 +68,12 @@ impl Palette {
             warning: Color32::from_rgb(0xf2, 0xc9, 0x4c),
             overlay: Color32::from_rgb(0x21, 0x21, 0x21),
             shadow: Color32::from_black_alpha(140),
+            red: Color32::from_rgb(0xff, 0x4e, 0x45),
+            green: Color32::from_rgb(0x2b, 0xa6, 0x40),
+            yellow: Color32::from_rgb(0xf2, 0xc9, 0x4c),
+            blue: Color32::from_rgb(0x3e, 0xa6, 0xff),
+            magenta: Color32::from_rgb(0xc7, 0x7d, 0xff),
+            cyan: Color32::from_rgb(0x3e, 0xa6, 0xff),
         }
     }
 
@@ -81,6 +97,12 @@ impl Palette {
             warning: Color32::from_rgb(0xb5, 0x81, 0x00),
             overlay: Color32::from_rgb(0xff, 0xff, 0xff),
             shadow: Color32::from_black_alpha(50),
+            red: Color32::from_rgb(0xcc, 0x00, 0x00),
+            green: Color32::from_rgb(0x10, 0x75, 0x16),
+            yellow: Color32::from_rgb(0xb5, 0x81, 0x00),
+            blue: Color32::from_rgb(0x06, 0x5f, 0xd4),
+            magenta: Color32::from_rgb(0x8e, 0x44, 0xad),
+            cyan: Color32::from_rgb(0x06, 0x5f, 0xd4),
         }
     }
 }
@@ -117,9 +139,33 @@ impl fastframe_theme::Palette for Palette {
             "warning" => self.warning = color,
             "overlay" => self.overlay = color,
             "shadow" => self.shadow = color,
+            "red" => self.red = color,
+            "green" => self.green = color,
+            "yellow" => self.yellow = color,
+            "blue" => self.blue = color,
+            "magenta" => self.magenta = color,
+            "cyan" => self.cyan = color,
             _ => return false,
         }
         true
+    }
+
+    /// A file that gives a base colour but not the ANSI role reuses it:
+    /// red and yellow read as danger and warning, links as the accent.
+    /// Green and magenta keep the base defaults when not given.
+    fn derive(&mut self, given: &std::collections::BTreeSet<&str>) {
+        if !given.contains("red") {
+            self.red = self.danger;
+        }
+        if !given.contains("yellow") {
+            self.yellow = self.warning;
+        }
+        if !given.contains("blue") {
+            self.blue = self.accent;
+        }
+        if !given.contains("cyan") {
+            self.cyan = self.accent;
+        }
     }
 }
 
@@ -238,8 +284,38 @@ mod tests {
     }
 
     #[test]
-    fn the_omarchy_template_is_the_base_one() {
-        assert_eq!(OMARCHY_TEMPLATE, fastframe_theme::omarchy::BASE_TEMPLATE);
+    fn the_omarchy_template_fills_the_ansi_roles() {
+        let colors = "mode\tdark\nbackground\t#101418\nforeground\t#e8eef2\
+            \naccent\t#4f9fdd\nred\t#e05a5a\ngreen\t#7fb069\nyellow\t#d9a440\
+            \nblue\t#5b9bd5\nmagenta\t#b48ead\ncyan\t#6fb3b8\n";
+        let rendered =
+            fastframe_theme::omarchy::render_seed::<Palette>(OMARCHY_TEMPLATE, colors).unwrap();
+        let palette: Palette = fastframe_theme::parse_palette(&rendered).unwrap();
+        assert_eq!(palette.window, Color32::from_rgb(0x10, 0x14, 0x18));
+        assert_eq!(palette.green, Color32::from_rgb(0x7f, 0xb0, 0x69));
+        assert_eq!(palette.magenta, Color32::from_rgb(0xb4, 0x8e, 0xad));
+        assert_eq!(palette.blue, Color32::from_rgb(0x5b, 0x9b, 0xd5));
+    }
+
+    #[test]
+    fn the_ansi_roles_derive_from_the_base_colours() {
+        // A file that leaves them out gets red and yellow from danger and
+        // warning, links from the accent, and keeps the base's green and
+        // magenta.
+        let palette: Palette = fastframe_theme::parse_palette(
+            r##"{"colors":{"danger":"#112233","warning":"#445566","accent":"#778899"}}"##,
+        )
+        .unwrap();
+        assert_eq!(palette.red, Color32::from_rgb(0x11, 0x22, 0x33));
+        assert_eq!(palette.yellow, Color32::from_rgb(0x44, 0x55, 0x66));
+        assert_eq!(palette.blue, Color32::from_rgb(0x77, 0x88, 0x99));
+        assert_eq!(palette.cyan, Color32::from_rgb(0x77, 0x88, 0x99));
+        assert_eq!(palette.green, Palette::dark().green);
+        assert_eq!(palette.magenta, Palette::dark().magenta);
+        // A file that gives them keeps them.
+        let given: Palette =
+            fastframe_theme::parse_palette(r##"{"colors":{"red":"#aabbcc"}}"##).unwrap();
+        assert_eq!(given.red, Color32::from_rgb(0xaa, 0xbb, 0xcc));
     }
 
     #[test]
