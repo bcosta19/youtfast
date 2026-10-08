@@ -179,6 +179,13 @@ impl Library {
         self.history.truncate(HISTORY_LIMIT);
     }
 
+    /// Whether the video is in the history.
+    pub fn watched(&self, video_id: &str) -> bool {
+        self.history
+            .iter()
+            .any(|watched| watched.video.id == video_id)
+    }
+
     /// Where to start the video: where it was left, unless that was right at
     /// its start or end.
     pub fn resume_position(&self, video_id: &str) -> Option<f64> {

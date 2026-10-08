@@ -14,7 +14,8 @@ use crate::instance::{self, Queue as RemoteQueue};
 use crate::library::{Account, Library};
 use crate::model::{
     AccountSource, Action, Channel, ChannelAbout, ChannelHeader, ChannelTab, CommentRow, Details,
-    Fetch, HistoryRow, Listing, PlaylistSummary, Quality, Resolution, Results, Source, Video, View,
+    FeedFilter, Fetch, HistoryRow, Listing, PlaylistSummary, Quality, Resolution, Results, Source,
+    Video, View,
 };
 use crate::mpv::{self, Mpv, NativeDisplay, VideoSurface};
 use crate::paths::Dirs;
@@ -51,6 +52,8 @@ pub struct State {
     pub feed: Listing<Video>,
     /// How many feed rows are drawn; the rest sit behind scrolling.
     pub feed_shown: usize,
+    /// Home's chip: which of the drawn rows it shows.
+    pub feed_filter: FeedFilter,
     /// The account feed's next page, when it has one.
     pub feed_more: Option<innertube::More>,
     /// A feed continuation on its way, or its error.
@@ -168,6 +171,20 @@ impl State {
         } else {
             Source::Device
         }
+    }
+
+    /// The feed's videos home shows: the first `feed_shown`, through the
+    /// chip.
+    pub fn visible_feed(&self) -> Vec<&Video> {
+        let now = util::now();
+        let videos = self.feed.items();
+        videos[..videos.len().min(self.feed_shown)]
+            .iter()
+            .filter(|video| {
+                self.feed_filter
+                    .keeps(video, self.library.watched(&video.id), now)
+            })
+            .collect()
     }
 
     /// Whether the account (when its list is known) or this device
@@ -1198,6 +1215,11 @@ impl App {
             }
             Action::ToggleDescription => {
                 self.state.description_open = !self.state.description_open;
+            }
+            Action::SetFeedFilter(filter) => self.state.feed_filter = filter,
+            Action::CopyLink(url) => {
+                ctx.copy_text(url);
+                self.state.notice = Some("Link copied".to_owned());
             }
             Action::OpenUrl(url) => {
                 if url.starts_with("https://") || url.starts_with("http://") {

@@ -122,7 +122,7 @@ fn command_line(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>)
 /// The sidebar: the `youtfast` pane with `[n] Label` items.
 fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
     egui::Panel::left("sidebar")
-        .exact_size(176.0)
+        .exact_size(208.0)
         .resizable(false)
         .show_separator_line(false)
         .frame(Frame::new().inner_margin(Margin::symmetric(8, 6)))
@@ -245,7 +245,53 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
                     actions,
                 );
             });
+            sidebar_channels(ui, state, actions);
         });
+}
+
+/// YouTube's sidebar lists the channels subscribed to under the views:
+/// the account's when signed in and loaded, this device's otherwise.
+fn sidebar_channels(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
+    let channels = match state.account_subscriptions.items() {
+        channels if state.signed_in() && !channels.is_empty() => channels,
+        _ => state.library.subscriptions.as_slice(),
+    };
+    if channels.is_empty() {
+        return;
+    }
+    let open = match &state.page {
+        Some(crate::app::Page::Channel(channel)) if state.view == View::Channel => {
+            Some(channel.id.as_str())
+        }
+        _ => None,
+    };
+    ui.add_space(widgets::line(ui) / 2.0);
+    widgets::pane(
+        ui,
+        &state.palette,
+        "subscriptions",
+        Some(channels.len()),
+        false,
+        None,
+        |ui| {
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    for channel in channels {
+                        if widgets::channel_item(
+                            ui,
+                            &state.palette,
+                            channel,
+                            open == Some(channel.id.as_str()),
+                        )
+                        .clicked()
+                        {
+                            actions.push(Action::OpenChannel(channel.clone()));
+                        }
+                    }
+                });
+        },
+    );
 }
 
 /// The bottom line: the view's name inverted, what is loading or the
@@ -385,7 +431,7 @@ pub fn cursor_key(state: &State) -> usize {
     }
     let source = usize::from(state.source() == crate::model::Source::Device) * 10;
     match state.view {
-        View::Home => tag(&state.feed),
+        View::Home => tag(&state.feed) + 10 * state.feed_filter as usize,
         View::Results => tag(&state.results),
         View::Subscriptions => tag(&state.account_subscriptions) + source,
         View::History => tag(&state.account_history) + source,
@@ -416,7 +462,7 @@ pub fn cursor_key(state: &State) -> usize {
 /// How many rows the current view's list has (0 = no cursor there).
 fn cursor_count(state: &State) -> usize {
     match state.view {
-        View::Home => state.feed.items().len().min(state.feed_shown),
+        View::Home => state.visible_feed().len(),
         View::Results => state.results.items().len(),
         View::Subscriptions => match state.source() {
             crate::model::Source::Account => state.account_subscriptions.items().len(),
@@ -447,7 +493,10 @@ fn cursor_count(state: &State) -> usize {
 fn open_at(state: &State, index: usize) -> Option<Action> {
     let video = |videos: &[crate::model::Video]| videos.get(index).cloned().map(Action::Open);
     match state.view {
-        View::Home => video(&state.feed.items()[..state.feed.items().len().min(state.feed_shown)]),
+        View::Home => state
+            .visible_feed()
+            .get(index)
+            .map(|video| Action::Open((*video).clone())),
         View::Results => video(state.results.items()),
         View::Subscriptions => match state.source() {
             crate::model::Source::Account => state

@@ -352,6 +352,47 @@ pub enum Source {
     Device,
 }
 
+/// Home's chips: which of the feed's videos it shows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FeedFilter {
+    #[default]
+    All,
+    /// Published since local midnight.
+    Today,
+    /// Not in this computer's history.
+    Unwatched,
+    Live,
+}
+
+impl FeedFilter {
+    pub const ALL: [FeedFilter; 4] = [
+        FeedFilter::All,
+        FeedFilter::Today,
+        FeedFilter::Unwatched,
+        FeedFilter::Live,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            FeedFilter::All => "all",
+            FeedFilter::Today => "today",
+            FeedFilter::Unwatched => "unwatched",
+            FeedFilter::Live => "live",
+        }
+    }
+
+    /// Whether the video passes; `watched` says whether it is in the
+    /// history.
+    pub fn keeps(self, video: &Video, watched: bool, now: i64) -> bool {
+        match self {
+            FeedFilter::All => true,
+            FeedFilter::Today => crate::util::age_bucket(video.published_at, now) == "today",
+            FeedFilter::Unwatched => !watched,
+            FeedFilter::Live => video.live,
+        }
+    }
+}
+
 /// The most a video may stream at. Remembered between runs.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Quality {
@@ -509,6 +550,10 @@ pub enum Action {
     ToggleReplies(String),
     /// The description's `[ more ]`/`[ less ]`.
     ToggleDescription,
+    /// Home's chips.
+    SetFeedFilter(FeedFilter),
+    /// The watch page's `[ share ]`: the link to the clipboard.
+    CopyLink(String),
     /// A link in a description or comment: opens in the browser. Only
     /// http/https are honoured.
     OpenUrl(String),
@@ -518,4 +563,29 @@ pub enum Action {
     SetChannelQuery(String),
     /// The next page of the current channel tab's list.
     LoadMore,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FeedFilter, Video};
+
+    #[test]
+    fn the_feed_chips_keep_what_they_say() {
+        let now = crate::util::now();
+        let mut fresh = Video::from_id("a".to_owned());
+        fresh.published_at = Some(now);
+        let mut old = Video::from_id("b".to_owned());
+        old.published_at = Some(now - 30 * 86_400);
+        let mut live = Video::from_id("c".to_owned());
+        live.live = true;
+
+        assert!(FeedFilter::All.keeps(&old, true, now));
+        assert!(FeedFilter::Today.keeps(&fresh, false, now));
+        assert!(!FeedFilter::Today.keeps(&old, false, now));
+        assert!(!FeedFilter::Today.keeps(&live, false, now));
+        assert!(FeedFilter::Unwatched.keeps(&old, false, now));
+        assert!(!FeedFilter::Unwatched.keeps(&fresh, true, now));
+        assert!(FeedFilter::Live.keeps(&live, false, now));
+        assert!(!FeedFilter::Live.keeps(&fresh, false, now));
+    }
 }

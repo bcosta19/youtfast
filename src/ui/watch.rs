@@ -1,5 +1,6 @@
-//! The watch page: the video pane, the controls strip, the details pane
-//! and the Up next pane.
+//! The watch page, laid out as YouTube's: the video pane and its
+//! controls, the title, the channel's line with the actions, the
+//! description, chapters and comments, and the Up next pane beside them.
 
 use egui::{
     Align, Align2, Color32, CornerRadius, FontId, Frame, Layout, Rect, RichText, Sense, Slider,
@@ -118,100 +119,160 @@ fn main_column(
     });
     ui.add_space(widgets::line(ui));
 
-    // The details pane is titled with the video's title.
+    // Under the video, as on YouTube: the title, the channel's line with
+    // the actions, then the description.
     // A video opened from a link has no title until mpv reads it.
     let title = Some(watching.title.as_str())
         .filter(|title| !title.is_empty())
         .or_else(|| status.and_then(|status| status.title.as_deref()))
         .unwrap_or("Loading…")
         .to_owned();
-    widgets::pane(ui, &palette, &title, None, true, None, |ui| {
-        details(ui, state, &watching, actions);
-    });
-    description(ui, state, actions);
+    ui.label(
+        RichText::new(title)
+            .font(FontId::monospace(16.0))
+            .strong()
+            .color(palette.text),
+    );
+    ui.add_space(widgets::line(ui) / 2.0);
+    channel_line(ui, state, &watching, actions);
+    ui.add_space(widgets::line(ui) / 2.0);
+    description(ui, state, &watching, actions);
     chapters(ui, state, status, actions);
     comments(ui, state, actions);
 }
 
-/// The details pane's rows: `channel ······ Name [ subscribe ]` and so
-/// on, filled from rustypipe's Details when it arrives.
-fn details(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Action>) {
-    match &state.details {
-        Fetch::Loading | Fetch::Idle => {
-            ui.horizontal(|ui| {
-                detail_line(ui, state, "channel", |ui| {
-                    if let Some(channel) = &watching.channel {
-                        ui.label(RichText::new(channel).monospace().color(state.palette.blue));
-                    }
-                });
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let saved = state.library.in_watch_later(&watching.id);
-                    watch_later_button(ui, state, watching, saved, actions);
-                });
-            });
-            if let Some(views) = watching.views {
-                kv(ui, state, "views", &util::thousands(views));
+/// YouTube's line under the title: the channel's avatar, name and
+/// subscribers with `[ subscribe ]`, then likes, `[ share ]` and
+/// `[ watch later ]` at the right. Filled from rustypipe's details when
+/// they arrive; the spinner or the error until then.
+fn channel_line(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Action>) {
+    let palette = &state.palette;
+    let details = state.details.ready();
+    let channel = match details {
+        Some(details) => Some(Channel {
+            id: details.channel.id.clone(),
+            name: details.channel.name.clone(),
+            avatar: details.channel.avatar.clone(),
+        }),
+        None => watching.channel_id.clone().map(|id| Channel {
+            id,
+            name: watching.channel.clone().unwrap_or_default(),
+            avatar: None,
+        }),
+    };
+    let avatar = 2.0 * widgets::line(ui);
+    let mut wrapped = false;
+    ui.horizontal(|ui| {
+        match channel.as_ref().and_then(|channel| channel.avatar.clone()) {
+            Some(url) => {
+                ui.add(
+                    egui::Image::new(url)
+                        .fit_to_exact_size(vec2(avatar, avatar))
+                        .corner_radius(CornerRadius::ZERO),
+                );
             }
-            if let Some(published) = &watching.published {
-                kv(ui, state, "published", published);
+            None => {
+                let (rect, _) = ui.allocate_exact_size(vec2(avatar, avatar), Sense::hover());
+                ui.painter()
+                    .rect_filled(rect, CornerRadius::ZERO, palette.surface);
             }
-            ui.label(
-                RichText::new(format!("{} details", widgets::spinner_frame(ui)))
-                    .monospace()
-                    .color(state.palette.secondary),
-            );
         }
-        Fetch::Failed(error) => {
+        ui.vertical(|ui| {
+            let name = channel
+                .as_ref()
+                .map(|channel| channel.name.clone())
+                .or_else(|| watching.channel.clone())
+                .unwrap_or_default();
+            let link = ui.link(RichText::new(name).monospace().strong().color(palette.blue));
+            if link.clicked()
+                && let Some(channel) = &channel
+            {
+                actions.push(Action::OpenChannel(channel.clone()));
+            }
+            let under = match &state.details {
+                Fetch::Ready(details) => details
+                    .subscribers
+                    .map(|count| format!("{} subscribers", util::compact(count)))
+                    .unwrap_or_default(),
+                Fetch::Failed(_) => String::new(),
+                _ => format!("{} details", widgets::spinner_frame(ui)),
+            };
             ui.label(
-                RichText::new(error.as_str())
+                RichText::new(under)
                     .monospace()
-                    .color(state.palette.red),
+                    .small()
+                    .color(palette.secondary),
             );
-            if widgets::bracket_button(ui, &state.palette, "r retry", widgets::ButtonStyle::Normal)
+        });
+        if let Some(channel) = &channel {
+            subscribe(ui, state, channel, actions);
+        }
+        // The actions sit at the right while they fit; under it otherwise.
+        let needed = 34.0 * widgets::cell(ui);
+        if ui.available_width() >= needed {
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                video_actions(ui, state, watching, true, actions);
+            });
+        } else {
+            wrapped = true;
+        }
+    });
+    if wrapped {
+        ui.horizontal(|ui| video_actions(ui, state, watching, false, actions));
+    }
+    if let Fetch::Failed(error) = &state.details {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(error.as_str()).monospace().color(palette.red));
+            if widgets::bracket_button(ui, palette, "r retry", widgets::ButtonStyle::Normal)
                 .clicked()
             {
                 actions.push(Action::Refresh);
             }
+        });
+    }
+}
+
+/// Likes, `[ share ]` and `[ watch later ]`, in that order as read;
+/// `right_to_left` when the caller's layout runs that way.
+fn video_actions(
+    ui: &mut Ui,
+    state: &State,
+    watching: &Video,
+    right_to_left: bool,
+    actions: &mut Vec<Action>,
+) {
+    let palette = &state.palette;
+    let likes = |ui: &mut Ui| {
+        if let Some(likes) = state.details.ready().and_then(|details| details.likes) {
+            ui.label(
+                RichText::new(format!(" ▲ {} ", util::compact(u64::from(likes))))
+                    .monospace()
+                    .color(palette.text)
+                    .background_color(palette.surface),
+            )
+            .on_hover_text("Likes. Rating a video needs youtube.com.");
         }
-        Fetch::Ready(details) => {
-            let channel = Channel {
-                id: details.channel.id.clone(),
-                name: details.channel.name.clone(),
-                avatar: details.channel.avatar.clone(),
-            };
-            ui.horizontal(|ui| {
-                detail_line(ui, state, "channel", |ui| {
-                    let link = ui.link(
-                        RichText::new(&channel.name)
-                            .monospace()
-                            .color(state.palette.blue),
-                    );
-                    if link.clicked() {
-                        actions.push(Action::OpenChannel(channel.clone()));
-                    }
-                });
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let saved = state.library.in_watch_later(&watching.id);
-                    watch_later_button(ui, state, watching, saved, actions);
-                    subscribe(ui, state, &channel, actions);
-                });
-            });
-            if let Some(subscribers) = details.subscribers {
-                kv(ui, state, "subscribers", &util::compact(subscribers));
-            }
-            kv(ui, state, "views", &util::thousands(details.views));
-            if let Some(likes) = details.likes {
-                kv(ui, state, "likes", &util::compact(u64::from(likes)));
-            }
-            match (&details.published, &details.published_date) {
-                (Some(ago), Some(date)) => {
-                    kv(ui, state, "published", &format!("{ago} ({date})"));
-                }
-                (Some(ago), None) => kv(ui, state, "published", ago),
-                (None, Some(date)) => kv(ui, state, "published", date),
-                (None, None) => {}
-            }
+    };
+    let share = |ui: &mut Ui, actions: &mut Vec<Action>| {
+        if widgets::bracket_button(ui, palette, "share", widgets::ButtonStyle::Normal)
+            .on_hover_text("Copy the link")
+            .clicked()
+        {
+            actions.push(Action::CopyLink(format!(
+                "https://youtu.be/{}",
+                watching.id
+            )));
         }
+    };
+    let saved = state.library.in_watch_later(&watching.id);
+    if right_to_left {
+        watch_later_button(ui, state, watching, saved, actions);
+        share(ui, actions);
+        likes(ui);
+    } else {
+        likes(ui);
+        share(ui, actions);
+        watch_later_button(ui, state, watching, saved, actions);
     }
 }
 
@@ -236,33 +297,72 @@ fn watch_later_button(
     }
 }
 
-/// The description pane: spans wrapped to the pane's width, collapsed to
-/// six rows with `[ more ]`.
-fn description(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
-    let Fetch::Ready(details) = &state.details else {
-        return;
-    };
-    if details.description.is_empty() {
-        return;
-    }
-    ui.add_space(widgets::line(ui));
-    widgets::pane(ui, &state.palette, "description", None, false, None, |ui| {
-        let collapsed =
-            !state.description_open && widgets::spans_truncated(ui, &details.description, 6);
-        let max_rows = if collapsed { Some(6) } else { None };
-        if let Some(action) = widgets::rich_text(ui, &state.palette, &details.description, max_rows)
-        {
-            actions.push(action);
-        }
-        if collapsed || state.description_open {
-            let label = if collapsed { "more" } else { "less" };
-            if widgets::bracket_button(ui, &state.palette, label, widgets::ButtonStyle::Normal)
-                .clicked()
-            {
-                actions.push(Action::ToggleDescription);
-            }
+/// The description pane, YouTube's grey box: `views · published` on its
+/// first line, then the text collapsed to three rows with `[ more ]`.
+/// Expanded, the counts are exact and the date is added.
+fn description(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Action>) {
+    let details = state.details.ready();
+    let open = state.description_open;
+    let views = details.map(|details| details.views).or(watching.views);
+    let views = views.map(|views| {
+        if open {
+            format!("{} views", util::thousands(views))
+        } else {
+            util::views(views)
         }
     });
+    let published = match details {
+        Some(details) => match (&details.published, &details.published_date) {
+            (Some(ago), Some(date)) if open => Some(format!("{ago} ({date})")),
+            (Some(ago), _) => Some(ago.clone()),
+            (None, date) => date.clone(),
+        },
+        None => watching.published.clone(),
+    };
+    let head = [views, published]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" · ");
+    let spans = details.map(|details| details.description.as_slice());
+    if head.is_empty() && spans.is_none_or(|spans| spans.is_empty()) {
+        return;
+    }
+    widgets::pane(
+        ui,
+        &state.palette,
+        "description",
+        None,
+        false,
+        Some(state.palette.surface),
+        |ui| {
+            ui.set_width(ui.available_width());
+            if !head.is_empty() {
+                ui.label(
+                    RichText::new(head)
+                        .monospace()
+                        .strong()
+                        .color(state.palette.text),
+                );
+            }
+            let Some(spans) = spans.filter(|spans| !spans.is_empty()) else {
+                return;
+            };
+            let collapsed = !open && widgets::spans_truncated(ui, spans, 3);
+            let max_rows = if collapsed { Some(3) } else { None };
+            if let Some(action) = widgets::rich_text(ui, &state.palette, spans, max_rows) {
+                actions.push(action);
+            }
+            if collapsed || open {
+                let label = if collapsed { "more" } else { "less" };
+                if widgets::bracket_button(ui, &state.palette, label, widgets::ButtonStyle::Normal)
+                    .clicked()
+                {
+                    actions.push(Action::ToggleDescription);
+                }
+            }
+        },
+    );
 }
 
 /// The chapters pane: `[00:00] Intro` rows, the current one selected.
@@ -387,7 +487,12 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 fn comment_row(ui: &mut Ui, state: &State, comment: &CommentRow, actions: &mut Vec<Action>) {
     // `@author · 3d · ▲ 120 · pinned`
     ui.horizontal(|ui| {
-        let author = comment.author.as_deref().unwrap_or("someone");
+        // YouTube's handles already start with `@`.
+        let author = comment
+            .author
+            .as_deref()
+            .unwrap_or("someone")
+            .trim_start_matches('@');
         let response = ui.link(
             RichText::new(format!("@{author}"))
                 .monospace()
@@ -485,26 +590,6 @@ fn reply_column(
     });
 }
 
-/// A `key ··· value` line: the key in dim, leader dots, the value in text.
-fn kv(ui: &mut Ui, state: &State, key: &str, value: &str) {
-    ui.horizontal(|ui| {
-        detail_line(ui, state, key, |ui| {
-            ui.label(RichText::new(value).monospace().color(state.palette.text));
-        });
-    });
-}
-
-/// The left half of a key/value line: `key` in dim followed by leader
-/// dots, then `value` drawn by `add`.
-fn detail_line(ui: &mut Ui, state: &State, key: &str, add: impl FnOnce(&mut Ui)) {
-    ui.label(
-        RichText::new(format!("{key:·<12}"))
-            .monospace()
-            .color(state.palette.dim),
-    );
-    add(ui);
-}
-
 /// Subscribe on this device, or show that the account already does.
 fn subscribe(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Action>) {
     if state.subscribed_in_account(&channel.id) {
@@ -521,7 +606,7 @@ fn subscribe(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Ac
     let (label, style) = if subscribed {
         ("subscribed", widgets::ButtonStyle::On)
     } else {
-        ("subscribe", widgets::ButtonStyle::Normal)
+        ("subscribe", widgets::ButtonStyle::Primary)
     };
     let hint = if subscribed {
         "Unsubscribe on this computer"

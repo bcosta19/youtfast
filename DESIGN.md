@@ -1,11 +1,13 @@
 # YouTFast design
 
 YouTFast looks like a terminal program, the way lazygit, btop or yazi do,
-drawn in the desktop's own terminal font and Omarchy palette. It is not a
-copy of youtube.com: there are panes instead of cards, a command line
-instead of a search box, a status line instead of toasts, and a feed that
-reads like a table. Video, thumbnails and avatars are real pictures; all the
-chrome around them is text, rules and colour.
+drawn in the desktop's own terminal font and Omarchy palette. The layout
+and what each page offers follow youtube.com (home's grid of cards and
+chips, search's large rows, the watch page's title, channel line and
+description box, the subscribed channels in the sidebar); the look stays a
+terminal's: panes instead of rounded cards, a command line instead of a
+search box, a status line instead of toasts. Video, thumbnails and avatars
+are real pictures; all the chrome around them is text, rules and colour.
 
 Mode: Operate. Scanning a feed, opening a video, and keyboard control come
 before decoration.
@@ -85,7 +87,10 @@ rectangle is always black.
   it.
 - **Sidebar**: a pane titled `youtfast`. Each item is `[n] Label`, the key
   in `magenta`; the current view is the selected row (inverted). Number keys
-  jump to views when no text field has focus.
+  jump to views when no text field has focus. Under it, as on YouTube, a
+  `subscriptions` pane lists the channels followed (the account's when
+  signed in, this device's otherwise): a square avatar one line high and
+  the name in `blue`; a click opens the channel.
 - **Status line** (bottom, one line, `panel` fill, no border): the current
   view's name as an inverted block in `accent` (` HOME `), then the
   backend's activity as a braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`) with what is
@@ -98,13 +103,22 @@ rectangle is always black.
 
 ## Lists
 
-- Every list of videos (home, results, history, watch later, liked,
-  playlist, channel tabs) is a list of rows, not a grid: a 16:9 thumbnail
-  (120×68 at body size; the duration in its corner in `yellow` on black),
-  then the title in `text` (one line, cut with an ellipsis), and under it
-  `channel · views · age` with the colours above. A watched video shows a
-  2 px `green` bar under its thumbnail, as long as the part watched.
-- Keyboard: `j`/`k` or ↓/↑ move the selected row (it scrolls into view),
+- Home is YouTube's grid of cards: as many columns as fit at 280 px or
+  more (up to five), each card the 16:9 thumbnail across its width and the
+  text under it. Day headings (`── today ──`) split the grid when the feed
+  has dates. Above it, chips: `all`, `today` (when the feed has dates),
+  `unwatched` (not in this computer's history), `live` (when there is a
+  live stream). A chip is ` label ` on `surface`; the one on is inverted
+  (`accent` fill, `window` text).
+- Every other list of videos (history, watch later, liked, playlist,
+  channel tabs, Up next) is rows, the way YouTube's Up next column draws
+  them: a 16:9 thumbnail (120×68; the duration in its corner in `yellow` on
+  black), then the title in `text` on up to two lines, the channel in
+  `blue`, and `views · age` in `secondary`. Search results are the same
+  rows with a larger thumbnail (up to 320×180, never more than half the
+  row). A watched video shows a 2 px `green` bar under its thumbnail, as
+  long as the part watched.
+- Keyboard: `j`/`k` or ↓/↑ move the selected row or card (it scrolls into view),
   Enter opens it, `g`/`G` go to the top or bottom. The pointer works as
   before: hover highlights, click opens.
 - Lists of channels are rows with a square avatar, the name in `blue`, and
@@ -132,18 +146,17 @@ rectangle is always black.
 
 - The video pane (titled with the channel name) takes the width, the
   controls strip under it.
-- Under it, a **details** pane titled with the video title in bold, laid out
-  as aligned key/value lines with dim leader dots, like a `man` page header:
-
-  ```
-  channel ······ Channel Name            [ subscribe ]
-  views ········ 1,234,567
-  likes ········ 34K
-  published ···· 2 days ago (2026-10-04)
-  ```
-
-- A **description** pane: the text with links in `cyan` and timestamps
-  (`12:34`) that seek when clicked; collapsed to 6 lines with `[ more ]`.
+- Under it, as on YouTube: the title in 16 bold, then the channel's line:
+  its square avatar (two lines high), the name in `blue` bold over
+  `11M subscribers` in `secondary`, `[ subscribe ]` in the primary style,
+  and at the right ` ▲ 26K ` (likes, on `surface`; rating needs
+  youtube.com), `[ share ]` (copies the youtu.be link) and
+  `[ watch later ]`. When they do not fit, the actions go to the line
+  under it.
+- A **description** pane filled with `surface`, YouTube's grey box: its
+  first line `1.3M views · Jun 8, 2023` in bold (exact counts and the date
+  once expanded), then the text with links in `cyan` and timestamps
+  (`12:34`) that seek when clicked; collapsed to 3 lines with `[ more ]`.
 - A **chapters** pane when the video has chapters: `[00:00] Intro` rows,
   the current one selected; clicking seeks.
 - A **comments** pane: threaded like a mail reader, each comment

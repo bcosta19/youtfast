@@ -8,7 +8,7 @@ use egui::{Align2, CornerRadius, CursorIcon, Image, Rect, RichText, Sense, Ui, p
 
 use super::{results, widgets};
 use crate::app::{AccountState, Page, State};
-use crate::model::{Action, Channel, Listing, PlaylistSummary, Source, Video, View};
+use crate::model::{Action, Channel, FeedFilter, Listing, PlaylistSummary, Source, Video, View};
 
 /// The account/device switch and a page's extra controls, as bracket
 /// buttons on one line inside the pane.
@@ -107,17 +107,54 @@ pub fn home(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             ui,
             &state.palette,
             "Home",
-            Some(state.feed.items().len().min(state.feed_shown)),
+            Some(state.visible_feed().len()),
             true,
             None,
-            |ui| feed_rows(ui, state, actions),
+            |ui| feed_grid(ui, state, actions),
         );
     });
 }
 
-/// The feed's rows, day-grouped, capped at `feed_shown`; the last row in
-/// view asks for more.
-fn feed_rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+/// The smallest a home card gets before the grid drops a column.
+const CARD_WIDTH: f32 = 280.0;
+
+/// Home's chips: `all`, `today` while the feed has dates, `unwatched`,
+/// and `live` while it has a live stream.
+fn feed_chips(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let live = state.feed.items().iter().any(|video| video.live);
+    let dated = state
+        .feed
+        .items()
+        .iter()
+        .any(|video| video.published_at.is_some());
+    ui.horizontal_wrapped(|ui| {
+        for filter in FeedFilter::ALL {
+            let hidden = match filter {
+                FeedFilter::Live => !live,
+                FeedFilter::Today => !dated,
+                _ => false,
+            };
+            if hidden && state.feed_filter != filter {
+                continue;
+            }
+            if widgets::chip(
+                ui,
+                &state.palette,
+                filter.label(),
+                state.feed_filter == filter,
+            )
+            .clicked()
+            {
+                actions.push(Action::SetFeedFilter(filter));
+            }
+        }
+    });
+    ui.add_space(widgets::line(ui) / 2.0);
+}
+
+/// The feed as YouTube's grid of cards, day-grouped, capped at
+/// `feed_shown`; the last card in view asks for more.
+fn feed_grid(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     match &state.feed {
         Listing::Idle => {}
         Listing::Loading => results::loading(ui, state, "feed"),
@@ -125,44 +162,48 @@ fn feed_rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         Listing::Ready(videos) if videos.is_empty() => {
             results::nothing(ui, state, "nothing from your subscriptions yet")
         }
-        Listing::Ready(videos) => {
+        Listing::Ready(_) => {
+            feed_chips(ui, state, actions);
             let now = crate::util::now();
-            let videos = videos[..videos.len().min(state.feed_shown)].to_vec();
+            let videos: Vec<Video> = state.visible_feed().into_iter().cloned().collect();
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .show(ui, |ui| {
-                    let mut bucket = "";
-                    for (index, video) in videos.iter().enumerate() {
-                        let day = crate::util::age_bucket(video.published_at, now);
-                        if day != bucket {
-                            bucket = day;
+                    if videos.is_empty() {
+                        results::nothing(ui, state, "no video passes this chip");
+                    }
+                    let gap = widgets::cell(ui);
+                    let (columns, width) =
+                        widgets::grid_columns(ui.available_width(), CARD_WIDTH, gap, 5);
+                    // Runs of the same day, each a heading and its rows of
+                    // cards.
+                    let mut start = 0;
+                    while start < videos.len() {
+                        let day = crate::util::age_bucket(videos[start].published_at, now);
+                        let end = videos[start..]
+                            .iter()
+                            .position(|video| {
+                                crate::util::age_bucket(video.published_at, now) != day
+                            })
+                            .map_or(videos.len(), |offset| start + offset);
+                        // The account's feed carries no dates: no heading.
+                        if day != "undated" {
                             ui.label(
                                 RichText::new(format!("── {day} ──"))
                                     .monospace()
                                     .color(state.palette.secondary),
                             );
                         }
-                        let selected = index == state.cursor;
-                        let watched = video
-                            .duration
-                            .and_then(|duration| {
-                                state
-                                    .library
-                                    .resume_position(&video.id)
-                                    .map(|left| left / duration)
-                            })
-                            .map(|fraction| fraction as f32);
-                        let response =
-                            widgets::video_row(ui, &state.palette, video, None, watched, selected);
-                        if selected {
-                            response.clone().scroll_to_me(None);
+                        for row in (start..end).collect::<Vec<_>>().chunks(columns) {
+                            ui.horizontal_top(|ui| {
+                                ui.spacing_mut().item_spacing.x = gap;
+                                for &index in row {
+                                    feed_card(ui, state, &videos, index, width, actions);
+                                }
+                            });
                         }
-                        if index == videos.len() - 1 && ui.is_rect_visible(response.rect) {
-                            actions.push(Action::LoadMore);
-                        }
-                        if response.clicked() {
-                            actions.push(Action::Open(video.clone()));
-                        }
+                        ui.add_space(widgets::line(ui) / 2.0);
+                        start = end;
                     }
                     widgets::more_row(
                         ui,
@@ -173,6 +214,38 @@ fn feed_rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     );
                 });
         }
+    }
+}
+
+/// One card of the feed's grid.
+fn feed_card(
+    ui: &mut Ui,
+    state: &State,
+    videos: &[Video],
+    index: usize,
+    width: f32,
+    actions: &mut Vec<Action>,
+) {
+    let video = &videos[index];
+    let selected = index == state.cursor;
+    let watched = video
+        .duration
+        .and_then(|duration| {
+            state
+                .library
+                .resume_position(&video.id)
+                .map(|left| left / duration)
+        })
+        .map(|fraction| fraction as f32);
+    let response = widgets::video_card(ui, &state.palette, video, watched, selected, width);
+    if selected {
+        response.clone().scroll_to_me(None);
+    }
+    if index == videos.len() - 1 && ui.is_rect_visible(response.rect) {
+        actions.push(Action::LoadMore);
+    }
+    if response.clicked() {
+        actions.push(Action::Open(video.clone()));
     }
 }
 

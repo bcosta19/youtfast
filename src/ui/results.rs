@@ -13,13 +13,23 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     egui::CentralPanel::default()
         .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 4)))
         .show(ui, |ui| {
-            videos(
+            let listing = &state.results;
+            widgets::pane(
                 ui,
-                state,
+                &state.palette,
                 "Results",
-                &state.results,
-                "search for something",
-                actions,
+                Some(listing.items().len()),
+                true,
+                None,
+                |ui| match listing {
+                    Listing::Idle => {}
+                    Listing::Loading => loading(ui, state, "results"),
+                    Listing::Failed(error) => failed(ui, state, error, actions),
+                    Listing::Ready(videos) if videos.is_empty() => {
+                        nothing(ui, state, "search for something")
+                    }
+                    Listing::Ready(videos) => rows(ui, state, videos, &|_| None, true, actions),
+                },
             );
         });
 }
@@ -74,6 +84,18 @@ pub fn video_rows(
     note: &dyn Fn(&Video) -> Option<String>,
     actions: &mut Vec<Action>,
 ) {
+    rows(ui, state, videos, note, false, actions);
+}
+
+/// [`video_rows`]; `large` draws search's big thumbnails (and no notes).
+fn rows(
+    ui: &mut Ui,
+    state: &State,
+    videos: &[Video],
+    note: &dyn Fn(&Video) -> Option<String>,
+    large: bool,
+    actions: &mut Vec<Action>,
+) {
     egui::ScrollArea::vertical()
         .auto_shrink(false)
         .show(ui, |ui| {
@@ -88,14 +110,18 @@ pub fn video_rows(
                             .map(|left| left / duration)
                     })
                     .map(|fraction| fraction as f32);
-                let response = widgets::video_row(
-                    ui,
-                    &state.palette,
-                    video,
-                    note(video).as_deref(),
-                    watched,
-                    selected,
-                );
+                let response = if large {
+                    widgets::video_row_large(ui, &state.palette, video, watched, selected)
+                } else {
+                    widgets::video_row(
+                        ui,
+                        &state.palette,
+                        video,
+                        note(video).as_deref(),
+                        watched,
+                        selected,
+                    )
+                };
                 if selected {
                     response.clone().scroll_to_me(None);
                 }

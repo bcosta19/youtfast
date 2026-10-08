@@ -1,5 +1,6 @@
 //! Pieces shared by the views: the pane every screen is drawn in, the
-//! bracket buttons, the spinner, the selectable row.
+//! bracket buttons, the chips, the spinner, the selectable row, and the
+//! video as a row or a card.
 
 use egui::text::LayoutJob;
 use egui::{
@@ -142,7 +143,13 @@ pub fn bracket_button(ui: &mut Ui, palette: &Palette, label: &str, style: Button
     };
     let mut button = egui::Button::new(text).frame(false);
     if style == ButtonStyle::Primary {
-        button = button.fill(palette.accent);
+        // A frameless button draws no fill: keep the frame, without its
+        // rule or corners.
+        button = button
+            .frame(true)
+            .fill(palette.accent)
+            .stroke(Stroke::NONE)
+            .corner_radius(CornerRadius::ZERO);
     }
     ui.add(button)
 }
@@ -191,6 +198,51 @@ pub fn row(
     response
 }
 
+/// A channel in the sidebar: a square avatar a line high, the name in
+/// blue on one line. `selected` draws the TUI cursor.
+pub fn channel_item(ui: &mut Ui, palette: &Palette, channel: &Channel, selected: bool) -> Response {
+    let size = line(ui);
+    let pad = cell(ui);
+    let (rect, response) =
+        ui.allocate_exact_size(vec2(ui.available_width(), size + 4.0), Sense::click());
+    row_fill(ui, palette, rect, &response, selected);
+    let avatar = Rect::from_min_size(
+        pos2(rect.left() + pad / 2.0, rect.top() + 2.0),
+        vec2(size, size),
+    );
+    match &channel.avatar {
+        Some(url) => Image::new(url.as_str())
+            .fit_to_exact_size(avatar.size())
+            .corner_radius(CornerRadius::ZERO)
+            .paint_at(ui, avatar),
+        None => {
+            ui.painter()
+                .rect_filled(avatar, CornerRadius::ZERO, palette.surface);
+        }
+    }
+    let color = if selected {
+        palette.window
+    } else {
+        palette.blue
+    };
+    let mut job = LayoutJob::default();
+    job.append(
+        &channel.name,
+        0.0,
+        egui::TextFormat::simple(FontId::monospace(13.0), color),
+    );
+    job.wrap.max_width = (rect.right() - avatar.right() - pad).max(10.0);
+    job.wrap.max_rows = 1;
+    job.wrap.overflow_character = Some('…');
+    let galley = ui.painter().layout_job(job);
+    let at = pos2(
+        avatar.right() + pad / 2.0,
+        rect.center().y - galley.size().y / 2.0,
+    );
+    ui.painter().galley(at, galley, color);
+    response
+}
+
 fn badge(ui: &Ui, thumbnail: Rect, video: &Video, palette: &Palette) {
     let (text, color) = if video.live {
         ("LIVE".to_owned(), palette.red)
@@ -207,25 +259,80 @@ fn badge(ui: &Ui, thumbnail: Rect, video: &Video, palette: &Palette) {
     painter.galley(rect.min + vec2(3.0, 1.0), galley, color);
 }
 
-/// A video as a list row: a 120x68 thumbnail, the title on one line,
-/// `channel · views · age` under it, and a note line when there is one.
-/// `watched` is the part watched (0..1), drawn as a green bar under the
-/// thumbnail. `selected` draws the TUI cursor.
-pub fn video_row(
-    ui: &mut Ui,
+/// The thumbnail with its corner badge, and the part watched (0..1) as a
+/// 2 px green bar under it.
+fn thumbnail(ui: &Ui, palette: &Palette, video: &Video, rect: Rect, watched: Option<f32>) {
+    Image::new(video.thumbnail())
+        .fit_to_exact_size(rect.size())
+        .corner_radius(CornerRadius::ZERO)
+        .paint_at(ui, rect);
+    badge(ui, rect, video, palette);
+    if let Some(watched) = watched {
+        let bar = Rect::from_min_size(
+            rect.left_bottom() + vec2(0.0, 1.0),
+            vec2(rect.width() * watched.clamp(0.0, 1.0), 2.0),
+        );
+        ui.painter()
+            .rect_filled(bar, CornerRadius::ZERO, palette.green);
+    }
+}
+
+/// The text YouTube puts beside or under a thumbnail: the title on up to
+/// two lines, the channel in blue, then `views · age` (and the note).
+/// Drawn from `at`, `width` wide; `inverted` is the selected row's colours.
+/// Returns the height used.
+fn video_text(
+    ui: &Ui,
     palette: &Palette,
     video: &Video,
     note: Option<&str>,
-    watched: Option<f32>,
-    selected: bool,
-) -> Response {
-    let font = FontId::monospace(14.0);
+    at: Pos2,
+    width: f32,
+    inverted: bool,
+) -> f32 {
+    let painter = ui.painter();
     let small = FontId::monospace(13.0);
-    let pad = cell(ui);
-    let thumb = vec2(120.0, 68.0);
-    let height = thumb.y + pad;
-    let (rect, response) =
-        ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
+    let (text, muted, channel_color) = if inverted {
+        (palette.window, palette.window, palette.window)
+    } else {
+        (palette.text, palette.secondary, palette.blue)
+    };
+    let lines = |text: &str, font: FontId, color: Color32, rows: usize| {
+        let mut job = LayoutJob::default();
+        job.append(text, 0.0, egui::TextFormat::simple(font, color));
+        job.wrap.max_width = width;
+        job.wrap.max_rows = rows;
+        job.wrap.overflow_character = Some('…');
+        painter.layout_job(job)
+    };
+    let mut y = at.y;
+    let title = lines(&video.title, FontId::monospace(14.0), text, 2);
+    y += title.rect.height();
+    painter.galley(at, title, text);
+    if let Some(channel) = video.channel.as_deref().filter(|name| !name.is_empty()) {
+        let galley = lines(channel, small.clone(), channel_color, 1);
+        let height = galley.rect.height();
+        painter.galley(pos2(at.x, y), galley, channel_color);
+        y += height;
+    }
+    let rest = [Some(meta(video)), note.map(str::to_owned)]
+        .into_iter()
+        .flatten()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ");
+    if !rest.is_empty() {
+        let galley = lines(&rest, small, muted, 1);
+        let height = galley.rect.height();
+        painter.galley(pos2(at.x, y), galley, muted);
+        y += height;
+    }
+    y - at.y
+}
+
+/// The fill behind a row or card: the TUI cursor when selected, the
+/// hover colour under the pointer.
+fn row_fill(ui: &Ui, palette: &Palette, rect: Rect, response: &Response, selected: bool) {
     if response.hovered() {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
     }
@@ -234,81 +341,133 @@ pub fn video_row(
     } else if response.hovered() {
         palette.surface_hover
     } else {
-        Color32::TRANSPARENT
+        return;
     };
-    if fill != Color32::TRANSPARENT {
-        ui.painter().rect_filled(rect, CornerRadius::ZERO, fill);
-    }
+    ui.painter().rect_filled(rect, CornerRadius::ZERO, fill);
+}
+
+/// A video as a list row, the way YouTube's Up next column draws it: a
+/// 120x68 thumbnail, the title on up to two lines, the channel, then
+/// `views · age` and the note when there is one. `watched` is the part
+/// watched (0..1). `selected` draws the TUI cursor.
+pub fn video_row(
+    ui: &mut Ui,
+    palette: &Palette,
+    video: &Video,
+    note: Option<&str>,
+    watched: Option<f32>,
+    selected: bool,
+) -> Response {
+    video_row_sized(
+        ui,
+        palette,
+        video,
+        note,
+        watched,
+        selected,
+        vec2(120.0, 68.0),
+    )
+}
+
+/// [`video_row`] with a larger thumbnail, as search results show them.
+pub fn video_row_large(
+    ui: &mut Ui,
+    palette: &Palette,
+    video: &Video,
+    watched: Option<f32>,
+    selected: bool,
+) -> Response {
+    // Up to 320x180, and never more than half the row.
+    let width = (ui.available_width() / 2.0).clamp(120.0, 320.0);
+    let thumb = vec2(width, width * 9.0 / 16.0);
+    video_row_sized(ui, palette, video, None, watched, selected, thumb)
+}
+
+fn video_row_sized(
+    ui: &mut Ui,
+    palette: &Palette,
+    video: &Video,
+    note: Option<&str>,
+    watched: Option<f32>,
+    selected: bool,
+    thumb: egui::Vec2,
+) -> Response {
+    let pad = cell(ui);
+    let (rect, response) =
+        ui.allocate_exact_size(vec2(ui.available_width(), thumb.y + pad), Sense::click());
+    row_fill(ui, palette, rect, &response, selected);
     let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad / 2.0), thumb);
-    Image::new(video.thumbnail())
-        .fit_to_exact_size(thumb)
-        .corner_radius(CornerRadius::ZERO)
-        .paint_at(ui, thumb_rect);
-    badge(ui, thumb_rect, video, palette);
-    if let Some(watched) = watched {
-        let bar = Rect::from_min_size(
-            thumb_rect.left_bottom() + vec2(0.0, 1.0),
-            vec2(thumb.x * watched.clamp(0.0, 1.0), 2.0),
-        );
-        ui.painter()
-            .rect_filled(bar, CornerRadius::ZERO, palette.green);
-    }
-    // The text beside the thumbnail: title, then channel · views · age.
-    let painter = ui.painter();
+    thumbnail(ui, palette, video, thumb_rect, watched);
     let text_x = thumb_rect.right() + pad;
     let width = (rect.right() - text_x - pad).max(20.0);
-    let text_color = if selected {
-        palette.window
-    } else {
-        palette.text
-    };
-    let muted = if selected {
-        palette.window
-    } else {
-        palette.secondary
-    };
-    let truncate = |text: &str, font: FontId, color: Color32| {
-        let mut job = LayoutJob::default();
-        job.append(text, 0.0, egui::TextFormat::simple(font, color));
-        job.wrap.max_width = width;
-        job.wrap.max_rows = 1;
-        job.wrap.overflow_character = Some('…');
-        painter.layout_job(job)
-    };
-    let mut y = thumb_rect.top();
-    let galley = truncate(&video.title, font, text_color);
-    painter.galley(pos2(text_x, y), galley.clone(), text_color);
-    y += galley.rect.height();
-    let channel = video.channel.as_deref().unwrap_or_default();
-    let mut details = vec![meta(video)];
-    if let Some(note) = note {
-        details.push(note.to_owned());
-    }
-    let rest = details
-        .into_iter()
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(" · ");
-    let mut job = LayoutJob::default();
-    if !channel.is_empty() {
-        job.append(
-            channel,
-            0.0,
-            egui::TextFormat::simple(small.clone(), palette.blue),
-        );
-        if !rest.is_empty() {
-            job.append(" · ", 0.0, egui::TextFormat::simple(small.clone(), muted));
-        }
-    }
-    if !rest.is_empty() {
-        job.append(&rest, 0.0, egui::TextFormat::simple(small, muted));
-    }
-    job.wrap.max_width = width;
-    job.wrap.max_rows = 1;
-    job.wrap.overflow_character = Some('…');
-    let galley = painter.layout_job(job);
-    painter.galley(pos2(text_x, y), galley.clone(), muted);
+    video_text(
+        ui,
+        palette,
+        video,
+        note,
+        pos2(text_x, thumb_rect.top()),
+        width,
+        selected,
+    );
     response
+}
+
+/// A video as a card in a grid, the way YouTube's home draws it: the
+/// thumbnail across the card's width, the text under it. `width` is the
+/// card's.
+pub fn video_card(
+    ui: &mut Ui,
+    palette: &Palette,
+    video: &Video,
+    watched: Option<f32>,
+    selected: bool,
+    width: f32,
+) -> Response {
+    let pad = cell(ui) / 2.0;
+    let thumb = vec2(width - 2.0 * pad, (width - 2.0 * pad) * 9.0 / 16.0);
+    // Room for two title lines, the channel and the meta line.
+    let text = 2.0 * line(ui) + 2.0 * (line(ui) - 1.0);
+    let (rect, response) =
+        ui.allocate_exact_size(vec2(width, thumb.y + text + 3.0 * pad), Sense::click());
+    row_fill(ui, palette, rect, &response, selected);
+    let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), thumb);
+    thumbnail(ui, palette, video, thumb_rect, watched);
+    video_text(
+        ui,
+        palette,
+        video,
+        None,
+        pos2(thumb_rect.left(), thumb_rect.bottom() + pad),
+        thumb.x,
+        selected,
+    );
+    response
+}
+
+/// One of the chips over a list: ` today `, inverted when on.
+pub fn chip(ui: &mut Ui, palette: &Palette, label: &str, on: bool) -> Response {
+    let (fill, color) = if on {
+        (palette.accent, palette.window)
+    } else {
+        (palette.surface, palette.text)
+    };
+    let button = egui::Button::new(RichText::new(format!(" {label} ")).monospace().color(color))
+        .fill(fill)
+        .corner_radius(CornerRadius::ZERO)
+        .stroke(Stroke::NONE);
+    let response = ui.add(button);
+    if response.hovered() {
+        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+    }
+    response
+}
+
+/// How many cards of at least `min` wide fit a row `available` wide, with
+/// `gap` between them, and the width each then gets.
+pub fn grid_columns(available: f32, min: f32, gap: f32, most: usize) -> (usize, f32) {
+    let columns = (((available + gap) / (min + gap)).floor() as usize).clamp(1, most);
+    let width = (available - gap * (columns - 1) as f32) / columns as f32;
+    (columns, width)
 }
 
 /// What a span does when clicked.
@@ -492,6 +651,17 @@ pub fn meta(video: &Video) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_grid_fits_as_many_columns_as_it_can() {
+        // 3 × 280 + 2 × 8 = 856 fits in 900; a fourth does not.
+        let (columns, width) = super::grid_columns(900.0, 280.0, 8.0, 5);
+        assert_eq!(columns, 3);
+        assert!((width - (900.0 - 16.0) / 3.0).abs() < 1e-3);
+        // Narrower than one card still draws one; wide stops at `most`.
+        assert_eq!(super::grid_columns(100.0, 280.0, 8.0, 5).0, 1);
+        assert_eq!(super::grid_columns(5000.0, 280.0, 8.0, 5).0, 5);
+    }
+
     #[test]
     fn the_shorts_crop_is_centered_9_of_16() {
         let uv = super::short_uv();
