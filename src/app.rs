@@ -380,10 +380,8 @@ impl App {
         for event in events {
             match event {
                 mpv::Event::Loaded => self.state.player_error = None,
-                mpv::Event::Failed => {
-                    self.state.player_error = Some(
-                        "Could not play this video. Updating yt-dlp usually fixes this.".into(),
-                    );
+                mpv::Event::Failed(failure) => {
+                    self.state.player_error = Some(failure_message(failure).into());
                 }
                 mpv::Event::Finished => {
                     if let Some(video) = &self.state.watching {
@@ -1711,6 +1709,18 @@ fn merge_feed_page(feed: &mut Vec<Video>, shorts: &mut Vec<Video>, page: Vec<Vid
     let landed = fresh.len();
     feed.extend(fresh);
     landed
+}
+
+/// What the watch page says when a video could not play.
+fn failure_message(failure: mpv::Failure) -> &'static str {
+    match failure {
+        mpv::Failure::BotCheck => {
+            "YouTube is limiting requests from this connection. Try again later."
+        }
+        mpv::Failure::AgeRestricted => "This video is age-restricted and needs signing in.",
+        mpv::Failure::Unavailable => "This video is private or unavailable.",
+        mpv::Failure::Other => "Could not play this video. Updating yt-dlp usually fixes this.",
+    }
 }
 
 #[cfg(test)]

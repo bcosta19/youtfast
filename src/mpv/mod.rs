@@ -127,7 +127,40 @@ pub enum Event {
     /// The video reached its end.
     Finished,
     /// The video could not be opened or stopped with an error.
-    Failed,
+    Failed(Failure),
+}
+
+/// Why a video could not play, as far as yt-dlp's error tells.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Failure {
+    /// YouTube asked to sign in to prove this is not a bot: it has
+    /// rate-limited this address.
+    BotCheck,
+    /// The video is age-restricted and needs a signed-in session.
+    AgeRestricted,
+    /// Private, removed, or not available here.
+    Unavailable,
+    /// Anything else, an outdated yt-dlp included.
+    Other,
+}
+
+impl Failure {
+    /// Reads a line yt-dlp wrote through mpv's ytdl hook; `None` when it is
+    /// not an error.
+    fn from_ytdl(line: &str) -> Option<Self> {
+        if !line.contains("ERROR:") {
+            return None;
+        }
+        Some(if line.contains("not a bot") {
+            Self::BotCheck
+        } else if line.contains("confirm your age") {
+            Self::AgeRestricted
+        } else if line.contains("Private video") || line.contains("Video unavailable") {
+            Self::Unavailable
+        } else {
+            Self::Other
+        })
+    }
 }
 
 pub struct Mpv {
@@ -135,6 +168,8 @@ pub struct Mpv {
     status: Status,
     /// The egui context mpv's wakeup callback repaints; freed in Drop.
     wakeup: *mut egui::Context,
+    /// yt-dlp's last error, until the load it belongs to ends.
+    ytdl_failure: Option<Failure>,
 }
 
 impl Mpv {
@@ -229,6 +264,7 @@ impl Mpv {
                 ..Status::default()
             },
             wakeup,
+            ytdl_failure: None,
         })
     }
 
@@ -370,7 +406,10 @@ impl Mpv {
                     // SAFETY: data matches the format mpv reports.
                     unsafe { self.apply_property(event.reply_userdata, property) };
                 }
-                ffi::MPV_EVENT_FILE_LOADED => events.push(Event::Loaded),
+                ffi::MPV_EVENT_FILE_LOADED => {
+                    self.ytdl_failure = None;
+                    events.push(Event::Loaded);
+                }
                 ffi::MPV_EVENT_END_FILE => {
                     // SAFETY: mpv documents data as mpv_event_end_file here.
                     let end = unsafe { &*(event.data as *const ffi::mpv_event_end_file) };
@@ -378,9 +417,10 @@ impl Mpv {
                         ffi::MPV_END_FILE_REASON_EOF => events.push(Event::Finished),
                         ffi::MPV_END_FILE_REASON_ERROR => {
                             log::warn!("mpv could not play: {}", Error::new(end.error, "playback"));
-                            events.push(Event::Failed);
+                            let failure = self.ytdl_failure.take().unwrap_or(Failure::Other);
+                            events.push(Event::Failed(failure));
                         }
-                        _ => {}
+                        _ => self.ytdl_failure = None,
                     }
                 }
                 ffi::MPV_EVENT_LOG_MESSAGE => {
@@ -394,6 +434,11 @@ impl Mpv {
                         )
                     };
                     log::warn!(target: "mpv", "[{prefix}] {}", text.trim_end());
+                    if prefix == "ytdl_hook"
+                        && let Some(failure) = Failure::from_ytdl(&text)
+                    {
+                        self.ytdl_failure = Some(failure);
+                    }
                 }
                 ffi::MPV_EVENT_SHUTDOWN => break,
                 _ => {}
@@ -465,4 +510,42 @@ unsafe extern "C" fn wake(context: *mut c_void) {
     // SAFETY: the pointer is the boxed context Mpv::new registered.
     let context = unsafe { &*(context as *const egui::Context) };
     context.request_repaint();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_why_yt_dlp_failed() {
+        let failure = |line| Failure::from_ytdl(line);
+        assert_eq!(
+            failure(
+                "ERROR: [youtube] W0jPTqIo5oE: Sign in to confirm you\u{2019}re not a bot. Use --cookies-from-browser"
+            ),
+            Some(Failure::BotCheck)
+        );
+        assert_eq!(
+            failure(
+                "ERROR: [youtube] abc: Sign in to confirm your age. This video may be inappropriate"
+            ),
+            Some(Failure::AgeRestricted)
+        );
+        assert_eq!(
+            failure("ERROR: [youtube] abc: Private video. Sign in if you've been granted access"),
+            Some(Failure::Unavailable)
+        );
+        assert_eq!(
+            failure("ERROR: [youtube] abc: Video unavailable"),
+            Some(Failure::Unavailable)
+        );
+        assert_eq!(
+            failure("ERROR: [youtube] abc: nsig extraction failed"),
+            Some(Failure::Other)
+        );
+        assert_eq!(
+            failure("WARNING: [youtube] abc: HTTP Error 429: Too Many Requests"),
+            None
+        );
+    }
 }

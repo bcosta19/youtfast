@@ -390,7 +390,13 @@ fn loading<'a>(state: &'a State, status: Option<&'a Status>) -> Option<&'static 
     match state.view {
         View::Home if matches!(state.feed, Listing::Loading) => Some("feed"),
         View::Results if matches!(state.results, Listing::Loading) => Some("results"),
-        View::Watch if state.watching.is_some() && status.is_none_or(|s| s.idle) => Some("video"),
+        View::Watch
+            if state.watching.is_some()
+                && state.player_error.is_none()
+                && status.is_none_or(|s| s.idle) =>
+        {
+            Some("video")
+        }
         View::Subscriptions if matches!(state.account_subscriptions, Listing::Loading) => {
             Some("subscriptions")
         }
