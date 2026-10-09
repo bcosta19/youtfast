@@ -170,6 +170,11 @@ pub struct Mpv {
     wakeup: *mut egui::Context,
     /// yt-dlp's last error, until the load it belongs to ends.
     ytdl_failure: Option<Failure>,
+    /// What [`Mpv::set_max_resolution`] last set.
+    max_resolution: u32,
+    /// yt-dlp's `--cookies-from-browser`, when an account's browser is
+    /// known: videos then play signed in.
+    cookies_from_browser: Option<String>,
 }
 
 impl Mpv {
@@ -265,6 +270,8 @@ impl Mpv {
             },
             wakeup,
             ytdl_failure: None,
+            max_resolution,
+            cookies_from_browser: None,
         })
     }
 
@@ -309,8 +316,28 @@ impl Mpv {
     /// Bounds the streams of the next video loaded to `resolution` (720 for
     /// 720p), by its smaller side, so a vertical video is judged like
     /// YouTube labels it. Below that, yt-dlp picks the best.
-    pub fn set_max_resolution(&self, resolution: u32) -> Result<(), Error> {
-        self.set_property("ytdl-raw-options", &format_sort(resolution))
+    pub fn set_max_resolution(&mut self, resolution: u32) -> Result<(), Error> {
+        self.max_resolution = resolution;
+        self.set_raw_options()
+    }
+
+    /// Plays signed in as this browser's YouTube session, read by yt-dlp
+    /// itself (`browser[+keyring][:profile]`); `None` plays signed out.
+    /// The session never passes through a file.
+    pub fn set_cookies_from_browser(&mut self, browser: Option<String>) -> Result<(), Error> {
+        self.cookies_from_browser = browser;
+        self.set_raw_options()
+    }
+
+    /// yt-dlp's options, from the two above. The browser goes in alone
+    /// with `append`, so a comma in a profile's name cannot split it.
+    fn set_raw_options(&self) -> Result<(), Error> {
+        self.set_property("ytdl-raw-options", &format_sort(self.max_resolution))?;
+        if let Some(browser) = &self.cookies_from_browser {
+            let option = format!("cookies-from-browser={browser}");
+            self.command(&["change-list", "ytdl-raw-options", "append", &option])?;
+        }
+        Ok(())
     }
 
     /// yt-dlp's answer for the current video, as mpv's ytdl hook received

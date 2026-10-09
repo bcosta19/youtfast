@@ -195,6 +195,12 @@ pub enum Event {
     SigningIn,
     /// The account signed in, by its library id.
     SignedIn(u32),
+    /// How mpv's yt-dlp reads the signed-in account's browser
+    /// (`--cookies-from-browser`), so videos play signed in too.
+    PlaybackCookies {
+        account: u32,
+        browser: String,
+    },
     /// A new account's session was checked and stored; the app keeps it.
     AccountAdded(Account),
     SignInFailed(String),
@@ -520,7 +526,7 @@ fn finish_sign_in(context: &Context, account: Account, result: Result<(), String
         Ok(()) => {
             log::info!("signed in as {}", account.name);
             context.send(Event::AccountAdded(account.clone()));
-            context.send(Event::SignedIn(account.id));
+            signed_in(context, &account);
         }
         Err(error) => {
             log::warn!("sign-in for {} failed: {error}", account.name);
@@ -554,7 +560,7 @@ async fn restore(context: &Context, account: &Account) {
     };
     let error = match kept {
         Ok(()) => {
-            context.send(Event::SignedIn(account.id));
+            signed_in(context, account);
             return;
         }
         Err(error) => error,
@@ -566,9 +572,28 @@ async fn restore(context: &Context, account: &Account) {
             Err(error) => Err(error),
         };
         if renewed.is_ok() {
-            context.send(Event::SignedIn(account.id));
+            signed_in(context, account);
             return;
         }
     }
     context.send(Event::SessionExpired(error));
+}
+
+/// Says who signed in; for a browser's account, then finds how yt-dlp
+/// opens that browser, for playback.
+fn signed_in(context: &Context, account: &Account) {
+    context.send(Event::SignedIn(account.id));
+    let AccountSource::Browser(spec) = &account.source else {
+        return;
+    };
+    let (context, spec, id) = (context.clone(), spec.clone(), account.id);
+    tokio::spawn(async move {
+        match account::ytdl_browser(&spec).await {
+            Ok(browser) => context.send(Event::PlaybackCookies {
+                account: id,
+                browser,
+            }),
+            Err(error) => log::warn!("videos will play signed out: {error}"),
+        }
+    });
 }

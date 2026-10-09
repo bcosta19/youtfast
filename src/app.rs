@@ -406,6 +406,20 @@ impl App {
         }
     }
 
+    /// Which browser's session mpv's yt-dlp plays with; `None` plays
+    /// signed out. It applies from the next video loaded.
+    fn set_playback_cookies(&mut self, browser: Option<String>) {
+        let Some(player) = &mut self.player else {
+            return;
+        };
+        if let Some(browser) = &browser {
+            log::info!("videos play signed in, through {browser}");
+        }
+        if let Err(error) = player.set_cookies_from_browser(browser) {
+            log::warn!("mpv: {error}");
+        }
+    }
+
     fn handle(&mut self, event: Event) {
         match event {
             Event::Loaded {
@@ -503,6 +517,8 @@ impl App {
                 self.save_library();
             }
             Event::SignedIn(id) => {
+                // The browser for playback follows once it is known.
+                self.set_playback_cookies(None);
                 self.state.account = AccountState::SignedIn(id);
                 self.state.library.active_account = Some(id);
                 self.save_library();
@@ -515,11 +531,18 @@ impl App {
                 self.load(self.state.view, true);
             }
             Event::SignInFailed(error) => self.state.account = AccountState::Failed(error),
+            Event::PlaybackCookies { account, browser } => {
+                if self.state.account == AccountState::SignedIn(account) {
+                    self.set_playback_cookies(Some(browser));
+                }
+            }
             Event::SessionExpired(error) => {
+                self.set_playback_cookies(None);
                 self.state.account =
                     AccountState::Failed(format!("{error} Sign in again to see your account."));
             }
             Event::SignedOut => {
+                self.set_playback_cookies(None);
                 self.state.account = AccountState::SignedOut;
                 // The account stays listed: its session is kept to switch
                 // back.
@@ -1527,7 +1550,7 @@ impl App {
         log::info!("quality set to {quality:?}");
         self.state.settings.quality = quality;
         self.save_settings();
-        let Some(player) = &self.player else {
+        let Some(player) = &mut self.player else {
             return;
         };
         if let Err(error) = player.set_max_resolution(quality.limit()) {

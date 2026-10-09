@@ -94,6 +94,8 @@ class Logger(YDLLogger):
 
 browser = sys.argv[1]
 profile = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None
+# "keyring" prints only which keyring opened the browser, not the cookies.
+only_keyring = len(sys.argv) > 3 and sys.argv[3] == "keyring"
 keyrings = [None]
 if browser not in ("firefox", "safari"):
     keyrings += ["GNOMEKEYRING", "KWALLET6", "KWALLET5", "BASICTEXT"]
@@ -105,6 +107,9 @@ for keyring in keyrings:
         continue
     cookies = [c for c in jar if c.domain == ".youtube.com"]
     if any(c.name in ("SAPISID", "__Secure-3PAPISID") and c.value for c in cookies):
+        if only_keyring:
+            print(keyring or "")
+            sys.exit(0)
         for c in cookies:
             print("\t".join([c.domain, "TRUE", c.path, "TRUE" if c.secure else "FALSE",
                              str(c.expires or 0), c.name, c.value or ""]))
@@ -121,12 +126,47 @@ pub fn split_browser(spec: &str) -> (String, Option<String>) {
 }
 
 pub async fn cookies_from_browser(spec: &str) -> Result<String, String> {
+    let cookies = extract(spec, "cookies").await?;
+    cookie_header(&cookies)
+}
+
+/// yt-dlp's `--cookies-from-browser` value for this browser, naming the
+/// keyring that opened it: the yt-dlp mpv runs would guess as wrongly as
+/// it does here. Nothing secret is in it.
+pub async fn ytdl_browser(spec: &str) -> Result<String, String> {
+    let keyring = extract(spec, "keyring").await?;
+    let (browser, profile) = split_browser(spec);
+    Ok(ytdl_browser_spec(
+        &browser,
+        keyring.trim(),
+        profile.as_deref(),
+    ))
+}
+
+/// `browser[+keyring][:profile]`, as yt-dlp takes it.
+fn ytdl_browser_spec(browser: &str, keyring: &str, profile: Option<&str>) -> String {
+    let mut spec = browser.to_owned();
+    if !keyring.is_empty() {
+        spec.push('+');
+        spec.push_str(&keyring.to_lowercase());
+    }
+    if let Some(profile) = profile {
+        spec.push(':');
+        spec.push_str(profile);
+    }
+    spec
+}
+
+/// Runs [`EXTRACT_COOKIES`] on a browser; `what` is `cookies` or
+/// `keyring`, and the script's output comes back as text.
+async fn extract(spec: &str, what: &str) -> Result<String, String> {
     let (browser, profile) = split_browser(spec);
     let output = Command::new("python3")
         .arg("-c")
         .arg(EXTRACT_COOKIES)
         .arg(&browser)
         .arg(profile.unwrap_or_default())
+        .arg(what)
         .stdin(Stdio::null())
         .kill_on_drop(true)
         .output()
@@ -152,9 +192,7 @@ pub async fn cookies_from_browser(spec: &str) -> Result<String, String> {
             )
         });
     }
-    let cookies = String::from_utf8(output.stdout)
-        .map_err(|_| "the browser's cookies were not text".to_owned())?;
-    cookie_header(&cookies)
+    String::from_utf8(output.stdout).map_err(|_| "the browser's cookies were not text".to_owned())
 }
 
 /// The browsers whose data is on this computer, by yt-dlp's names.
@@ -321,6 +359,19 @@ fn without_credentials(data: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn yt_dlp_is_told_the_keyring_and_profile() {
+        assert_eq!(ytdl_browser_spec("firefox", "", None), "firefox");
+        assert_eq!(
+            ytdl_browser_spec("chromium", "GNOMEKEYRING", None),
+            "chromium+gnomekeyring"
+        );
+        assert_eq!(
+            ytdl_browser_spec("chromium", "KWALLET6", Some("Profile 1")),
+            "chromium+kwallet6:Profile 1"
+        );
+    }
 
     #[test]
     fn a_browser_spec_splits_at_the_profile() {

@@ -81,7 +81,10 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
   search and parses its JSON into `model::Video`. Playback hands the watch
   link to mpv, whose ytdl hook asks yt-dlp for the streams
   (`mpv::FORMAT`, bounded by the quality chosen, 1080p on Auto). Updating yt-dlp fixes YouTube
-  breakage without a release.
+  breakage without a release. With a browser's account signed in, that
+  yt-dlp reads the browser itself (`cookies-from-browser`, naming the
+  keyring that opened it: `account::ytdl_browser`), so videos play signed
+  in; a cookies.txt account still plays signed out.
 - `src/mpv/ffi.rs` declares the libmpv functions used, by hand (client API
   2.x). `src/mpv/mod.rs` wraps them: `Mpv` owns the player, observes the
   properties the interface shows, and is polled once per frame from
@@ -137,8 +140,8 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
    videos and playlists through rustypipe.
 4. **Search through rustypipe** (already in the tree) to drop the
    per-search yt-dlp start-up (about a second), keeping yt-dlp for streams.
-   Playing age-restricted and members-only videos with the account needs
-   the session handed to yt-dlp without writing it to a file.
+   Browser accounts already play signed in; a cookies.txt account needs
+   its session handed to yt-dlp without writing it to a file.
 5. **More:** comments, captions (mpv `sub-add`), chapters, SponsorBlock,
    mini player, downloads.
 
