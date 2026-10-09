@@ -201,6 +201,12 @@ impl State {
 /// settings file; read once to bring it over.
 const QUALITY_KEY: &str = "quality";
 
+/// How many watch pages' details are kept: some 15 to 30 KB each.
+const DETAILS_KEPT: usize = 50;
+/// How long kept details are shown instead of asked for again, in seconds;
+/// views and likes move, and `r` asks again at once.
+const DETAILS_FRESH: i64 = 30 * 60;
+
 pub struct App {
     state: State,
     backend: Backend,
@@ -215,6 +221,9 @@ pub struct App {
     /// The generation the details/comments requests of the video being
     /// watched were sent with; a later `open` drops their answers.
     details_generation: u64,
+    /// The watch pages seen lately, so going back to one asks YouTube
+    /// again only for its comments.
+    details_cache: util::Recent<Details>,
     /// The comments page in flight, to put its token back on failure.
     more_comments_token: Option<String>,
     /// The channel the open page shows, to detect a channel switch.
@@ -322,6 +331,7 @@ impl App {
             generation: 0,
             generations: HashMap::new(),
             details_generation: 0,
+            details_cache: util::Recent::new(DETAILS_KEPT),
             more_comments_token: None,
             open_channel: None,
             back: Vec::new(),
@@ -420,6 +430,44 @@ impl App {
         }
     }
 
+    /// Shows a video's details on the watch page, fresh or from the cache,
+    /// and asks for its first comments page.
+    fn show_details(&mut self, details: Details) {
+        // Complete what the watch page and the library know.
+        if let Some(watching) = self.state.watching.as_mut()
+            && watching.id == details.id
+        {
+            let filled = Video {
+                id: details.id.clone(),
+                title: details.title.clone(),
+                channel: Some(details.channel.name.clone()),
+                channel_id: Some(details.channel.id.clone()),
+                duration: None,
+                views: Some(details.views),
+                live: details.live,
+                published_at: None,
+                published: details.published.clone(),
+                short: false,
+            };
+            watching.complete_from(&filled);
+            let watching = watching.clone();
+            self.state.library.update_video(&watching);
+            self.save_library();
+        }
+        // The first comments page comes right behind it.
+        if let Some(token) = details.comments_token.clone() {
+            self.state.comments = Fetch::Loading;
+            self.state.comments_visitor_data = details.visitor_data.clone();
+            self.backend.send(Command::LoadComments {
+                generation: self.details_generation,
+                key: CommentsKey::Top,
+                token,
+                visitor_data: details.visitor_data.clone(),
+            });
+        }
+        self.state.details = Fetch::Ready(details);
+    }
+
     fn handle(&mut self, event: Event) {
         match event {
             Event::Loaded {
@@ -438,39 +486,9 @@ impl App {
                 }
                 match result {
                     Ok(details) => {
-                        // Complete what the watch page and the library know.
-                        if let Some(watching) = self.state.watching.as_mut()
-                            && watching.id == details.id
-                        {
-                            let filled = Video {
-                                id: details.id.clone(),
-                                title: details.title.clone(),
-                                channel: Some(details.channel.name.clone()),
-                                channel_id: Some(details.channel.id.clone()),
-                                duration: None,
-                                views: Some(details.views),
-                                live: details.live,
-                                published_at: None,
-                                published: details.published.clone(),
-                                short: false,
-                            };
-                            watching.complete_from(&filled);
-                            let watching = watching.clone();
-                            self.state.library.update_video(&watching);
-                            self.save_library();
-                        }
-                        // The first comments page comes right behind it.
-                        if let Some(token) = details.comments_token.clone() {
-                            self.state.comments = Fetch::Loading;
-                            self.state.comments_visitor_data = details.visitor_data.clone();
-                            self.backend.send(Command::LoadComments {
-                                generation: self.details_generation,
-                                key: CommentsKey::Top,
-                                token,
-                                visitor_data: details.visitor_data.clone(),
-                            });
-                        }
-                        self.state.details = Fetch::Ready(details);
+                        self.details_cache
+                            .put(details.id.clone(), util::now(), details.clone());
+                        self.show_details(details);
                     }
                     Err(error) => self.state.details = Fetch::Failed(error),
                 }
@@ -1378,17 +1396,21 @@ impl App {
         self.state.description_open = false;
         self.generation += 1;
         self.details_generation = self.generation;
-        self.backend.send(Command::LoadDetails {
-            generation: self.details_generation,
-            id: video.id.clone(),
-        });
         if let Some(player) = &self.player {
             self.state.player_error = player
                 .load(&video.url(), start)
                 .err()
                 .map(|error| error.to_string());
         }
+        let id = video.id.clone();
         self.state.watching = Some(video);
+        match self.details_cache.get(&id, util::now(), DETAILS_FRESH) {
+            Some(details) => self.show_details(details.clone()),
+            None => self.backend.send(Command::LoadDetails {
+                generation: self.details_generation,
+                id,
+            }),
+        }
     }
 
     fn open_page(&mut self, ctx: &egui::Context, view: View, page: Page) {
@@ -1604,6 +1626,7 @@ impl App {
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll();
+        ui::images::forget_unseen(ctx);
         // What later launches sent to the running copy.
         let remote: Vec<instance::Remote> = std::mem::take(
             &mut *self

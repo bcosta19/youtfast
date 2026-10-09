@@ -123,9 +123,60 @@ pub fn ago(then: i64, now: i64) -> String {
     }
 }
 
+/// The last few values put, by key, each with when it was put: a bounded
+/// cache that forgets the oldest first.
+pub struct Recent<T> {
+    capacity: usize,
+    /// Oldest first: (key, Unix seconds put, value).
+    entries: std::collections::VecDeque<(String, i64, T)>,
+}
+
+impl<T> Recent<T> {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            capacity,
+            entries: std::collections::VecDeque::new(),
+        }
+    }
+
+    /// The value put under `key` at most `max_age` seconds before `now`.
+    pub fn get(&self, key: &str, now: i64, max_age: i64) -> Option<&T> {
+        self.entries
+            .iter()
+            .find(|(k, at, _)| k == key && now - at <= max_age)
+            .map(|(_, _, value)| value)
+    }
+
+    /// Puts a value, replacing the key's older one; past the capacity the
+    /// oldest goes.
+    pub fn put(&mut self, key: String, now: i64, value: T) {
+        self.entries.retain(|(k, _, _)| *k != key);
+        self.entries.push_back((key, now, value));
+        while self.entries.len() > self.capacity {
+            self.entries.pop_front();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recent_keeps_the_newest_and_forgets_the_old() {
+        let mut recent = Recent::new(2);
+        recent.put("a".to_owned(), 0, 1);
+        recent.put("b".to_owned(), 10, 2);
+        assert_eq!(recent.get("a", 20, 60), Some(&1));
+        // Too old to trust.
+        assert_eq!(recent.get("a", 100, 60), None);
+        // Putting a key again replaces it and makes it the newest.
+        recent.put("a".to_owned(), 30, 3);
+        recent.put("c".to_owned(), 40, 4);
+        assert_eq!(recent.get("b", 40, 60), None);
+        assert_eq!(recent.get("a", 40, 60), Some(&3));
+        assert_eq!(recent.get("c", 40, 60), Some(&4));
+    }
 
     #[test]
     fn time_ago() {

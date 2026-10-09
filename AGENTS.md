@@ -29,6 +29,9 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
 - `src/ui/` draws views from `app::State` and the player's `mpv::Status`, and
   pushes `model::Action`s. `src/app.rs` applies them after the frame. A view
   only changes its own state (search text, the seek bar while dragged).
+  Remote images go through `ui::images::remote`, which lets egui forget
+  the ones not drawn for a minute; the watch page's details are kept for
+  the last 50 videos (`App::details_cache`), for half an hour.
 - `src/backend.rs` is the interface's handle to a tokio runtime on its own
   thread. The two sides talk only through `Command` and `Event`, and every
   event wakes the window. Nothing blocks the interface thread.

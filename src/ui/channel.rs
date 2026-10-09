@@ -2,7 +2,7 @@
 //! the tab line, and the tab's pane — video rows, playlist rows, or the
 //! About pane's key/value lines.
 
-use egui::{Align2, Image, RichText, Sense, TextEdit, Ui, vec2};
+use egui::{Align2, RichText, Sense, TextEdit, Ui, vec2};
 
 use super::{results, widgets};
 use crate::app::State;
@@ -87,7 +87,7 @@ fn header(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Actio
             match avatar {
                 Some(url) => {
                     ui.add(
-                        Image::new(url.to_owned())
+                        super::images::remote(ui, url)
                             .fit_to_exact_size(size)
                             .corner_radius(egui::CornerRadius::ZERO),
                     );
@@ -385,7 +385,7 @@ fn playlist_row(
     let thumb = thumb_rect(rect, cell, size);
     match &playlist.thumbnail {
         Some(url) => {
-            Image::new(url.clone())
+            super::images::remote(ui, url)
                 .fit_to_exact_size(size)
                 .corner_radius(egui::CornerRadius::ZERO)
                 .paint_at(ui, thumb);

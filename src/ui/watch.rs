@@ -169,7 +169,7 @@ fn channel_line(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<
         match channel.as_ref().and_then(|channel| channel.avatar.clone()) {
             Some(url) => {
                 ui.add(
-                    egui::Image::new(url)
+                    super::images::remote(ui, &url)
                         .fit_to_exact_size(vec2(avatar, avatar))
                         .corner_radius(CornerRadius::ZERO),
                 );

@@ -4,7 +4,7 @@
 //! between the signed-in account and this device; each is one pane of
 //! rows.
 
-use egui::{Align2, CornerRadius, CursorIcon, Image, Rect, RichText, Sense, Ui, pos2, vec2};
+use egui::{Align2, CornerRadius, CursorIcon, Rect, RichText, Sense, Ui, pos2, vec2};
 
 use super::{results, widgets};
 use crate::app::{AccountState, Page, State};
@@ -295,7 +295,7 @@ fn short_card(ui: &mut Ui, state: &State, video: &Video, actions: &mut Vec<Actio
                 .rect_filled(rect, CornerRadius::ZERO, palette.surface_hover);
         }
         let thumb_rect = Rect::from_min_size(rect.min, thumb);
-        Image::new(video.thumbnail())
+        super::images::remote(ui, &video.thumbnail())
             .uv(widgets::short_uv())
             .fit_to_exact_size(thumb)
             .corner_radius(CornerRadius::ZERO)
@@ -463,7 +463,7 @@ fn channel_row(
     let avatar_rect = egui::Rect::from_min_size(rect.min + vec2(widgets::cell(ui), 2.0), size);
     match &channel.avatar {
         Some(avatar) => {
-            Image::new(avatar.clone())
+            super::images::remote(ui, avatar)
                 .fit_to_exact_size(size)
                 .corner_radius(egui::CornerRadius::ZERO)
                 .paint_at(ui, avatar_rect);
@@ -789,7 +789,7 @@ fn playlist_row(
     let thumb_rect = egui::Rect::from_min_size(rect.min + vec2(pad, pad / 2.0), size);
     match &playlist.thumbnail {
         Some(url) => {
-            Image::new(url.clone())
+            super::images::remote(ui, url)
                 .fit_to_exact_size(size)
                 .corner_radius(egui::CornerRadius::ZERO)
                 .paint_at(ui, thumb_rect);

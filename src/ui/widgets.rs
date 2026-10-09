@@ -4,8 +4,8 @@
 
 use egui::text::LayoutJob;
 use egui::{
-    Color32, CornerRadius, CursorIcon, FontId, Galley, Image, Margin, Pos2, Rect, Response,
-    RichText, Sense, Stroke, Ui, pos2, vec2,
+    Color32, CornerRadius, CursorIcon, FontId, Galley, Margin, Pos2, Rect, Response, RichText,
+    Sense, Stroke, Ui, pos2, vec2,
 };
 
 use crate::icons::Icon;
@@ -211,7 +211,7 @@ pub fn channel_item(ui: &mut Ui, palette: &Palette, channel: &Channel, selected:
         vec2(size, size),
     );
     match &channel.avatar {
-        Some(url) => Image::new(url.as_str())
+        Some(url) => super::images::remote(ui, url)
             .fit_to_exact_size(avatar.size())
             .corner_radius(CornerRadius::ZERO)
             .paint_at(ui, avatar),
@@ -262,7 +262,7 @@ fn badge(ui: &Ui, thumbnail: Rect, video: &Video, palette: &Palette) {
 /// The thumbnail with its corner badge, and the part watched (0..1) as a
 /// 2 px green bar under it.
 fn thumbnail(ui: &Ui, palette: &Palette, video: &Video, rect: Rect, watched: Option<f32>) {
-    Image::new(video.thumbnail())
+    super::images::remote(ui, &video.thumbnail())
         .fit_to_exact_size(rect.size())
         .corner_radius(CornerRadius::ZERO)
         .paint_at(ui, rect);

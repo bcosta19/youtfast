@@ -8,6 +8,7 @@
 
 mod account;
 mod channel;
+pub mod images;
 mod library;
 mod notifications;
 mod results;
