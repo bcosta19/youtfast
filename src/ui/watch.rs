@@ -33,6 +33,9 @@ pub fn show(
         egui::ScrollArea::vertical()
             .auto_shrink(false)
             .show(ui, |ui| {
+                // Room for the first panes' titles, which sit on their top
+                // rule; the scroll area clips what is above it.
+                ui.add_space(widgets::line(ui) / 2.0);
                 if ui.available_width() >= WIDE {
                     ui.horizontal_top(|ui| {
                         let gap = widgets::cell(ui);

@@ -19,6 +19,8 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 // set_max_width also widens: a narrow window would cut
                 // the text off at its edge instead of wrapping it.
                 ui.set_max_width(WIDTH.min(ui.available_width()));
+                // Room for the title on the first pane's top rule.
+                ui.add_space(widgets::line(ui) / 2.0);
                 accounts_pane(ui, state, actions);
                 ui.add_space(widgets::line(ui));
                 add_pane(ui, state, actions);
