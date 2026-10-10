@@ -177,8 +177,12 @@ pub struct Mpv {
     /// What [`Mpv::set_max_resolution`] last set.
     max_resolution: u32,
     /// yt-dlp's `--cookies-from-browser`, when an account's browser is
-    /// known: videos then play signed in.
+    /// known: a video YouTube refuses signed out is tried again with it.
     cookies_from_browser: Option<String>,
+    /// The video loaded last and where it started, for that retry.
+    current: Option<(String, Option<f64>)>,
+    /// The video loaded last went through the browser's session.
+    signed_in: bool,
 }
 
 impl Mpv {
@@ -277,6 +281,8 @@ impl Mpv {
             ytdl_failure: None,
             max_resolution,
             cookies_from_browser: None,
+            current: None,
+            signed_in: false,
         })
     }
 
@@ -290,7 +296,12 @@ impl Mpv {
 
     /// Opens a YouTube link (or anything else mpv plays) in place of the
     /// current video, from `start` seconds when given (where it was left).
-    pub fn load(&self, url: &str, start: Option<f64>) -> Result<(), Error> {
+    /// It plays signed out: signed in, yt-dlp offers YouTube's web clients
+    /// only, which hand out little more than one 360p stream without a PO
+    /// token. [`Mpv::retry_signed_in`] covers what needs the session.
+    pub fn load(&mut self, url: &str, start: Option<f64>) -> Result<(), Error> {
+        self.current = Some((url.to_owned(), start));
+        self.signed_in = false;
         match start {
             Some(start) => self.load_with(url, &format!("start={start:.3}"))?,
             None => self.command(&["loadfile", url, "replace"])?,
@@ -298,13 +309,41 @@ impl Mpv {
         self.set_paused(false)
     }
 
+    /// Loads the last video again through the browser's session, once,
+    /// after YouTube refused it signed out (a bot check, an age limit, a
+    /// private video). False when there is no session or it was tried.
+    pub fn retry_signed_in(&mut self) -> Result<bool, Error> {
+        let (Some(browser), Some((url, start)), false) = (
+            self.cookies_from_browser.as_deref(),
+            self.current.clone(),
+            self.signed_in,
+        ) else {
+            return Ok(false);
+        };
+        self.signed_in = true;
+        let mut options = format!("start={:.3}", start.unwrap_or(0.0));
+        options.push(',');
+        options.push_str(&session_option(browser));
+        self.load_with(&url, &options)?;
+        self.set_paused(false)?;
+        Ok(true)
+    }
+
     /// Opens `url` again at `position`, keeping it paused or playing: how a
-    /// new quality takes effect. mpv asks yt-dlp for the streams again.
-    pub fn reload(&self, url: &str, position: f64, paused: bool) -> Result<(), Error> {
-        let options = format!(
+    /// new quality takes effect. mpv asks yt-dlp for the streams again,
+    /// through the session when the video needed it.
+    pub fn reload(&mut self, url: &str, position: f64, paused: bool) -> Result<(), Error> {
+        self.current = Some((url.to_owned(), Some(position)));
+        let mut options = format!(
             "start={position:.3},pause={}",
             if paused { "yes" } else { "no" }
         );
+        if self.signed_in
+            && let Some(browser) = &self.cookies_from_browser
+        {
+            options.push(',');
+            options.push_str(&session_option(browser));
+        }
         self.load_with(url, &options)
     }
 
@@ -320,26 +359,14 @@ impl Mpv {
     /// YouTube labels it. Below that, yt-dlp picks the best.
     pub fn set_max_resolution(&mut self, resolution: u32) -> Result<(), Error> {
         self.max_resolution = resolution;
-        self.set_raw_options()
+        self.set_property("ytdl-raw-options", &format_sort(resolution))
     }
 
-    /// Plays signed in as this browser's YouTube session, read by yt-dlp
-    /// itself (`browser[+keyring][:profile]`); `None` plays signed out.
-    /// The session never passes through a file.
-    pub fn set_cookies_from_browser(&mut self, browser: Option<String>) -> Result<(), Error> {
+    /// The browser whose YouTube session yt-dlp reads itself
+    /// (`browser[+keyring][:profile]`) for a video refused signed out;
+    /// `None` forgets it. The session never passes through a file.
+    pub fn set_cookies_from_browser(&mut self, browser: Option<String>) {
         self.cookies_from_browser = browser;
-        self.set_raw_options()
-    }
-
-    /// yt-dlp's options, from the two above. The browser goes in alone
-    /// with `append`, so a comma in a profile's name cannot split it.
-    fn set_raw_options(&self) -> Result<(), Error> {
-        self.set_property("ytdl-raw-options", &format_sort(self.max_resolution))?;
-        if let Some(browser) = &self.cookies_from_browser {
-            let option = format!("cookies-from-browser={browser}");
-            self.command(&["change-list", "ytdl-raw-options", "append", &option])?;
-        }
-        Ok(())
     }
 
     /// yt-dlp's answer for the current video, as mpv's ytdl hook received
@@ -532,6 +559,15 @@ impl Drop for Mpv {
 /// smaller side, and `res:1080` prefers the largest at or below 1080.
 fn format_sort(resolution: u32) -> String {
     format!("format-sort=res:{resolution}")
+}
+
+/// The per-file option that adds the browser's session to yt-dlp's
+/// options for one load. The value goes as `%length%value`, mpv's quoting
+/// in a `loadfile` option list, so a comma in a profile's name cannot
+/// split it.
+fn session_option(browser: &str) -> String {
+    let value = format!("cookies-from-browser={browser}");
+    format!("ytdl-raw-options-append=%{}%{value}", value.len())
 }
 
 /// mpv's volume value: 0 to 100, as a whole number.

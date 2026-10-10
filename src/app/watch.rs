@@ -18,7 +18,25 @@ impl App {
             match event {
                 mpv::Event::Loaded => self.state.player_error = None,
                 mpv::Event::Failed(failure) => {
-                    self.state.player_error = Some(failure_message(failure).into());
+                    // What the session can fix is tried again with it.
+                    let fixable = matches!(
+                        failure,
+                        mpv::Failure::BotCheck
+                            | mpv::Failure::AgeRestricted
+                            | mpv::Failure::Unavailable
+                    );
+                    let retried = fixable
+                        && self.player.as_mut().is_some_and(|player| {
+                            player.retry_signed_in().unwrap_or_else(|error| {
+                                log::warn!("mpv: {error}");
+                                false
+                            })
+                        });
+                    if retried {
+                        log::info!("refused signed out ({failure:?}); trying signed in");
+                    } else {
+                        self.state.player_error = Some(failure_message(failure).into());
+                    }
                 }
                 mpv::Event::Finished => {
                     if let Some(video) = &self.state.watching {
@@ -73,7 +91,7 @@ impl App {
         self.state.comments_visitor_data = None;
         self.state.description_open = false;
         self.state.comments_open.clear();
-        if let Some(player) = &self.player {
+        if let Some(player) = &mut self.player {
             self.state.player_error = player
                 .load(&video.url(), start)
                 .err()
@@ -290,18 +308,16 @@ impl App {
         }
     }
 
-    /// Which browser's session mpv's yt-dlp plays with; `None` plays
-    /// signed out. It applies from the next video loaded.
+    /// Which browser's session mpv's yt-dlp falls back on for a video
+    /// YouTube refuses signed out; `None` forgets it.
     pub(super) fn set_playback_cookies(&mut self, browser: Option<String>) {
         let Some(player) = &mut self.player else {
             return;
         };
         if let Some(browser) = &browser {
-            log::info!("videos play signed in, through {browser}");
+            log::info!("videos refused signed out retry through {browser}");
         }
-        if let Err(error) = player.set_cookies_from_browser(browser) {
-            log::warn!("mpv: {error}");
-        }
+        player.set_cookies_from_browser(browser);
     }
 
     /// Bounds the streams from now on, and reloads the video being watched
@@ -320,10 +336,13 @@ impl App {
             log::warn!("mpv: {error}");
             return;
         }
-        let status = player.status();
+        let (idle, position, paused) = {
+            let status = player.status();
+            (status.idle, status.position, status.paused)
+        };
         if let Some(video) = &self.state.watching
-            && !status.idle
-            && let Err(error) = player.reload(&video.url(), status.position, status.paused)
+            && !idle
+            && let Err(error) = player.reload(&video.url(), position, paused)
         {
             log::warn!("mpv: {error}");
         }
