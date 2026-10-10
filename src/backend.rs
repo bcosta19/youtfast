@@ -346,10 +346,7 @@ async fn handle(command: Command, context: Context) {
                     let AccountSource::Browser(spec) = &account.source else {
                         return;
                     };
-                    match account::cookies_from_browser(spec).await {
-                        Ok(cookie) => start_session(&context, cookie, account.id).await,
-                        Err(error) => Err(error),
-                    }
+                    session_from_browser(&context, spec, account.id).await
                 }
             };
             finish_sign_in(&context, account, result);
@@ -410,30 +407,29 @@ async fn handle(command: Command, context: Context) {
         }
         Command::SaveLibrary(library) => {
             let path = context.dirs.library();
-            match tokio::task::spawn_blocking(move || library.save(&path)).await {
-                Ok(Ok(())) => {}
-                Ok(Err(error)) => {
-                    log::error!("could not save the library: {error}");
-                    context.send(Event::Notice(format!(
-                        "Could not save the library: {error}"
-                    )));
-                }
-                Err(error) => log::error!("saving the library failed: {error}"),
-            }
+            save(&context, "library", move || library.save(&path)).await;
         }
         Command::SaveSettings(settings) => {
             let path = context.dirs.settings();
-            match tokio::task::spawn_blocking(move || settings.save(&path)).await {
-                Ok(Ok(())) => {}
-                Ok(Err(error)) => {
-                    log::error!("could not save the settings: {error}");
-                    context.send(Event::Notice(format!(
-                        "Could not save the settings: {error}"
-                    )));
-                }
-                Err(error) => log::error!("saving the settings failed: {error}"),
-            }
+            save(&context, "settings", move || settings.save(&path)).await;
         }
+    }
+}
+
+/// Writes a file off the runtime's workers; `what` names it ("library").
+/// A failed write is logged and shown.
+async fn save(
+    context: &Context,
+    what: &str,
+    write: impl FnOnce() -> std::io::Result<()> + Send + 'static,
+) {
+    match tokio::task::spawn_blocking(write).await {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => {
+            log::error!("could not save the {what}: {error}");
+            context.send(Event::Notice(format!("Could not save the {what}: {error}")));
+        }
+        Err(error) => log::error!("saving the {what} failed: {error}"),
     }
 }
 
@@ -445,7 +441,11 @@ async fn load(rp: &RustyPipe, request: Request) -> Result<Payload, String> {
             let (videos, more) = innertube::feed(rp, channels, account).await?;
             Payload::Feed { videos, more }
         }
-        Request::MoreFeed(more) => {
+        Request::MoreFeed(more)
+        | Request::More {
+            more,
+            playlists: false,
+        } => {
             let (videos, next) = innertube::more_videos(rp, &more).await?;
             Payload::More {
                 items: PageItems::Videos(videos),
@@ -488,19 +488,14 @@ async fn load(rp: &RustyPipe, request: Request) -> Result<Payload, String> {
             }
         },
         Request::ChannelAbout(id) => Payload::About(innertube::channel_about(rp, &id).await?),
-        Request::More { more, playlists } => {
-            if playlists {
-                let (items, next) = innertube::more_playlists(rp, &more).await?;
-                Payload::More {
-                    items: PageItems::Playlists(items),
-                    more: next,
-                }
-            } else {
-                let (items, next) = innertube::more_videos(rp, &more).await?;
-                Payload::More {
-                    items: PageItems::Videos(items),
-                    more: next,
-                }
+        Request::More {
+            more,
+            playlists: true,
+        } => {
+            let (items, next) = innertube::more_playlists(rp, &more).await?;
+            Payload::More {
+                items: PageItems::Playlists(items),
+                more: next,
             }
         }
     })
@@ -508,17 +503,33 @@ async fn load(rp: &RustyPipe, request: Request) -> Result<Payload, String> {
 
 /// Checks the session with YouTube, then keeps it in the credential store.
 async fn start_session(context: &Context, cookie: String, id: u32) -> Result<(), String> {
-    innertube::sign_in(&context.rp, cookie.clone())
+    sign_in(
+        context,
+        cookie.clone(),
+        "YouTube did not accept this session. Sign in again on youtube.com and retry.",
+    )
+    .await?;
+    account::save_session(id, cookie).await
+}
+
+/// Reads a browser's session and starts it as account `id`.
+async fn session_from_browser(context: &Context, spec: &str, id: u32) -> Result<(), String> {
+    let cookie = account::cookies_from_browser(spec).await?;
+    start_session(context, cookie, id).await
+}
+
+/// Starts using a session; `rejected` is what to say when YouTube does
+/// not accept it.
+async fn sign_in(context: &Context, cookie: String, rejected: &str) -> Result<(), String> {
+    innertube::sign_in(&context.rp, cookie)
         .await
         .map_err(|error| {
             if innertube::is_signed_out(&error) {
-                "YouTube did not accept this session. Sign in again on youtube.com and retry."
-                    .to_owned()
+                rejected.to_owned()
             } else {
                 format!("Could not reach YouTube: {error}")
             }
-        })?;
-    account::save_session(id, cookie).await
+        })
 }
 
 fn finish_sign_in(context: &Context, account: Account, result: Result<(), String>) {
@@ -546,15 +557,7 @@ async fn restore(context: &Context, account: &Account) {
         account::load_session(account.id).await
     };
     let kept = match stored {
-        Ok(Some(cookie)) => innertube::sign_in(&context.rp, cookie)
-            .await
-            .map_err(|error| {
-                if innertube::is_signed_out(&error) {
-                    "Your YouTube session has expired.".to_owned()
-                } else {
-                    format!("Could not reach YouTube: {error}")
-                }
-            }),
+        Ok(Some(cookie)) => sign_in(context, cookie, "Your YouTube session has expired.").await,
         Ok(None) => Err("No session is kept on this computer any more.".to_owned()),
         Err(error) => Err(error),
     };
@@ -567,10 +570,7 @@ async fn restore(context: &Context, account: &Account) {
     };
     if let AccountSource::Browser(browser) = &account.source {
         log::info!("renewing the session from {browser}: {error}");
-        let renewed = match account::cookies_from_browser(browser).await {
-            Ok(cookie) => start_session(context, cookie, account.id).await,
-            Err(error) => Err(error),
-        };
+        let renewed = session_from_browser(context, browser, account.id).await;
         if renewed.is_ok() {
             signed_in(context, account);
             return;

@@ -5,7 +5,7 @@ use egui::{RichText, Ui};
 
 use super::{results, widgets};
 use crate::app::State;
-use crate::model::{Action, Video};
+use crate::model::Action;
 use crate::util;
 
 pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
@@ -127,7 +127,8 @@ fn rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             );
         }
         let selected = index == state.cursor;
-        let response = video_row(ui, state, &video, selected);
+        let watched = widgets::watched(&state.library, &video);
+        let response = widgets::video_row(ui, &state.palette, &video, None, watched, selected);
         if selected {
             response.clone().scroll_to_me(None);
         }
@@ -135,17 +136,4 @@ fn rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             actions.push(Action::Open(video.clone()));
         }
     }
-}
-
-fn video_row(ui: &mut Ui, state: &State, video: &Video, selected: bool) -> egui::Response {
-    let watched = video
-        .duration
-        .and_then(|duration| {
-            state
-                .library
-                .resume_position(&video.id)
-                .map(|left| left / duration)
-        })
-        .map(|fraction| fraction as f32);
-    widgets::video_row(ui, &state.palette, video, None, watched, selected)
 }

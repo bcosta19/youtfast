@@ -28,7 +28,7 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     Listing::Ready(videos) if videos.is_empty() => {
                         nothing(ui, state, "search for something")
                     }
-                    Listing::Ready(videos) => rows(ui, state, videos, &|_| None, true, actions),
+                    Listing::Ready(videos) => rows(ui, state, videos, true, actions),
                 },
             );
         });
@@ -45,19 +45,6 @@ pub fn videos(
     empty: &str,
     actions: &mut Vec<Action>,
 ) {
-    videos_noted(ui, state, title, listing, empty, &|_| None, actions);
-}
-
-/// [`videos`], with a per-video note line ("watched 2 days ago").
-pub fn videos_noted(
-    ui: &mut Ui,
-    state: &State,
-    title: &str,
-    listing: &Listing<Video>,
-    empty: &str,
-    note: &dyn Fn(&Video) -> Option<String>,
-    actions: &mut Vec<Action>,
-) {
     let count = listing.items().len();
     widgets::pane(
         ui,
@@ -71,56 +58,28 @@ pub fn videos_noted(
             Listing::Loading => loading(ui, state, title),
             Listing::Failed(error) => failed(ui, state, error, actions),
             Listing::Ready(videos) if videos.is_empty() => nothing(ui, state, empty),
-            Listing::Ready(videos) => video_rows(ui, state, videos, note, actions),
+            Listing::Ready(videos) => video_rows(ui, state, videos, actions),
         },
     );
 }
 
 /// The rows themselves, in a scroll area.
-pub fn video_rows(
-    ui: &mut Ui,
-    state: &State,
-    videos: &[Video],
-    note: &dyn Fn(&Video) -> Option<String>,
-    actions: &mut Vec<Action>,
-) {
-    rows(ui, state, videos, note, false, actions);
+pub fn video_rows(ui: &mut Ui, state: &State, videos: &[Video], actions: &mut Vec<Action>) {
+    rows(ui, state, videos, false, actions);
 }
 
-/// [`video_rows`]; `large` draws search's big thumbnails (and no notes).
-fn rows(
-    ui: &mut Ui,
-    state: &State,
-    videos: &[Video],
-    note: &dyn Fn(&Video) -> Option<String>,
-    large: bool,
-    actions: &mut Vec<Action>,
-) {
+/// [`video_rows`]; `large` draws search's big thumbnails.
+fn rows(ui: &mut Ui, state: &State, videos: &[Video], large: bool, actions: &mut Vec<Action>) {
     egui::ScrollArea::vertical()
         .auto_shrink(false)
         .show(ui, |ui| {
             for (index, video) in videos.iter().enumerate() {
                 let selected = index == state.cursor;
-                let watched = video
-                    .duration
-                    .and_then(|duration| {
-                        state
-                            .library
-                            .resume_position(&video.id)
-                            .map(|left| left / duration)
-                    })
-                    .map(|fraction| fraction as f32);
+                let watched = widgets::watched(&state.library, video);
                 let response = if large {
                     widgets::video_row_large(ui, &state.palette, video, watched, selected)
                 } else {
-                    widgets::video_row(
-                        ui,
-                        &state.palette,
-                        video,
-                        note(video).as_deref(),
-                        watched,
-                        selected,
-                    )
+                    widgets::video_row(ui, &state.palette, video, None, watched, selected)
                 };
                 if selected {
                     response.clone().scroll_to_me(None);

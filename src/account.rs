@@ -276,7 +276,16 @@ pub async fn save_session(id: u32, cookie: String) -> Result<(), String> {
 }
 
 pub async fn load_session(id: u32) -> Result<Option<String>, String> {
-    with_store(move || match entry(&session_key(id))?.get_secret() {
+    read_secret(session_key(id)).await
+}
+
+pub async fn delete_session(id: u32) -> Result<(), String> {
+    delete_secret(session_key(id)).await
+}
+
+/// The session kept under `key`, if any.
+async fn read_secret(key: String) -> Result<Option<String>, String> {
+    with_store(move || match entry(&key)?.get_secret() {
         Ok(secret) => String::from_utf8(secret)
             .map(Some)
             .map_err(|_| "The stored session is damaged.".to_owned()),
@@ -286,8 +295,9 @@ pub async fn load_session(id: u32) -> Result<Option<String>, String> {
     .await
 }
 
-pub async fn delete_session(id: u32) -> Result<(), String> {
-    with_store(move || match entry(&session_key(id))?.delete_credential() {
+/// Deletes the entry under `key`; one already gone counts as deleted.
+async fn delete_secret(key: String) -> Result<(), String> {
+    with_store(move || match entry(&key)?.delete_credential() {
         Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
         Err(error) => Err(store_error(error)),
     })
@@ -298,28 +308,16 @@ pub async fn delete_session(id: u32) -> Result<(), String> {
 /// under account 1's key. Reads back the moved session before removing
 /// the old entry, so a failure leaves it in place.
 pub async fn migrate_legacy_session() -> Result<Option<String>, String> {
-    if load_session(1).await?.is_some() {
-        return load_session(1).await;
+    if let Some(session) = load_session(1).await? {
+        return Ok(Some(session));
     }
-    let old = with_store(|| match entry(COOKIE_KEY)?.get_secret() {
-        Ok(secret) => String::from_utf8(secret)
-            .map(Some)
-            .map_err(|_| "The stored session is damaged.".to_owned()),
-        Err(keyring_core::Error::NoEntry) => Ok(None),
-        Err(error) => Err(store_error(error)),
-    })
-    .await?;
-    let Some(cookie) = old else {
+    let Some(cookie) = read_secret(COOKIE_KEY.to_owned()).await? else {
         return Ok(None);
     };
     save_session(1, cookie).await?;
     let back = load_session(1).await?;
     if back.is_some() {
-        with_store(|| match entry(COOKIE_KEY)?.delete_credential() {
-            Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
-            Err(error) => Err(store_error(error)),
-        })
-        .await?;
+        delete_secret(COOKIE_KEY.to_owned()).await?;
     }
     Ok(back)
 }

@@ -1,14 +1,14 @@
 //! The pages of what the user follows and keeps: the home feed,
 //! subscriptions, history, Watch later, liked videos, playlists, and one
-//! channel's or playlist's videos. Pages that exist both ways switch
-//! between the signed-in account and this device; each is one pane of
-//! rows.
+//! playlist's videos. Pages that exist both ways switch between the
+//! signed-in account and this device; each is one pane of rows.
 
 use egui::{Align2, CornerRadius, CursorIcon, Rect, RichText, Sense, Ui, pos2, vec2};
 
 use super::{results, widgets};
 use crate::app::{AccountState, Page, State};
-use crate::model::{Action, Channel, FeedFilter, Listing, PlaylistSummary, Source, Video, View};
+use crate::model::{Action, Channel, FeedFilter, Listing, Source, Video, View};
+use crate::util;
 
 /// The account/device switch and a page's extra controls, as bracket
 /// buttons on one line inside the pane.
@@ -19,7 +19,6 @@ fn controls(
     actions: &mut Vec<Action>,
     extra: impl FnOnce(&mut Ui, &mut Vec<Action>),
 ) {
-    let mut used = false;
     if both_ways && state.signed_in() {
         let source = state.source();
         let style = |on: bool| {
@@ -49,10 +48,8 @@ fn controls(
         {
             actions.push(Action::SetSource(Source::Device));
         }
-        used = true;
     }
     extra(ui, actions);
-    let _ = used;
     ui.add_space(widgets::line(ui) / 2.0);
 }
 
@@ -228,15 +225,7 @@ fn feed_card(
 ) {
     let video = &videos[index];
     let selected = index == state.cursor;
-    let watched = video
-        .duration
-        .and_then(|duration| {
-            state
-                .library
-                .resume_position(&video.id)
-                .map(|left| left / duration)
-        })
-        .map(|fraction| fraction as f32);
+    let watched = widgets::watched(&state.library, video);
     let response = widgets::video_card(ui, &state.palette, video, watched, selected, width);
     if selected {
         response.clone().scroll_to_me(None);
@@ -283,7 +272,6 @@ fn short_card(ui: &mut Ui, state: &State, video: &Video, actions: &mut Vec<Actio
     let palette = &state.palette;
     let width = 108.0;
     let thumb = vec2(width, 192.0);
-    let cell = widgets::cell(ui);
     ui.vertical(|ui| {
         let (rect, response) = ui.allocate_exact_size(
             vec2(width, thumb.y + 2.0 * widgets::line(ui)),
@@ -326,7 +314,6 @@ fn short_card(ui: &mut Ui, state: &State, video: &Video, actions: &mut Vec<Actio
                 palette.secondary,
             );
         }
-        let _ = cell;
         if response.clicked() {
             actions.push(Action::Open(video.clone()));
         }
@@ -443,20 +430,7 @@ fn channel_row(
     let height = size.y + 4.0;
     let (rect, response) =
         ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
-    if response.hovered() {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-    }
-    let fill = if selected {
-        palette.accent
-    } else if response.hovered() {
-        palette.surface_hover
-    } else {
-        egui::Color32::TRANSPARENT
-    };
-    if fill != egui::Color32::TRANSPARENT {
-        ui.painter()
-            .rect_filled(rect, egui::CornerRadius::ZERO, fill);
-    }
+    widgets::row_fill(ui, palette, rect, &response, selected);
     if selected {
         response.clone().scroll_to_me(None);
     }
@@ -487,7 +461,7 @@ fn channel_row(
         palette.blue
     };
     ui.painter().text(
-        pos_at(rect, avatar_rect.right() + widgets::cell(ui), 0.0),
+        pos_at(rect, avatar_rect.right() + widgets::cell(ui)),
         egui::Align2::LEFT_CENTER,
         &channel.name,
         egui::FontId::monospace(14.0),
@@ -519,7 +493,7 @@ fn channel_row(
     }
 }
 
-fn pos_at(rect: egui::Rect, x: f32, _y: f32) -> egui::Pos2 {
+fn pos_at(rect: egui::Rect, x: f32) -> egui::Pos2 {
     egui::pos2(x, rect.center().y)
 }
 
@@ -585,18 +559,13 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                                         }
                                         let selected = index == state.cursor;
                                         let video = &row.video;
-                                        let watched = video.duration.and_then(|duration| {
-                                            state
-                                                .library
-                                                .resume_position(&video.id)
-                                                .map(|left| left / duration)
-                                        });
+                                        let watched = widgets::watched(&state.library, video);
                                         let response = widgets::video_row(
                                             ui,
                                             &state.palette,
                                             video,
                                             None,
-                                            watched.map(|f| f as f32),
+                                            watched,
                                             selected,
                                         );
                                         if selected {
@@ -682,13 +651,9 @@ pub fn watch_later(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     Source::Device if state.library.watch_later.is_empty() => {
                         results::nothing(ui, state, "save videos from their page")
                     }
-                    Source::Device => results::video_rows(
-                        ui,
-                        state,
-                        &state.library.watch_later,
-                        &|_| None,
-                        actions,
-                    ),
+                    Source::Device => {
+                        results::video_rows(ui, state, &state.library.watch_later, actions)
+                    }
                 }
             },
         );
@@ -708,7 +673,7 @@ fn rows_listing(
         Listing::Loading => results::loading(ui, state, "videos"),
         Listing::Failed(error) => results::failed(ui, state, error, actions),
         Listing::Ready(videos) if videos.is_empty() => results::nothing(ui, state, empty),
-        Listing::Ready(videos) => results::video_rows(ui, state, videos, &|_| None, actions),
+        Listing::Ready(videos) => results::video_rows(ui, state, videos, actions),
     }
 }
 
@@ -747,7 +712,23 @@ pub fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                         .auto_shrink(false)
                         .show(ui, |ui| {
                             for (index, playlist) in playlists.iter().enumerate() {
-                                playlist_row(ui, state, playlist, index == state.cursor, actions);
+                                let selected = index == state.cursor;
+                                let response = widgets::playlist_row(
+                                    ui,
+                                    &state.palette,
+                                    playlist,
+                                    selected,
+                                    true,
+                                );
+                                if selected {
+                                    response.clone().scroll_to_me(None);
+                                }
+                                if response.clicked() {
+                                    actions.push(Action::OpenPlaylist {
+                                        id: playlist.id.clone(),
+                                        name: playlist.name.clone(),
+                                    });
+                                }
                             }
                         });
                 }
@@ -756,92 +737,7 @@ pub fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     });
 }
 
-fn playlist_row(
-    ui: &mut Ui,
-    state: &State,
-    playlist: &PlaylistSummary,
-    selected: bool,
-    actions: &mut Vec<Action>,
-) {
-    let palette = &state.palette;
-    let pad = widgets::cell(ui);
-    let size = vec2(120.0, 68.0);
-    let height = size.y + pad;
-    let (rect, response) =
-        ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
-    if response.hovered() {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-    }
-    let fill = if selected {
-        palette.accent
-    } else if response.hovered() {
-        palette.surface_hover
-    } else {
-        egui::Color32::TRANSPARENT
-    };
-    if fill != egui::Color32::TRANSPARENT {
-        ui.painter()
-            .rect_filled(rect, egui::CornerRadius::ZERO, fill);
-    }
-    if selected {
-        response.clone().scroll_to_me(None);
-    }
-    let thumb_rect = egui::Rect::from_min_size(rect.min + vec2(pad, pad / 2.0), size);
-    match &playlist.thumbnail {
-        Some(url) => {
-            super::images::remote(ui, url)
-                .fit_to_exact_size(size)
-                .corner_radius(egui::CornerRadius::ZERO)
-                .paint_at(ui, thumb_rect);
-        }
-        None => {
-            ui.painter()
-                .rect_filled(thumb_rect, egui::CornerRadius::ZERO, palette.surface);
-        }
-    }
-    let name_color = if selected {
-        palette.window
-    } else {
-        palette.text
-    };
-    let muted = if selected {
-        palette.window
-    } else {
-        palette.secondary
-    };
-    let text_x = thumb_rect.right() + pad;
-    let painter = ui.painter();
-    let name = painter.layout_no_wrap(
-        playlist.name.clone(),
-        egui::FontId::monospace(14.0),
-        name_color,
-    );
-    painter.galley(egui::pos2(text_x, thumb_rect.top()), name, name_color);
-    let details: Vec<String> = [
-        playlist.videos.map(|count| format!("{count} videos")),
-        playlist.channel.clone(),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-    if !details.is_empty() {
-        let galley =
-            painter.layout_no_wrap(details.join(" · "), egui::FontId::monospace(13.0), muted);
-        painter.galley(
-            egui::pos2(text_x, thumb_rect.top() + widgets::line(ui)),
-            galley,
-            muted,
-        );
-    }
-    if response.clicked() {
-        actions.push(Action::OpenPlaylist {
-            id: playlist.id.clone(),
-            name: playlist.name.clone(),
-        });
-    }
-}
-
-/// One channel's latest videos, or one playlist's.
+/// One playlist's videos.
 pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     egui::CentralPanel::default().show(ui, |ui| {
         let Some(Page::Playlist { name, .. }) = &state.page else {
@@ -858,5 +754,3 @@ pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         );
     });
 }
-
-use crate::util;

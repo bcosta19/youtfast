@@ -208,7 +208,7 @@ fn channel_line(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<
             );
         });
         if let Some(channel) = &channel {
-            subscribe(ui, state, channel, actions);
+            widgets::subscribe(ui, state, channel, widgets::ButtonStyle::Primary, actions);
         }
         // The actions sit at the right while they fit; under it otherwise.
         let needed = 34.0 * widgets::cell(ui);
@@ -593,37 +593,6 @@ fn reply_column(
     });
 }
 
-/// Subscribe on this device, or show that the account already does.
-fn subscribe(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Action>) {
-    if state.subscribed_in_account(&channel.id) {
-        ui.label(
-            RichText::new("[ subscribed ]")
-                .monospace()
-                .color(state.palette.accent)
-                .strong(),
-        )
-        .on_hover_text("Your account is subscribed. Manage it on youtube.com.");
-        return;
-    }
-    let subscribed = state.library.is_subscribed(&channel.id);
-    let (label, style) = if subscribed {
-        ("subscribed", widgets::ButtonStyle::On)
-    } else {
-        ("subscribe", widgets::ButtonStyle::Primary)
-    };
-    let hint = if subscribed {
-        "Unsubscribe on this computer"
-    } else {
-        "Follow this channel on this computer: its videos join your feed"
-    };
-    if widgets::bracket_button(ui, &state.palette, label, style)
-        .on_hover_text(hint)
-        .clicked()
-    {
-        actions.push(Action::ToggleSubscription(channel.clone()));
-    }
-}
-
 /// The picture, with the spinner or the error over it. A click pauses; a
 /// double click goes full screen.
 fn video(
@@ -886,7 +855,7 @@ fn up_next(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         false,
         None,
         |ui| {
-            results::video_rows(ui, state, &next, &|_| None, actions);
+            results::video_rows(ui, state, &next, actions);
         },
     );
 }
@@ -914,7 +883,7 @@ fn related(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         false,
         None,
         |ui| {
-            results::video_rows(ui, state, &related, &|_| None, actions);
+            results::video_rows(ui, state, &related, actions);
         },
     );
 }

@@ -193,7 +193,7 @@ impl Mpv {
         let handle = Arc::new(Handle(ptr));
         let format_sort = format_sort(max_resolution);
         let volume = volume.clamp(0.0, 100.0);
-        let initial_volume = format!("{volume:.0}");
+        let initial_volume = volume_text(volume);
         let options: [(&CStr, &str); 14] = [
             (c"vo", "libmpv"),
             (c"hwdec", "auto-safe"),
@@ -287,15 +287,7 @@ impl Mpv {
     /// current video, from `start` seconds when given (where it was left).
     pub fn load(&self, url: &str, start: Option<f64>) -> Result<(), Error> {
         match start {
-            // The index argument (-1, ignored by "replace") came in mpv
-            // 0.38; per-file options follow it.
-            Some(start) => self.command(&[
-                "loadfile",
-                url,
-                "replace",
-                "-1",
-                &format!("start={start:.3}"),
-            ])?,
+            Some(start) => self.load_with(url, &format!("start={start:.3}"))?,
             None => self.command(&["loadfile", url, "replace"])?,
         }
         self.set_paused(false)
@@ -308,9 +300,14 @@ impl Mpv {
             "start={position:.3},pause={}",
             if paused { "yes" } else { "no" }
         );
+        self.load_with(url, &options)
+    }
+
+    /// Opens `url` in place of the current video with per-file `options`.
+    fn load_with(&self, url: &str, options: &str) -> Result<(), Error> {
         // The index argument (-1, ignored by "replace") came in mpv 0.38;
         // per-file options follow it.
-        self.command(&["loadfile", url, "replace", "-1", &options])
+        self.command(&["loadfile", url, "replace", "-1", options])
     }
 
     /// Bounds the streams of the next video loaded to `resolution` (720 for
@@ -388,7 +385,7 @@ impl Mpv {
     }
 
     pub fn set_volume(&self, volume: f64) -> Result<(), Error> {
-        self.set_property("volume", &format!("{:.0}", volume.clamp(0.0, 100.0)))
+        self.set_property("volume", &volume_text(volume))
     }
 
     fn command(&self, args: &[&str]) -> Result<(), Error> {
@@ -529,6 +526,11 @@ impl Drop for Mpv {
 /// smaller side, and `res:1080` prefers the largest at or below 1080.
 fn format_sort(resolution: u32) -> String {
     format!("format-sort=res:{resolution}")
+}
+
+/// mpv's volume value: 0 to 100, as a whole number.
+fn volume_text(volume: f64) -> String {
+    format!("{:.0}", volume.clamp(0.0, 100.0))
 }
 
 /// mpv's wakeup callback: events are waiting, so ask for a frame to read

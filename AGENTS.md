@@ -27,8 +27,10 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
 ## Architecture
 
 - `src/ui/` draws views from `app::State` and the player's `mpv::Status`, and
-  pushes `model::Action`s. `src/app.rs` applies them after the frame. A view
-  only changes its own state (search text, the seek bar while dragged).
+  pushes `model::Action`s. `src/app.rs` applies them after the frame,
+  through its children in `src/app/` (loading, watch, accounts,
+  notifications, themes). A view only changes its own state (search text,
+  the seek bar while dragged).
   Remote images go through `ui::images::remote`, which lets egui forget
   the ones not drawn for a minute; the watch page's details are kept for
   the last 50 videos (`App::details_cache`), for half an hour.

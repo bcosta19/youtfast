@@ -6,11 +6,11 @@ use std::cmp::Reverse;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use rustypipe::client::RustyPipe;
+use rustypipe::client::{RustyPipe, RustyPipeQuery};
 use rustypipe::error::Error;
 use rustypipe::model::{
-    Channel as RpChannel, ChannelItem, ChannelRss, Comment, PlaylistItem, Thumbnail, UrlTarget,
-    VideoDetails, VideoItem, paginator::ContinuationEndpoint, paginator::Paginator,
+    Channel as RpChannel, ChannelItem, ChannelRss, Comment, Playlist, PlaylistItem, Thumbnail,
+    UrlTarget, VideoDetails, VideoItem, paginator::ContinuationEndpoint, paginator::Paginator,
     richtext::TextComponent,
 };
 use rustypipe::param::ChannelVideoTab;
@@ -28,7 +28,6 @@ use crate::util;
 /// Channel feeds fetched at once: RSS is cheap, but hundreds of
 /// subscriptions should not open hundreds of connections.
 const RSS_CONCURRENCY: usize = 8;
-/// The most videos the home feed shows.
 /// The most items an account list (subscriptions, history, a playlist)
 /// pages through.
 const LIST_LIMIT: usize = 500;
@@ -82,17 +81,13 @@ pub async fn feed(
         }
     }
 
-    let semaphore = Arc::new(Semaphore::new(RSS_CONCURRENCY));
-    let mut tasks = JoinSet::new();
-    for channel in channels {
+    let mut tasks = spawn_limited(channels, |channel| {
         let rp = rp.clone();
-        let semaphore = Arc::clone(&semaphore);
-        tasks.spawn(async move {
-            let _permit = semaphore.acquire_owned().await;
+        async move {
             let result = rp.query().channel_rss(&channel.id).await;
             (channel.name, result)
-        });
-    }
+        }
+    });
     let now = util::now();
     let mut failed_channels = 0;
     while let Some(joined) = tasks.join_next().await {
@@ -126,25 +121,21 @@ pub async fn feed(
 /// The newest Shorts of the given channels, up to `per` each, interleaved
 /// so no channel floods the shelf. Channels that fail are skipped.
 pub async fn channel_shorts(rp: &RustyPipe, channels: Vec<String>, per: usize) -> Vec<Video> {
-    let semaphore = Arc::new(Semaphore::new(RSS_CONCURRENCY));
-    let mut tasks = JoinSet::new();
-    for id in channels {
+    let mut tasks = spawn_limited(channels, |id| {
         let rp = rp.clone();
-        let semaphore = Arc::clone(&semaphore);
-        tasks.spawn(async move {
-            let _permit = semaphore.acquire_owned().await;
+        async move {
             let result = rp
                 .query()
                 .channel_videos_tab(&id, ChannelVideoTab::Shorts)
                 .await;
             (id, result)
-        });
-    }
+        }
+    });
     let mut each = Vec::new();
     while let Some(joined) = tasks.join_next().await {
         match joined {
             Ok((_, Ok(channel))) => {
-                let mut shorts: Vec<Video> = channel
+                let shorts: Vec<Video> = channel
                     .content
                     .items
                     .into_iter()
@@ -155,7 +146,7 @@ pub async fn channel_shorts(rp: &RustyPipe, channels: Vec<String>, per: usize) -
                         video
                     })
                     .collect();
-                each.push(std::mem::take(&mut shorts));
+                each.push(shorts);
             }
             Ok((id, Err(error))) => {
                 log::warn!("could not read the shorts of {id}: {error}");
@@ -168,34 +159,40 @@ pub async fn channel_shorts(rp: &RustyPipe, channels: Vec<String>, per: usize) -
     interleave(each)
 }
 
+/// Spawns `fetch` for every item, [`RSS_CONCURRENCY`] at a time.
+fn spawn_limited<T, F, R>(items: Vec<T>, fetch: impl Fn(T) -> F) -> JoinSet<R>
+where
+    F: Future<Output = R> + Send + 'static,
+    R: Send + 'static,
+{
+    let semaphore = Arc::new(Semaphore::new(RSS_CONCURRENCY));
+    let mut tasks = JoinSet::new();
+    for item in items {
+        let semaphore = Arc::clone(&semaphore);
+        let task = fetch(item);
+        tasks.spawn(async move {
+            let _permit = semaphore.acquire_owned().await;
+            task.await
+        });
+    }
+    tasks
+}
+
 /// Round-robin over the lists so every channel takes its turn: the first
 /// item of each, then the second of each, until all are spent.
-pub fn interleave<T>(mut lists: Vec<Vec<T>>) -> Vec<T> {
+pub fn interleave<T>(lists: Vec<Vec<T>>) -> Vec<T> {
+    let mut lists: Vec<_> = lists.into_iter().map(Vec::into_iter).collect();
     let mut out = Vec::new();
     loop {
         let mut any = false;
         for list in &mut lists {
-            if let Some(item) = list.pop_at_front() {
+            if let Some(item) = list.next() {
                 out.push(item);
                 any = true;
             }
         }
         if !any {
             return out;
-        }
-    }
-}
-
-trait PopFront<T> {
-    fn pop_at_front(&mut self) -> Option<T>;
-}
-
-impl<T> PopFront<T> for Vec<T> {
-    fn pop_at_front(&mut self) -> Option<T> {
-        if self.is_empty() {
-            None
-        } else {
-            Some(self.remove(0))
         }
     }
 }
@@ -312,14 +309,9 @@ pub async fn channel_about(rp: &RustyPipe, id: &str) -> Result<ChannelAbout, Str
         description: info.description,
         links: info.links,
         views: info.view_count,
-        created: info.create_date.map(|date| {
-            format!(
-                "{:04}-{:02}-{:02}",
-                date.year(),
-                u8::from(date.month()),
-                date.day()
-            )
-        }),
+        created: info
+            .create_date
+            .map(|date| iso_date(date.year(), date.month(), date.day())),
         country: info.country.map(|country| country.name().to_owned()),
         subscribers: info.subscriber_count,
         videos: info.video_count,
@@ -338,6 +330,11 @@ fn channel_header<T>(channel: &RpChannel<T>) -> ChannelHeader {
         has_shorts: channel.has_shorts,
         has_live: channel.has_live,
     }
+}
+
+/// A date as `YYYY-MM-DD`.
+fn iso_date(year: i32, month: impl Into<u8>, day: u8) -> String {
+    format!("{year:04}-{:02}-{day:02}", month.into())
 }
 
 pub async fn subscriptions(rp: &RustyPipe) -> Result<Vec<Channel>, Error> {
@@ -365,16 +362,14 @@ pub async fn history(rp: &RustyPipe) -> Result<Vec<HistoryRow>, Error> {
 
 pub async fn watch_later(rp: &RustyPipe) -> Result<Vec<Video>, Error> {
     let query = rp.query();
-    let mut playlist = query.watch_later().await?;
-    playlist.videos.extend_limit(&query, LIST_LIMIT).await?;
-    Ok(playlist.videos.items.into_iter().map(video).collect())
+    let playlist = query.watch_later().await?;
+    playlist_items(&query, playlist).await
 }
 
 pub async fn liked(rp: &RustyPipe) -> Result<Vec<Video>, Error> {
     let query = rp.query();
-    let mut playlist = query.liked_videos().await?;
-    playlist.videos.extend_limit(&query, LIST_LIMIT).await?;
-    Ok(playlist.videos.items.into_iter().map(video).collect())
+    let playlist = query.liked_videos().await?;
+    playlist_items(&query, playlist).await
 }
 
 pub async fn playlists(rp: &RustyPipe) -> Result<Vec<PlaylistSummary>, Error> {
@@ -388,8 +383,16 @@ pub async fn playlists(rp: &RustyPipe) -> Result<Vec<PlaylistSummary>, Error> {
 /// adds by itself when one is set.
 pub async fn playlist_videos(rp: &RustyPipe, id: &str) -> Result<Vec<Video>, Error> {
     let query = rp.query();
-    let mut playlist = query.playlist(id).await?;
-    playlist.videos.extend_limit(&query, LIST_LIMIT).await?;
+    let playlist = query.playlist(id).await?;
+    playlist_items(&query, playlist).await
+}
+
+/// A playlist's videos, paged through up to [`LIST_LIMIT`].
+async fn playlist_items(
+    query: &RustyPipeQuery,
+    mut playlist: Playlist,
+) -> Result<Vec<Video>, Error> {
+    playlist.videos.extend_limit(query, LIST_LIMIT).await?;
     Ok(playlist.videos.items.into_iter().map(video).collect())
 }
 
@@ -417,14 +420,9 @@ fn video_details(item: VideoDetails, watching_id: &str) -> Details {
         views: item.view_count,
         likes: item.like_count,
         published: item.publish_date_txt,
-        published_date: item.publish_date.map(|date| {
-            format!(
-                "{:04}-{:02}-{:02}",
-                date.year(),
-                u8::from(date.month()),
-                date.day()
-            )
-        }),
+        published_date: item
+            .publish_date
+            .map(|date| iso_date(date.year(), date.month(), date.day())),
         live: item.is_live,
         description: item
             .description

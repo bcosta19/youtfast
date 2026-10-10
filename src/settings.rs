@@ -99,31 +99,11 @@ impl Settings {
     /// Reads the settings. A missing file is the defaults; an unreadable
     /// one is moved aside rather than overwritten by the next save.
     pub fn load(path: &Path) -> Self {
-        let text = match std::fs::read_to_string(path) {
-            Ok(text) => text,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Self::default(),
-            Err(error) => {
-                log::error!("could not read the settings: {error}");
-                return Self::default();
-            }
-        };
-        match serde_json::from_str(&text) {
-            Ok(settings) => settings,
-            Err(error) => {
-                let mut aside = path.as_os_str().to_owned();
-                aside.push(format!(".unreadable-{}", crate::util::now()));
-                log::error!("the settings are unreadable ({error}); keeping them as {aside:?}");
-                if let Err(error) = std::fs::rename(path, &aside) {
-                    log::error!("could not move the unreadable settings aside: {error}");
-                }
-                Self::default()
-            }
-        }
+        crate::paths::load_json(path, "settings")
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        let json = serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?;
-        crate::paths::write_atomic(path, &json)
+        crate::paths::save_json(path, self)
     }
 
     /// The colours the interface draws with now: the selected palette's

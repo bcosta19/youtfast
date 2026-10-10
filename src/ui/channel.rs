@@ -7,6 +7,7 @@ use egui::{Align2, RichText, Sense, TextEdit, Ui, vec2};
 use super::{results, widgets};
 use crate::app::State;
 use crate::model::{Action, Channel, ChannelAbout, ChannelHeader, ChannelTab, Fetch, Listing};
+use crate::util;
 
 /// The tabs in the order they show, given what the header knows. Before
 /// the header arrives, Shorts and Live cannot be known to exist. An active
@@ -119,10 +120,10 @@ fn header(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Actio
                         parts.push(handle.clone());
                     }
                     if let Some(subscribers) = header.subscribers {
-                        parts.push(format!("{} subscribers", crate::util::compact(subscribers)));
+                        parts.push(format!("{} subscribers", util::compact(subscribers)));
                     }
                     if let Some(videos) = header.videos {
-                        parts.push(format!("{} videos", crate::util::compact(videos)));
+                        parts.push(format!("{} videos", util::compact(videos)));
                     }
                     if !parts.is_empty() {
                         ui.label(
@@ -135,42 +136,10 @@ fn header(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Actio
             });
         });
         ui.horizontal(|ui| {
-            subscribe(ui, state, channel, actions);
+            widgets::subscribe(ui, state, channel, widgets::ButtonStyle::Normal, actions);
             channel_search(ui, state, actions);
         });
     });
-}
-
-/// Subscribe on this device, or show that the account already does —
-/// the same control the watch page's channel line has.
-fn subscribe(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Action>) {
-    if state.subscribed_in_account(&channel.id) {
-        ui.label(
-            RichText::new("[ subscribed ]")
-                .monospace()
-                .color(state.palette.accent)
-                .strong(),
-        )
-        .on_hover_text("Your account is subscribed. Manage it on youtube.com.");
-        return;
-    }
-    let subscribed = state.library.is_subscribed(&channel.id);
-    let (label, style) = if subscribed {
-        ("subscribed", widgets::ButtonStyle::On)
-    } else {
-        ("subscribe", widgets::ButtonStyle::Normal)
-    };
-    let hint = if subscribed {
-        "Unsubscribe on this computer"
-    } else {
-        "Follow this channel on this computer: its videos join your feed"
-    };
-    if widgets::bracket_button(ui, &state.palette, label, style)
-        .on_hover_text(hint)
-        .clicked()
-    {
-        actions.push(Action::ToggleSubscription(channel.clone()));
-    }
 }
 
 /// The borderless field that searches this channel, underlined.
@@ -267,15 +236,7 @@ fn videos(ui: &mut Ui, state: &State, tab: &ChannelTab, actions: &mut Vec<Action
                     .show(ui, |ui| {
                         for (index, video) in videos.iter().enumerate() {
                             let selected = index == state.cursor;
-                            let watched = video
-                                .duration
-                                .and_then(|duration| {
-                                    state
-                                        .library
-                                        .resume_position(&video.id)
-                                        .map(|left| left / duration)
-                                })
-                                .map(|fraction| fraction as f32);
+                            let watched = widgets::watched(&state.library, video);
                             let response = widgets::video_row(
                                 ui,
                                 &state.palette,
@@ -335,7 +296,17 @@ fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     .auto_shrink(false)
                     .show(ui, |ui| {
                         for (index, playlist) in playlists.iter().enumerate() {
-                            let response = playlist_row(ui, state, playlist, index == state.cursor);
+                            let selected = index == state.cursor;
+                            let response = widgets::playlist_row(
+                                ui,
+                                &state.palette,
+                                playlist,
+                                selected,
+                                false,
+                            );
+                            if selected {
+                                response.clone().scroll_to_me(None);
+                            }
                             if index == playlists.len() - 1 && ui.is_rect_visible(response.rect) {
                                 actions.push(Action::LoadMore);
                             }
@@ -351,88 +322,6 @@ fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             }
         },
     );
-}
-
-fn playlist_row(
-    ui: &mut Ui,
-    state: &State,
-    playlist: &crate::model::PlaylistSummary,
-    selected: bool,
-) -> egui::Response {
-    let palette = &state.palette;
-    let cell = widgets::cell(ui);
-    let size = vec2(120.0, 68.0);
-    let height = size.y + cell;
-    let (rect, response) =
-        ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
-    if response.hovered() {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-    }
-    let fill = if selected {
-        palette.accent
-    } else if response.hovered() {
-        palette.surface_hover
-    } else {
-        egui::Color32::TRANSPARENT
-    };
-    if fill != egui::Color32::TRANSPARENT {
-        ui.painter()
-            .rect_filled(rect, egui::CornerRadius::ZERO, fill);
-    }
-    if selected {
-        response.clone().scroll_to_me(None);
-    }
-    let thumb = thumb_rect(rect, cell, size);
-    match &playlist.thumbnail {
-        Some(url) => {
-            super::images::remote(ui, url)
-                .fit_to_exact_size(size)
-                .corner_radius(egui::CornerRadius::ZERO)
-                .paint_at(ui, thumb);
-        }
-        None => {
-            ui.painter()
-                .rect_filled(thumb, egui::CornerRadius::ZERO, palette.surface);
-        }
-    }
-    let text_x = thumb.right() + cell;
-    if selected {
-        response.clone().scroll_to_me(None);
-    }
-    let name_color = if selected {
-        palette.window
-    } else {
-        palette.text
-    };
-    let muted = if selected {
-        palette.window
-    } else {
-        palette.secondary
-    };
-    let painter = ui.painter();
-    let name = painter.layout_no_wrap(
-        playlist.name.clone(),
-        egui::FontId::monospace(14.0),
-        name_color,
-    );
-    painter.galley(egui::pos2(text_x, thumb.top()), name, name_color);
-    if let Some(count) = playlist.videos {
-        let galley = painter.layout_no_wrap(
-            format!("{count} videos"),
-            egui::FontId::monospace(13.0),
-            muted,
-        );
-        painter.galley(
-            egui::pos2(text_x, thumb.top() + widgets::line(ui)),
-            galley,
-            muted,
-        );
-    }
-    response
-}
-
-fn thumb_rect(rect: egui::Rect, cell: f32, size: egui::Vec2) -> egui::Rect {
-    egui::Rect::from_min_size(rect.min + vec2(cell, cell / 2.0), size)
 }
 
 /// The About pane: key/value lines, then the description, then links.
@@ -469,16 +358,16 @@ fn about_rows(ui: &mut Ui, state: &State, about: &ChannelAbout, actions: &mut Ve
         .subscribers
         .or_else(|| header.as_ref().and_then(|header| header.subscribers));
     if let Some(count) = subscribers {
-        kv(ui, "subscribers", &crate::util::compact(count));
+        kv(ui, "subscribers", &util::compact(count));
     }
     let videos = about
         .videos
         .or_else(|| header.as_ref().and_then(|header| header.videos));
     if let Some(count) = videos {
-        kv(ui, "videos", &crate::util::compact(count));
+        kv(ui, "videos", &util::compact(count));
     }
     if let Some(views) = about.views {
-        kv(ui, "views", &crate::util::thousands(views));
+        kv(ui, "views", &util::thousands(views));
     }
     if let Some(created) = &about.created {
         kv(ui, "joined", created);

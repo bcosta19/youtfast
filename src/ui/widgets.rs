@@ -1,6 +1,6 @@
 //! Pieces shared by the views: the pane every screen is drawn in, the
-//! bracket buttons, the chips, the spinner, the selectable row, and the
-//! video as a row or a card.
+//! bracket buttons and subscribe, the chips, the spinner, the selectable
+//! row, the video as a row or a card, and the playlist as a row.
 
 use egui::text::LayoutJob;
 use egui::{
@@ -8,25 +8,28 @@ use egui::{
     Sense, Stroke, Ui, pos2, vec2,
 };
 
+use crate::app::State;
 use crate::icons::Icon;
-use crate::model::{Action, Channel, Fetch, Span, Video};
+use crate::library::Library;
+use crate::model::{Action, Channel, Fetch, PlaylistSummary, Span, Video};
 use crate::theme::Palette;
 use crate::util;
 
-/// The width of one character cell, the spacing grid's unit.
-pub fn cell(ui: &Ui) -> f32 {
+/// The size of one character of body text.
+fn glyph(ui: &Ui) -> egui::Vec2 {
     ui.painter()
         .layout_no_wrap("0".to_owned(), FontId::monospace(14.0), Color32::WHITE)
         .size()
-        .x
+}
+
+/// The width of one character cell, the spacing grid's unit.
+pub fn cell(ui: &Ui) -> f32 {
+    glyph(ui).x
 }
 
 /// The height of one line of body text.
 pub fn line(ui: &Ui) -> f32 {
-    ui.painter()
-        .layout_no_wrap("0".to_owned(), FontId::monospace(14.0), Color32::WHITE)
-        .size()
-        .y
+    glyph(ui).y
 }
 
 /// A frameless button that is just the icon.
@@ -83,7 +86,6 @@ pub fn pane<R>(
         .show(ui, add_contents);
     let rect = inner.response.rect;
     let painter = ui.painter();
-    let behind = fill;
     // The title sits on the top rule at the left.
     let mut title = RichText::new(format!(" {title} ")).font(font.clone());
     if focused {
@@ -99,7 +101,7 @@ pub fn pane<R>(
         pos2(rect.left() + cell + galley.size().x / 2.0, rect.top()),
         galley.size(),
     );
-    painter.rect_filled(text_rect, CornerRadius::ZERO, behind);
+    painter.rect_filled(text_rect, CornerRadius::ZERO, fill);
     painter.galley(text_rect.min, galley, color);
     // The count on the same rule, at the right.
     if let Some(count) = count {
@@ -116,7 +118,7 @@ pub fn pane<R>(
             pos2(rect.right() - cell - galley.size().x / 2.0, rect.top()),
             galley.size(),
         );
-        painter.rect_filled(rect, CornerRadius::ZERO, behind);
+        painter.rect_filled(rect, CornerRadius::ZERO, fill);
         painter.galley(rect.min, galley, color);
     }
     inner
@@ -154,6 +156,44 @@ pub fn bracket_button(ui: &mut Ui, palette: &Palette, label: &str, style: Button
     ui.add(button)
 }
 
+/// Subscribe on this device, or show that the account already does.
+/// `unsubscribed` is the button's style before subscribing.
+pub fn subscribe(
+    ui: &mut Ui,
+    state: &State,
+    channel: &Channel,
+    unsubscribed: ButtonStyle,
+    actions: &mut Vec<Action>,
+) {
+    if state.subscribed_in_account(&channel.id) {
+        ui.label(
+            RichText::new("[ subscribed ]")
+                .monospace()
+                .color(state.palette.accent)
+                .strong(),
+        )
+        .on_hover_text("Your account is subscribed. Manage it on youtube.com.");
+        return;
+    }
+    let subscribed = state.library.is_subscribed(&channel.id);
+    let (label, style) = if subscribed {
+        ("subscribed", ButtonStyle::On)
+    } else {
+        ("subscribe", unsubscribed)
+    };
+    let hint = if subscribed {
+        "Unsubscribe on this computer"
+    } else {
+        "Follow this channel on this computer: its videos join your feed"
+    };
+    if bracket_button(ui, &state.palette, label, style)
+        .on_hover_text(hint)
+        .clicked()
+    {
+        actions.push(Action::ToggleSubscription(channel.clone()));
+    }
+}
+
 /// One selectable row in a list or menu, TUI style: the cursor is the
 /// accent inverted. `parts` are `(text, colour)` runs; the colour is the
 /// unselected one (the row inverts it). Returns the click response.
@@ -172,19 +212,7 @@ pub fn row(
     let height = galley.rect.height().max(line(ui)) + 2.0;
     let (rect, response) =
         ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
-    if response.hovered() {
-        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
-    }
-    let fill = if selected {
-        palette.accent
-    } else if response.hovered() {
-        palette.surface_hover
-    } else {
-        Color32::TRANSPARENT
-    };
-    if fill != Color32::TRANSPARENT {
-        ui.painter().rect_filled(rect, CornerRadius::ZERO, fill);
-    }
+    row_fill(ui, palette, rect, &response, selected);
     let text_pos = pos2(
         rect.left() + cell(ui),
         rect.center().y - galley.rect.height() / 2.0,
@@ -332,7 +360,7 @@ fn video_text(
 
 /// The fill behind a row or card: the TUI cursor when selected, the
 /// hover colour under the pointer.
-fn row_fill(ui: &Ui, palette: &Palette, rect: Rect, response: &Response, selected: bool) {
+pub fn row_fill(ui: &Ui, palette: &Palette, rect: Rect, response: &Response, selected: bool) {
     if response.hovered() {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
     }
@@ -344,6 +372,18 @@ fn row_fill(ui: &Ui, palette: &Palette, rect: Rect, response: &Response, selecte
         return;
     };
     ui.painter().rect_filled(rect, CornerRadius::ZERO, fill);
+}
+
+/// The part of `video` watched (0..1), from its resume position.
+pub fn watched(library: &Library, video: &Video) -> Option<f32> {
+    video
+        .duration
+        .and_then(|duration| {
+            library
+                .resume_position(&video.id)
+                .map(|left| left / duration)
+        })
+        .map(|fraction| fraction as f32)
 }
 
 /// A video as a list row, the way YouTube's Up next column draws it: a
@@ -441,6 +481,63 @@ pub fn video_card(
         thumb.x,
         selected,
     );
+    response
+}
+
+/// A playlist as a list row: its 120x68 thumbnail, the name, then
+/// `N videos` (and the playlist's channel when `with_channel`).
+/// `selected` draws the TUI cursor.
+pub fn playlist_row(
+    ui: &mut Ui,
+    palette: &Palette,
+    playlist: &PlaylistSummary,
+    selected: bool,
+    with_channel: bool,
+) -> Response {
+    let pad = cell(ui);
+    let size = vec2(120.0, 68.0);
+    let height = size.y + pad;
+    let (rect, response) =
+        ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
+    row_fill(ui, palette, rect, &response, selected);
+    let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad / 2.0), size);
+    match &playlist.thumbnail {
+        Some(url) => {
+            super::images::remote(ui, url)
+                .fit_to_exact_size(size)
+                .corner_radius(CornerRadius::ZERO)
+                .paint_at(ui, thumb_rect);
+        }
+        None => {
+            ui.painter()
+                .rect_filled(thumb_rect, CornerRadius::ZERO, palette.surface);
+        }
+    }
+    let name_color = if selected {
+        palette.window
+    } else {
+        palette.text
+    };
+    let muted = if selected {
+        palette.window
+    } else {
+        palette.secondary
+    };
+    let text_x = thumb_rect.right() + pad;
+    let painter = ui.painter();
+    let name = painter.layout_no_wrap(playlist.name.clone(), FontId::monospace(14.0), name_color);
+    painter.galley(pos2(text_x, thumb_rect.top()), name, name_color);
+    let details: Vec<String> = [
+        playlist.videos.map(|count| format!("{count} videos")),
+        playlist.channel.clone().filter(|_| with_channel),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    if !details.is_empty() {
+        let galley = painter.layout_no_wrap(details.join(" · "), FontId::monospace(13.0), muted);
+        painter.galley(pos2(text_x, thumb_rect.top() + line(ui)), galley, muted);
+    }
     response
 }
 
@@ -638,7 +735,7 @@ pub fn short_uv() -> Rect {
 }
 
 /// "1.2M views · 2 days ago", or "Live now".
-pub fn meta(video: &Video) -> String {
+fn meta(video: &Video) -> String {
     if video.live {
         return "Live now".to_owned();
     }

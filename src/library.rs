@@ -69,44 +69,33 @@ impl Library {
     /// Reads the library. A missing file is an empty library; an unreadable
     /// one is moved aside rather than overwritten by the next save.
     pub fn load(path: &Path) -> Self {
-        let text = match std::fs::read_to_string(path) {
-            Ok(text) => text,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Self::default(),
-            Err(error) => {
-                log::error!("could not read the library: {error}");
-                return Self::default();
-            }
-        };
-        match serde_json::from_str::<Library>(&text) {
-            Ok(mut library) => {
-                // Older files' single `account` becomes account 1.
-                if library.accounts.is_empty()
-                    && let Some(source) = library.account.take()
-                {
-                    library.accounts.push(Account {
-                        id: 1,
-                        name: "My account".to_owned(),
-                        source,
-                    });
-                    library.active_account = Some(1);
-                }
-                library
-            }
-            Err(error) => {
-                let mut aside = path.as_os_str().to_owned();
-                aside.push(format!(".unreadable-{}", crate::util::now()));
-                log::error!("the library is unreadable ({error}); keeping it as {aside:?}");
-                if let Err(error) = std::fs::rename(path, &aside) {
-                    log::error!("could not move the unreadable library aside: {error}");
-                }
-                Self::default()
-            }
+        let mut library: Library = crate::paths::load_json(path, "library");
+        // Older files' single `account` becomes account 1.
+        if library.accounts.is_empty()
+            && let Some(source) = library.account.take()
+        {
+            library.accounts.push(Account {
+                id: 1,
+                name: "My account".to_owned(),
+                source,
+            });
+            library.active_account = Some(1);
         }
+        library
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        let json = serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?;
-        crate::paths::write_atomic(path, &json)
+        crate::paths::save_json(path, self)
+    }
+
+    /// The account with this id.
+    pub fn account(&self, id: u32) -> Option<&Account> {
+        self.accounts.iter().find(|account| account.id == id)
+    }
+
+    /// The account with this id, to change.
+    pub fn account_mut(&mut self, id: u32) -> Option<&mut Account> {
+        self.accounts.iter_mut().find(|account| account.id == id)
     }
 
     /// Whether `name` is already an account's; the add form refuses it.
@@ -123,12 +112,7 @@ impl Library {
     /// Subscribes, or unsubscribes when already subscribed. Returns whether
     /// the channel is subscribed now.
     pub fn toggle_subscription(&mut self, channel: Channel) -> bool {
-        if let Some(index) = self
-            .subscriptions
-            .iter()
-            .position(|known| known.id == channel.id)
-        {
-            self.subscriptions.remove(index);
+        if take_first(&mut self.subscriptions, |known| known.id == channel.id).is_some() {
             false
         } else {
             self.subscriptions.push(channel);
@@ -145,12 +129,7 @@ impl Library {
     /// Adds to Watch later, or removes when already there. Returns whether
     /// the video is there now.
     pub fn toggle_watch_later(&mut self, video: Video) -> bool {
-        if let Some(index) = self
-            .watch_later
-            .iter()
-            .position(|known| known.id == video.id)
-        {
-            self.watch_later.remove(index);
+        if take_first(&mut self.watch_later, |known| known.id == video.id).is_some() {
             false
         } else {
             self.watch_later.insert(0, video);
@@ -160,14 +139,8 @@ impl Library {
 
     /// Puts the video at the top of the history, keeping where it was left.
     pub fn record_watch(&mut self, video: Video, now: i64) {
-        let position = match self
-            .history
-            .iter()
-            .position(|watched| watched.video.id == video.id)
-        {
-            Some(index) => self.history.remove(index).position,
-            None => 0.0,
-        };
+        let position = take_first(&mut self.history, |watched| watched.video.id == video.id)
+            .map_or(0.0, |watched| watched.position);
         self.history.insert(
             0,
             Watched {
@@ -275,6 +248,12 @@ impl Library {
         self.history.truncate(HISTORY_LIMIT);
         (new_subscriptions, new_history)
     }
+}
+
+/// Removes and returns the first item of `list` that `matches` accepts.
+fn take_first<T>(list: &mut Vec<T>, matches: impl FnMut(&T) -> bool) -> Option<T> {
+    let index = list.iter().position(matches)?;
+    Some(list.remove(index))
 }
 
 #[cfg(test)]
