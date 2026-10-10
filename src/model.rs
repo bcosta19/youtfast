@@ -197,6 +197,8 @@ pub struct CommentRow {
     pub author: Option<String>,
     /// The author's channel id, to open their page.
     pub author_id: Option<String>,
+    /// The author's avatar, small.
+    pub author_avatar: Option<String>,
     pub text: Vec<Span>,
     /// YouTube's wording ("3 days ago").
     pub published: String,
@@ -552,6 +554,8 @@ pub enum Action {
     ToggleReplies(String),
     /// The description's `[ more ]`/`[ less ]`.
     ToggleDescription,
+    /// A long comment's `[ read more ]`/`[ show less ]`, by its id.
+    ToggleCommentText(String),
     /// Home's chips.
     SetFeedFilter(FeedFilter),
     /// The watch page's `[ share ]`: the link to the clipboard.

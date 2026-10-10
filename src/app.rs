@@ -121,6 +121,8 @@ pub struct State {
     pub replies: HashMap<String, Fetch<Vec<CommentRow>>>,
     /// The description expanded past its first rows.
     pub description_open: bool,
+    /// The comments (and replies) expanded past their first rows, by id.
+    pub comments_open: HashSet<String>,
     /// The channel page's header, kept while the same channel is open.
     pub channel_header: Option<ChannelHeader>,
     /// Which tab the channel page shows.
@@ -569,6 +571,11 @@ impl App {
             Action::ToggleReplies(id) => self.toggle_replies(id),
             Action::ToggleDescription => {
                 self.state.description_open = !self.state.description_open;
+            }
+            Action::ToggleCommentText(id) => {
+                if !self.state.comments_open.remove(&id) {
+                    self.state.comments_open.insert(id);
+                }
             }
             Action::SetFeedFilter(filter) => self.state.feed_filter = filter,
             Action::CopyLink(url) => {

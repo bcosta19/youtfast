@@ -465,6 +465,10 @@ fn comment(item: &Comment) -> CommentRow {
         id: item.id.clone(),
         author: item.author.as_ref().map(|author| author.name.clone()),
         author_id: item.author.as_ref().map(|author| author.id.clone()),
+        author_avatar: item
+            .author
+            .as_ref()
+            .and_then(|author| at_least(&author.avatar, COMMENT_AVATAR)),
         text: item
             .text
             .0
@@ -573,18 +577,34 @@ fn playlist(item: PlaylistItem) -> PlaylistSummary {
     }
 }
 
-/// The largest of a set of thumbnails, as an absolute URL (YouTube gives
-/// some as `//yt3.ggpht.com/…`).
+/// The largest of a set of thumbnails, as an absolute URL.
 fn largest(thumbnails: &[Thumbnail]) -> Option<String> {
-    let url = &thumbnails
+    let thumbnail = thumbnails.iter().max_by_key(|thumbnail| thumbnail.width)?;
+    Some(absolute(&thumbnail.url))
+}
+
+/// The width a comment's avatar is fetched at: it is drawn about 36 px
+/// square, and a page shows dozens.
+const COMMENT_AVATAR: u32 = 64;
+
+/// The smallest of a set of thumbnails at least `width` pixels wide (the
+/// largest when none is), as an absolute URL.
+fn at_least(thumbnails: &[Thumbnail], width: u32) -> Option<String> {
+    let thumbnail = thumbnails
         .iter()
-        .max_by_key(|thumbnail| thumbnail.width)?
-        .url;
-    Some(if url.starts_with("//") {
+        .filter(|thumbnail| thumbnail.width >= width)
+        .min_by_key(|thumbnail| thumbnail.width)
+        .or_else(|| thumbnails.iter().max_by_key(|thumbnail| thumbnail.width))?;
+    Some(absolute(&thumbnail.url))
+}
+
+/// YouTube gives some image URLs as `//yt3.ggpht.com/…`.
+fn absolute(url: &str) -> String {
+    if url.starts_with("//") {
         format!("https:{url}")
     } else {
-        url.clone()
-    })
+        url.to_owned()
+    }
 }
 
 #[cfg(test)]
@@ -663,6 +683,29 @@ mod tests {
             vec!["a1", "b1", "c1", "a2", "c2", "a3"]
         );
         assert!(interleave::<i32>(vec![vec![], vec![]]).is_empty());
+    }
+
+    #[test]
+    fn a_small_avatar_is_the_smallest_wide_enough() {
+        // Thumbnail is non_exhaustive too.
+        let thumbnail = |width: u32| -> Thumbnail {
+            serde_json::from_str(&format!(
+                r#"{{"url":"//yt3.ggpht.com/{width}","width":{width},"height":{width}}}"#
+            ))
+            .unwrap()
+        };
+        let set = [thumbnail(176), thumbnail(48), thumbnail(88)];
+        assert_eq!(
+            at_least(&set, 64).as_deref(),
+            Some("https://yt3.ggpht.com/88")
+        );
+        // None wide enough: the largest there is.
+        let small = [thumbnail(32), thumbnail(48)];
+        assert_eq!(
+            at_least(&small, 64).as_deref(),
+            Some("https://yt3.ggpht.com/48")
+        );
+        assert_eq!(at_least(&[], 64), None);
     }
 
     #[test]

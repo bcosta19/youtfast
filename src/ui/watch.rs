@@ -457,8 +457,8 @@ fn chapters(ui: &mut Ui, state: &State, status: Option<&Status>, actions: &mut V
     );
 }
 
-/// The comments pane: `@author · 3d · ▲ 120 · pinned` under the title,
-/// the text under that, replies indented under a `│` rule.
+/// The comments pane: one [`comment_row`] each, then the next page's
+/// `[ load more ]`.
 fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let Fetch::Ready(details) = &state.details else {
         return;
@@ -490,8 +490,9 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                             .color(state.palette.dim),
                     );
                 }
+                let avatar = 2.0 * widgets::line(ui);
                 for comment in rows.clone() {
-                    comment_row(ui, state, &comment, actions);
+                    comment_row(ui, state, &comment, avatar, actions);
                 }
                 // The tail row: the page on its way, a failed page's
                 // retry, or the button.
@@ -533,42 +534,117 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     );
 }
 
-/// One comment, and its replies under the `│` rule when open.
-fn comment_row(ui: &mut Ui, state: &State, comment: &CommentRow, actions: &mut Vec<Action>) {
-    // `@author · 3d · ▲ 120 · pinned`
+/// The rows a long comment shows until `[ read more ]`.
+const COMMENT_ROWS: usize = 5;
+
+/// One comment as on YouTube: the author's avatar at the left; beside it
+/// `@author · 3 days ago · pinned`, the text (long ones cut to a few rows),
+/// then `▲ 120 ♥ [ 4 replies ]`, and the replies under the `│` rule when
+/// open. `avatar` is the avatar's side: replies draw it smaller.
+fn comment_row(
+    ui: &mut Ui,
+    state: &State,
+    comment: &CommentRow,
+    avatar: f32,
+    actions: &mut Vec<Action>,
+) {
+    // YouTube's handles already start with `@`.
+    let author = comment
+        .author
+        .as_deref()
+        .unwrap_or("someone")
+        .trim_start_matches('@');
+    let channel = comment.author_id.as_ref().map(|id| Channel {
+        id: id.clone(),
+        name: author.to_owned(),
+        avatar: comment.author_avatar.clone(),
+    });
+    let palette = &state.palette;
+    ui.horizontal_top(|ui| {
+        let (rect, response) = ui.allocate_exact_size(vec2(avatar, avatar), Sense::click());
+        match &comment.author_avatar {
+            Some(url) => super::images::remote(ui, url)
+                .fit_to_exact_size(rect.size())
+                .corner_radius(CornerRadius::ZERO)
+                .paint_at(ui, rect),
+            None => {
+                ui.painter()
+                    .rect_filled(rect, CornerRadius::ZERO, palette.surface);
+                let initial: String = author.chars().take(1).collect();
+                ui.painter().text(
+                    rect.center(),
+                    Align2::CENTER_CENTER,
+                    initial.to_uppercase(),
+                    FontId::monospace(avatar / 2.0),
+                    palette.secondary,
+                );
+            }
+        }
+        if let Some(channel) = &channel
+            && response
+                .on_hover_cursor(egui::CursorIcon::PointingHand)
+                .clicked()
+        {
+            actions.push(Action::OpenChannel(channel.clone()));
+        }
+        ui.add_space(widgets::cell(ui));
+        ui.vertical(|ui| {
+            ui.set_width(ui.available_width());
+            comment_header(ui, state, comment, author, channel.as_ref(), actions);
+            let open = state.comments_open.contains(&comment.id);
+            let collapsed = !open && widgets::spans_truncated(ui, &comment.text, COMMENT_ROWS);
+            let max_rows = collapsed.then_some(COMMENT_ROWS);
+            if let Some(action) = widgets::rich_text(ui, palette, &comment.text, max_rows) {
+                actions.push(action);
+            }
+            if (collapsed || open)
+                && widgets::bracket_button(
+                    ui,
+                    palette,
+                    if collapsed { "read more" } else { "show less" },
+                    widgets::ButtonStyle::Normal,
+                )
+                .clicked()
+            {
+                actions.push(Action::ToggleCommentText(comment.id.clone()));
+            }
+            comment_footer(ui, state, comment, actions);
+            if let Some(replies) = state.replies.get(&comment.id) {
+                ui.add_space(widgets::line(ui) / 2.0);
+                reply_column(ui, state, replies, actions);
+            }
+        });
+    });
+    ui.add_space(widgets::line(ui));
+}
+
+/// `@author · 3 days ago · pinned · by creator`; the author opens their
+/// channel.
+fn comment_header(
+    ui: &mut Ui,
+    state: &State,
+    comment: &CommentRow,
+    author: &str,
+    channel: Option<&Channel>,
+    actions: &mut Vec<Action>,
+) {
     ui.horizontal(|ui| {
-        // YouTube's handles already start with `@`.
-        let author = comment
-            .author
-            .as_deref()
-            .unwrap_or("someone")
-            .trim_start_matches('@');
         let response = ui.link(
             RichText::new(format!("@{author}"))
                 .monospace()
                 .color(state.palette.blue),
         );
-        if response.clicked()
-            && let Some(id) = &comment.author_id
+        if let Some(channel) = channel
+            && response.clicked()
         {
-            actions.push(Action::OpenChannel(Channel {
-                id: id.clone(),
-                name: author.to_owned(),
-                avatar: None,
-            }));
+            actions.push(Action::OpenChannel(channel.clone()));
         }
         let mut meta = vec![comment.published.clone()];
-        if let Some(likes) = comment.likes.filter(|likes| *likes > 0) {
-            meta.push(format!("▲ {}", util::compact(u64::from(likes))));
-        }
         if comment.pinned {
             meta.push("pinned".to_owned());
         }
         if comment.by_owner {
             meta.push("by creator".to_owned());
-        }
-        if comment.hearted {
-            meta.push("♥".to_owned());
         }
         ui.label(
             RichText::new(format!("· {}", meta.join(" · ")))
@@ -577,27 +653,48 @@ fn comment_row(ui: &mut Ui, state: &State, comment: &CommentRow, actions: &mut V
                 .color(state.palette.secondary),
         );
     });
-    if let Some(action) = widgets::rich_text(ui, &state.palette, &comment.text, None) {
-        actions.push(action);
+}
+
+/// Under the text: the likes, the creator's heart and the replies'
+/// toggle.
+fn comment_footer(ui: &mut Ui, state: &State, comment: &CommentRow, actions: &mut Vec<Action>) {
+    let likes = comment.likes.filter(|likes| *likes > 0);
+    if likes.is_none() && !comment.hearted && comment.replies == 0 {
+        return;
     }
-    if comment.replies > 0 {
-        let open = state.replies.contains_key(&comment.id);
-        let label = if open {
-            "hide replies".to_owned()
-        } else {
-            format!("{} replies", comment.replies)
-        };
-        if widgets::bracket_button(ui, &state.palette, &label, widgets::ButtonStyle::Normal)
-            .clicked()
-        {
-            actions.push(Action::ToggleReplies(comment.id.clone()));
+    ui.horizontal(|ui| {
+        if let Some(likes) = likes {
+            ui.label(
+                RichText::new(format!("▲ {}", util::compact(u64::from(likes))))
+                    .monospace()
+                    .small()
+                    .color(state.palette.secondary),
+            );
         }
-        if let Some(replies) = state.replies.get(&comment.id) {
-            ui.add_space(widgets::line(ui) / 2.0);
-            reply_column(ui, state, replies, actions);
+        if comment.hearted {
+            ui.label(
+                RichText::new("♥")
+                    .monospace()
+                    .small()
+                    .color(state.palette.red),
+            )
+            .on_hover_text("Hearted by the creator");
         }
-    }
-    ui.add_space(widgets::line(ui) / 2.0);
+        if comment.replies > 0 {
+            let label = if state.replies.contains_key(&comment.id) {
+                "hide replies".to_owned()
+            } else if comment.replies == 1 {
+                "1 reply".to_owned()
+            } else {
+                format!("{} replies", comment.replies)
+            };
+            if widgets::bracket_button(ui, &state.palette, &label, widgets::ButtonStyle::Normal)
+                .clicked()
+            {
+                actions.push(Action::ToggleReplies(comment.id.clone()));
+            }
+        }
+    });
 }
 
 /// Replies two cells in, a 1 px `outline` rule at their left.
@@ -624,8 +721,9 @@ fn reply_column(
             Fetch::Idle | Fetch::Loading => results::loading(&mut inner, state, "replies"),
             Fetch::Failed(error) => results::failed(&mut inner, state, error, actions),
             Fetch::Ready(rows) => {
+                let avatar = 1.5 * widgets::line(ui);
                 for reply in rows.clone() {
-                    comment_row(&mut inner, state, &reply, actions);
+                    comment_row(&mut inner, state, &reply, avatar, actions);
                 }
             }
         }

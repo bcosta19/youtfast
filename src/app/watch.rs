@@ -72,6 +72,7 @@ impl App {
         self.reset_watch_panes();
         self.state.comments_visitor_data = None;
         self.state.description_open = false;
+        self.state.comments_open.clear();
         if let Some(player) = &self.player {
             self.state.player_error = player
                 .load(&video.url(), start)
