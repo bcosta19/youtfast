@@ -34,6 +34,7 @@ const VIDEO_HEIGHT: u64 = 10;
 const FPS: u64 = 11;
 const CODEC: u64 = 12;
 const HWDEC: u64 = 13;
+const SEEKABLE: u64 = 14;
 
 #[derive(Debug)]
 pub struct Error {
@@ -104,6 +105,9 @@ pub struct Status {
     pub buffering: bool,
     /// Nothing is loaded.
     pub idle: bool,
+    /// A seek can land: false while nothing is loaded and while a video
+    /// is still opening.
+    pub seekable: bool,
     pub title: Option<String>,
     /// 0 to 100.
     pub volume: f64,
@@ -232,7 +236,7 @@ impl Mpv {
         // SAFETY: valid handle, options set, not yet initialized.
         check(unsafe { ffi::mpv_initialize(handle.ptr()) }, "starting mpv")?;
 
-        let observed: [(u64, &CStr, ffi::mpv_format); 13] = [
+        let observed: [(u64, &CStr, ffi::mpv_format); 14] = [
             (TIME_POS, c"time-pos", ffi::MPV_FORMAT_DOUBLE),
             (DURATION, c"duration", ffi::MPV_FORMAT_DOUBLE),
             (PAUSE, c"pause", ffi::MPV_FORMAT_FLAG),
@@ -246,6 +250,7 @@ impl Mpv {
             (FPS, c"container-fps", ffi::MPV_FORMAT_DOUBLE),
             (CODEC, c"video-format", ffi::MPV_FORMAT_STRING),
             (HWDEC, c"hwdec-current", ffi::MPV_FORMAT_STRING),
+            (SEEKABLE, c"seekable", ffi::MPV_FORMAT_FLAG),
         ];
         for (id, name, format) in observed {
             // SAFETY: valid handle and a static property name.
@@ -499,6 +504,7 @@ impl Mpv {
             PAUSE => status.paused = flag.unwrap_or(false),
             BUFFERING => status.buffering = flag.unwrap_or(false),
             IDLE => status.idle = flag.unwrap_or(true),
+            SEEKABLE => status.seekable = flag.unwrap_or(false),
             MEDIA_TITLE => status.title = string,
             VIDEO_WIDTH => status.video_width = integer.unwrap_or(0),
             VIDEO_HEIGHT => status.video_height = integer.unwrap_or(0),

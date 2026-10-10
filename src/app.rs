@@ -490,6 +490,14 @@ impl App {
                 }
                 self.with_player(|player| player.set_paused(paused));
             }
+            // A seek before the video has opened would fail in mpv: a
+            // shortcut typed as the window appears, or the desktop's media
+            // controls while it loads.
+            Action::SeekTo { .. } | Action::SeekBy(_)
+                if !self
+                    .player
+                    .as_ref()
+                    .is_some_and(|player| player.status().seekable) => {}
             Action::SeekTo { seconds, exact } => {
                 self.with_player(|player| player.seek_to(seconds, exact));
                 self.media.seeked(seconds);
