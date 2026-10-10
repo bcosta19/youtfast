@@ -94,20 +94,54 @@ impl App {
             }
             _ => {}
         }
+        // Back on Home with the feed already here, its shelf is due.
+        self.ask_shelf();
     }
 
     /// Asks the backend for a list, marking it loading.
     pub(super) fn request(&mut self, slot: Slot, request: Request) {
         let state = &mut self.state;
+        // A fresh first page drops the list's continuation too.
         match slot {
-            Slot::Search => state.results = Listing::Loading,
-            Slot::Feed => state.feed = Listing::Loading,
-            Slot::Subscriptions => state.account_subscriptions = Listing::Loading,
-            Slot::History => state.account_history = Listing::Loading,
-            Slot::WatchLater => state.account_watch_later = Listing::Loading,
-            Slot::Liked => state.liked = Listing::Loading,
-            Slot::Playlists => state.playlists = Listing::Loading,
-            Slot::Page => state.page_videos = Listing::Loading,
+            Slot::Search => {
+                state.results = Listing::Loading;
+                state.results_more = None;
+                state.results_more_state = Fetch::Idle;
+            }
+            Slot::Feed => {
+                state.feed = Listing::Loading;
+                self.shelf_asked = false;
+            }
+            Slot::Subscriptions => {
+                state.account_subscriptions = Listing::Loading;
+                state.subscriptions_more = None;
+                state.subscriptions_more_state = Fetch::Idle;
+            }
+            Slot::History => {
+                state.account_history = Listing::Loading;
+                state.history_more = None;
+                state.history_more_state = Fetch::Idle;
+            }
+            Slot::WatchLater => {
+                state.account_watch_later = Listing::Loading;
+                state.watch_later_more = None;
+                state.watch_later_more_state = Fetch::Idle;
+            }
+            Slot::Liked => {
+                state.liked = Listing::Loading;
+                state.liked_more = None;
+                state.liked_more_state = Fetch::Idle;
+            }
+            Slot::Playlists => {
+                state.playlists = Listing::Loading;
+                state.playlists_more = None;
+                state.playlists_more_state = Fetch::Idle;
+            }
+            Slot::Page => {
+                state.page_videos = Listing::Loading;
+                state.page_more = None;
+                state.page_more_state = Fetch::Idle;
+            }
             Slot::Shorts => state.shorts = Listing::Loading,
             Slot::Alerts => {}
         }
@@ -138,7 +172,7 @@ impl App {
         });
     }
 
-    /// Shows more of Home's feed or of the channel tab, asking for the
+    /// Shows more of Home's feed or of the page's list, asking for the
     /// next page when the rows here run out.
     pub(super) fn load_more(&mut self) {
         if self.state.view == View::Home {
@@ -154,14 +188,79 @@ impl App {
             }
             return;
         }
-        // A running continuation cannot be asked twice.
-        if self.state.view == View::Channel
-            && !matches!(self.state.page_more_state, Fetch::Loading)
-            && let Some(more) = self.state.page_more.clone()
-        {
-            self.state.page_more_state = Fetch::Loading;
-            let playlists = self.state.channel_tab == ChannelTab::Playlists;
-            self.send_continuation(Slot::Page, Request::More { more, playlists });
+        let Some((slot, request)) = self.continuation() else {
+            return;
+        };
+        // Mark the continuation on its way, so a double click on its
+        // button cannot send the same page twice.
+        let state = match slot {
+            Slot::Search => &mut self.state.results_more_state,
+            Slot::Subscriptions => &mut self.state.subscriptions_more_state,
+            Slot::History => &mut self.state.history_more_state,
+            Slot::WatchLater => &mut self.state.watch_later_more_state,
+            Slot::Liked => &mut self.state.liked_more_state,
+            Slot::Playlists => &mut self.state.playlists_more_state,
+            Slot::Page => &mut self.state.page_more_state,
+            _ => return,
+        };
+        *state = Fetch::Loading;
+        self.send_continuation(slot, request);
+    }
+
+    /// The continuation of the list the page on screen shows: the slot
+    /// its next page fills, and the request that asks for it. `None`
+    /// when the page's list is not paged or its next page is already on
+    /// its way.
+    fn continuation(&self) -> Option<(Slot, Request)> {
+        let in_flight = |fetch: &Fetch<()>| !matches!(fetch, Fetch::Loading);
+        let state = &self.state;
+        // The channel page's tabs and a playlist's page all continue
+        // through the page slot: the playlists tab asks for playlists,
+        // every other list videos.
+        let page = match state.view {
+            View::Channel => Some(matches!(state.channel_tab, ChannelTab::Playlists)),
+            View::Playlist => Some(false),
+            _ => None,
+        };
+        if let Some(playlists) = page {
+            return state
+                .page_more
+                .clone()
+                .filter(|_| in_flight(&state.page_more_state))
+                .map(|more| (Slot::Page, Request::More { more, playlists }));
+        }
+        match state.view {
+            View::Results => state
+                .results_more
+                .clone()
+                .filter(|_| in_flight(&state.results_more_state))
+                .map(|more| (Slot::Search, Request::MoreVideos(more))),
+            View::Subscriptions => state
+                .subscriptions_more
+                .clone()
+                .filter(|_| in_flight(&state.subscriptions_more_state))
+                .map(|more| (Slot::Subscriptions, Request::MoreSubscriptions(more))),
+            View::History if state.source() == Source::Account => state
+                .history_more
+                .clone()
+                .filter(|_| in_flight(&state.history_more_state))
+                .map(|more| (Slot::History, Request::MoreHistory(more))),
+            View::WatchLater if state.source() == Source::Account => state
+                .watch_later_more
+                .clone()
+                .filter(|_| in_flight(&state.watch_later_more_state))
+                .map(|more| (Slot::WatchLater, Request::MoreVideos(more))),
+            View::Liked => state
+                .liked_more
+                .clone()
+                .filter(|_| in_flight(&state.liked_more_state))
+                .map(|more| (Slot::Liked, Request::MoreVideos(more))),
+            View::Playlists => state
+                .playlists_more
+                .clone()
+                .filter(|_| in_flight(&state.playlists_more_state))
+                .map(|more| (Slot::Playlists, Request::MorePlaylists(more))),
+            _ => None,
         }
     }
 
@@ -187,7 +286,18 @@ impl App {
         let state = &mut self.state;
         let mut feed_page = None;
         match (slot, result) {
-            (Slot::Search, Ok(Payload::Videos(videos))) => put(&mut state.results, Ok(videos)),
+            (Slot::Search, Ok(Payload::VideoList { items, more })) => {
+                state.results_more = more;
+                state.results_more_state = Fetch::Idle;
+                put(&mut state.results, Ok(items));
+            }
+            (Slot::Search, Ok(Payload::More { items, more })) => {
+                state.results_more = more;
+                state.results_more_state = Fetch::Idle;
+                if let PageItems::Videos(videos) = items {
+                    state.results.items_mut().extend(videos);
+                }
+            }
             (Slot::Feed, Ok(Payload::Feed { videos, more })) => {
                 feed_page = Some(videos.clone());
                 // Shorts leave the list for the shelf.
@@ -200,6 +310,7 @@ impl App {
                 state.feed_more_state = Fetch::Idle;
                 state.feed_shown = 40;
                 put(&mut state.feed, Ok(videos));
+                state.feed_loaded_at = Some(util::now());
                 self.ask_shelf();
             }
             (Slot::Feed, Ok(Payload::More { items, more })) => {
@@ -234,11 +345,21 @@ impl App {
                     rows.retain(|video| !on_shelf.contains(&video.id));
                 }
             }
-            (Slot::WatchLater, Ok(Payload::Videos(videos))) => {
-                put(&mut state.account_watch_later, Ok(videos));
+            (Slot::WatchLater, Ok(Payload::VideoList { items, more })) => {
+                state.watch_later_more = more;
+                state.watch_later_more_state = Fetch::Idle;
+                put(&mut state.account_watch_later, Ok(items));
             }
-            (Slot::Liked, Ok(Payload::Videos(videos))) => put(&mut state.liked, Ok(videos)),
-            (Slot::Page, Ok(Payload::Videos(videos))) => put(&mut state.page_videos, Ok(videos)),
+            (Slot::Liked, Ok(Payload::VideoList { items, more })) => {
+                state.liked_more = more;
+                state.liked_more_state = Fetch::Idle;
+                put(&mut state.liked, Ok(items));
+            }
+            (Slot::Page, Ok(Payload::VideoList { items, more })) => {
+                state.page_more = more;
+                state.page_more_state = Fetch::Idle;
+                put(&mut state.page_videos, Ok(items));
+            }
             (
                 Slot::Page,
                 Ok(Payload::ChannelPage {
@@ -253,6 +374,7 @@ impl App {
                 match items {
                     PageItems::Videos(videos) => put(&mut state.page_videos, Ok(videos)),
                     PageItems::Playlists(items) => put(&mut state.page_playlists, Ok(items)),
+                    _ => {}
                 }
             }
             (Slot::Page, Ok(Payload::About(about))) => {
@@ -268,18 +390,69 @@ impl App {
                     PageItems::Playlists(items) => {
                         state.page_playlists.items_mut().extend(items);
                     }
+                    _ => {}
                 }
             }
-            (Slot::Subscriptions, Ok(Payload::Channels(channels))) => {
-                put(&mut state.account_subscriptions, Ok(channels));
+            (Slot::Subscriptions, Ok(Payload::Channels { items, more })) => {
+                state.subscriptions_more = more;
+                state.subscriptions_more_state = Fetch::Idle;
+                put(&mut state.account_subscriptions, Ok(items));
             }
-            (Slot::History, Ok(Payload::History(rows))) => {
-                put(&mut state.account_history, Ok(rows))
+            (Slot::Subscriptions, Ok(Payload::More { items, more })) => {
+                state.subscriptions_more = more;
+                state.subscriptions_more_state = Fetch::Idle;
+                if let PageItems::Channels(channels) = items {
+                    let subscriptions = state.account_subscriptions.items_mut();
+                    subscriptions.extend(channels);
+                    // The list stays by name over the added page.
+                    subscriptions.sort_by_cached_key(|channel| channel.name.to_lowercase());
+                }
             }
-            (Slot::Playlists, Ok(Payload::Playlists(lists))) => {
-                put(&mut state.playlists, Ok(lists))
+            (Slot::History, Ok(Payload::History { items, more })) => {
+                state.history_more = more;
+                state.history_more_state = Fetch::Idle;
+                put(&mut state.account_history, Ok(items));
             }
-            (Slot::Search, Err(error)) => put(&mut state.results, Err(error)),
+            (Slot::History, Ok(Payload::More { items, more })) => {
+                state.history_more = more;
+                state.history_more_state = Fetch::Idle;
+                if let PageItems::History(rows) = items {
+                    state.account_history.items_mut().extend(rows);
+                }
+            }
+            (Slot::WatchLater, Ok(Payload::More { items, more })) => {
+                state.watch_later_more = more;
+                state.watch_later_more_state = Fetch::Idle;
+                if let PageItems::Videos(videos) = items {
+                    state.account_watch_later.items_mut().extend(videos);
+                }
+            }
+            (Slot::Liked, Ok(Payload::More { items, more })) => {
+                state.liked_more = more;
+                state.liked_more_state = Fetch::Idle;
+                if let PageItems::Videos(videos) = items {
+                    state.liked.items_mut().extend(videos);
+                }
+            }
+            (Slot::Playlists, Ok(Payload::Playlists { items, more })) => {
+                state.playlists_more = more;
+                state.playlists_more_state = Fetch::Idle;
+                put(&mut state.playlists, Ok(items));
+            }
+            (Slot::Playlists, Ok(Payload::More { items, more })) => {
+                state.playlists_more = more;
+                state.playlists_more_state = Fetch::Idle;
+                if let PageItems::Playlists(lists) = items {
+                    state.playlists.items_mut().extend(lists);
+                }
+            }
+            (Slot::Search, Err(error)) => {
+                if matches!(state.results_more_state, Fetch::Loading) {
+                    state.results_more_state = Fetch::Failed(error);
+                } else {
+                    put(&mut state.results, Err(error));
+                }
+            }
             (Slot::Feed, Err(error)) => {
                 // A continuation failing keeps the feed already shown.
                 if matches!(state.feed_more_state, Fetch::Loading) {
@@ -295,12 +468,27 @@ impl App {
             (Slot::Alerts, Err(error)) => {
                 log::warn!("the alerts check failed: {error}");
             }
-            (Slot::WatchLater, Err(error)) => put(&mut state.account_watch_later, Err(error)),
-            (Slot::Liked, Err(error)) => put(&mut state.liked, Err(error)),
+            // A continuation failing keeps the rows already shown; its
+            // error lands on the continuation's own state.
+            (Slot::WatchLater, Err(error)) => {
+                if matches!(state.watch_later_more_state, Fetch::Loading) {
+                    state.watch_later_more_state = Fetch::Failed(error);
+                } else {
+                    put(&mut state.account_watch_later, Err(error));
+                }
+            }
+            (Slot::Liked, Err(error)) => {
+                if matches!(state.liked_more_state, Fetch::Loading) {
+                    state.liked_more_state = Fetch::Failed(error);
+                } else {
+                    put(&mut state.liked, Err(error));
+                }
+            }
             (Slot::Page, Err(error)) => {
-                // A continuation failing keeps the rows already shown.
                 if matches!(state.page_more_state, Fetch::Loading) {
                     state.page_more_state = Fetch::Failed(error);
+                } else if state.view == View::Playlist {
+                    put(&mut state.page_videos, Err(error));
                 } else {
                     match state.channel_tab {
                         ChannelTab::About => state.channel_about = Fetch::Failed(error),
@@ -309,9 +497,27 @@ impl App {
                     }
                 }
             }
-            (Slot::Subscriptions, Err(error)) => put(&mut state.account_subscriptions, Err(error)),
-            (Slot::History, Err(error)) => put(&mut state.account_history, Err(error)),
-            (Slot::Playlists, Err(error)) => put(&mut state.playlists, Err(error)),
+            (Slot::Subscriptions, Err(error)) => {
+                if matches!(state.subscriptions_more_state, Fetch::Loading) {
+                    state.subscriptions_more_state = Fetch::Failed(error);
+                } else {
+                    put(&mut state.account_subscriptions, Err(error));
+                }
+            }
+            (Slot::History, Err(error)) => {
+                if matches!(state.history_more_state, Fetch::Loading) {
+                    state.history_more_state = Fetch::Failed(error);
+                } else {
+                    put(&mut state.account_history, Err(error));
+                }
+            }
+            (Slot::Playlists, Err(error)) => {
+                if matches!(state.playlists_more_state, Fetch::Loading) {
+                    state.playlists_more_state = Fetch::Failed(error);
+                } else {
+                    put(&mut state.playlists, Err(error));
+                }
+            }
             (slot, Ok(_)) => log::error!("{slot:?} received another kind of list"),
         }
         // The feed's own load doubles as a check, only while alerts are on.
@@ -324,10 +530,13 @@ impl App {
         }
     }
 
-    /// After the feed arrives, ask the Shorts tabs of the device
-    /// subscriptions it shows (up to 12, ordered by their newest video),
-    /// for Home's shelf.
+    /// While Home shows it, ask the Shorts tabs of the device
+    /// subscriptions the feed shows (up to 12, ordered by their newest
+    /// video), once per feed load, for the shelf.
     fn ask_shelf(&mut self) {
+        if self.shelf_asked || self.state.view != View::Home {
+            return;
+        }
         let mut seen: HashSet<String> = HashSet::new();
         let channels: Vec<String> = self
             .state
@@ -348,6 +557,7 @@ impl App {
         if channels.is_empty() {
             return;
         }
+        self.shelf_asked = true;
         // The shelf keeps what the feed already put there.
         self.send_request(Slot::Shorts, Request::Shorts { channels });
     }

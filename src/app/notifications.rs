@@ -3,14 +3,44 @@
 
 use super::*;
 
+/// How fresh the feed must be for a check to reuse it instead of asking
+/// its sources again: the timer's first check fires a minute after the
+/// feed landed.
+const ALERTS_REUSE_FEED: i64 = 15 * 60;
+
 impl App {
-    /// The check the timer (or `[ check now ]`) runs: the feed's sources
-    /// again, on its own slot so Home's list is undisturbed.
+    /// The check the timer runs: the feed's sources again, on its own
+    /// slot so Home's list is undisturbed — unless the feed itself just
+    /// loaded, which already is that answer.
     pub(super) fn check_alerts(&mut self) {
         if !self.state.settings.alerts || self.state.alerts_checking {
             return;
         }
+        let fresh = self
+            .state
+            .feed_loaded_at
+            .is_some_and(|at| util::now() - at < ALERTS_REUSE_FEED);
+        if fresh && matches!(self.state.feed, Listing::Ready(_)) {
+            let mut videos = self.state.feed.items().to_vec();
+            videos.extend(self.state.shorts.items().iter().cloned());
+            self.note_alerts(videos);
+            return;
+        }
         self.state.alerts_checking = true;
+        self.ask_alerts();
+    }
+
+    /// `[ check now ]`'s check: always asks the sources again.
+    pub(super) fn check_alerts_now(&mut self) {
+        if !self.state.settings.alerts || self.state.alerts_checking {
+            return;
+        }
+        self.state.alerts_checking = true;
+        self.ask_alerts();
+    }
+
+    /// Asks the feed's sources for a check, on the alerts' own slot.
+    fn ask_alerts(&mut self) {
         let account = self.state.signed_in();
         let channels = self.state.device_only_subscriptions();
         self.send_request(Slot::Alerts, Request::Alerts { channels, account });

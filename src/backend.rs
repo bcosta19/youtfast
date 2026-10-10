@@ -4,6 +4,7 @@
 //! (interface to runtime) and [`Event`] (runtime to interface), and every
 //! event wakes the window. Nothing here blocks the interface thread.
 
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -22,7 +23,7 @@ use crate::model::{
 };
 use crate::paths::Dirs;
 use crate::settings::Settings;
-use crate::{account, innertube, takeout, youtube};
+use crate::{account, innertube, takeout};
 
 /// A file the user is choosing in the native dialog. Made on the interface
 /// thread (macOS requires it there) and awaited on the runtime.
@@ -69,7 +70,7 @@ pub enum Request {
     },
     /// A channel page's About pane.
     ChannelAbout(String),
-    /// The next page of the channel tab's list.
+    /// The next page of the channel tab's or a playlist's list.
     More {
         more: crate::innertube::More,
         /// `true` to continue the playlists tab, `false` a video list.
@@ -77,6 +78,14 @@ pub enum Request {
     },
     /// The next page of the account's feed.
     MoreFeed(crate::innertube::More),
+    /// The next page of the account's subscriptions.
+    MoreSubscriptions(crate::innertube::More),
+    /// The next page of the account's history.
+    MoreHistory(crate::innertube::More),
+    /// The next page of an account video list (Watch later, liked).
+    MoreVideos(crate::innertube::More),
+    /// The next page of the account's playlists.
+    MorePlaylists(crate::innertube::More),
     /// The timer's check of the feed's sources.
     Alerts {
         channels: Vec<Channel>,
@@ -95,9 +104,27 @@ pub enum Payload {
         videos: Vec<Video>,
         more: Option<crate::innertube::More>,
     },
-    Channels(Vec<Channel>),
-    History(Vec<HistoryRow>),
-    Playlists(Vec<PlaylistSummary>),
+    /// A video list's first page and its continuation (Watch later,
+    /// liked videos, a playlist's videos).
+    VideoList {
+        items: Vec<Video>,
+        more: Option<crate::innertube::More>,
+    },
+    /// The first page of the account's subscriptions and its continuation.
+    Channels {
+        items: Vec<Channel>,
+        more: Option<crate::innertube::More>,
+    },
+    /// The first page of the account's history and its continuation.
+    History {
+        items: Vec<HistoryRow>,
+        more: Option<crate::innertube::More>,
+    },
+    /// The first page of the account's playlists and its continuation.
+    Playlists {
+        items: Vec<PlaylistSummary>,
+        more: Option<crate::innertube::More>,
+    },
     /// A channel tab's first page: the header plus videos or playlists.
     ChannelPage {
         header: ChannelHeader,
@@ -106,16 +133,18 @@ pub enum Payload {
     },
     /// A channel's About tab.
     About(ChannelAbout),
-    /// A continued page of a channel tab's list.
+    /// A continued page of a paged list.
     More {
         items: PageItems,
         more: Option<crate::innertube::More>,
     },
 }
 
-/// What a channel tab's rows are.
+/// What a paged list's rows are.
 pub enum PageItems {
     Videos(Vec<Video>),
+    Channels(Vec<Channel>),
+    History(Vec<HistoryRow>),
     Playlists(Vec<PlaylistSummary>),
 }
 
@@ -185,6 +214,9 @@ pub enum Command {
     RemoveAccount(u32),
     SaveLibrary(Library),
     SaveSettings(Settings),
+    /// Thumbnail URLs the interface is drawing from the network, for the
+    /// disk cache to keep next time.
+    CacheThumbnails(Vec<String>),
 }
 
 /// How a new account proves itself.
@@ -275,6 +307,16 @@ struct Context {
     /// Held by each change to the account, so they reach YouTube in the
     /// order they were made.
     account_writes: Arc<tokio::sync::Mutex<()>>,
+    /// The `Load` running on each slot: a newer request aborts it, since
+    /// its answer would be dropped on arrival anyway.
+    loads: Arc<std::sync::Mutex<HashMap<Slot, tokio::task::JoinHandle<()>>>>,
+    /// Channel RSS answers kept a while (see `innertube::RssCache`).
+    rss: Arc<innertube::RssCache>,
+    /// Thumbnails being downloaded to the disk cache; a URL goes in while
+    /// its fetch runs so it is not fetched twice at once.
+    thumb_pending: Arc<std::sync::Mutex<HashSet<String>>>,
+    /// At most this many thumbnail fetches at a time.
+    thumb_sem: Arc<tokio::sync::Semaphore>,
 }
 
 impl Context {
@@ -306,11 +348,20 @@ impl Backend {
             library_saves: Arc::new(library_saves),
             settings_saves: Arc::new(settings_saves),
             account_writes: Arc::new(tokio::sync::Mutex::new(())),
+            loads: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            rss: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            thumb_pending: Arc::new(std::sync::Mutex::new(HashSet::new())),
+            thumb_sem: Arc::new(tokio::sync::Semaphore::new(4)),
         };
         std::thread::Builder::new()
             .name("youtfast-backend".into())
             .spawn(move || {
                 runtime.block_on(async move {
+                    {
+                        // The thumbnail cache is bounded once per run.
+                        let dir = context.dirs.cache.join("thumbnails");
+                        tokio::task::spawn_blocking(move || crate::thumbs::prune(&dir));
+                    }
                     tokio::spawn(writer(
                         context.clone(),
                         "library",
@@ -353,15 +404,22 @@ async fn handle(command: Command, context: Context) {
             generation,
             request,
         } => {
-            let result = load(&context.rp, request).await;
-            if let Err(error) = &result {
-                log::warn!("loading {slot:?} failed: {error}");
-            }
-            context.send(Event::Loaded {
-                slot,
-                generation,
-                result,
+            let worker = context.clone();
+            let task = tokio::spawn(async move {
+                let result = load(&worker, request).await;
+                if let Err(error) = &result {
+                    log::warn!("loading {slot:?} failed: {error}");
+                }
+                worker.send(Event::Loaded {
+                    slot,
+                    generation,
+                    result,
+                });
             });
+            // The slot's older request still on its way is now useless.
+            if let Some(previous) = context.loads.lock().unwrap().insert(slot, task) {
+                previous.abort();
+            }
         }
         Command::LoadDetails { generation, id } => {
             let result = innertube::details(&context.rp, &id).await;
@@ -439,7 +497,11 @@ async fn handle(command: Command, context: Context) {
             let Some(file) = picked.await else {
                 return;
             };
-            let import = takeout::parse(&file.read().await);
+            let import = match std::fs::File::open(file.path()) {
+                Ok(file) => takeout::parse_reader(std::io::BufReader::new(file)),
+                // The handle's own read covers a path that cannot be opened.
+                Err(_) => takeout::parse(&file.read().await),
+            };
             context.send(Event::Imported(import));
         }
         Command::AddAccount { account, method } => {
@@ -524,8 +586,38 @@ async fn handle(command: Command, context: Context) {
         Command::SaveSettings(settings) => {
             context.settings_saves.send_replace(Some(settings));
         }
+        Command::CacheThumbnails(urls) => {
+            let dir = context.dirs.cache.join("thumbnails");
+            let _ = std::fs::create_dir_all(&dir);
+            for url in urls {
+                if !context.thumb_pending.lock().unwrap().insert(url.clone()) {
+                    continue;
+                }
+                let path = crate::thumbs::path(&dir, &url);
+                if path.exists() {
+                    context.thumb_pending.lock().unwrap().remove(&url);
+                    continue;
+                }
+                let context = context.clone();
+                tokio::spawn(async move {
+                    let _permit = context.thumb_sem.acquire().await;
+                    let task = url.clone();
+                    let _ = tokio::task::spawn_blocking(move || {
+                        crate::thumbs::fetch(&task, &path);
+                    })
+                    .await;
+                    context.thumb_pending.lock().unwrap().remove(&url);
+                });
+            }
+        }
     }
 }
+
+/// How long a save waits for more saves to pile up behind it: a burst —
+/// a video's open, its details and its finish can be seconds apart —
+/// writes once, not once each. `on_exit` saves directly, so this delay
+/// never puts the last state at risk.
+const SAVE_DEBOUNCE: std::time::Duration = std::time::Duration::from_secs(1);
 
 /// Writes the newest snapshot of one file, one write at a time: saves sent
 /// during a write collapse into the next, and an older snapshot never
@@ -539,6 +631,7 @@ async fn writer<T: Clone + Send + Sync + 'static>(
     save: fn(&T, &Path) -> std::io::Result<()>,
 ) {
     while snapshots.changed().await.is_ok() {
+        tokio::time::sleep(SAVE_DEBOUNCE).await;
         let Some(value) = snapshots.borrow_and_update().clone() else {
             continue;
         };
@@ -554,15 +647,20 @@ async fn writer<T: Clone + Send + Sync + 'static>(
     }
 }
 
-async fn load(rp: &RustyPipe, request: Request) -> Result<Payload, String> {
-    let text = |error: rustypipe::error::Error| error.to_string();
+async fn load(context: &Context, request: Request) -> Result<Payload, String> {
+    let rp = &context.rp;
+    let text = innertube::text;
     Ok(match request {
-        Request::Search(query) => Payload::Videos(youtube::search(&query).await?),
+        Request::Search(query) => {
+            let (items, more) = innertube::search(rp, &query).await?;
+            Payload::VideoList { items, more }
+        }
         Request::Feed { channels, account } => {
-            let (videos, more) = innertube::feed(rp, channels, account).await?;
+            let (videos, more) = innertube::feed(rp, channels, account, &context.rss).await?;
             Payload::Feed { videos, more }
         }
         Request::MoreFeed(more)
+        | Request::MoreVideos(more)
         | Request::More {
             more,
             playlists: false,
@@ -577,18 +675,46 @@ async fn load(rp: &RustyPipe, request: Request) -> Result<Payload, String> {
             Payload::Videos(innertube::channel_shorts(rp, channels, 6).await)
         }
         Request::Alerts { channels, account } => {
-            let (videos, _) = innertube::feed(rp, channels, account).await?;
+            let (videos, _) = innertube::feed(rp, channels, account, &context.rss).await?;
             Payload::Feed { videos, more: None }
         }
         Request::Subscriptions => {
-            Payload::Channels(innertube::subscriptions(rp).await.map_err(text)?)
+            let (items, more) = innertube::subscriptions(rp).await.map_err(text)?;
+            Payload::Channels { items, more }
         }
-        Request::History => Payload::History(innertube::history(rp).await.map_err(text)?),
-        Request::WatchLater => Payload::Videos(innertube::watch_later(rp).await.map_err(text)?),
-        Request::Liked => Payload::Videos(innertube::liked(rp).await.map_err(text)?),
-        Request::Playlists => Payload::Playlists(innertube::playlists(rp).await.map_err(text)?),
+        Request::MoreSubscriptions(more) => {
+            let (items, next) = innertube::more_channels(rp, &more).await?;
+            Payload::More {
+                items: PageItems::Channels(items),
+                more: next,
+            }
+        }
+        Request::History => {
+            let (items, more) = innertube::history(rp).await.map_err(text)?;
+            Payload::History { items, more }
+        }
+        Request::MoreHistory(more) => {
+            let (items, next) = innertube::more_history(rp, &more).await?;
+            Payload::More {
+                items: PageItems::History(items),
+                more: next,
+            }
+        }
+        Request::WatchLater => {
+            let (items, more) = innertube::watch_later(rp).await.map_err(text)?;
+            Payload::VideoList { items, more }
+        }
+        Request::Liked => {
+            let (items, more) = innertube::liked(rp).await.map_err(text)?;
+            Payload::VideoList { items, more }
+        }
+        Request::Playlists => {
+            let (items, more) = innertube::playlists(rp).await.map_err(text)?;
+            Payload::Playlists { items, more }
+        }
         Request::Playlist(id) => {
-            Payload::Videos(innertube::playlist_videos(rp, &id).await.map_err(text)?)
+            let (items, more) = innertube::playlist_videos(rp, &id).await.map_err(text)?;
+            Payload::VideoList { items, more }
         }
         Request::ChannelTab { id, tab } => match tab {
             crate::model::ChannelTab::Playlists => {
@@ -612,7 +738,8 @@ async fn load(rp: &RustyPipe, request: Request) -> Result<Payload, String> {
         Request::More {
             more,
             playlists: true,
-        } => {
+        }
+        | Request::MorePlaylists(more) => {
             let (items, next) = innertube::more_playlists(rp, &more).await?;
             Payload::More {
                 items: PageItems::Playlists(items),

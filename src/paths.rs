@@ -29,6 +29,9 @@ impl Dirs {
         std::fs::create_dir_all(&dirs.data)?;
         std::fs::create_dir_all(&dirs.config)?;
         std::fs::create_dir_all(&dirs.cache)?;
+        only_the_owner(&dirs.data);
+        only_the_owner(&dirs.config);
+        only_the_owner(&dirs.cache);
         Ok(dirs)
     }
 
@@ -45,6 +48,19 @@ impl Dirs {
     }
 }
 
+/// Restricts `dir` to its owner; the library and settings behind it are
+/// nobody else's reading. On other platforms the defaults apply.
+#[cfg(unix)]
+fn only_the_owner(dir: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Err(error) = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)) {
+        log::warn!("could not restrict {} to its owner: {error}", dir.display());
+    }
+}
+
+#[cfg(not(unix))]
+fn only_the_owner(_: &Path) {}
+
 /// Replaces `path` with `contents` in one step: the data goes to a file
 /// beside it, reaches the disk, and is renamed over the old one, so a crash
 /// leaves either the old file or the new, never half of one. Each write
@@ -60,7 +76,14 @@ pub fn write_atomic(path: &Path, contents: &[u8]) -> std::io::Result<()> {
     ));
     let temporary = PathBuf::from(temporary);
     let written = (|| {
-        let mut file = std::fs::File::create(&temporary)?;
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        // What YouTFast writes is its user's alone: the file is born
+        // readable only to them, never open to the umask's default
+        // between creation and a later chmod.
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+        let mut file = options.open(&temporary)?;
         file.write_all(contents)?;
         file.sync_all()?;
         std::fs::rename(&temporary, path)
@@ -133,6 +156,21 @@ mod tests {
         let written = std::fs::read(&path).unwrap();
         assert_eq!(written.len(), 64 * 1024);
         assert!(written.iter().all(|byte| *byte == written[0]));
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    /// A written file is readable by its owner alone.
+    #[cfg(unix)]
+    #[test]
+    fn writes_are_the_owners_alone() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::var("CARGO_TARGET_TMPDIR")
+            .unwrap_or_else(|_| format!("{}/target", env!("CARGO_MANIFEST_DIR")));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = Path::new(&dir).join(format!("youtfast-mode-{}.json", crate::util::now()));
+        write_atomic(&path, b"data").unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
         std::fs::remove_file(&path).unwrap();
     }
 }

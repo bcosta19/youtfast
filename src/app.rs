@@ -49,6 +49,9 @@ pub struct State {
     /// The search field's text.
     pub query: String,
     pub results: Results,
+    /// The results' next page, and a page on its way (or its error).
+    pub results_more: Option<innertube::More>,
+    pub results_more_state: Fetch<()>,
     /// The home feed (long videos; shorts go to the shelf).
     pub feed: Listing<Video>,
     /// How many feed rows are drawn; the rest sit behind scrolling.
@@ -61,12 +64,26 @@ pub struct State {
     pub feed_more_state: Fetch<()>,
     /// Home's shorts shelf.
     pub shorts: Listing<Video>,
-    /// The signed-in account's lists.
+    /// When the feed last landed; one fresh enough already is the
+    /// alerts check's answer.
+    pub feed_loaded_at: Option<i64>,
+    /// The signed-in account's lists, each with the next page's
+    /// directions and a page on its way (or its error).
     pub account_subscriptions: Listing<Channel>,
+    pub subscriptions_more: Option<innertube::More>,
+    pub subscriptions_more_state: Fetch<()>,
     pub account_history: Listing<HistoryRow>,
+    pub history_more: Option<innertube::More>,
+    pub history_more_state: Fetch<()>,
     pub account_watch_later: Listing<Video>,
+    pub watch_later_more: Option<innertube::More>,
+    pub watch_later_more_state: Fetch<()>,
     pub liked: Listing<Video>,
+    pub liked_more: Option<innertube::More>,
+    pub liked_more_state: Fetch<()>,
     pub playlists: Listing<PlaylistSummary>,
+    pub playlists_more: Option<innertube::More>,
+    pub playlists_more_state: Fetch<()>,
     pub page: Option<Page>,
     pub page_videos: Listing<Video>,
     /// What this computer keeps, with or without an account.
@@ -261,6 +278,9 @@ pub struct App {
     more_comments_token: Option<String>,
     /// The channel the open page shows, to detect a channel switch.
     open_channel: Option<String>,
+    /// The shelf's Shorts tabs were asked for this feed already; a new
+    /// feed load asks again, but only while Home is showing the shelf.
+    shelf_asked: bool,
     /// Where Back goes: the pages a video, channel or playlist was opened
     /// from.
     back: Vec<View>,
@@ -298,6 +318,7 @@ impl App {
         egui_extras::install_image_loaders(ctx);
         fastframe_icons::install::<crate::icons::Icon>(ctx);
         let dirs = Dirs::new().context("could not make the data folders")?;
+        ui::images::init(dirs.cache.join("thumbnails"));
         let backend =
             Backend::start(ctx.clone(), dirs.clone()).context("could not start the backend")?;
 
@@ -369,6 +390,7 @@ impl App {
             ratings: util::Recent::new(RATINGS_KEPT),
             more_comments_token: None,
             open_channel: None,
+            shelf_asked: false,
             back: Vec::new(),
             custom_themes,
             theme_waker,
@@ -631,7 +653,7 @@ impl App {
                 }
             }
             Action::SetChannelTab(tab) => self.set_channel_tab(tab),
-            Action::CheckAlertsNow => self.check_alerts(),
+            Action::CheckAlertsNow => self.check_alerts_now(),
             Action::MarkAlertsSeen => self.mark_alerts_seen(),
             Action::SetAlerts(on) => self.set_alerts(on),
             Action::SetDesktopNotifications(on) => {
@@ -659,6 +681,11 @@ impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll();
         ui::images::forget_unseen(ctx);
+        // Thumbnails drawn from the network go to the disk cache.
+        let wanted = ui::images::drain_wanted();
+        if !wanted.is_empty() {
+            self.backend.send(Command::CacheThumbnails(wanted));
+        }
         // What later launches sent to the running copy.
         let remote: Vec<instance::Remote> = std::mem::take(
             &mut *self

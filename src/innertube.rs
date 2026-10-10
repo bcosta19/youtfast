@@ -3,15 +3,15 @@
 //! Everything here runs on the backend runtime and returns the app's types.
 
 use std::cmp::Reverse;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use rustypipe::client::{RustyPipe, RustyPipeQuery};
 use rustypipe::error::Error;
 use rustypipe::model::{
-    Channel as RpChannel, ChannelItem, ChannelRss, Comment, Playlist, PlaylistItem, Thumbnail,
-    UrlTarget, VideoDetails, VideoItem, paginator::ContinuationEndpoint, paginator::Paginator,
-    richtext::TextComponent,
+    Channel as RpChannel, ChannelItem, ChannelRss, Comment, HistoryItem, Playlist, PlaylistItem,
+    Thumbnail, UrlTarget, VideoDetails, VideoItem, paginator::ContinuationEndpoint,
+    paginator::Paginator, richtext::TextComponent,
 };
 use rustypipe::param::ChannelVideoTab;
 use tokio::sync::Semaphore;
@@ -31,13 +31,18 @@ pub use edit::{rate, rating, save_targets, set_saved};
 /// Channel feeds fetched at once: RSS is cheap, but hundreds of
 /// subscriptions should not open hundreds of connections.
 const RSS_CONCURRENCY: usize = 8;
-/// The most items an account list (subscriptions, history, a playlist)
-/// pages through.
-const LIST_LIMIT: usize = 500;
+/// How long a channel's RSS answer is kept: uploads take minutes to
+/// reach RSS anyway, so re-fetching sooner buys nothing.
+const RSS_TTL: i64 = 10 * 60;
+/// Channel RSS answers by channel id (when, videos), shared by the feed
+/// and the alerts check so neither re-fetches what the other just got.
+pub type RssCache = std::sync::Mutex<HashMap<String, (i64, Vec<Video>)>>;
 
 /// The rustypipe client. Its cache keeps client versions and the player's
 /// deobfuscation data between runs, never the session (see [`CacheFile`]),
-/// and it writes no error reports: those hold whole responses.
+/// and it writes no error reports: those hold whole responses. Botguard
+/// stays off: playback is mpv's, so the binary rustypipe would find on
+/// PATH has nothing to do here.
 pub fn client(dirs: &Dirs) -> Result<RustyPipe, Error> {
     RustyPipe::builder()
         .storage(Box::new(CacheFile {
@@ -45,13 +50,34 @@ pub fn client(dirs: &Dirs) -> Result<RustyPipe, Error> {
         }))
         .storage_dir(dirs.cache.clone())
         .no_reporter()
+        .no_botguard()
         .build()
 }
 
 /// Whether the failure means the session is gone (signed out elsewhere,
-/// expired, or rotated away by the browser it came from).
+/// expired, or rotated away by the browser it came from). A 403 is not
+/// always that: YouTube's bot check and rate limits answer 403 too, and
+/// say so in the message — calling those an expired session sends the
+/// user to sign in again over a session that is fine.
 pub fn is_signed_out(error: &Error) -> bool {
-    matches!(error, Error::Auth(_)) || matches!(error, Error::HttpStatus(401 | 403, _))
+    match error {
+        Error::Auth(_) | Error::HttpStatus(401, _) => true,
+        Error::HttpStatus(403, message) => {
+            let message = message.to_lowercase();
+            !(message.contains("bot") || message.contains("rate") || message.contains("quota"))
+        }
+        _ => false,
+    }
+}
+
+/// An error as text for the user and the log: reqwest's message can end in
+/// the request's URL ("... for url (...)"), which helps nobody.
+pub fn text(error: Error) -> String {
+    let text = error.to_string();
+    match text.find(" for url (") {
+        Some(at) => text[..at].to_owned(),
+        None => text,
+    }
 }
 
 /// Starts using a session, checking it with YouTube first.
@@ -66,10 +92,12 @@ pub async fn sign_out(rp: &RustyPipe) {
 
 /// The home feed: the account's subscription feed when signed in, and the
 /// latest videos of every channel subscribed on this device. Newest first.
+/// Channels whose RSS `cache` still holds fresh answer from it.
 pub async fn feed(
     rp: &RustyPipe,
     channels: Vec<Channel>,
     account: bool,
+    cache: &RssCache,
 ) -> Result<(Vec<Video>, Option<More>), String> {
     let mut videos = Vec::new();
     let mut problems = Vec::new();
@@ -80,24 +108,47 @@ pub async fn feed(
                 more = More::of(&page);
                 videos.extend(page.items.into_iter().map(video));
             }
-            Err(error) => problems.push(format!("your account's feed: {error}")),
+            Err(error) => problems.push(format!("your account's feed: {}", text(error))),
         }
     }
 
-    let mut tasks = spawn_limited(channels, |channel| {
+    let now = util::now();
+    // Channels whose RSS is still fresh answer from the cache; the rest
+    // are fetched and kept there.
+    let mut fresh = Vec::new();
+    {
+        let cache = cache.lock().unwrap();
+        for channel in channels {
+            match cache.get(&channel.id) {
+                Some((at, hit)) if now - at < RSS_TTL => videos.extend(hit.iter().cloned()),
+                _ => fresh.push(channel),
+            }
+        }
+    }
+    let mut tasks = spawn_limited(fresh, |channel| {
         let rp = rp.clone();
         async move {
             let result = rp.query().channel_rss(&channel.id).await;
-            (channel.name, result)
+            (channel, result)
         }
     });
-    let now = util::now();
     let mut failed_channels = 0;
     while let Some(joined) = tasks.join_next().await {
         match joined {
-            Ok((_, Ok(feed))) => videos.extend(rss_videos(feed, now)),
-            Ok((name, Err(error))) => {
-                log::warn!("could not read the feed of {name}: {error}");
+            Ok((channel, Ok(feed))) => {
+                let videos_of_channel: Vec<Video> = rss_videos(feed, now);
+                cache
+                    .lock()
+                    .unwrap()
+                    .insert(channel.id, (now, videos_of_channel.clone()));
+                videos.extend(videos_of_channel);
+            }
+            Ok((channel, Err(error))) => {
+                log::warn!(
+                    "could not read the feed of {}: {}",
+                    channel.name,
+                    text(error)
+                );
                 failed_channels += 1;
             }
             Err(error) => {
@@ -152,7 +203,7 @@ pub async fn channel_shorts(rp: &RustyPipe, channels: Vec<String>, per: usize) -
                 each.push(shorts);
             }
             Ok((id, Err(error))) => {
-                log::warn!("could not read the shorts of {id}: {error}");
+                log::warn!("could not read the shorts of {id}: {}", text(error));
             }
             Err(error) => {
                 log::warn!("a shorts task failed: {error}");
@@ -200,13 +251,15 @@ pub fn interleave<T>(lists: Vec<Vec<T>>) -> Vec<T> {
     }
 }
 
-/// How to continue a paged list: YouTube's continuation token and the
-/// endpoint it came from.
+/// How to continue a paged list: YouTube's continuation token, the
+/// endpoint it came from, and whether the list it continues needed the
+/// signed-in session (the account's lists always do).
 #[derive(Clone, Debug)]
 pub struct More {
     pub ctoken: String,
     pub endpoint: ContinuationEndpoint,
     pub visitor_data: Option<String>,
+    pub authenticated: bool,
 }
 
 impl More {
@@ -216,7 +269,19 @@ impl More {
             ctoken: ctoken.clone(),
             endpoint: paginator.endpoint,
             visitor_data: paginator.visitor_data.clone(),
+            authenticated: paginator.authenticated,
         })
+    }
+}
+
+/// The query a continuation runs through: with the session when the
+/// list it continues needed one.
+fn continuation_query(rp: &RustyPipe, more: &More) -> RustyPipeQuery {
+    let query = rp.query();
+    if more.authenticated {
+        query.authenticated()
+    } else {
+        query
     }
 }
 
@@ -225,11 +290,10 @@ pub async fn more_videos(
     rp: &RustyPipe,
     more: &More,
 ) -> Result<(Vec<Video>, Option<More>), String> {
-    let page = rp
-        .query()
+    let page = continuation_query(rp, more)
         .continuation::<VideoItem, _>(&more.ctoken, more.endpoint, more.visitor_data.as_deref())
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(text)?;
     let more = More::of(&page);
     Ok((page.items.into_iter().map(video).collect(), more))
 }
@@ -239,13 +303,51 @@ pub async fn more_playlists(
     rp: &RustyPipe,
     more: &More,
 ) -> Result<(Vec<PlaylistSummary>, Option<More>), String> {
-    let page = rp
-        .query()
+    let page = continuation_query(rp, more)
         .continuation::<PlaylistItem, _>(&more.ctoken, more.endpoint, more.visitor_data.as_deref())
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(text)?;
     let more = More::of(&page);
     Ok((page.items.into_iter().map(playlist).collect(), more))
+}
+
+/// The next page of channels (the account's subscriptions).
+pub async fn more_channels(
+    rp: &RustyPipe,
+    more: &More,
+) -> Result<(Vec<Channel>, Option<More>), String> {
+    let page = continuation_query(rp, more)
+        .continuation::<ChannelItem, _>(&more.ctoken, more.endpoint, more.visitor_data.as_deref())
+        .await
+        .map_err(text)?;
+    let more = More::of(&page);
+    Ok((page.items.into_iter().map(channel).collect(), more))
+}
+
+/// The first page of videos matching `query`, and how to ask for the
+/// next: the same continuation every other list uses.
+pub async fn search(rp: &RustyPipe, query: &str) -> Result<(Vec<Video>, Option<More>), String> {
+    let result = rp
+        .query()
+        .search::<VideoItem, _>(query)
+        .await
+        .map_err(text)?;
+    let more = More::of(&result.items);
+    Ok((result.items.items.into_iter().map(video).collect(), more))
+}
+
+/// The next page of the account's history.
+pub async fn more_history(
+    rp: &RustyPipe,
+    more: &More,
+) -> Result<(Vec<HistoryRow>, Option<More>), String> {
+    let page = rp
+        .query()
+        .history_continuation(&more.ctoken, more.visitor_data.as_deref())
+        .await
+        .map_err(text)?;
+    let more = More::of(&page);
+    Ok((page.items.into_iter().map(history_row).collect(), more))
 }
 
 /// A channel's Videos, Shorts or Live tab, or its videos matching `query`.
@@ -263,7 +365,7 @@ pub async fn channel_tab(
         ChannelTab::Live => query.channel_videos_tab(id, ChannelVideoTab::Live).await,
         _ => unreachable!("channel_tab is for the video tabs"),
     }
-    .map_err(|error| error.to_string())?;
+    .map_err(text)?;
     let header = channel_header(&result);
     let more = More::of(&result.content);
     let shorts = *tab == ChannelTab::Shorts;
@@ -286,11 +388,7 @@ pub async fn channel_playlists_page(
     rp: &RustyPipe,
     id: &str,
 ) -> Result<(ChannelHeader, Vec<PlaylistSummary>, Option<More>), String> {
-    let result = rp
-        .query()
-        .channel_playlists(id)
-        .await
-        .map_err(|error| error.to_string())?;
+    let result = rp.query().channel_playlists(id).await.map_err(text)?;
     let header = channel_header(&result);
     let more = More::of(&result.content);
     Ok((
@@ -302,11 +400,7 @@ pub async fn channel_playlists_page(
 
 /// A channel's About tab.
 pub async fn channel_about(rp: &RustyPipe, id: &str) -> Result<ChannelAbout, String> {
-    let info = rp
-        .query()
-        .channel_info(id)
-        .await
-        .map_err(|error| error.to_string())?;
+    let info = rp.query().channel_info(id).await.map_err(text)?;
     Ok(ChannelAbout {
         url: info.url,
         description: info.description,
@@ -340,73 +434,63 @@ fn iso_date(year: i32, month: impl Into<u8>, day: u8) -> String {
     format!("{year:04}-{:02}-{day:02}", month.into())
 }
 
-pub async fn subscriptions(rp: &RustyPipe) -> Result<Vec<Channel>, Error> {
-    let query = rp.query();
-    let mut page = query.subscriptions().await?;
-    page.extend_limit(&query, LIST_LIMIT).await?;
+/// The first page of the account's subscriptions and its continuation;
+/// the "Load more" rows ask for the next page.
+pub async fn subscriptions(rp: &RustyPipe) -> Result<(Vec<Channel>, Option<More>), Error> {
+    let page = rp.query().subscriptions().await?;
+    let more = More::of(&page);
     let mut channels: Vec<Channel> = page.items.into_iter().map(channel).collect();
     channels.sort_by_cached_key(|channel| channel.name.to_lowercase());
-    Ok(channels)
+    Ok((channels, more))
 }
 
-pub async fn history(rp: &RustyPipe) -> Result<Vec<HistoryRow>, Error> {
-    let query = rp.query();
-    let mut page = query.history().await?;
-    page.extend_limit(&query, LIST_LIMIT).await?;
-    Ok(page
-        .items
-        .into_iter()
-        .map(|entry| HistoryRow {
-            video: video(entry.item),
-            when: entry.playback_date_txt,
-        })
-        .collect())
+/// The first page of the account's history and its continuation.
+pub async fn history(rp: &RustyPipe) -> Result<(Vec<HistoryRow>, Option<More>), Error> {
+    let page = rp.query().history().await?;
+    let more = More::of(&page);
+    Ok((page.items.into_iter().map(history_row).collect(), more))
 }
 
-pub async fn watch_later(rp: &RustyPipe) -> Result<Vec<Video>, Error> {
-    let query = rp.query();
-    let playlist = query.watch_later().await?;
-    playlist_items(&query, playlist).await
+fn history_row(entry: HistoryItem<VideoItem>) -> HistoryRow {
+    HistoryRow {
+        video: video(entry.item),
+        when: entry.playback_date_txt,
+    }
 }
 
-pub async fn liked(rp: &RustyPipe) -> Result<Vec<Video>, Error> {
-    let query = rp.query();
-    let playlist = query.liked_videos().await?;
-    playlist_items(&query, playlist).await
+pub async fn watch_later(rp: &RustyPipe) -> Result<(Vec<Video>, Option<More>), Error> {
+    Ok(playlist_page(rp.query().watch_later().await?))
 }
 
-pub async fn playlists(rp: &RustyPipe) -> Result<Vec<PlaylistSummary>, Error> {
-    let query = rp.query();
-    let mut page = query.saved_playlists().await?;
-    page.extend_limit(&query, LIST_LIMIT).await?;
-    Ok(page.items.into_iter().map(playlist).collect())
+pub async fn liked(rp: &RustyPipe) -> Result<(Vec<Video>, Option<More>), Error> {
+    Ok(playlist_page(rp.query().liked_videos().await?))
 }
 
-/// A playlist's videos. Private playlists need the session, which rustypipe
-/// adds by itself when one is set.
-pub async fn playlist_videos(rp: &RustyPipe, id: &str) -> Result<Vec<Video>, Error> {
-    let query = rp.query();
-    let playlist = query.playlist(id).await?;
-    playlist_items(&query, playlist).await
+pub async fn playlists(rp: &RustyPipe) -> Result<(Vec<PlaylistSummary>, Option<More>), Error> {
+    let page = rp.query().saved_playlists().await?;
+    let more = More::of(&page);
+    Ok((page.items.into_iter().map(playlist).collect(), more))
 }
 
-/// A playlist's videos, paged through up to [`LIST_LIMIT`].
-async fn playlist_items(
-    query: &RustyPipeQuery,
-    mut playlist: Playlist,
-) -> Result<Vec<Video>, Error> {
-    playlist.videos.extend_limit(query, LIST_LIMIT).await?;
-    Ok(playlist.videos.items.into_iter().map(video).collect())
+/// A playlist's first page of videos. Private playlists need the session,
+/// which rustypipe adds by itself when one is set.
+pub async fn playlist_videos(
+    rp: &RustyPipe,
+    id: &str,
+) -> Result<(Vec<Video>, Option<More>), Error> {
+    Ok(playlist_page(rp.query().playlist(id).await?))
+}
+
+/// A playlist's first page of videos and its continuation.
+fn playlist_page(playlist: Playlist) -> (Vec<Video>, Option<More>) {
+    let more = More::of(&playlist.videos);
+    (playlist.videos.items.into_iter().map(video).collect(), more)
 }
 
 /// The watch page's data: metadata, description, chapters, recommended
 /// videos and the comments' continuation token. Works signed in or out.
 pub async fn details(rp: &RustyPipe, id: &str) -> Result<Details, String> {
-    let details = rp
-        .query()
-        .video_details(id)
-        .await
-        .map_err(|error| error.to_string())?;
+    let details = rp.query().video_details(id).await.map_err(text)?;
     Ok(video_details(details, id))
 }
 
@@ -459,7 +543,7 @@ pub async fn comments(
         .query()
         .video_comments(ctoken, visitor_data)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(text)?;
     Ok((page.items.iter().map(comment).collect(), page.ctoken))
 }
 
@@ -677,6 +761,29 @@ mod tests {
             }
             other => panic!("a playlist link is a web link, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_bot_check_is_not_a_dead_session() {
+        use rustypipe::error::Error;
+        let status = |code, msg: &str| Error::HttpStatus(code, msg.to_owned().into());
+        assert!(is_signed_out(&Error::Auth(
+            rustypipe::error::AuthError::NoLogin
+        )));
+        assert!(is_signed_out(&status(401, "")));
+        // An empty or plainly credential 403 still means the session.
+        assert!(is_signed_out(&status(403, "")));
+        assert!(is_signed_out(&status(403, "Invalid credentials")));
+        // YouTube's own words for a bot check or rate limit do not.
+        assert!(!is_signed_out(&status(
+            403,
+            "Sign in to confirm you're not a bot"
+        )));
+        assert!(!is_signed_out(&status(
+            403,
+            "Too many requests; rate limited"
+        )));
+        assert!(!is_signed_out(&status(500, "")));
     }
 
     #[test]

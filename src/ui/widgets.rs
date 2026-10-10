@@ -5,7 +5,7 @@
 
 use egui::text::LayoutJob;
 use egui::{
-    Color32, CornerRadius, CursorIcon, FontId, Galley, Pos2, Rect, Response, Sense, Stroke, Ui,
+    Color32, CornerRadius, CursorIcon, FontId, Galley, Id, Pos2, Rect, Response, Sense, Stroke, Ui,
     pos2, vec2,
 };
 
@@ -908,10 +908,21 @@ fn span_job(
 
 /// Whether `max_rows` would cut the spans at the caller's width.
 /// (Colours do not change where a row wraps, so a default palette is fine.)
-pub fn spans_truncated(ui: &Ui, spans: &[Span], max_rows: usize) -> bool {
-    let (job, _) = span_job(spans, &Palette::dark(), ui.available_width(), None);
-    let galley = ui.painter().layout_job(job);
-    galley.rows.len() > max_rows
+/// The answer is kept in `id` and only recomputed when the width changes:
+/// laying the job out every frame just for this check allocates the whole
+/// text again for every comment.
+pub fn spans_truncated(ui: &Ui, id: Id, spans: &[Span], max_rows: usize) -> bool {
+    let width = ui.available_width();
+    if let Some((cached, truncated)) = ui.ctx().data_mut(|d| d.get_persisted::<(f32, bool)>(id))
+        && cached == width
+    {
+        return truncated;
+    }
+    let (job, _) = span_job(spans, &Palette::dark(), width, None);
+    let truncated = ui.painter().layout_job(job).rows.len() > max_rows;
+    ui.ctx()
+        .data_mut(|d| d.insert_persisted(id, (width, truncated)));
+    truncated
 }
 
 /// The galley position of the span under `pos`, if it is clickable.

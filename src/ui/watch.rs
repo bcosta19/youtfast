@@ -644,7 +644,8 @@ fn description(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<A
         let Some(spans) = spans.filter(|spans| !spans.is_empty()) else {
             return;
         };
-        let collapsed = !open && widgets::spans_truncated(ui, spans, 3);
+        let collapsed =
+            !open && widgets::spans_truncated(ui, ui.id().with("description"), spans, 3);
         let max_rows = if collapsed { Some(3) } else { None };
         if let Some(action) = widgets::rich_text(ui, &state.palette, spans, max_rows) {
             actions.push(action);
@@ -740,8 +741,8 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 }
                 ui.add_space(8.0);
                 let avatar = 40.0;
-                for comment in rows.clone() {
-                    comment_row(ui, state, &comment, avatar, actions);
+                for comment in rows {
+                    comment_row(ui, state, comment, avatar, actions);
                 }
                 // The tail row: the page on its way, a failed page's
                 // retry, or the button.
@@ -825,7 +826,13 @@ fn comment_row(
             ui.spacing_mut().item_spacing.y = 4.0;
             comment_header(ui, state, comment, author, channel.as_ref(), actions);
             let open = state.comments_open.contains(&comment.id);
-            let collapsed = !open && widgets::spans_truncated(ui, &comment.text, COMMENT_ROWS);
+            let collapsed = !open
+                && widgets::spans_truncated(
+                    ui,
+                    ui.id().with(("comment", &comment.id)),
+                    &comment.text,
+                    COMMENT_ROWS,
+                );
             let max_rows = collapsed.then_some(COMMENT_ROWS);
             if let Some(action) = widgets::rich_text(ui, palette, &comment.text, max_rows) {
                 actions.push(action);
@@ -975,8 +982,8 @@ fn reply_column(
             Fetch::Idle | Fetch::Loading => widgets::loading(ui, &state.palette, "replies"),
             Fetch::Failed(error) => results::failed(ui, state, error, actions),
             Fetch::Ready(rows) => {
-                for reply in rows.clone() {
-                    comment_row(ui, state, &reply, 24.0, actions);
+                for reply in rows {
+                    comment_row(ui, state, reply, 24.0, actions);
                 }
             }
         });
@@ -1088,13 +1095,11 @@ fn quality_menu(ui: &mut Ui, state: &State, status: &Status, actions: &mut Vec<A
         (_, Some(playing)) => playing.label(),
         (Quality::Max(lines), None) => format!("{lines}p"),
     };
-    let offered: Vec<Resolution> = if state.resolutions.is_empty() {
-        [2160, 1440, 1080, 720, 480, 360]
-            .into_iter()
-            .map(|lines| Resolution { lines, fps: 0 })
-            .collect()
+    let fallback = [2160, 1440, 1080, 720, 480, 360].map(|lines| Resolution { lines, fps: 0 });
+    let offered: &[Resolution] = if state.resolutions.is_empty() {
+        &fallback
     } else {
-        state.resolutions.clone()
+        &state.resolutions
     };
     let menu = egui::ComboBox::from_id_salt("quality")
         .selected_text(RichText::new(text).font(theme::medium(13.0)))
@@ -1231,17 +1236,16 @@ fn seek_bar(ui: &mut Ui, state: &mut State, status: &Status, actions: &mut Vec<A
 
 fn up_next(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let watching = state.watching.as_ref().map(|video| video.id.as_str());
-    let next: Vec<_> = state
+    let next: Vec<&Video> = state
         .up_next
         .iter()
         .filter(|video| Some(video.id.as_str()) != watching)
-        .cloned()
         .collect();
     if next.is_empty() {
         return;
     }
     widgets::section(ui, &state.palette, "Up next", Some(next.len()), |ui| {
-        results::video_rows(ui, state, &next, actions);
+        results::video_rows(ui, state, next, actions);
     });
 }
 
@@ -1251,17 +1255,16 @@ fn related(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         return;
     };
     let watching = state.watching.as_ref().map(|video| video.id.as_str());
-    let related: Vec<Video> = details
+    let related: Vec<&Video> = details
         .related
         .iter()
         .filter(|video| Some(video.id.as_str()) != watching)
-        .cloned()
         .collect();
     if related.is_empty() {
         return;
     }
     widgets::section(ui, &state.palette, "Related", Some(related.len()), |ui| {
-        results::video_rows(ui, state, &related, actions);
+        results::video_rows(ui, state, related, actions);
     });
 }
 

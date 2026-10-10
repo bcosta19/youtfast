@@ -240,7 +240,6 @@ fn videos(ui: &mut Ui, state: &State, tab: &ChannelTab, actions: &mut Vec<Action
             ),
         },
         Listing::Ready(videos) => {
-            let videos = videos.clone();
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .show(ui, |ui| {
@@ -306,7 +305,6 @@ fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             "This channel has no public playlists",
         ),
         Listing::Ready(playlists) => {
-            let playlists = playlists.clone();
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .show(ui, |ui| {

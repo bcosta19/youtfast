@@ -60,6 +60,8 @@ impl App {
         self.ratings.put(id.clone(), util::now(), rating);
         // The Liked list changes with it.
         self.state.liked = Listing::Idle;
+        self.state.liked_more = None;
+        self.state.liked_more_state = Fetch::Idle;
         self.backend.send(Command::Rate {
             id,
             rating,
@@ -146,9 +148,13 @@ impl App {
     fn forget_playlist(&mut self, playlist: &str) {
         if playlist == "WL" {
             self.state.account_watch_later = Listing::Idle;
+            self.state.watch_later_more = None;
+            self.state.watch_later_more_state = Fetch::Idle;
         }
         if matches!(&self.state.page, Some(Page::Playlist { id, .. }) if id == playlist) {
             self.state.page_videos = Listing::Idle;
+            self.state.page_more = None;
+            self.state.page_more_state = Fetch::Idle;
         }
     }
 

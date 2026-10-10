@@ -6,6 +6,8 @@
 //! - `history/watch-history.json`: what was watched and when. Takeout
 //!   writes HTML unless JSON is chosen when the export is made.
 
+use std::io::BufRead;
+
 use serde::Deserialize;
 
 use crate::library::{Import, Watched};
@@ -14,53 +16,79 @@ use crate::youtube;
 
 /// Reads either Takeout file, told apart by its contents.
 pub fn parse(bytes: &[u8]) -> Result<Import, String> {
-    let text = String::from_utf8_lossy(bytes);
-    let text = text.trim_start_matches('\u{feff}').trim_start();
-    if text.starts_with('[') {
-        Ok(Import {
-            history: history(text)?,
+    parse_reader(bytes)
+}
+
+/// [`parse`], streaming: a big watch-history.json is deserialized as it is
+/// read instead of sitting in memory a second time as raw bytes.
+pub fn parse_reader<R: BufRead>(mut reader: R) -> Result<Import, String> {
+    // A UTF-8 BOM first, if there is one.
+    if let Ok(buf) = reader.fill_buf()
+        && buf.starts_with(&[0xEF, 0xBB, 0xBF])
+    {
+        reader.consume(3);
+    }
+    // The first byte that is not whitespace, without consuming it: the
+    // parsers below want their text whole.
+    let first = reader
+        .fill_buf()
+        .map_err(|error| format!("Could not read this file: {error}"))?
+        .iter()
+        .find(|byte| !byte.is_ascii_whitespace())
+        .copied();
+    match first {
+        Some(b'[') => Ok(Import {
+            history: history(reader)?,
             ..Import::default()
-        })
-    } else if text.starts_with('<') {
-        Err(
+        }),
+        Some(b'<') => Err(
             "This is Takeout's HTML history. Export it again with JSON chosen as the \
              history format."
                 .to_owned(),
-        )
-    } else {
-        let subscriptions = subscriptions(text);
-        if subscriptions.is_empty() {
-            Err(
-                "No YouTube subscriptions or history found in this file. Choose \
-                 subscriptions.csv or watch-history.json from the Takeout archive."
-                    .to_owned(),
-            )
-        } else {
-            Ok(Import {
-                subscriptions,
-                ..Import::default()
-            })
+        ),
+        Some(_) => {
+            let mut subscriptions = Vec::new();
+            for line in reader.lines() {
+                let line = line.map_err(|error| format!("Could not read this file: {error}"))?;
+                if let Some(channel) = subscription(&line) {
+                    subscriptions.push(channel);
+                }
+            }
+            if subscriptions.is_empty() {
+                Err(
+                    "No YouTube subscriptions or history found in this file. Choose \
+                     subscriptions.csv or watch-history.json from the Takeout archive."
+                        .to_owned(),
+                )
+            } else {
+                Ok(Import {
+                    subscriptions,
+                    ..Import::default()
+                })
+            }
         }
+        None => Err(
+            "No YouTube subscriptions or history found in this file. Choose \
+             subscriptions.csv or watch-history.json from the Takeout archive."
+                .to_owned(),
+        ),
     }
 }
 
-fn subscriptions(text: &str) -> Vec<Channel> {
-    text.lines()
-        .filter_map(|line| {
-            let fields = csv_fields(line);
-            let id = fields.first()?.trim();
-            // Skips the header, in whatever language it is.
-            if !(id.starts_with("UC") && id.len() == 24) {
-                return None;
-            }
-            let name = fields.get(2).map_or(id, |name| name.trim());
-            Some(Channel {
-                id: id.to_owned(),
-                name: name.to_owned(),
-                avatar: None,
-            })
-        })
-        .collect()
+/// The channel one subscriptions.csv line names, or `None` for the header
+/// row, in whatever language it is.
+fn subscription(line: &str) -> Option<Channel> {
+    let fields = csv_fields(line);
+    let id = fields.first()?.trim();
+    if !(id.starts_with("UC") && id.len() == 24) {
+        return None;
+    }
+    let name = fields.get(2).map_or(id, |name| name.trim());
+    Some(Channel {
+        id: id.to_owned(),
+        name: name.to_owned(),
+        avatar: None,
+    })
 }
 
 /// The fields of one CSV line: commas separate, double quotes enclose a
@@ -112,8 +140,8 @@ const WATCHED_PREFIXES: [&str; 6] = [
     "Vous avez regardé ",
 ];
 
-fn history(text: &str) -> Result<Vec<Watched>, String> {
-    let entries: Vec<Entry> = serde_json::from_str(text)
+fn history<R: std::io::Read>(reader: R) -> Result<Vec<Watched>, String> {
+    let entries: Vec<Entry> = serde_json::from_reader(reader)
         .map_err(|error| format!("Could not read this history file: {error}"))?;
     Ok(entries
         .into_iter()

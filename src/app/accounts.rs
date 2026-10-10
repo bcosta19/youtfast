@@ -124,10 +124,20 @@ impl App {
         self.state.library.active_account = None;
         self.save_library();
         self.state.account_subscriptions = Listing::Idle;
+        self.state.subscriptions_more = None;
+        self.state.subscriptions_more_state = Fetch::Idle;
         self.state.account_history = Listing::Idle;
+        self.state.history_more = None;
+        self.state.history_more_state = Fetch::Idle;
         self.state.account_watch_later = Listing::Idle;
+        self.state.watch_later_more = None;
+        self.state.watch_later_more_state = Fetch::Idle;
         self.state.liked = Listing::Idle;
+        self.state.liked_more = None;
+        self.state.liked_more_state = Fetch::Idle;
         self.state.playlists = Listing::Idle;
+        self.state.playlists_more = None;
+        self.state.playlists_more_state = Fetch::Idle;
         self.state.feed = Listing::Idle;
         if matches!(self.state.view, View::Liked | View::Playlists) {
             self.state.view = View::Home;

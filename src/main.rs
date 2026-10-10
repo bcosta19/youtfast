@@ -15,6 +15,7 @@ mod paths;
 mod settings;
 mod takeout;
 mod theme;
+mod thumbs;
 mod ui;
 mod util;
 mod youtube;

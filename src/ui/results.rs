@@ -55,7 +55,7 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             Listing::Ready(videos) if videos.is_empty() => {
                 nothing(ui, state, "Search for something")
             }
-            Listing::Ready(videos) => rows(ui, state, videos, true, actions),
+            Listing::Ready(videos) => rows(ui, state, videos, true, true, actions),
         }
     });
 }
@@ -81,16 +81,29 @@ pub fn videos(
 }
 
 /// The rows themselves, in a scroll area.
-pub fn video_rows(ui: &mut Ui, state: &State, videos: &[Video], actions: &mut Vec<Action>) {
-    rows(ui, state, videos, false, actions);
+pub fn video_rows<'a>(
+    ui: &mut Ui,
+    state: &State,
+    videos: impl IntoIterator<Item = &'a Video>,
+    actions: &mut Vec<Action>,
+) {
+    rows(ui, state, videos, false, false, actions);
 }
 
-/// [`video_rows`]; `large` draws search's big thumbnails.
-fn rows(ui: &mut Ui, state: &State, videos: &[Video], large: bool, actions: &mut Vec<Action>) {
+/// [`video_rows`]; `large` draws search's big thumbnails, and `more` ends
+/// the list with the continuation's row.
+fn rows<'a>(
+    ui: &mut Ui,
+    state: &State,
+    videos: impl IntoIterator<Item = &'a Video>,
+    large: bool,
+    more: bool,
+    actions: &mut Vec<Action>,
+) {
     egui::ScrollArea::vertical()
         .auto_shrink(false)
         .show(ui, |ui| {
-            for (index, video) in videos.iter().enumerate() {
+            for (index, video) in videos.into_iter().enumerate() {
                 let selected = index == state.cursor;
                 let watched = widgets::watched(&state.library, video);
                 let response = if large {
@@ -104,6 +117,15 @@ fn rows(ui: &mut Ui, state: &State, videos: &[Video], large: bool, actions: &mut
                 if response.clicked() {
                     actions.push(Action::Open(video.clone()));
                 }
+            }
+            if more {
+                widgets::more_row(
+                    ui,
+                    &state.palette,
+                    &state.results_more_state,
+                    state.results_more.is_some(),
+                    actions,
+                );
             }
         });
 }

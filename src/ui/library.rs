@@ -132,7 +132,7 @@ fn feed_grid(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         Listing::Ready(_) => {
             feed_chips(ui, state, actions);
             let now = crate::util::now();
-            let videos: Vec<Video> = state.visible_feed().into_iter().cloned().collect();
+            let videos = state.visible_feed();
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .show(ui, |ui| {
@@ -190,12 +190,12 @@ fn feed_grid(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 fn feed_card(
     ui: &mut Ui,
     state: &State,
-    videos: &[Video],
+    videos: &[&Video],
     index: usize,
     width: f32,
     actions: &mut Vec<Action>,
 ) {
-    let video = &videos[index];
+    let video = videos[index];
     let selected = index == state.cursor;
     let watched = widgets::watched(&state.library, video);
     let response = widgets::video_card(ui, &state.palette, video, watched, selected, width);
@@ -225,8 +225,8 @@ fn shorts_shelf(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 12.0;
-                    for video in shorts.clone() {
-                        short_card(ui, state, &video, actions);
+                    for video in shorts {
+                        short_card(ui, state, video, actions);
                     }
                 });
             });
@@ -298,14 +298,23 @@ pub fn subscriptions(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             }
         });
         match state.source() {
-            Source::Account => channel_listing(
-                ui,
-                state,
-                &state.account_subscriptions,
-                "The account's subscriptions",
-                false,
-                actions,
-            ),
+            Source::Account => {
+                channel_listing(
+                    ui,
+                    state,
+                    &state.account_subscriptions,
+                    "The account's subscriptions",
+                    false,
+                    actions,
+                );
+                widgets::more_row(
+                    ui,
+                    &state.palette,
+                    &state.subscriptions_more_state,
+                    state.subscriptions_more.is_some(),
+                    actions,
+                );
+            }
             Source::Device if state.library.subscriptions.is_empty() => results::nothing(
                 ui,
                 state,
@@ -488,6 +497,13 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                         });
                 }
             }
+            widgets::more_row(
+                ui,
+                &state.palette,
+                &state.history_more_state,
+                state.history_more.is_some(),
+                actions,
+            );
             return;
         }
         if state.library.history.is_empty() {
@@ -537,13 +553,22 @@ pub fn watch_later(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         results::title(ui, state, "Watch later", Some(count));
         controls(ui, state, actions, |_, _| {});
         match state.source() {
-            Source::Account => rows_listing(
-                ui,
-                state,
-                &state.account_watch_later,
-                "The account's Watch later",
-                actions,
-            ),
+            Source::Account => {
+                rows_listing(
+                    ui,
+                    state,
+                    &state.account_watch_later,
+                    "The account's Watch later",
+                    actions,
+                );
+                widgets::more_row(
+                    ui,
+                    &state.palette,
+                    &state.watch_later_more_state,
+                    state.watch_later_more.is_some(),
+                    actions,
+                );
+            }
             Source::Device if state.library.watch_later.is_empty() => {
                 results::nothing(ui, state, "Save videos from their page")
             }
@@ -577,6 +602,13 @@ pub fn liked(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             "Liked videos",
             &state.liked,
             "The account's liked videos",
+            actions,
+        );
+        widgets::more_row(
+            ui,
+            &state.palette,
+            &state.liked_more_state,
+            state.liked_more.is_some(),
             actions,
         );
     });
@@ -613,6 +645,13 @@ pub fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     });
             }
         }
+        widgets::more_row(
+            ui,
+            &state.palette,
+            &state.playlists_more_state,
+            state.playlists_more.is_some(),
+            actions,
+        );
     });
 }
 
@@ -624,5 +663,12 @@ pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         };
         results::title(ui, state, name, Some(state.page_videos.items().len()));
         rows_listing(ui, state, &state.page_videos, "No videos here", actions);
+        widgets::more_row(
+            ui,
+            &state.palette,
+            &state.page_more_state,
+            state.page_more.is_some(),
+            actions,
+        );
     });
 }

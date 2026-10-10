@@ -174,8 +174,10 @@ async fn extract(spec: &str, what: &str) -> Result<String, String> {
         .map_err(|error| format!("could not run Python for yt-dlp: {error}"))?;
     let stderr = String::from_utf8_lossy(&output.stderr);
     if !output.status.success() {
-        // stderr names files and keyrings, never cookie values.
-        log::warn!("reading {browser}'s cookies failed: {}", stderr.trim());
+        // stderr is yt-dlp's and Python's text, not ours: it is matched
+        // for the known failures below but never logged, since what it
+        // carries besides them is not ours to vouch for.
+        log::warn!("reading {browser}'s cookies failed");
         let browser = crate::model::browser_label(&browser);
         return Err(if stderr.contains("No module named 'yt_dlp'") {
             "yt-dlp is not installed for Python, so the browser cannot be read.".to_owned()
@@ -253,12 +255,20 @@ fn session_key(id: u32) -> String {
     format!("{COOKIE_KEY}-{id}")
 }
 
+/// One credential-store call at a time: the timeout abandons the *wait*,
+/// never the call, so a store that hangs serializes its failures instead
+/// of stacking abandoned threads.
+static STORE_CALLS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
+
 /// Runs a blocking credential-store call off the runtime's workers, and
 /// gives up on a store that does not answer (a keyring waiting on a
 /// password prompt nobody sees).
 async fn with_store<T: Send + 'static>(
     call: impl FnOnce() -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
+    let Ok(_turn) = tokio::time::timeout(STORE_TIMEOUT, STORE_CALLS.acquire()).await else {
+        return Err("The system keyring did not respond.".to_owned());
+    };
     match tokio::time::timeout(STORE_TIMEOUT, tokio::task::spawn_blocking(call)).await {
         Ok(Ok(result)) => result,
         Ok(Err(_)) => Err("The system keyring failed.".to_owned()),
@@ -268,6 +278,17 @@ async fn with_store<T: Send + 'static>(
 
 pub async fn save_session(id: u32, cookie: String) -> Result<(), String> {
     with_store(move || {
+        // Windows' Credential Manager caps a secret at 2560 bytes, which a
+        // YouTube session can exceed; the store's own error would not say
+        // why, and it is not shown anyway.
+        #[cfg(windows)]
+        if cookie.len() > 2560 {
+            return Err(
+                "This session is too large for the Windows Credential Manager \
+                 (2560 bytes), so it cannot be kept there."
+                    .to_owned(),
+            );
+        }
         entry(&session_key(id))?
             .set_secret(cookie.as_bytes())
             .map_err(store_error)
@@ -345,13 +366,59 @@ impl rustypipe::cache::CacheStorage for CacheFile {
     }
 }
 
-/// The cache without `auth_cookie` and `oauth_token`, or `None` when it is
-/// not the JSON object expected (then nothing is written at all).
+/// Names under which rustypipe keeps a session, dropped wherever they
+/// appear in the cache. rustypipe today puts them at the top; a later
+/// version could nest them, so the strip walks the whole JSON.
+const CREDENTIAL_KEYS: &[&str] = &[
+    "auth_cookie",
+    "oauth_token",
+    "cookie",
+    "cookies",
+    "access_token",
+    "refresh_token",
+    "id_token",
+    "authorization",
+];
+
+/// What a session looks like inside a value: the signed-in cookie names
+/// and a Google access token's `ya29.` prefix. The cache is not written
+/// at all while any remains, under any key.
+const SESSION_MARKERS: &[&str] = &["SAPISID=", "__Secure-3PAPISID=", "ya29."];
+
+/// The cache keeps only the fields it is written for (`clients`,
+/// `deobf`); the session is taken out of what remains, or `None` when
+/// the JSON is not the object expected or still names a session
+/// somewhere (then nothing is written at all).
 fn without_credentials(data: &str) -> Option<String> {
     let mut cache: serde_json::Map<String, serde_json::Value> = serde_json::from_str(data).ok()?;
-    cache.remove("auth_cookie");
-    cache.remove("oauth_token");
-    serde_json::to_string(&cache).ok()
+    cache.retain(|key, _| matches!(key.as_str(), "clients" | "deobf"));
+    for value in cache.values_mut() {
+        strip_credentials(value);
+    }
+    let clean = serde_json::to_string(&cache).ok()?;
+    // A session under a name not known here refuses the whole write.
+    if SESSION_MARKERS.iter().any(|marker| clean.contains(marker)) {
+        return None;
+    }
+    Some(clean)
+}
+
+/// Drops every credential-named field of `value`, at any depth.
+fn strip_credentials(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            map.retain(|key, _| !CREDENTIAL_KEYS.contains(&key.as_str()));
+            for nested in map.values_mut() {
+                strip_credentials(nested);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for nested in items {
+                strip_credentials(nested);
+            }
+        }
+        _ => {}
+    }
 }
 
 #[cfg(test)]
@@ -423,10 +490,20 @@ mod tests {
     fn cache_never_keeps_the_session() {
         let cache = r#"{"clients": {"desktop": {"version": "2.2026"}},
                         "auth_cookie": {"cookie": "SAPISID=secret"},
-                        "oauth_token": {"access_token": "secret"}}"#;
+                        "oauth_token": {"access_token": "ya29.secret"},
+                        "a_field_added_later": {"cookie": "SAPISID=secret2"}}"#;
         let clean = without_credentials(cache).unwrap();
         assert!(!clean.contains("secret"));
+        assert!(!clean.contains("SAPISID"));
         assert!(clean.contains("2.2026"));
+        // A credential nested inside a kept field is stripped too.
+        let nested = r#"{"deobf": {"data": {"code": "x"}, "auth_cookie": "SAPISID=s"}}"#;
+        let clean = without_credentials(nested).unwrap();
+        assert!(!clean.contains("SAPISID"));
+        assert!(clean.contains("code"));
+        // A session under a name not known refuses the whole write.
+        let hidden = r#"{"clients": {"desktop": {"sid": "SAPISID=hidden"}}}"#;
+        assert_eq!(without_credentials(hidden), None);
         assert_eq!(without_credentials("not json"), None);
     }
 }

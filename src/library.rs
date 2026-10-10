@@ -3,6 +3,7 @@
 //! Watch later. One JSON file, written atomically off the interface thread.
 
 use std::cmp::Reverse;
+use std::collections::HashSet;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -37,6 +38,10 @@ pub struct Library {
     /// load, then never written again.
     #[serde(skip_serializing)]
     pub account: Option<AccountSource>,
+    /// The history's video ids, for `watched` without scanning it. Kept
+    /// by `reindex_watched`; rebuilt on load, never written.
+    #[serde(skip)]
+    watched_ids: HashSet<String>,
 }
 
 /// A named YouTube account; how its session was read is its `source`.
@@ -81,7 +86,18 @@ impl Library {
             });
             library.active_account = Some(1);
         }
+        library.reindex_watched();
         library
+    }
+
+    /// Rebuilds the video-id index `watched` reads after the history
+    /// changed (load, a recorded watch, a Takeout merge, a clear).
+    fn reindex_watched(&mut self) {
+        self.watched_ids = self
+            .history
+            .iter()
+            .map(|watched| watched.video.id.clone())
+            .collect();
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
@@ -150,18 +166,20 @@ impl Library {
             },
         );
         self.history.truncate(HISTORY_LIMIT);
+        self.reindex_watched();
     }
 
     /// Whether the video is in the history.
     pub fn watched(&self, video_id: &str) -> bool {
-        self.history
-            .iter()
-            .any(|watched| watched.video.id == video_id)
+        self.watched_ids.contains(video_id)
     }
 
     /// Where to start the video: where it was left, unless that was right at
     /// its start or end.
     pub fn resume_position(&self, video_id: &str) -> Option<f64> {
+        if !self.watched(video_id) {
+            return None;
+        }
         let watched = self
             .history
             .iter()
@@ -215,6 +233,7 @@ impl Library {
 
     pub fn clear_history(&mut self) {
         self.history.clear();
+        self.watched_ids.clear();
     }
 
     /// Adds what a Takeout file brought. Returns how many subscriptions and
@@ -246,6 +265,7 @@ impl Library {
         }
         self.history.sort_by_key(|watched| Reverse(watched.at));
         self.history.truncate(HISTORY_LIMIT);
+        self.reindex_watched();
         (new_subscriptions, new_history)
     }
 }
@@ -396,6 +416,35 @@ mod tests {
             .collect();
         assert_eq!(order, ["bbbbbbbbbbb", "aaaaaaaaaaa"]);
         assert_eq!(library.history[1].at, 10);
+    }
+
+    #[test]
+    fn watched_follows_the_history_through_every_change() {
+        let mut library = Library::default();
+        assert!(!library.watched("aaaaaaaaaaa"));
+        library.record_watch(video("aaaaaaaaaaa"), 1);
+        assert!(library.watched("aaaaaaaaaaa"));
+        // A Takeout merge and a reload see it too.
+        library.merge(Import {
+            subscriptions: Vec::new(),
+            history: vec![Watched {
+                video: video("bbbbbbbbbbb"),
+                at: 2,
+                position: 30.0,
+            }],
+        });
+        assert!(library.watched("bbbbbbbbbbb"));
+        assert_eq!(library.resume_position("bbbbbbbbbbb"), Some(30.0));
+        let json = serde_json::to_string(&library).unwrap();
+        let mut read: Library = serde_json::from_str(&json).unwrap();
+        read.reindex_watched();
+        assert!(read.watched("aaaaaaaaaaa"));
+        assert!(read.watched("bbbbbbbbbbb"));
+        assert!(!read.watched("ccccccccccc"));
+        // Clearing leaves nothing watched.
+        library.clear_history();
+        assert!(!library.watched("aaaaaaaaaaa"));
+        assert!(!library.watched("bbbbbbbbbbb"));
     }
 
     #[test]

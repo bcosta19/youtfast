@@ -6286,6 +6286,7 @@ dependencies = [
  "eframe",
  "egui",
  "egui_extras",
+ "ehttp",
  "fastframe-fonts",
  "fastframe-icons",
  "fastframe-instance",

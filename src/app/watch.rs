@@ -48,9 +48,9 @@ impl App {
         }
         if let Some(json) = json {
             // Kept from before a quality change until there is news.
-            self.state.resolutions = youtube::available_resolutions(&json);
-            if let (Some(details), Some(watching)) =
-                (youtube::ytdl_details(&json), self.state.watching.as_mut())
+            let (details, resolutions) = youtube::ytdl_loaded(&json);
+            self.state.resolutions = resolutions;
+            if let (Some(details), Some(watching)) = (details, self.state.watching.as_mut())
                 && details.id == watching.id
             {
                 watching.complete_from(&details);
