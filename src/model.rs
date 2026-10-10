@@ -586,6 +586,8 @@ pub enum Action {
     },
     /// The share menu's `Start at` box.
     SetShareAtTime(bool),
+    /// The sidebar between open and its collapsed rail.
+    ToggleSidebar,
     /// Home's chips.
     SetFeedFilter(FeedFilter),
     /// The watch page's `[ share ]`: the link to the clipboard.

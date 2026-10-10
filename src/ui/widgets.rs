@@ -238,16 +238,7 @@ pub fn channel_item(ui: &mut Ui, palette: &Palette, channel: &Channel, selected:
         pos2(rect.left() + pad / 2.0, rect.top() + 2.0),
         vec2(size, size),
     );
-    match &channel.avatar {
-        Some(url) => super::images::remote(ui, url)
-            .fit_to_exact_size(avatar.size())
-            .corner_radius(CornerRadius::ZERO)
-            .paint_at(ui, avatar),
-        None => {
-            ui.painter()
-                .rect_filled(avatar, CornerRadius::ZERO, palette.surface);
-        }
-    }
+    channel_avatar_at(ui, palette, channel, avatar);
     let color = if selected {
         palette.window
     } else {
@@ -269,6 +260,37 @@ pub fn channel_item(ui: &mut Ui, palette: &Palette, channel: &Channel, selected:
     );
     ui.painter().galley(at, galley, color);
     response
+}
+
+/// A channel in the collapsed sidebar: only its square avatar, a little
+/// over a line high and centred. `selected` draws the TUI cursor.
+pub fn channel_avatar(
+    ui: &mut Ui,
+    palette: &Palette,
+    channel: &Channel,
+    selected: bool,
+) -> Response {
+    let size = line(ui) * 1.25;
+    let (rect, response) =
+        ui.allocate_exact_size(vec2(ui.available_width(), size + 4.0), Sense::click());
+    row_fill(ui, palette, rect, &response, selected);
+    let avatar = Rect::from_center_size(rect.center(), vec2(size, size));
+    channel_avatar_at(ui, palette, channel, avatar);
+    response
+}
+
+/// A channel's square avatar in `rect`, or a placeholder square.
+fn channel_avatar_at(ui: &Ui, palette: &Palette, channel: &Channel, rect: Rect) {
+    match &channel.avatar {
+        Some(url) => super::images::remote(ui, url)
+            .fit_to_exact_size(rect.size())
+            .corner_radius(CornerRadius::ZERO)
+            .paint_at(ui, rect),
+        None => {
+            ui.painter()
+                .rect_filled(rect, CornerRadius::ZERO, palette.surface);
+        }
+    }
 }
 
 fn badge(ui: &Ui, thumbnail: Rect, video: &Video, palette: &Palette) {

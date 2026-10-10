@@ -562,6 +562,10 @@ impl App {
                 self.state.settings.theater = !self.state.settings.theater;
                 self.save_settings();
             }
+            Action::ToggleSidebar => {
+                self.state.settings.sidebar_collapsed = !self.state.settings.sidebar_collapsed;
+                self.save_settings();
+            }
             Action::SetQuality(quality) => self.set_quality(quality),
             Action::SetTheme(choice) => self.set_theme(choice),
             Action::ToggleSubscription(channel) => {

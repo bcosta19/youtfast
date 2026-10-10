@@ -68,6 +68,9 @@ pub struct Settings {
     /// rest under it.
     #[serde(default)]
     pub theater: bool,
+    /// The sidebar collapsed to its rail of keys and avatars.
+    #[serde(default)]
+    pub sidebar_collapsed: bool,
 }
 
 fn default_alerts_every() -> u32 {
@@ -96,6 +99,7 @@ impl Default for Settings {
             desktop_notifications: on(),
             alerts_every_minutes: default_alerts_every(),
             theater: false,
+            sidebar_collapsed: false,
         }
     }
 }

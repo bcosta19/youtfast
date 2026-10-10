@@ -120,139 +120,106 @@ fn command_line(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>)
         });
 }
 
-/// The sidebar: the `youtfast` pane with `[n] Label` items.
+/// The sidebar's width, open and collapsed to its rail.
+const SIDEBAR_OPEN: f32 = 208.0;
+const SIDEBAR_RAIL: f32 = 72.0;
+
+/// The sidebar: the `youtfast` pane with `[n] Label` items, and the
+/// channels subscribed to. Collapsed (`b`), it is a rail of the `[n]`
+/// keys and the channels' avatars, each named on hover.
 fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
+    let collapsed = state.settings.sidebar_collapsed;
     egui::Panel::left("sidebar")
-        .exact_size(208.0)
+        .exact_size(if collapsed {
+            SIDEBAR_RAIL
+        } else {
+            SIDEBAR_OPEN
+        })
         .resizable(false)
         .show_separator_line(false)
         .frame(Frame::new().inner_margin(Margin::symmetric(8, 6)))
         .show(ui, |ui| {
-            widgets::pane(ui, &state.palette, "youtfast", None, false, None, |ui| {
-                let item = |ui: &mut egui::Ui,
-                            key: char,
-                            view: Option<View>,
-                            label: &str,
-                            count: Option<usize>,
-                            selected: bool,
-                            actions: &mut Vec<Action>| {
-                    let mut parts = vec![
-                        (format!("[{key}]"), state.palette.magenta),
-                        (format!(" {label}"), state.palette.text),
-                    ];
-                    if let Some(count) = count.filter(|count| *count > 0) {
-                        parts.push((format!("{count:>4}"), state.palette.accent));
+            let (toggle, hint) = if collapsed {
+                ("»", "Show the sidebar (b)")
+            } else {
+                ("«", "Collapse the sidebar (b)")
+            };
+            if widgets::bracket_button(ui, &state.palette, toggle, widgets::ButtonStyle::Normal)
+                .on_hover_text(hint)
+                .clicked()
+            {
+                actions.push(Action::ToggleSidebar);
+            }
+            // Room for the pane's title, which sits on its top rule.
+            ui.add_space(widgets::line(ui) / 2.0);
+            let title = if collapsed { "" } else { "youtfast" };
+            widgets::pane(ui, &state.palette, title, None, false, None, |ui| {
+                for (key, view, label, count) in sidebar_items(state) {
+                    let selected = state.view == view
+                        || (view == View::Playlists && state.view == View::Playlist)
+                        || (view == View::Subscriptions && state.view == View::Channel);
+                    if view == View::Account {
+                        ui.add_space(widgets::line(ui));
                     }
-                    if widgets::row(ui, &state.palette, selected, &parts).clicked()
-                        && let Some(view) = view
-                    {
+                    let mut parts = vec![(format!("[{key}]"), state.palette.magenta)];
+                    let count = count.filter(|count| *count > 0);
+                    if collapsed {
+                        if count.is_some() {
+                            parts.push(("•".to_owned(), state.palette.accent));
+                        }
+                    } else {
+                        parts.push((format!(" {label}"), state.palette.text));
+                        if let Some(count) = count {
+                            parts.push((format!("{count:>4}"), state.palette.accent));
+                        }
+                    }
+                    let mut response = widgets::row(ui, &state.palette, selected, &parts);
+                    if collapsed {
+                        response = response.on_hover_text(label);
+                    }
+                    if response.clicked() {
                         actions.push(Action::Navigate(view));
                     }
-                };
-                let on = |view: View| {
-                    state.view == view
-                        || (view == View::Playlists && state.view == View::Playlist)
-                        || (view == View::Subscriptions && state.view == View::Channel)
-                };
-                item(
-                    ui,
-                    '1',
-                    Some(View::Home),
-                    "Home",
-                    None,
-                    on(View::Home),
-                    actions,
-                );
-                item(
-                    ui,
-                    '2',
-                    Some(View::Subscriptions),
-                    "Subscriptions",
-                    None,
-                    on(View::Subscriptions),
-                    actions,
-                );
-                item(
-                    ui,
-                    '3',
-                    Some(View::History),
-                    "History",
-                    None,
-                    on(View::History),
-                    actions,
-                );
-                item(
-                    ui,
-                    '4',
-                    Some(View::WatchLater),
-                    "Watch later",
-                    None,
-                    on(View::WatchLater),
-                    actions,
-                );
-                if state.signed_in() {
-                    item(
-                        ui,
-                        '5',
-                        Some(View::Liked),
-                        "Liked",
-                        None,
-                        on(View::Liked),
-                        actions,
-                    );
-                    item(
-                        ui,
-                        '6',
-                        Some(View::Playlists),
-                        "Playlists",
-                        None,
-                        on(View::Playlists),
-                        actions,
-                    );
                 }
-                item(
-                    ui,
-                    '7',
-                    Some(View::Notifications),
-                    "Notifications",
-                    Some(state.alerts.len()),
-                    on(View::Notifications),
-                    actions,
-                );
-                ui.add_space(widgets::line(ui));
-                let account = state
-                    .active_account()
-                    .map(|account| account.name.clone())
-                    .unwrap_or_else(|| match &state.account {
-                        AccountState::SigningIn => "Signing in".to_owned(),
-                        _ => "Sign in".to_owned(),
-                    });
-                item(
-                    ui,
-                    '8',
-                    Some(View::Account),
-                    &account,
-                    None,
-                    on(View::Account),
-                    actions,
-                );
-                item(
-                    ui,
-                    '9',
-                    Some(View::Settings),
-                    "Settings",
-                    None,
-                    on(View::Settings),
-                    actions,
-                );
             });
-            sidebar_channels(ui, state, actions);
+            sidebar_channels(ui, state, collapsed, actions);
         });
+}
+
+/// The sidebar's views: key, view, label and a count to show.
+fn sidebar_items(state: &State) -> Vec<(char, View, String, Option<usize>)> {
+    let mut items = vec![
+        ('1', View::Home, "Home".to_owned(), None),
+        ('2', View::Subscriptions, "Subscriptions".to_owned(), None),
+        ('3', View::History, "History".to_owned(), None),
+        ('4', View::WatchLater, "Watch later".to_owned(), None),
+    ];
+    if state.signed_in() {
+        items.push(('5', View::Liked, "Liked".to_owned(), None));
+        items.push(('6', View::Playlists, "Playlists".to_owned(), None));
+    }
+    items.push((
+        '7',
+        View::Notifications,
+        "Notifications".to_owned(),
+        Some(state.alerts.len()),
+    ));
+    let account = state
+        .active_account()
+        .map(|account| account.name.clone())
+        .unwrap_or_else(|| match &state.account {
+            AccountState::SigningIn => "Signing in".to_owned(),
+            _ => "Sign in".to_owned(),
+        });
+    items.push(('8', View::Account, account, None));
+    items.push(('9', View::Settings, "Settings".to_owned(), None));
+    items
 }
 
 /// YouTube's sidebar lists the channels subscribed to under the views:
 /// the account's when signed in and loaded, this device's otherwise.
-fn sidebar_channels(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
+/// `collapsed` draws only their avatars.
+fn sidebar_channels(ui: &mut egui::Ui, state: &State, collapsed: bool, actions: &mut Vec<Action>) {
     let channels = match state.account_subscriptions.items() {
         channels if state.signed_in() && !channels.is_empty() => channels,
         _ => state.library.subscriptions.as_slice(),
@@ -267,32 +234,29 @@ fn sidebar_channels(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>)
         _ => None,
     };
     ui.add_space(widgets::line(ui) / 2.0);
-    widgets::pane(
-        ui,
-        &state.palette,
-        "subscriptions",
-        Some(channels.len()),
-        false,
-        None,
-        |ui| {
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, true])
-                .show(ui, |ui| {
-                    for channel in channels {
-                        if widgets::channel_item(
-                            ui,
-                            &state.palette,
-                            channel,
-                            open == Some(channel.id.as_str()),
-                        )
-                        .clicked()
-                        {
-                            actions.push(Action::OpenChannel(channel.clone()));
-                        }
+    let (title, count) = if collapsed {
+        ("", None)
+    } else {
+        ("subscriptions", Some(channels.len()))
+    };
+    widgets::pane(ui, &state.palette, title, count, false, None, |ui| {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                for channel in channels {
+                    let selected = open == Some(channel.id.as_str());
+                    let response = if collapsed {
+                        widgets::channel_avatar(ui, &state.palette, channel, selected)
+                            .on_hover_text(&channel.name)
+                    } else {
+                        widgets::channel_item(ui, &state.palette, channel, selected)
+                    };
+                    if response.clicked() {
+                        actions.push(Action::OpenChannel(channel.clone()));
                     }
-                });
-        },
-    );
+                }
+            });
+    });
 }
 
 /// The bottom line: the view's name inverted, what is loading or the
@@ -670,6 +634,7 @@ fn keys_overlay(ctx: &egui::Context, state: &State) {
                             ("enter", "open the row"),
                             ("h / l", "a channel's tabs"),
                             ("a", "the next account"),
+                            ("b", "collapse the sidebar"),
                         ],
                     );
                     column(
@@ -740,6 +705,9 @@ fn keys(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
         }
         if input.key_pressed(Key::R) {
             actions.push(Action::Refresh);
+        }
+        if input.key_pressed(Key::B) {
+            actions.push(Action::ToggleSidebar);
         }
         // `a` switches to the next account.
         if input.key_pressed(Key::A)
