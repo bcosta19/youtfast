@@ -343,7 +343,7 @@ impl Mpv {
     pub fn ytdl_json(&self) -> Option<String> {
         if let Some(stdout) = self.get_property("user-data/mpv/ytdl/json-subprocess-result/stdout")
         {
-            return Some(stdout);
+            return Some(unquoted(stdout));
         }
         // Read as a whole, the result is JSON with yt-dlp's output inside.
         let result = self.get_property("user-data/mpv/ytdl/json-subprocess-result")?;
@@ -533,6 +533,12 @@ fn volume_text(volume: f64) -> String {
     format!("{:.0}", volume.clamp(0.0, 100.0))
 }
 
+/// mpv hands a user-data string back JSON-encoded, quotes and escapes
+/// included; yt-dlp's own JSON is an object, so a string is unwrapped.
+fn unquoted(value: String) -> String {
+    serde_json::from_str::<String>(&value).unwrap_or(value)
+}
+
 /// mpv's wakeup callback: events are waiting, so ask for a frame to read
 /// them. It may run on any thread and must not call back into mpv.
 unsafe extern "C" fn wake(context: *mut c_void) {
@@ -576,5 +582,13 @@ mod tests {
             failure("WARNING: [youtube] abc: HTTP Error 429: Too Many Requests"),
             None
         );
+    }
+
+    #[test]
+    fn yt_dlp_output_is_read_through_mpv_quoting() {
+        let json = r#"{"id": "abc", "formats": []}"#;
+        let quoted = serde_json::to_string(json).unwrap();
+        assert_eq!(unquoted(quoted), json);
+        assert_eq!(unquoted(json.to_owned()), json);
     }
 }
