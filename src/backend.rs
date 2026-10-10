@@ -5,12 +5,14 @@
 //! event wakes the window. Nothing here blocks the interface thread.
 
 use std::future::Future;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::mpsc;
 
 use rustypipe::client::RustyPipe;
 use tokio::sync::mpsc as async_mpsc;
+use tokio::sync::watch;
 
 use crate::library::Account;
 use crate::library::{Import, Library};
@@ -227,6 +229,10 @@ struct Context {
     waker: egui::Context,
     /// The running alerts timer, restarted when the interval changes.
     alerts_timer: Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    /// The newest library and settings to write; one writer each takes
+    /// them in turn (see [`writer`]).
+    library_saves: Arc<watch::Sender<Option<Library>>>,
+    settings_saves: Arc<watch::Sender<Option<Settings>>>,
 }
 
 impl Context {
@@ -247,17 +253,35 @@ impl Backend {
             .thread_name("youtfast-worker")
             .enable_all()
             .build()?;
+        let (library_saves, library_snapshots) = watch::channel(None);
+        let (settings_saves, settings_snapshots) = watch::channel(None);
         let context = Context {
             rp: innertube::client(&dirs)?,
             dirs,
             events: outgoing,
             waker,
             alerts_timer: Arc::new(tokio::sync::Mutex::new(None)),
+            library_saves: Arc::new(library_saves),
+            settings_saves: Arc::new(settings_saves),
         };
         std::thread::Builder::new()
             .name("youtfast-backend".into())
             .spawn(move || {
                 runtime.block_on(async move {
+                    tokio::spawn(writer(
+                        context.clone(),
+                        "library",
+                        context.dirs.library(),
+                        library_snapshots,
+                        Library::save,
+                    ));
+                    tokio::spawn(writer(
+                        context.clone(),
+                        "settings",
+                        context.dirs.settings(),
+                        settings_snapshots,
+                        Settings::save,
+                    ));
                     while let Some(command) = incoming.recv().await {
                         let context = context.clone();
                         tokio::spawn(async move { handle(command, context).await });
@@ -406,30 +430,38 @@ async fn handle(command: Command, context: Context) {
             });
         }
         Command::SaveLibrary(library) => {
-            let path = context.dirs.library();
-            save(&context, "library", move || library.save(&path)).await;
+            context.library_saves.send_replace(Some(library));
         }
         Command::SaveSettings(settings) => {
-            let path = context.dirs.settings();
-            save(&context, "settings", move || settings.save(&path)).await;
+            context.settings_saves.send_replace(Some(settings));
         }
     }
 }
 
-/// Writes a file off the runtime's workers; `what` names it ("library").
-/// A failed write is logged and shown.
-async fn save(
-    context: &Context,
-    what: &str,
-    write: impl FnOnce() -> std::io::Result<()> + Send + 'static,
+/// Writes the newest snapshot of one file, one write at a time: saves sent
+/// during a write collapse into the next, and an older snapshot never
+/// lands after a newer one. `what` names the file ("library"); a failed
+/// write is logged and shown.
+async fn writer<T: Clone + Send + Sync + 'static>(
+    context: Context,
+    what: &'static str,
+    path: PathBuf,
+    mut snapshots: watch::Receiver<Option<T>>,
+    save: fn(&T, &Path) -> std::io::Result<()>,
 ) {
-    match tokio::task::spawn_blocking(write).await {
-        Ok(Ok(())) => {}
-        Ok(Err(error)) => {
-            log::error!("could not save the {what}: {error}");
-            context.send(Event::Notice(format!("Could not save the {what}: {error}")));
+    while snapshots.changed().await.is_ok() {
+        let Some(value) = snapshots.borrow_and_update().clone() else {
+            continue;
+        };
+        let path = path.clone();
+        match tokio::task::spawn_blocking(move || save(&value, &path)).await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                log::error!("could not save the {what}: {error}");
+                context.send(Event::Notice(format!("Could not save the {what}: {error}")));
+            }
+            Err(error) => log::error!("saving the {what} failed: {error}"),
         }
-        Err(error) => log::error!("saving the {what} failed: {error}"),
     }
 }
 

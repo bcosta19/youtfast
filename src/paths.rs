@@ -2,6 +2,7 @@
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -46,17 +47,28 @@ impl Dirs {
 
 /// Replaces `path` with `contents` in one step: the data goes to a file
 /// beside it, reaches the disk, and is renamed over the old one, so a crash
-/// leaves either the old file or the new, never half of one.
+/// leaves either the old file or the new, never half of one. Each write
+/// has its own temporary file, so writes racing on one path (the backend's
+/// saves, the one at exit) never rename or fill each other's.
 pub fn write_atomic(path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    static WRITES: AtomicU64 = AtomicU64::new(0);
     let mut temporary = path.as_os_str().to_owned();
-    temporary.push(".tmp");
+    temporary.push(format!(
+        ".{}-{}.tmp",
+        std::process::id(),
+        WRITES.fetch_add(1, Ordering::Relaxed)
+    ));
     let temporary = PathBuf::from(temporary);
-    {
+    let written = (|| {
         let mut file = std::fs::File::create(&temporary)?;
         file.write_all(contents)?;
         file.sync_all()?;
+        std::fs::rename(&temporary, path)
+    })();
+    if written.is_err() {
+        let _ = std::fs::remove_file(&temporary);
     }
-    std::fs::rename(&temporary, path)
+    written
 }
 
 /// Reads a JSON file; `what` names it in the log ("library"). A missing
@@ -89,4 +101,38 @@ pub fn load_json<T: DeserializeOwned + Default>(path: &Path, what: &str) -> T {
 pub fn save_json<T: Serialize>(path: &Path, value: &T) -> std::io::Result<()> {
     let json = serde_json::to_vec_pretty(value).map_err(std::io::Error::other)?;
     write_atomic(path, &json)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn writes_racing_on_one_file_all_land_whole() {
+        let dir = std::env::var("CARGO_TARGET_TMPDIR")
+            .unwrap_or_else(|_| format!("{}/target", env!("CARGO_MANIFEST_DIR")));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = Path::new(&dir).join(format!("youtfast-race-{}.json", crate::util::now()));
+        let writers: Vec<_> = (0..4u8)
+            .map(|writer| {
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    let contents = vec![writer; 64 * 1024];
+                    (0..50)
+                        .map(|_| write_atomic(&path, &contents))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        for writer in writers {
+            for result in writer.join().unwrap() {
+                result.unwrap();
+            }
+        }
+        // One writer's whole contents, never a mix.
+        let written = std::fs::read(&path).unwrap();
+        assert_eq!(written.len(), 64 * 1024);
+        assert!(written.iter().all(|byte| *byte == written[0]));
+        std::fs::remove_file(&path).unwrap();
+    }
 }
