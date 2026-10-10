@@ -156,13 +156,14 @@ fn notifications(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 );
             });
             ui.label(
-            RichText::new(
-                "Checks the same sources as Home. YouTube's own notifications                  have no API, so this watches subscriptions instead.",
-            )
-            .monospace()
-            .small()
-            .color(state.palette.dim),
-        );
+                RichText::new(
+                    "Checks the same sources as Home. YouTube's own notifications \
+                 have no API, so this watches subscriptions instead.",
+                )
+                .monospace()
+                .small()
+                .color(state.palette.dim),
+            );
         },
     );
 }
