@@ -15,11 +15,10 @@ use crate::util;
 fn controls(
     ui: &mut Ui,
     state: &State,
-    both_ways: bool,
     actions: &mut Vec<Action>,
     extra: impl FnOnce(&mut Ui, &mut Vec<Action>),
 ) {
-    if both_ways && state.signed_in() {
+    if state.signed_in() {
         let source = state.source();
         let style = |on: bool| {
             if on {
@@ -335,7 +334,7 @@ pub fn subscriptions(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             None,
             |ui| {
                 ui.horizontal(|ui| {
-                    controls(ui, state, true, actions, |ui, actions| {
+                    controls(ui, state, actions, |ui, actions| {
                         if widgets::bracket_button(
                             ui,
                             &state.palette,
@@ -514,7 +513,7 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             None,
             |ui| {
                 ui.horizontal(|ui| {
-                    controls(ui, state, true, actions, |ui, actions| {
+                    controls(ui, state, actions, |ui, actions| {
                         if device
                             && !state.library.history.is_empty()
                             && widgets::bracket_button(
@@ -638,7 +637,7 @@ pub fn watch_later(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             None,
             |ui| {
                 ui.horizontal(|ui| {
-                    controls(ui, state, true, actions, |_, _| {});
+                    controls(ui, state, actions, |_, _| {});
                 });
                 match state.source() {
                     Source::Account => rows_listing(
