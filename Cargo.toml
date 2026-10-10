@@ -102,5 +102,9 @@ egui_extras = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8
 egui_glow = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
 emath = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
 epaint = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
+# rustypipe 0.11.4 with one fix (marked "YouTFast patch"): comment authors'
+# avatars, which YouTube now sends as `author.avatarThumbnailUrl`. Drop the
+# copy once a release reads them.
+rustypipe = { path = "vendor/rustypipe" }
 epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
 winit = { git = "https://github.com/crmne/winit", rev = "ed7caa9023f10b397f5b6ec8284a840cbd8a6f65" }
