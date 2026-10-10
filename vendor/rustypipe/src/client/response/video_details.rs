@@ -431,6 +431,13 @@ pub(crate) struct CommentItemSectionHeader {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CommentItemSectionHeaderRenderer {
     pub menu: CommentItemSectionHeaderMenu,
+    /// Comment count (e.g. `"2.4K"`) — this is the only surviving source for
+    /// it in the video_details response; the older `commentsEntryPointHeaderRenderer`
+    /// item section (see `ItemSection::CommentsEntryPoint`) is no longer sent
+    /// by YouTube in this response shape.
+    #[serde(default)]
+    #[serde_as(as = "Option<Text>")]
+    pub contextual_info: Option<String>,
 }
 
 /// Comment section menu
@@ -713,6 +720,10 @@ pub(crate) struct CommentEntityPayload {
     #[serde_as(as = "DefaultOnError")]
     pub author: Option<CommentAuthor>,
     pub toolbar: CommentToolbar,
+    /// Present with real width/height on some responses; absent on others
+    /// (confirmed live -- newer responses only carry the flat
+    /// `author.avatarThumbnailUrl` string instead). Prefer this when
+    /// present, since it has real dimensions; fall back to the flat URL.
     #[serde(default)]
     pub avatar: ImageView,
 }
@@ -744,8 +755,9 @@ pub(crate) struct CommentAuthor {
     pub is_artist: bool,
     #[serde(default)]
     pub is_creator: bool,
-    /// YouTFast patch: the avatar as YouTube sends it now (one URL sized by
-    /// its `=s88` suffix), since the entity's own `avatar` stopped coming.
+    /// Flat avatar URL, the reliable source (the sibling top-level `avatar`
+    /// field on `commentEntityPayload` is an `avatarViewModel` wrapper whose
+    /// shape doesn't match `ImageView`, so it always maps empty).
     #[serde(default)]
     pub avatar_thumbnail_url: Option<String>,
 }

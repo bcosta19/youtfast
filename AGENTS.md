@@ -63,9 +63,10 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
   InnerTube's `like/*`, `playlist/get_add_to_playlist` and
   `browse/edit_playlist`); ratings are kept 30 minutes (`App::ratings`),
   and each write is shown at once and undone if YouTube refuses it.
-  rustypipe is a patched copy in `vendor/rustypipe` (`[patch.crates-io]`):
-  its changes are marked "YouTFast patch" (comment authors' avatars); drop
-  the copy once a release carries them.
+  rustypipe is a copy in `vendor/rustypipe` (`[patch.crates-io]`): 0.11.4
+  with upstream PR #80 (codeberg.org/ThetaDev/rustypipe) applied, for
+  comment authors' avatars and the comment count; drop the copy once a
+  release carries it.
 - `src/alerts.rs` is the new-upload check's brain: a pure split of a
   feed's videos into unseen (`alerts_seen_at`) and not-yet-notified
   (`alerts_notified_at`) stamps the library keeps. A tokio timer in

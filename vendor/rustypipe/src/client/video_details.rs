@@ -324,16 +324,26 @@ impl MapResponse<VideoDetails> for response::VideoDetails {
             })
             .unwrap_or_default();
 
-        let latest_comments_ctoken = comment_panel.and_then(|comments| {
-            let mut items = comments
-                .engagement_panel_title_header_renderer
-                .menu
-                .sort_filter_sub_menu_renderer
-                .sub_menu_items;
-            items
-                .try_swap_remove(1)
-                .and_then(|c| c.service_endpoint.into_token())
-        });
+        let (latest_comments_ctoken, comment_panel_count) = match comment_panel {
+            Some(comments) => {
+                let header = comments.engagement_panel_title_header_renderer;
+                let count = header.contextual_info.and_then(|txt| {
+                    util::parse_large_numstr_or_warn::<u64>(&txt, ctx.lang, &mut warnings)
+                });
+                let mut items = header.menu.sort_filter_sub_menu_renderer.sub_menu_items;
+                let ctoken = items
+                    .try_swap_remove(1)
+                    .and_then(|c| c.service_endpoint.into_token());
+                (ctoken, count)
+            }
+            None => (None, None),
+        };
+        // The legacy `commentsEntryPointHeaderRenderer` item section is no
+        // longer sent by YouTube in this response shape (confirmed live,
+        // 100% of videos tested) -- the comments engagement panel's header
+        // (`contextualInfo`, parsed above) is the only surviving count
+        // source here.
+        let comment_count = comment_count.or(comment_panel_count);
 
         Ok(MapResult {
             c: VideoDetails {
@@ -622,6 +632,7 @@ fn map_comment_vm(
     };
 
     let reply_count = parse_num(&ce.toolbar.reply_count).unwrap_or_default();
+    let avatar_image = ce.avatar.image;
 
     Some(Comment {
         id: vm.comment_id,
@@ -630,39 +641,34 @@ fn map_comment_vm(
             .unwrap_or(ce.properties.content)
             .into(),
         by_owner: ce.author.as_ref().map(|a| a.is_creator).unwrap_or_default(),
-        author: ce.author.map(|a| ChannelTag {
-            id: a.channel_id,
-            name: a.display_name,
-            avatar: {
-                // YouTFast patch: the entity's `avatar` is gone; the author
-                // carries one URL whose `=sNN` suffix is its size.
-                let avatar: Vec<crate::model::Thumbnail> = ce.avatar.image.into();
-                match a.avatar_thumbnail_url {
-                    Some(url) if avatar.is_empty() => {
-                        let size = url
-                            .rsplit_once("=s")
-                            .and_then(|(_, rest)| {
-                                rest.split(|c: char| !c.is_ascii_digit()).next()
-                            })
-                            .and_then(|digits| digits.parse().ok())
-                            .unwrap_or(88);
-                        vec![crate::model::Thumbnail {
-                            url,
-                            width: size,
-                            height: size,
-                        }]
-                    }
-                    _ => avatar,
-                }
-            },
-            verification: if a.is_artist {
-                Verification::Artist
-            } else if a.is_verified {
-                Verification::Verified
+        author: ce.author.map(|a| {
+            // The nested `avatar.image` thumbnail list has real
+            // width/height when present, but is absent on some responses
+            // (confirmed live) -- fall back to the flat, dimension-less
+            // `author.avatarThumbnailUrl` string in that case rather than
+            // losing the avatar entirely.
+            let avatar: Vec<crate::model::Thumbnail> = avatar_image.into();
+            let avatar = if avatar.is_empty() {
+                a.avatar_thumbnail_url
+                    .into_iter()
+                    .map(|url| crate::model::Thumbnail { url, width: 0, height: 0 })
+                    .collect()
             } else {
-                Verification::None
-            },
-            subscriber_count: None,
+                avatar
+            };
+            ChannelTag {
+                id: a.channel_id,
+                name: a.display_name,
+                avatar,
+                verification: if a.is_artist {
+                    Verification::Artist
+                } else if a.is_verified {
+                    Verification::Verified
+                } else {
+                    Verification::None
+                },
+                subscriber_count: None,
+            }
         }),
         like_count: parse_num(&ce.toolbar.like_count_notliked),
         reply_count,
