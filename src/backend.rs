@@ -17,7 +17,8 @@ use tokio::sync::watch;
 use crate::library::Account;
 use crate::library::{Import, Library};
 use crate::model::{
-    AccountSource, Channel, ChannelAbout, ChannelHeader, HistoryRow, PlaylistSummary, Video,
+    AccountSource, Channel, ChannelAbout, ChannelHeader, HistoryRow, PlaylistSummary, Rating,
+    SaveTarget, Video,
 };
 use crate::paths::Dirs;
 use crate::settings::Settings;
@@ -153,6 +154,23 @@ pub enum Command {
         visitor_data: Option<String>,
     },
     ImportTakeout(Picked),
+    /// The account's rating of a video.
+    LoadRating(String),
+    /// Rate a video on the account (`Rating::None` clears it).
+    Rate {
+        id: String,
+        rating: Rating,
+        /// The rating shown before, to put back if YouTube refuses.
+        previous: Rating,
+    },
+    /// The account's playlists, each with whether it holds the video.
+    LoadSaveTargets(String),
+    /// Add the video to an account playlist, or take it out.
+    SetSaved {
+        id: String,
+        playlist: String,
+        saved: bool,
+    },
     /// A new account signs in: file or browser read first, then the
     /// session lands in the keyring under the account's id.
     AddAccount {
@@ -194,6 +212,27 @@ pub enum Event {
         result: Result<(Vec<crate::model::CommentRow>, Option<String>), String>,
     },
     Imported(Result<Import, String>),
+    Rating {
+        id: String,
+        result: Result<Rating, String>,
+    },
+    /// A rating the account refused; the app puts `previous` back.
+    RateFailed {
+        id: String,
+        previous: Rating,
+        error: String,
+    },
+    SaveTargets {
+        id: String,
+        result: Result<Vec<SaveTarget>, String>,
+    },
+    /// A playlist change the account refused; the app undoes it.
+    SaveFailed {
+        id: String,
+        playlist: String,
+        saved: bool,
+        error: String,
+    },
     SigningIn,
     /// The account signed in, by its library id.
     SignedIn(u32),
@@ -233,6 +272,9 @@ struct Context {
     /// them in turn (see [`writer`]).
     library_saves: Arc<watch::Sender<Option<Library>>>,
     settings_saves: Arc<watch::Sender<Option<Settings>>>,
+    /// Held by each change to the account, so they reach YouTube in the
+    /// order they were made.
+    account_writes: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl Context {
@@ -263,6 +305,7 @@ impl Backend {
             alerts_timer: Arc::new(tokio::sync::Mutex::new(None)),
             library_saves: Arc::new(library_saves),
             settings_saves: Arc::new(settings_saves),
+            account_writes: Arc::new(tokio::sync::Mutex::new(())),
         };
         std::thread::Builder::new()
             .name("youtfast-backend".into())
@@ -345,6 +388,52 @@ async fn handle(command: Command, context: Context) {
                 key,
                 result,
             });
+        }
+        Command::LoadRating(id) => {
+            let result = innertube::rating(&context.rp, &id).await;
+            if let Err(error) = &result {
+                log::warn!("loading the rating of {id} failed: {error}");
+            }
+            context.send(Event::Rating { id, result });
+        }
+        Command::Rate {
+            id,
+            rating,
+            previous,
+        } => {
+            // One change at a time, in the order clicked.
+            let _turn = context.account_writes.lock().await;
+            if let Err(error) = innertube::rate(&context.rp, &id, rating).await {
+                log::warn!("rating {id} failed: {error}");
+                context.send(Event::RateFailed {
+                    id,
+                    previous,
+                    error,
+                });
+            }
+        }
+        Command::LoadSaveTargets(id) => {
+            let result = innertube::save_targets(&context.rp, &id).await;
+            if let Err(error) = &result {
+                log::warn!("loading the save menu of {id} failed: {error}");
+            }
+            context.send(Event::SaveTargets { id, result });
+        }
+        Command::SetSaved {
+            id,
+            playlist,
+            saved,
+        } => {
+            let _turn = context.account_writes.lock().await;
+            if let Err(error) = innertube::set_saved(&context.rp, &id, &playlist, saved).await {
+                log::warn!("saving {id} to {playlist} failed: {error}");
+                context.send(Event::SaveFailed {
+                    id,
+                    playlist,
+                    saved,
+                    error,
+                });
+            }
         }
         Command::ImportTakeout(picked) => {
             let Some(file) = picked.await else {

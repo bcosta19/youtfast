@@ -213,6 +213,25 @@ pub struct CommentRow {
     pub hearted: bool,
 }
 
+/// The account's rating of a video.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Rating {
+    #[default]
+    None,
+    Like,
+    Dislike,
+}
+
+/// A playlist of the account in the watch page's save menu, and whether
+/// it holds the video.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SaveTarget {
+    /// `WL` for Watch later.
+    pub id: String,
+    pub name: String,
+    pub saved: bool,
+}
+
 /// The tab a channel page shows.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum ChannelTab {
@@ -556,6 +575,17 @@ pub enum Action {
     ToggleDescription,
     /// A long comment's `[ read more ]`/`[ show less ]`, by its id.
     ToggleCommentText(String),
+    /// Rate the video being watched on the account.
+    Rate(Rating),
+    /// The save menu opened: ask for the account's playlists.
+    LoadSaveTargets,
+    /// Add the video being watched to an account playlist, or take it out.
+    SetSaved {
+        playlist: String,
+        saved: bool,
+    },
+    /// The share menu's `Start at` box.
+    SetShareAtTime(bool),
     /// Home's chips.
     SetFeedFilter(FeedFilter),
     /// The watch page's `[ share ]`: the link to the clipboard.

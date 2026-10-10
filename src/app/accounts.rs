@@ -112,6 +112,7 @@ impl App {
         self.state.feed = Listing::Idle;
         self.state.shorts = Listing::Idle;
         self.load(self.state.view, true);
+        self.forget_account_marks();
     }
 
     /// Drops the account's lists and leaves its pages.
@@ -132,5 +133,6 @@ impl App {
             self.state.view = View::Home;
         }
         self.load(self.state.view, true);
+        self.forget_account_marks();
     }
 }

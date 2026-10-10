@@ -25,6 +25,9 @@ use crate::model::{
 use crate::paths::Dirs;
 use crate::util;
 
+mod edit;
+pub use edit::{rate, rating, save_targets, set_saved};
+
 /// Channel feeds fetched at once: RSS is cheap, but hundreds of
 /// subscriptions should not open hundreds of connections.
 const RSS_CONCURRENCY: usize = 8;

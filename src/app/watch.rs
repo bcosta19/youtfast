@@ -81,6 +81,9 @@ impl App {
         }
         let id = video.id.clone();
         self.state.watching = Some(video);
+        self.state.save_targets = Fetch::Idle;
+        self.state.share_at_time = false;
+        self.load_rating();
         match self.details_cache.get(&id, util::now(), DETAILS_FRESH) {
             Some(details) => self.show_details(details.clone()),
             None => self.backend.send(Command::LoadDetails {

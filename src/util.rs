@@ -158,9 +158,77 @@ impl<T> Recent<T> {
     }
 }
 
+/// A video's short link, starting `at` seconds in when given.
+pub fn video_link(id: &str, at: Option<u64>) -> String {
+    match at {
+        Some(at) if at > 0 => format!("https://youtu.be/{id}?t={at}"),
+        _ => format!("https://youtu.be/{id}"),
+    }
+}
+
+/// Where the share menu sends a link: each site's own share page, opened
+/// in the browser, and an e-mail. `title` goes with the link where the
+/// site takes text.
+pub fn share_targets(link: &str, title: &str) -> [(&'static str, String); 7] {
+    let url = percent_encode(link);
+    let text = percent_encode(&format!("{title} {link}"));
+    let subject = percent_encode(title);
+    [
+        ("WhatsApp", format!("https://wa.me/?text={text}")),
+        (
+            "Telegram",
+            format!("https://t.me/share/url?url={url}&text={subject}"),
+        ),
+        ("X", format!("https://x.com/intent/post?text={text}")),
+        (
+            "Reddit",
+            format!("https://www.reddit.com/submit?url={url}&title={subject}"),
+        ),
+        (
+            "Facebook",
+            format!("https://www.facebook.com/sharer/sharer.php?u={url}"),
+        ),
+        (
+            "LinkedIn",
+            format!("https://www.linkedin.com/sharing/share-offsite/?url={url}"),
+        ),
+        ("E-mail", format!("mailto:?subject={subject}&body={url}")),
+    ]
+}
+
+/// Text as a URL query value: everything but unreserved characters is
+/// `%XX`-escaped, byte by byte.
+fn percent_encode(text: &str) -> String {
+    let mut encoded = String::with_capacity(text.len());
+    for byte in text.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            encoded.push(byte as char);
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    encoded
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn share_links_start_where_asked_and_escape_their_text() {
+        assert_eq!(video_link("abc", None), "https://youtu.be/abc");
+        assert_eq!(video_link("abc", Some(0)), "https://youtu.be/abc");
+        assert_eq!(video_link("abc", Some(83)), "https://youtu.be/abc?t=83");
+        let targets = share_targets("https://youtu.be/abc?t=83", "Rock & roll é");
+        assert_eq!(
+            targets[0].1,
+            "https://wa.me/?text=Rock%20%26%20roll%20%C3%A9%20https%3A%2F%2Fyoutu.be%2Fabc%3Ft%3D83"
+        );
+        assert_eq!(
+            targets[6].1,
+            "mailto:?subject=Rock%20%26%20roll%20%C3%A9&body=https%3A%2F%2Fyoutu.be%2Fabc%3Ft%3D83"
+        );
+    }
 
     #[test]
     fn recent_keeps_the_newest_and_forgets_the_old() {

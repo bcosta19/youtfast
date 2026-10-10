@@ -15,8 +15,8 @@ use crate::instance::{self, Queue as RemoteQueue};
 use crate::library::{Account, Import, Library};
 use crate::model::{
     AccountSource, Action, Channel, ChannelAbout, ChannelHeader, ChannelTab, CommentRow, Details,
-    FeedFilter, Fetch, HistoryRow, Listing, PlaylistSummary, Quality, Resolution, Results, Source,
-    Video, View,
+    FeedFilter, Fetch, HistoryRow, Listing, PlaylistSummary, Quality, Rating, Resolution, Results,
+    SaveTarget, Source, Video, View,
 };
 use crate::mpv::{self, Mpv, NativeDisplay, VideoSurface};
 use crate::paths::Dirs;
@@ -123,6 +123,15 @@ pub struct State {
     pub description_open: bool,
     /// The comments (and replies) expanded past their first rows, by id.
     pub comments_open: HashSet<String>,
+    /// The account's rating of the video being watched.
+    pub rating: Fetch<Rating>,
+    /// The rating the like count was taken with, so a new rating moves the
+    /// count shown by one.
+    pub rating_base: Rating,
+    /// The save menu's account playlists, asked for when it first opens.
+    pub save_targets: Fetch<Vec<SaveTarget>>,
+    /// The share menu's `Start at` box: links start where the video is.
+    pub share_at_time: bool,
     /// The channel page's header, kept while the same channel is open.
     pub channel_header: Option<ChannelHeader>,
     /// Which tab the channel page shows.
@@ -222,6 +231,11 @@ const DETAILS_FRESH: i64 = 30 * 60;
 /// How long the volume stays still before it is saved: a drag of the
 /// slider is one save, not one per frame.
 const VOLUME_SAVE_AFTER: Duration = Duration::from_secs(1);
+/// How many videos' ratings are kept, and for how long in seconds: the
+/// app's own changes update them, so only a rating changed elsewhere (in
+/// a browser) shows late.
+const RATINGS_KEPT: usize = 200;
+const RATING_FRESH: i64 = 30 * 60;
 
 pub struct App {
     state: State,
@@ -240,6 +254,9 @@ pub struct App {
     /// The watch pages seen lately, so going back to one asks YouTube
     /// again only for its comments.
     details_cache: util::Recent<Details>,
+    /// The account's ratings of the videos watched lately (see
+    /// [`RATING_FRESH`]).
+    ratings: util::Recent<Rating>,
     /// The comments page in flight, to put its token back on failure.
     more_comments_token: Option<String>,
     /// The channel the open page shows, to detect a channel switch.
@@ -349,6 +366,7 @@ impl App {
             generations: HashMap::new(),
             details_generation: 0,
             details_cache: util::Recent::new(DETAILS_KEPT),
+            ratings: util::Recent::new(RATINGS_KEPT),
             more_comments_token: None,
             open_channel: None,
             back: Vec::new(),
@@ -411,6 +429,19 @@ impl App {
             } => self.on_comments(generation, key, result),
             Event::Imported(Ok(import)) => self.on_imported(import),
             Event::Imported(Err(error)) => self.state.notice = Some(error),
+            Event::Rating { id, result } => self.on_rating(id, result),
+            Event::RateFailed {
+                id,
+                previous,
+                error,
+            } => self.on_rate_failed(id, previous, error),
+            Event::SaveTargets { id, result } => self.on_save_targets(id, result),
+            Event::SaveFailed {
+                id,
+                playlist,
+                saved,
+                error,
+            } => self.on_save_failed(id, playlist, saved, error),
             Event::SigningIn => self.state.account = AccountState::SigningIn,
             Event::AccountAdded(account) => {
                 self.state.library.accounts.push(account);
@@ -577,13 +608,21 @@ impl App {
                     self.state.comments_open.insert(id);
                 }
             }
+            Action::Rate(rating) => self.rate(rating),
+            Action::LoadSaveTargets => self.load_save_targets(),
+            Action::SetSaved { playlist, saved } => self.set_saved(playlist, saved),
+            Action::SetShareAtTime(on) => self.state.share_at_time = on,
             Action::SetFeedFilter(filter) => self.state.feed_filter = filter,
             Action::CopyLink(url) => {
                 ctx.copy_text(url);
                 self.state.notice = Some("Link copied".to_owned());
             }
             Action::OpenUrl(url) => {
-                if url.starts_with("https://") || url.starts_with("http://") {
+                // Web pages, and the share menu's e-mail.
+                if url.starts_with("https://")
+                    || url.starts_with("http://")
+                    || url.starts_with("mailto:")
+                {
                     ctx.open_url(egui::OpenUrl::new_tab(url));
                 }
             }
@@ -728,4 +767,5 @@ mod accounts;
 mod loading;
 mod notifications;
 mod themes;
+mod video_actions;
 mod watch;

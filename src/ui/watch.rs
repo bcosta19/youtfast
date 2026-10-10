@@ -10,7 +10,7 @@ use egui::{
 use super::{results, widgets};
 use crate::app::State;
 use crate::icons::Icon;
-use crate::model::{Action, Channel, CommentRow, Fetch, Quality, Resolution, Video};
+use crate::model::{Action, Channel, CommentRow, Fetch, Quality, Rating, Resolution, Video};
 use crate::mpv::{Status, VideoSurface};
 use crate::util;
 
@@ -184,7 +184,7 @@ fn about_video(
             .color(palette.text),
     );
     ui.add_space(widgets::line(ui) / 2.0);
-    channel_line(ui, state, watching, actions);
+    channel_line(ui, state, watching, status, actions);
     ui.add_space(widgets::line(ui) / 2.0);
     description(ui, state, watching, actions);
     chapters(ui, state, status, actions);
@@ -192,10 +192,16 @@ fn about_video(
 }
 
 /// YouTube's line under the title: the channel's avatar, name and
-/// subscribers with `[ subscribe ]`, then likes, `[ share ]` and
-/// `[ watch later ]` at the right. Filled from rustypipe's details when
-/// they arrive; the spinner or the error until then.
-fn channel_line(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Action>) {
+/// subscribers with `[ subscribe ]`, then the rating, `[ share ]` and
+/// `[ save ]` at the right. Filled from rustypipe's details when they
+/// arrive; the spinner or the error until then.
+fn channel_line(
+    ui: &mut Ui,
+    state: &State,
+    watching: &Video,
+    status: Option<&Status>,
+    actions: &mut Vec<Action>,
+) {
     let palette = &state.palette;
     let details = state.details.ready();
     let channel = match details {
@@ -258,17 +264,17 @@ fn channel_line(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<
             widgets::subscribe(ui, state, channel, widgets::ButtonStyle::Primary, actions);
         }
         // The actions sit at the right while they fit; under it otherwise.
-        let needed = 34.0 * widgets::cell(ui);
+        let needed = 44.0 * widgets::cell(ui);
         if ui.available_width() >= needed {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                video_actions(ui, state, watching, true, actions);
+                video_actions(ui, state, watching, status, true, actions);
             });
         } else {
             wrapped = true;
         }
     });
     if wrapped {
-        ui.horizontal(|ui| video_actions(ui, state, watching, false, actions));
+        ui.horizontal(|ui| video_actions(ui, state, watching, status, false, actions));
     }
     if let Fetch::Failed(error) = &state.details {
         ui.horizontal(|ui| {
@@ -282,69 +288,230 @@ fn channel_line(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<
     }
 }
 
-/// Likes, `[ share ]` and `[ watch later ]`, in that order as read;
+/// The rating, `[ share ]` and `[ save ]`, in that order as read;
 /// `right_to_left` when the caller's layout runs that way.
 fn video_actions(
     ui: &mut Ui,
     state: &State,
     watching: &Video,
+    status: Option<&Status>,
     right_to_left: bool,
     actions: &mut Vec<Action>,
 ) {
-    let palette = &state.palette;
-    let likes = |ui: &mut Ui| {
-        if let Some(likes) = state.details.ready().and_then(|details| details.likes) {
-            ui.label(
-                RichText::new(format!(" ▲ {} ", util::compact(u64::from(likes))))
-                    .monospace()
-                    .color(palette.text)
-                    .background_color(palette.surface),
-            )
-            .on_hover_text("Likes. Rating a video needs youtube.com.");
-        }
-    };
-    let share = |ui: &mut Ui, actions: &mut Vec<Action>| {
-        if widgets::bracket_button(ui, palette, "share", widgets::ButtonStyle::Normal)
-            .on_hover_text("Copy the link")
-            .clicked()
-        {
-            actions.push(Action::CopyLink(format!(
-                "https://youtu.be/{}",
-                watching.id
-            )));
-        }
-    };
-    let saved = state.library.in_watch_later(&watching.id);
     if right_to_left {
-        watch_later_button(ui, state, watching, saved, actions);
-        share(ui, actions);
-        likes(ui);
+        save_menu(ui, state, watching, actions);
+        share_menu(ui, state, watching, status, actions);
+        rating_buttons(ui, state, true, actions);
     } else {
-        likes(ui);
-        share(ui, actions);
-        watch_later_button(ui, state, watching, saved, actions);
+        rating_buttons(ui, state, false, actions);
+        share_menu(ui, state, watching, status, actions);
+        save_menu(ui, state, watching, actions);
     }
 }
 
-/// The watch-later bracket button.
-fn watch_later_button(
+/// `[ ▲ 19K ]` and `[ ▼ ]`: the account's rating, lit when given; a click
+/// on the lit one takes it back. The count moves with the rating given
+/// here. Without an account they only show the count.
+fn rating_buttons(ui: &mut Ui, state: &State, right_to_left: bool, actions: &mut Vec<Action>) {
+    let palette = &state.palette;
+    let rating = state.rating.ready().copied();
+    let likes = state
+        .details
+        .ready()
+        .and_then(|details| details.likes)
+        .map(|likes| {
+            let now = i64::from(rating == Some(Rating::Like));
+            let before = i64::from(state.rating_base == Rating::Like);
+            (i64::from(likes) + now - before).max(0) as u64
+        });
+    let enabled = state.signed_in() && rating.is_some();
+    let hint = if !state.signed_in() {
+        "Sign in to rate videos"
+    } else if matches!(state.rating, Fetch::Failed(_)) {
+        "Your rating could not be read"
+    } else {
+        ""
+    };
+    let style = |on: bool| {
+        if on {
+            widgets::ButtonStyle::On
+        } else {
+            widgets::ButtonStyle::Normal
+        }
+    };
+    let like = |ui: &mut Ui, actions: &mut Vec<Action>| {
+        let label = match likes {
+            Some(likes) => format!("▲ {}", util::compact(likes)),
+            None => "▲".to_owned(),
+        };
+        let liked = rating == Some(Rating::Like);
+        let response = ui
+            .add_enabled_ui(enabled, |ui| {
+                widgets::bracket_button(ui, palette, &label, style(liked))
+            })
+            .inner;
+        let response = if hint.is_empty() {
+            response.on_hover_text(if liked { "Liked" } else { "I like this" })
+        } else {
+            response.on_disabled_hover_text(hint)
+        };
+        if response.clicked() {
+            actions.push(Action::Rate(if liked {
+                Rating::None
+            } else {
+                Rating::Like
+            }));
+        }
+    };
+    let dislike = |ui: &mut Ui, actions: &mut Vec<Action>| {
+        let disliked = rating == Some(Rating::Dislike);
+        let response = ui
+            .add_enabled_ui(enabled, |ui| {
+                widgets::bracket_button(ui, palette, "▼", style(disliked))
+            })
+            .inner;
+        let response = if hint.is_empty() {
+            response.on_hover_text(if disliked {
+                "Disliked"
+            } else {
+                "I dislike this"
+            })
+        } else {
+            response.on_disabled_hover_text(hint)
+        };
+        if response.clicked() {
+            actions.push(Action::Rate(if disliked {
+                Rating::None
+            } else {
+                Rating::Dislike
+            }));
+        }
+    };
+    if right_to_left {
+        dislike(ui, actions);
+        like(ui, actions);
+    } else {
+        like(ui, actions);
+        dislike(ui, actions);
+    }
+}
+
+/// `[ share ]`: the link, `Start at` the moment playing, copy, and each
+/// site's share page.
+fn share_menu(
     ui: &mut Ui,
     state: &State,
     watching: &Video,
-    saved: bool,
+    status: Option<&Status>,
     actions: &mut Vec<Action>,
 ) {
-    let (label, style) = if saved {
-        ("saved", widgets::ButtonStyle::On)
+    let palette = &state.palette;
+    let response = widgets::bracket_button(ui, palette, "share", widgets::ButtonStyle::Normal);
+    egui::Popup::menu(&response)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| {
+            ui.set_min_width(260.0);
+            let position = status.map_or(0.0, |status| status.position);
+            let at = state.share_at_time.then_some(position as u64);
+            let link = util::video_link(&watching.id, at);
+            ui.label(RichText::new(&link).monospace().color(palette.text));
+            let mut start_at = state.share_at_time;
+            if ui
+                .checkbox(
+                    &mut start_at,
+                    RichText::new(format!("Start at {}", util::duration(position))).monospace(),
+                )
+                .changed()
+            {
+                actions.push(Action::SetShareAtTime(start_at));
+            }
+            if widgets::bracket_button(ui, palette, "copy link", widgets::ButtonStyle::Primary)
+                .clicked()
+            {
+                actions.push(Action::CopyLink(link.clone()));
+                ui.close();
+            }
+            ui.separator();
+            let title = state
+                .details
+                .ready()
+                .map(|details| details.title.as_str())
+                .filter(|title| !title.is_empty())
+                .unwrap_or(&watching.title);
+            for (site, url) in util::share_targets(&link, title) {
+                if widgets::bracket_button(ui, palette, site, widgets::ButtonStyle::Normal)
+                    .clicked()
+                {
+                    actions.push(Action::OpenUrl(url));
+                    ui.close();
+                }
+            }
+        });
+}
+
+/// `[ save ]`: Watch later on this computer and, signed in, the account's
+/// playlists, each a box to tick. The account's list is asked for when
+/// the menu first opens.
+fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Action>) {
+    let palette = &state.palette;
+    let local = state.library.in_watch_later(&watching.id);
+    let account = state
+        .save_targets
+        .ready()
+        .is_some_and(|targets| targets.iter().any(|target| target.saved));
+    let style = if local || account {
+        widgets::ButtonStyle::On
     } else {
-        ("watch later", widgets::ButtonStyle::Normal)
+        widgets::ButtonStyle::Normal
     };
-    if widgets::bracket_button(ui, &state.palette, label, style)
-        .on_hover_text("Watch later on this computer")
-        .clicked()
-    {
-        actions.push(Action::ToggleWatchLater(watching.clone()));
-    }
+    let label = if local || account { "saved" } else { "save" };
+    let response = widgets::bracket_button(ui, palette, label, style);
+    egui::Popup::menu(&response)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| {
+            ui.set_min_width(240.0);
+            let mut on_device = local;
+            if ui
+                .checkbox(
+                    &mut on_device,
+                    RichText::new("Watch later on this computer").monospace(),
+                )
+                .changed()
+            {
+                actions.push(Action::ToggleWatchLater(watching.clone()));
+            }
+            ui.separator();
+            if !state.signed_in() {
+                ui.label(
+                    RichText::new("Sign in to save to the account's playlists")
+                        .monospace()
+                        .small()
+                        .color(palette.dim),
+                );
+                return;
+            }
+            match &state.save_targets {
+                Fetch::Idle => actions.push(Action::LoadSaveTargets),
+                Fetch::Loading => results::loading(ui, state, "playlists"),
+                Fetch::Failed(error) => {
+                    ui.label(RichText::new(error.as_str()).monospace().color(palette.red));
+                }
+                Fetch::Ready(targets) => {
+                    for target in targets {
+                        let mut saved = target.saved;
+                        if ui
+                            .checkbox(&mut saved, RichText::new(&target.name).monospace())
+                            .changed()
+                        {
+                            actions.push(Action::SetSaved {
+                                playlist: target.id.clone(),
+                                saved,
+                            });
+                        }
+                    }
+                }
+            }
+        });
 }
 
 /// The description pane, YouTube's grey box: `views · published` on its

@@ -57,7 +57,12 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
   feed (`more_videos` again) — its shorts land on the shelf, filled further
   by `channel_shorts` (each device channel's Shorts tab). rustypipe has no
   posts or podcasts tabs, no write actions and no home recommendations:
-  subscribing and Watch later act on the local library.
+  subscribing acts on the local library. The watch page's rating and the
+  account playlists of `[ save ]` are the only writes to the account
+  (`src/innertube/edit.rs`, through rustypipe's `raw` request to
+  InnerTube's `like/*`, `playlist/get_add_to_playlist` and
+  `browse/edit_playlist`); ratings are kept 30 minutes (`App::ratings`),
+  and each write is shown at once and undone if YouTube refuses it.
 - `src/alerts.rs` is the new-upload check's brain: a pure split of a
   feed's videos into unseen (`alerts_seen_at`) and not-yet-notified
   (`alerts_notified_at`) stamps the library keeps. A tokio timer in
