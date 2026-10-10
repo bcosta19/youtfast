@@ -1,13 +1,22 @@
-//! A channel's page: the header (avatar, name, numbers, its own search),
-//! the tab line, and the tab's pane — video rows, playlist rows, or the
-//! About pane's key/value lines.
+//! A channel's page, YouTube's way: the header (round avatar, the name,
+//! the numbers, Subscribe), the underlined tab bar with the channel's own
+//! search at its right, and the tab: a grid of video cards, playlist rows,
+//! or the About cards.
 
-use egui::{Align2, RichText, Sense, TextEdit, Ui, vec2};
+use egui::{Align, Layout, RichText, Sense, Ui, pos2, vec2};
 
 use super::{results, widgets};
 use crate::app::State;
 use crate::model::{Action, Channel, ChannelAbout, ChannelHeader, ChannelTab, Fetch, Listing};
+use crate::theme;
 use crate::util;
+
+/// The smallest a video card gets before the grid drops a column.
+const CARD_WIDTH: f32 = 280.0;
+/// The space between cards, rows and the page's parts.
+const GAP: f32 = 8.0;
+/// The widest the About cards read well.
+const ABOUT_WIDTH: f32 = 720.0;
 
 /// The tabs in the order they show, given what the header knows. Before
 /// the header arrives, Shorts and Live cannot be known to exist. An active
@@ -56,11 +65,11 @@ fn same_kind(a: &ChannelTab, b: &ChannelTab) -> bool {
 }
 
 pub fn show(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Action>) {
-    egui::CentralPanel::default().show(ui, |ui| {
+    results::panel(ui, |ui| {
         header(ui, state, channel, actions);
-        ui.add_space(widgets::line(ui) / 2.0);
-        tab_row(ui, state, actions);
-        ui.add_space(widgets::line(ui) / 2.0);
+        ui.add_space(16.0);
+        tab_bar(ui, state, actions);
+        ui.add_space(16.0);
         match &state.channel_tab {
             ChannelTab::About => about(ui, state, actions),
             ChannelTab::Playlists => playlists(ui, state, actions),
@@ -69,104 +78,126 @@ pub fn show(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Act
     });
 }
 
-/// The header pane: the square avatar, the name in blue bold, the
-/// numbers in secondary, subscribe and the channel's own search.
+/// The header: the round avatar, the name in bold, the handle and the
+/// numbers in secondary, and Subscribe as the primary pill.
 fn header(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Action>) {
-    let title = state
-        .channel_header
-        .as_ref()
+    let palette = &state.palette;
+    let header = state.channel_header.as_ref();
+    let title = header
         .map(|header| header.name.clone())
         .unwrap_or_else(|| channel.name.clone());
-    widgets::pane(ui, &state.palette, &title, None, true, None, |ui| {
-        ui.horizontal(|ui| {
-            // The 64 px square avatar, or a placeholder initial.
-            let size = vec2(64.0, 64.0);
-            let avatar = state
-                .channel_header
-                .as_ref()
-                .and_then(|header| header.avatar.as_deref());
-            match avatar {
-                Some(url) => {
-                    ui.add(
-                        super::images::remote(ui, url)
-                            .fit_to_exact_size(size)
-                            .corner_radius(egui::CornerRadius::ZERO),
-                    );
+    ui.horizontal(|ui| {
+        let (rect, _) = ui.allocate_exact_size(vec2(80.0, 80.0), Sense::hover());
+        let avatar = header.and_then(|header| header.avatar.as_deref());
+        widgets::avatar(ui, palette, avatar, &title, rect);
+        ui.add_space(8.0);
+        ui.vertical(|ui| {
+            ui.label(
+                RichText::new(&title)
+                    .font(theme::bold(24.0))
+                    .color(palette.text),
+            );
+            if let Some(header) = header {
+                let mut parts = Vec::new();
+                if let Some(handle) = &header.handle {
+                    parts.push(handle.clone());
                 }
-                None => {
-                    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
-                    ui.painter()
-                        .rect_filled(rect, egui::CornerRadius::ZERO, state.palette.surface);
-                    let initial: String = title.chars().take(1).collect();
-                    ui.painter().text(
-                        rect.center(),
-                        Align2::CENTER_CENTER,
-                        initial.to_uppercase(),
-                        egui::FontId::monospace(28.0),
-                        state.palette.dim,
+                if let Some(subscribers) = header.subscribers {
+                    parts.push(format!("{} subscribers", util::compact(subscribers)));
+                }
+                if let Some(videos) = header.videos {
+                    parts.push(format!("{} videos", util::compact(videos)));
+                }
+                if !parts.is_empty() {
+                    ui.label(
+                        RichText::new(parts.join(" · "))
+                            .font(theme::regular(14.0))
+                            .color(palette.secondary),
                     );
                 }
             }
-            ui.vertical(|ui| {
-                ui.label(
-                    RichText::new(&title)
-                        .monospace()
-                        .strong()
-                        .color(state.palette.blue),
-                );
-                if let Some(header) = &state.channel_header {
-                    let mut parts = Vec::new();
-                    if let Some(handle) = &header.handle {
-                        parts.push(handle.clone());
-                    }
-                    if let Some(subscribers) = header.subscribers {
-                        parts.push(format!("{} subscribers", util::compact(subscribers)));
-                    }
-                    if let Some(videos) = header.videos {
-                        parts.push(format!("{} videos", util::compact(videos)));
-                    }
-                    if !parts.is_empty() {
-                        ui.label(
-                            RichText::new(parts.join(" · "))
-                                .monospace()
-                                .color(state.palette.secondary),
-                        );
-                    }
-                }
-            });
-        });
-        ui.horizontal(|ui| {
-            widgets::subscribe(ui, state, channel, widgets::ButtonStyle::Normal, actions);
-            channel_search(ui, state, actions);
+            ui.add_space(4.0);
+            widgets::subscribe(ui, state, channel, widgets::ButtonStyle::Primary, actions);
         });
     });
 }
 
-/// The borderless field that searches this channel, underlined.
-fn channel_search(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
-    ui.add_space(widgets::cell(ui));
-    let mut query = state.channel_query.clone();
-    let field = ui.add(
-        TextEdit::singleline(&mut query)
-            .desired_width(240.0)
-            .hint_text(RichText::new("search this channel").color(state.palette.dim))
-            .font(egui::FontId::monospace(14.0))
-            .frame(egui::Frame::NONE),
+/// The tab's name in the bar.
+fn tab_label(tab: &ChannelTab) -> String {
+    match tab {
+        ChannelTab::Videos => "Videos".to_owned(),
+        ChannelTab::Shorts => "Shorts".to_owned(),
+        ChannelTab::Live => "Live".to_owned(),
+        ChannelTab::Playlists => "Playlists".to_owned(),
+        ChannelTab::About => "About".to_owned(),
+        ChannelTab::Search(query) => format!("Search: {query}"),
+    }
+}
+
+/// YouTube's tab bar: the names in medium, the current one in `text` over
+/// a 2 px underline, the others in `secondary`; a hairline under the bar;
+/// the channel's own search at its right.
+fn tab_bar(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let palette = &state.palette;
+    let height = 40.0;
+    let bar = ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 24.0;
+        for tab in tabs(state.channel_header.as_ref(), &state.channel_tab) {
+            let current = same_kind(&tab, &state.channel_tab);
+            let galley =
+                ui.painter()
+                    .layout_no_wrap(tab_label(&tab), theme::medium(15.0), palette.text);
+            let (rect, response) =
+                ui.allocate_exact_size(vec2(galley.size().x, height), Sense::click());
+            if response.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
+            let color = if current || response.hovered() {
+                palette.text
+            } else {
+                palette.secondary
+            };
+            let text_at = pos2(rect.left(), rect.center().y - galley.size().y / 2.0);
+            ui.painter()
+                .galley_with_override_text_color(text_at, galley, color);
+            if current {
+                let underline = egui::Rect::from_min_max(
+                    pos2(rect.left(), rect.bottom() - 2.0),
+                    rect.right_bottom(),
+                );
+                ui.painter().rect_filled(underline, 1.0, palette.text);
+            }
+            if response.clicked() {
+                actions.push(Action::SetChannelTab(tab));
+            }
+        }
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            channel_search(ui, state, actions);
+        });
+    });
+    let rect = bar.response.rect;
+    ui.painter().hline(
+        rect.left()..=rect.right(),
+        rect.bottom(),
+        egui::Stroke::new(1.0, palette.outline),
     );
-    if field.changed() {
+}
+
+/// The field that searches this channel: Enter opens the Search tab.
+fn channel_search(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let mut query = state.channel_query.clone();
+    let field = widgets::search_field(
+        ui,
+        &state.palette,
+        &mut query,
+        "Search this channel",
+        egui::Id::new("channel search"),
+        240.0_f32.min(ui.available_width()),
+    );
+    // The clear button edits the text without the field's `changed`.
+    if query != state.channel_query {
         actions.push(Action::SetChannelQuery(query));
     }
-    // The underline: `outline`, `accent` while focused.
-    let color = if field.has_focus() {
-        state.palette.accent
-    } else {
-        state.palette.outline
-    };
-    ui.painter().hline(
-        field.rect.left()..=field.rect.right(),
-        field.rect.bottom() - 1.0,
-        egui::Stroke::new(1.0, color),
-    );
     if field.has_focus() && ui.input(|input| input.key_pressed(egui::Key::Escape)) {
         field.surrender_focus();
     }
@@ -180,90 +211,78 @@ fn channel_search(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     }
 }
 
-/// `[ videos ] [ shorts ] [ live ] [ playlists ] [ about ]`, the active
-/// one On.
-fn tab_row(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
-    ui.horizontal(|ui| {
-        for tab in tabs(state.channel_header.as_ref(), &state.channel_tab) {
-            let label = match &tab {
-                ChannelTab::Videos => "videos".to_owned(),
-                ChannelTab::Shorts => "shorts".to_owned(),
-                ChannelTab::Live => "live".to_owned(),
-                ChannelTab::Playlists => "playlists".to_owned(),
-                ChannelTab::About => "about".to_owned(),
-                ChannelTab::Search(query) => format!("search: {query}"),
-            };
-            let style = if same_kind(&tab, &state.channel_tab) {
-                widgets::ButtonStyle::On
-            } else {
-                widgets::ButtonStyle::Normal
-            };
-            if widgets::bracket_button(ui, &state.palette, &label, style).clicked() {
-                actions.push(Action::SetChannelTab(tab));
-            }
-        }
-    });
-}
-
-/// A video tab: Videos, Shorts, Live, or search results — rows with the
-/// cursor, paging as the last row scrolls into view.
+/// A video tab: Videos, Shorts, Live, or search results — a grid of
+/// cards with the cursor, paging as the last card scrolls into view.
 fn videos(ui: &mut Ui, state: &State, tab: &ChannelTab, actions: &mut Vec<Action>) {
-    let title = match tab {
-        ChannelTab::Videos => "Videos".to_owned(),
-        ChannelTab::Shorts => "Shorts".to_owned(),
-        ChannelTab::Live => "Live".to_owned(),
-        ChannelTab::Search(query) => format!("search: {query}"),
+    let what = match tab {
+        ChannelTab::Videos => "videos",
+        ChannelTab::Shorts => "shorts",
+        ChannelTab::Live => "live streams",
+        ChannelTab::Search(_) => "results",
         _ => unreachable!(),
     };
-    widgets::pane(
-        ui,
-        &state.palette,
-        &title,
-        Some(state.page_videos.items().len()),
-        true,
-        None,
-        |ui| match &state.page_videos {
-            Listing::Idle => {}
-            Listing::Loading => results::loading(ui, state, &title),
-            Listing::Failed(error) => results::failed(ui, state, error, actions),
-            Listing::Ready(videos) if videos.is_empty() => {
-                results::nothing(ui, state, "nothing here")
-            }
-            Listing::Ready(videos) => {
-                let videos = videos.clone();
-                egui::ScrollArea::vertical()
-                    .auto_shrink(false)
-                    .show(ui, |ui| {
-                        for (index, video) in videos.iter().enumerate() {
-                            let selected = index == state.cursor;
-                            let watched = widgets::watched(&state.library, video);
-                            let response = widgets::video_row(
-                                ui,
-                                &state.palette,
-                                video,
-                                None,
-                                watched,
-                                selected,
-                            );
-                            if selected {
-                                response.clone().scroll_to_me(None);
-                            }
-                            // The last row visible asks for the next page.
-                            if index == videos.len() - 1 && ui.is_rect_visible(response.rect) {
-                                actions.push(Action::LoadMore);
-                            }
-                            if response.clicked() {
-                                actions.push(Action::Open(video.clone()));
-                            }
-                        }
-                        more_row(ui, state, actions);
-                    });
-            }
+    match &state.page_videos {
+        Listing::Idle => {}
+        Listing::Loading => results::loading(ui, state, what),
+        Listing::Failed(error) => results::failed(ui, state, error, actions),
+        Listing::Ready(videos) if videos.is_empty() => match tab {
+            ChannelTab::Search(query) => results::empty(
+                ui,
+                state,
+                "No results",
+                &format!("Nothing on this channel matches \u{201c}{query}\u{201d}"),
+            ),
+            _ => results::empty(
+                ui,
+                state,
+                &format!("No {what}"),
+                "This channel has not posted any here yet",
+            ),
         },
-    );
+        Listing::Ready(videos) => {
+            let videos = videos.clone();
+            egui::ScrollArea::vertical()
+                .auto_shrink(false)
+                .show(ui, |ui| {
+                    let (columns, width) =
+                        widgets::grid_columns(ui.available_width(), CARD_WIDTH, GAP, 5);
+                    let indices: Vec<usize> = (0..videos.len()).collect();
+                    for row in indices.chunks(columns) {
+                        ui.horizontal_top(|ui| {
+                            ui.spacing_mut().item_spacing.x = GAP;
+                            for &index in row {
+                                let video = &videos[index];
+                                let selected = index == state.cursor;
+                                let watched = widgets::watched(&state.library, video);
+                                let response = widgets::video_card(
+                                    ui,
+                                    &state.palette,
+                                    video,
+                                    watched,
+                                    selected,
+                                    width,
+                                );
+                                if selected {
+                                    response.clone().scroll_to_me(None);
+                                }
+                                // The last card visible asks for the next page.
+                                if index == videos.len() - 1 && ui.is_rect_visible(response.rect) {
+                                    actions.push(Action::LoadMore);
+                                }
+                                if response.clicked() {
+                                    actions.push(Action::Open(video.clone()));
+                                }
+                            }
+                        });
+                    }
+                    ui.add_space(GAP);
+                    more_row(ui, state, actions);
+                });
+        }
+    }
 }
 
-/// The tab's paged list's tail row.
+/// The tab's paged list's tail: the page on its way, Retry, or Load more.
 fn more_row(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     widgets::more_row(
         ui,
@@ -274,132 +293,158 @@ fn more_row(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     );
 }
 
-/// The playlists tab: thumbnail, name, `N videos`.
+/// The playlists tab: rows of thumbnail, name, `N videos`.
 fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
-    widgets::pane(
-        ui,
-        &state.palette,
-        "Playlists",
-        Some(state.page_playlists.items().len()),
-        true,
-        None,
-        |ui| match &state.page_playlists {
-            Listing::Idle => {}
-            Listing::Loading => results::loading(ui, state, "playlists"),
-            Listing::Failed(error) => results::failed(ui, state, error, actions),
-            Listing::Ready(playlists) if playlists.is_empty() => {
-                results::nothing(ui, state, "no playlists")
-            }
-            Listing::Ready(playlists) => {
-                let playlists = playlists.clone();
-                egui::ScrollArea::vertical()
-                    .auto_shrink(false)
-                    .show(ui, |ui| {
-                        for (index, playlist) in playlists.iter().enumerate() {
-                            let selected = index == state.cursor;
-                            let response = widgets::playlist_row(
-                                ui,
-                                &state.palette,
-                                playlist,
-                                selected,
-                                false,
-                            );
-                            if selected {
-                                response.clone().scroll_to_me(None);
-                            }
-                            if index == playlists.len() - 1 && ui.is_rect_visible(response.rect) {
-                                actions.push(Action::LoadMore);
-                            }
-                            if response.clicked() {
-                                actions.push(Action::OpenPlaylist {
-                                    id: playlist.id.clone(),
-                                    name: playlist.name.clone(),
-                                });
-                            }
+    match &state.page_playlists {
+        Listing::Idle => {}
+        Listing::Loading => results::loading(ui, state, "playlists"),
+        Listing::Failed(error) => results::failed(ui, state, error, actions),
+        Listing::Ready(playlists) if playlists.is_empty() => results::empty(
+            ui,
+            state,
+            "No playlists",
+            "This channel has no public playlists",
+        ),
+        Listing::Ready(playlists) => {
+            let playlists = playlists.clone();
+            egui::ScrollArea::vertical()
+                .auto_shrink(false)
+                .show(ui, |ui| {
+                    for (index, playlist) in playlists.iter().enumerate() {
+                        let selected = index == state.cursor;
+                        let response =
+                            widgets::playlist_row(ui, &state.palette, playlist, selected, false);
+                        if selected {
+                            response.clone().scroll_to_me(None);
                         }
-                        more_row(ui, state, actions);
-                    });
-            }
-        },
-    );
-}
-
-/// The About pane: key/value lines, then the description, then links.
-fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
-    widgets::pane(ui, &state.palette, "About", None, true, None, |ui| {
-        egui::ScrollArea::vertical()
-            .auto_shrink(false)
-            .show(ui, |ui| match &state.channel_about {
-                Fetch::Idle => {}
-                Fetch::Loading => results::loading(ui, state, "about"),
-                Fetch::Failed(error) => results::failed(ui, state, error, actions),
-                Fetch::Ready(about) => about_rows(ui, state, about, actions),
-            });
-    });
-}
-
-/// `key ········· value` rows, then the text, then the links.
-fn about_rows(ui: &mut Ui, state: &State, about: &ChannelAbout, actions: &mut Vec<Action>) {
-    let header = &state.channel_header;
-    let kv = |ui: &mut Ui, key: &str, value: &str| {
-        ui.horizontal(|ui| {
-            ui.label(
-                RichText::new(format!("{key:·<12}"))
-                    .monospace()
-                    .color(state.palette.dim),
-            );
-            ui.label(RichText::new(value).monospace().color(state.palette.text));
-        });
-    };
-    if let Some(handle) = header.as_ref().and_then(|header| header.handle.clone()) {
-        kv(ui, "handle", &handle);
-    }
-    let subscribers = about
-        .subscribers
-        .or_else(|| header.as_ref().and_then(|header| header.subscribers));
-    if let Some(count) = subscribers {
-        kv(ui, "subscribers", &util::compact(count));
-    }
-    let videos = about
-        .videos
-        .or_else(|| header.as_ref().and_then(|header| header.videos));
-    if let Some(count) = videos {
-        kv(ui, "videos", &util::compact(count));
-    }
-    if let Some(views) = about.views {
-        kv(ui, "views", &util::thousands(views));
-    }
-    if let Some(created) = &about.created {
-        kv(ui, "joined", created);
-    }
-    if let Some(country) = &about.country {
-        kv(ui, "country", country);
-    }
-    kv(ui, "url", &about.url);
-    if !about.description.is_empty() {
-        ui.add_space(widgets::line(ui) / 2.0);
-        ui.label(
-            RichText::new(&about.description)
-                .monospace()
-                .color(state.palette.text),
-        );
-    }
-    if !about.links.is_empty() {
-        ui.add_space(widgets::line(ui) / 2.0);
-        for (title, url) in &about.links {
-            ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new(format!("{title:·<16}"))
-                        .monospace()
-                        .color(state.palette.dim),
-                );
-                let link = ui.link(RichText::new(url).monospace().color(state.palette.cyan));
-                if link.clicked() {
-                    actions.push(Action::OpenUrl(url.clone()));
-                }
-            });
+                        if index == playlists.len() - 1 && ui.is_rect_visible(response.rect) {
+                            actions.push(Action::LoadMore);
+                        }
+                        if response.clicked() {
+                            actions.push(Action::OpenPlaylist {
+                                id: playlist.id.clone(),
+                                name: playlist.name.clone(),
+                            });
+                        }
+                    }
+                    ui.add_space(GAP);
+                    more_row(ui, state, actions);
+                });
         }
     }
+}
+
+/// The About tab: the description, the links and the details, each a card
+/// under its heading.
+fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    egui::ScrollArea::vertical()
+        .auto_shrink(false)
+        .show(ui, |ui| match &state.channel_about {
+            Fetch::Idle => {}
+            Fetch::Loading => results::loading(ui, state, "about"),
+            Fetch::Failed(error) => results::failed(ui, state, error, actions),
+            Fetch::Ready(about) => {
+                // set_max_width also widens: a narrow window would cut
+                // the text off at its edge instead of wrapping it.
+                ui.set_max_width(ABOUT_WIDTH.min(ui.available_width()));
+                about_cards(ui, state, about, actions);
+            }
+        });
+}
+
+/// A label in secondary and its value in text, one line of a card's grid.
+fn detail(ui: &mut Ui, state: &State, label: &str, value: &str) {
+    ui.label(
+        RichText::new(label)
+            .font(theme::regular(14.0))
+            .color(state.palette.secondary),
+    );
+    ui.label(
+        RichText::new(value)
+            .font(theme::regular(14.0))
+            .color(state.palette.text),
+    );
+    ui.end_row();
+}
+
+/// Description, Links and More info, YouTube's About in cards.
+fn about_cards(ui: &mut Ui, state: &State, about: &ChannelAbout, actions: &mut Vec<Action>) {
+    let palette = &state.palette;
+    let header = &state.channel_header;
+    if !about.description.is_empty() {
+        widgets::section(ui, palette, "Description", None, |ui| {
+            widgets::card(ui, palette, |ui| {
+                ui.label(
+                    RichText::new(&about.description)
+                        .font(theme::regular(14.0))
+                        .color(palette.text),
+                );
+            });
+        });
+        ui.add_space(24.0);
+    }
+    if !about.links.is_empty() {
+        widgets::section(ui, palette, "Links", None, |ui| {
+            widgets::card(ui, palette, |ui| {
+                egui::Grid::new("channel links")
+                    .num_columns(2)
+                    .spacing(vec2(24.0, GAP))
+                    .show(ui, |ui| {
+                        for (title, url) in &about.links {
+                            ui.label(
+                                RichText::new(title)
+                                    .font(theme::regular(14.0))
+                                    .color(palette.secondary),
+                            );
+                            let link = ui.link(
+                                RichText::new(url)
+                                    .font(theme::regular(14.0))
+                                    .color(palette.blue),
+                            );
+                            if link.clicked() {
+                                actions.push(Action::OpenUrl(url.clone()));
+                            }
+                            ui.end_row();
+                        }
+                    });
+            });
+        });
+        ui.add_space(24.0);
+    }
+    widgets::section(ui, palette, "More info", None, |ui| {
+        widgets::card(ui, palette, |ui| {
+            egui::Grid::new("channel details")
+                .num_columns(2)
+                .spacing(vec2(24.0, GAP))
+                .show(ui, |ui| {
+                    if let Some(handle) = header.as_ref().and_then(|header| header.handle.clone()) {
+                        detail(ui, state, "Handle", &handle);
+                    }
+                    let subscribers = about
+                        .subscribers
+                        .or_else(|| header.as_ref().and_then(|header| header.subscribers));
+                    if let Some(count) = subscribers {
+                        detail(ui, state, "Subscribers", &util::compact(count));
+                    }
+                    let videos = about
+                        .videos
+                        .or_else(|| header.as_ref().and_then(|header| header.videos));
+                    if let Some(count) = videos {
+                        detail(ui, state, "Videos", &util::compact(count));
+                    }
+                    if let Some(views) = about.views {
+                        detail(ui, state, "Views", &util::thousands(views));
+                    }
+                    if let Some(created) = &about.created {
+                        detail(ui, state, "Joined", created);
+                    }
+                    if let Some(country) = &about.country {
+                        detail(ui, state, "Country", country);
+                    }
+                    detail(ui, state, "Address", &about.url);
+                });
+        });
+    });
 }
 
 #[cfg(test)]

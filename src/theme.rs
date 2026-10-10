@@ -207,8 +207,53 @@ pub fn catalog_status(catalog: &Catalog, selected: Option<&str>) -> Cow<'static,
     }
 }
 
+/// The corner radius of cards, menus and thumbnails; small for badges.
+pub const RADIUS: u8 = 8;
+pub const RADIUS_SMALL: u8 = 4;
+
+/// The interface face at a weight, as the siblings name them.
+pub fn regular(size: f32) -> egui::FontId {
+    fastframe_fonts::Weight::Regular.font_id(size)
+}
+
+pub fn medium(size: f32) -> egui::FontId {
+    fastframe_fonts::Weight::Medium.font_id(size)
+}
+
+pub fn semibold(size: f32) -> egui::FontId {
+    fastframe_fonts::Weight::SemiBold.font_id(size)
+}
+
+pub fn bold(size: f32) -> egui::FontId {
+    fastframe_fonts::Weight::Bold.font_id(size)
+}
+
+/// How the desktop renders text, read once per process. Tests take the
+/// platform's default instead of asking the desktop.
+static TEXT_RENDERING: std::sync::LazyLock<fastframe_text::TextRendering> =
+    std::sync::LazyLock::new(|| {
+        if cfg!(test) {
+            fastframe_text::TextRendering::platform_default()
+        } else {
+            fastframe_text::detect()
+        }
+    });
+
+fn text_rendering() -> fastframe_text::TextRendering {
+    *TEXT_RENDERING
+}
+
+/// Inter at its four weights (or the platform's interface face), the
+/// installed faces behind it for other scripts, drawn the way the desktop
+/// renders text: the siblings' setup.
+pub fn install_fonts(ctx: &egui::Context) {
+    let mut fonts = fastframe_fonts::FontSetup::default().definitions();
+    text_rendering().apply_to(&mut fonts);
+    ctx.set_fonts(fonts);
+}
+
 /// Applies the palette to egui's own widgets so dialogs, menus, and text
-/// fields agree with the views. Corner radii and spacing keep egui's own.
+/// fields agree with the views, with the siblings' corners and spacing.
 pub fn apply(ctx: &egui::Context, palette: &Palette) {
     let (theme, mut visuals) = if palette.dark {
         (egui::Theme::Dark, egui::Visuals::dark())
@@ -218,6 +263,7 @@ pub fn apply(ctx: &egui::Context, palette: &Palette) {
     // First: `set_visuals` writes the style of the theme in effect.
     ctx.set_theme(theme);
     visuals.dark_mode = palette.dark;
+    text_rendering().apply_to_visuals(&mut visuals);
     visuals.panel_fill = palette.panel;
     visuals.window_fill = palette.overlay;
     visuals.extreme_bg_color = palette.surface;
@@ -225,22 +271,37 @@ pub fn apply(ctx: &egui::Context, palette: &Palette) {
     visuals.code_bg_color = palette.surface;
     visuals.override_text_color = Some(palette.text);
     visuals.weak_text_color = Some(palette.secondary);
-    visuals.hyperlink_color = palette.accent;
+    visuals.hyperlink_color = palette.blue;
     visuals.selection.bg_fill = palette.accent.gamma_multiply(0.35);
     visuals.selection.stroke = Stroke::new(1.0, palette.accent);
     visuals.window_stroke = Stroke::new(1.0, palette.outline);
-    visuals.window_shadow.color = palette.shadow;
-    visuals.popup_shadow.color = palette.shadow;
+    visuals.window_corner_radius = egui::CornerRadius::same(RADIUS + 2);
+    visuals.menu_corner_radius = egui::CornerRadius::same(RADIUS);
+    visuals.window_shadow = egui::epaint::Shadow {
+        offset: [0, 6],
+        blur: 24,
+        spread: 0,
+        color: palette.shadow,
+    };
+    visuals.popup_shadow = egui::epaint::Shadow {
+        offset: [0, 4],
+        blur: 16,
+        spread: 0,
+        color: palette.shadow,
+    };
+    let corner = egui::CornerRadius::same(RADIUS_SMALL + 2);
     for widget in [
         &mut visuals.widgets.inactive,
         &mut visuals.widgets.hovered,
         &mut visuals.widgets.active,
         &mut visuals.widgets.open,
     ] {
+        widget.corner_radius = corner;
         widget.bg_stroke = Stroke::NONE;
         widget.fg_stroke = Stroke::new(1.0, palette.text);
         widget.expansion = 0.0;
     }
+    visuals.widgets.noninteractive.corner_radius = corner;
     visuals.widgets.noninteractive.bg_fill = palette.panel;
     visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, palette.outline);
     visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, palette.text);
@@ -253,31 +314,45 @@ pub fn apply(ctx: &egui::Context, palette: &Palette) {
     visuals.widgets.open.bg_fill = palette.surface_hover;
     visuals.widgets.open.weak_bg_fill = palette.surface_hover;
     visuals.text_cursor.stroke = Stroke::new(2.0, palette.accent);
+    visuals.striped = false;
     visuals.slider_trailing_fill = true;
     visuals.handle_shape = egui::style::HandleShape::Circle;
-    // Square everything: the terminal look has no rounded corners.
-    visuals.window_corner_radius = egui::CornerRadius::ZERO;
-    visuals.menu_corner_radius = egui::CornerRadius::ZERO;
-    for widget in [
-        &mut visuals.widgets.inactive,
-        &mut visuals.widgets.hovered,
-        &mut visuals.widgets.active,
-        &mut visuals.widgets.open,
-        &mut visuals.widgets.noninteractive,
-    ] {
-        widget.corner_radius = egui::CornerRadius::ZERO;
-    }
     ctx.set_visuals(visuals);
-    // Three sizes: secondary at 13, body at 14, titles at 16.
     ctx.all_styles_mut(|style| {
+        use egui::FontFamily::{Monospace, Proportional};
+        use egui::{FontId, TextStyle};
         style.text_styles = [
-            (egui::TextStyle::Heading, egui::FontId::proportional(16.0)),
-            (egui::TextStyle::Body, egui::FontId::proportional(14.0)),
-            (egui::TextStyle::Button, egui::FontId::proportional(14.0)),
-            (egui::TextStyle::Small, egui::FontId::proportional(13.0)),
-            (egui::TextStyle::Monospace, egui::FontId::monospace(14.0)),
+            (TextStyle::Small, FontId::new(12.0, Proportional)),
+            (TextStyle::Body, FontId::new(14.0, Proportional)),
+            (TextStyle::Button, FontId::new(14.0, Proportional)),
+            (TextStyle::Heading, FontId::new(20.0, Proportional)),
+            (TextStyle::Monospace, FontId::new(13.0, Monospace)),
         ]
         .into();
+        style.spacing.item_spacing = egui::vec2(8.0, 6.0);
+        style.spacing.button_padding = egui::vec2(12.0, 6.0);
+        style.spacing.interact_size = egui::vec2(40.0, 28.0);
+        style.spacing.menu_margin = egui::Margin::same(6);
+        style.spacing.window_margin = egui::Margin::same(16);
+        style.spacing.scroll = egui::style::ScrollStyle {
+            bar_width: 8.0,
+            floating_width: 6.0,
+            floating_allocated_width: 0.0,
+            handle_min_length: 28.0,
+            bar_inner_margin: 3.0,
+            bar_outer_margin: 2.0,
+            dormant_background_opacity: 0.0,
+            dormant_handle_opacity: 0.0,
+            active_background_opacity: 0.0,
+            active_handle_opacity: 0.55,
+            interact_handle_opacity: 0.85,
+            foreground_color: true,
+            ..egui::style::ScrollStyle::floating()
+        };
+        style.interaction.selectable_labels = false;
+        style.interaction.tooltip_delay = 0.4;
+        style.animation_time = 0.12;
+        style.url_in_tooltip = false;
     });
 }
 

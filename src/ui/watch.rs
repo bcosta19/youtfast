@@ -3,8 +3,8 @@
 //! description, chapters and comments, and the Up next pane beside them.
 
 use egui::{
-    Align, Align2, Color32, CornerRadius, FontId, Frame, Layout, Rect, RichText, Sense, Slider,
-    Stroke, Ui, UiBuilder, pos2, vec2,
+    Align, Align2, Color32, CornerRadius, Frame, Layout, Margin, Rect, Response, RichText, Sense,
+    Slider, Stroke, Ui, UiBuilder, pos2, vec2,
 };
 
 use super::{results, widgets};
@@ -12,6 +12,7 @@ use crate::app::State;
 use crate::icons::Icon;
 use crate::model::{Action, Channel, CommentRow, Fetch, Quality, Rating, Resolution, Video};
 use crate::mpv::{Status, VideoSurface};
+use crate::theme::{self, Palette};
 use crate::util;
 
 /// The "Up next" pane's width beside the video in a wide window.
@@ -26,80 +27,62 @@ pub fn show(
     surface: Option<&VideoSurface>,
     actions: &mut Vec<Action>,
 ) {
-    egui::CentralPanel::default().show(ui, |ui| {
-        // The video never takes more than most of the window's height, so
-        // its controls stay in view.
-        let max_video_height = ui.available_height() * 0.75;
-        let Some(watching) = state.watching.clone() else {
-            return;
-        };
-        let theater = state.settings.theater;
-        egui::ScrollArea::vertical()
-            .auto_shrink(false)
-            .show(ui, |ui| {
-                // Room for the first panes' titles, which sit on their top
-                // rule; the scroll area clips what is above it.
-                ui.add_space(widgets::line(ui) / 2.0);
-                // Theater mode: the video across the window, the columns
-                // under it.
-                if theater {
-                    video_pane(
-                        ui,
-                        state,
-                        &watching,
-                        status,
-                        surface,
-                        max_video_height,
-                        actions,
-                    );
-                }
-                if ui.available_width() >= WIDE {
-                    ui.horizontal_top(|ui| {
-                        let gap = widgets::cell(ui);
-                        let main_width = ui.available_width() - SIDEBAR_WIDTH - gap;
-                        ui.vertical(|ui| {
-                            ui.set_width(main_width);
-                            if !theater {
-                                video_pane(
-                                    ui,
-                                    state,
-                                    &watching,
-                                    status,
-                                    surface,
-                                    max_video_height,
-                                    actions,
-                                );
-                            }
-                            about_video(ui, state, &watching, status, actions);
-                        });
-                        ui.add_space(gap);
-                        ui.vertical(|ui| {
-                            ui.set_width(SIDEBAR_WIDTH);
-                            up_next(ui, state, actions);
-                            ui.add_space(widgets::line(ui));
-                            related(ui, state, actions);
-                        });
-                    });
-                } else {
-                    if !theater {
-                        video_pane(
-                            ui,
-                            state,
-                            &watching,
-                            status,
-                            surface,
-                            max_video_height,
-                            actions,
-                        );
+    egui::CentralPanel::default()
+        .frame(Frame::central_panel(ui.style()).inner_margin(Margin::same(24)))
+        .show(ui, |ui| {
+            // The video never takes more than most of the window's height, so
+            // its controls stay in view.
+            let max_video_height = ui.available_height() * 0.75;
+            let Some(watching) = state.watching.clone() else {
+                return;
+            };
+            let theater = state.settings.theater;
+            egui::ScrollArea::vertical()
+                .auto_shrink(false)
+                .show(ui, |ui| {
+                    // Theater mode: the video across the window, the columns
+                    // under it.
+                    if theater {
+                        video_pane(ui, state, status, surface, max_video_height, actions);
                     }
-                    about_video(ui, state, &watching, status, actions);
-                    ui.add_space(widgets::line(ui));
-                    up_next(ui, state, actions);
-                    ui.add_space(widgets::line(ui));
-                    related(ui, state, actions);
-                }
-            });
-    });
+                    if ui.available_width() >= WIDE {
+                        ui.horizontal_top(|ui| {
+                            let gap = 24.0;
+                            let main_width = ui.available_width() - SIDEBAR_WIDTH - gap;
+                            ui.vertical(|ui| {
+                                ui.set_width(main_width);
+                                if !theater {
+                                    video_pane(
+                                        ui,
+                                        state,
+                                        status,
+                                        surface,
+                                        max_video_height,
+                                        actions,
+                                    );
+                                }
+                                about_video(ui, state, &watching, status, actions);
+                            });
+                            ui.add_space(gap);
+                            ui.vertical(|ui| {
+                                ui.set_width(SIDEBAR_WIDTH);
+                                up_next(ui, state, actions);
+                                ui.add_space(24.0);
+                                related(ui, state, actions);
+                            });
+                        });
+                    } else {
+                        if !theater {
+                            video_pane(ui, state, status, surface, max_video_height, actions);
+                        }
+                        about_video(ui, state, &watching, status, actions);
+                        ui.add_space(24.0);
+                        up_next(ui, state, actions);
+                        ui.add_space(24.0);
+                        related(ui, state, actions);
+                    }
+                });
+        });
 }
 
 /// The video over the whole window, with the controls over its bottom edge
@@ -133,32 +116,22 @@ pub fn fullscreen(
         });
 }
 
-/// The pane with the video and its controls, titled with the channel's
-/// name.
+/// The video and, under it, its controls strip.
 fn video_pane(
     ui: &mut Ui,
     state: &mut State,
-    watching: &Video,
     status: Option<&Status>,
     surface: Option<&VideoSurface>,
     max_video_height: f32,
     actions: &mut Vec<Action>,
 ) {
-    let pane_title = watching
-        .channel
-        .clone()
-        .or_else(|| watching.channel_id.clone())
-        .unwrap_or_else(|| "watch".to_owned());
-    let palette = state.palette.clone();
-    widgets::pane(ui, &palette, &pane_title, None, false, None, |ui| {
-        let width = ui.available_width();
-        let height = (width * 9.0 / 16.0).min(max_video_height);
-        let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
-        video(ui, rect, state, status, surface, actions);
-        ui.add_space(4.0);
-        controls(ui, state, status, actions);
-    });
-    ui.add_space(widgets::line(ui));
+    let width = ui.available_width();
+    let height = (width * 9.0 / 16.0).min(max_video_height);
+    let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
+    video(ui, rect, state, status, surface, actions);
+    ui.add_space(8.0);
+    controls(ui, state, status, actions);
+    ui.add_space(16.0);
 }
 
 /// Under the video, as on YouTube: the title, the channel's line with the
@@ -179,22 +152,21 @@ fn about_video(
         .to_owned();
     ui.label(
         RichText::new(title)
-            .font(FontId::monospace(16.0))
-            .strong()
+            .font(theme::bold(20.0))
             .color(palette.text),
     );
-    ui.add_space(widgets::line(ui) / 2.0);
+    ui.add_space(12.0);
     channel_line(ui, state, watching, status, actions);
-    ui.add_space(widgets::line(ui) / 2.0);
+    ui.add_space(16.0);
     description(ui, state, watching, actions);
     chapters(ui, state, status, actions);
     comments(ui, state, actions);
 }
 
-/// YouTube's line under the title: the channel's avatar, name and
-/// subscribers with `[ subscribe ]`, then the rating, `[ share ]` and
-/// `[ save ]` at the right. Filled from rustypipe's details when they
-/// arrive; the spinner or the error until then.
+/// YouTube's line under the title: the channel's round avatar, name and
+/// subscribers with the Subscribe pill, then the rating, Share and Save at
+/// the right. Filled from rustypipe's details when they arrive; the
+/// spinner or the error until then.
 fn channel_line(
     ui: &mut Ui,
     state: &State,
@@ -216,55 +188,59 @@ fn channel_line(
             avatar: None,
         }),
     };
-    let avatar = 2.0 * widgets::line(ui);
+    let avatar = 40.0;
     let mut wrapped = false;
     ui.horizontal(|ui| {
-        match channel.as_ref().and_then(|channel| channel.avatar.clone()) {
-            Some(url) => {
-                ui.add(
-                    super::images::remote(ui, &url)
-                        .fit_to_exact_size(vec2(avatar, avatar))
-                        .corner_radius(CornerRadius::ZERO),
-                );
-            }
-            None => {
-                let (rect, _) = ui.allocate_exact_size(vec2(avatar, avatar), Sense::hover());
-                ui.painter()
-                    .rect_filled(rect, CornerRadius::ZERO, palette.surface);
-            }
-        }
-        ui.vertical(|ui| {
-            let name = channel
+        let name = channel
+            .as_ref()
+            .map(|channel| channel.name.clone())
+            .or_else(|| watching.channel.clone())
+            .unwrap_or_default();
+        let (rect, response) = ui.allocate_exact_size(vec2(avatar, avatar), Sense::click());
+        widgets::avatar(
+            ui,
+            palette,
+            channel
                 .as_ref()
-                .map(|channel| channel.name.clone())
-                .or_else(|| watching.channel.clone())
-                .unwrap_or_default();
-            let link = ui.link(RichText::new(name).monospace().strong().color(palette.blue));
-            if link.clicked()
+                .and_then(|channel| channel.avatar.as_deref()),
+            &name,
+            rect,
+        );
+        if let Some(channel) = &channel
+            && response
+                .on_hover_cursor(egui::CursorIcon::PointingHand)
+                .clicked()
+        {
+            actions.push(Action::OpenChannel(channel.clone()));
+        }
+        ui.add_space(4.0);
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 2.0;
+            if text_link(ui, &name, theme::semibold(15.0), palette.text).clicked()
                 && let Some(channel) = &channel
             {
                 actions.push(Action::OpenChannel(channel.clone()));
             }
-            let under = match &state.details {
-                Fetch::Ready(details) => details
-                    .subscribers
-                    .map(|count| format!("{} subscribers", util::compact(count)))
-                    .unwrap_or_default(),
-                Fetch::Failed(_) => String::new(),
-                _ => format!("{} details", widgets::spinner_frame(ui)),
-            };
-            ui.label(
-                RichText::new(under)
-                    .monospace()
-                    .small()
-                    .color(palette.secondary),
-            );
+            match &state.details {
+                Fetch::Ready(details) => {
+                    if let Some(count) = details.subscribers {
+                        ui.label(
+                            RichText::new(format!("{} subscribers", util::compact(count)))
+                                .font(theme::regular(13.0))
+                                .color(palette.secondary),
+                        );
+                    }
+                }
+                Fetch::Failed(_) => {}
+                _ => widgets::spinner(ui, 13.0),
+            }
         });
+        ui.add_space(8.0);
         if let Some(channel) = &channel {
             widgets::subscribe(ui, state, channel, widgets::ButtonStyle::Primary, actions);
         }
         // The actions sit at the right while they fit; under it otherwise.
-        let needed = 44.0 * widgets::cell(ui);
+        let needed = 360.0;
         if ui.available_width() >= needed {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 video_actions(ui, state, watching, status, true, actions);
@@ -278,17 +254,19 @@ fn channel_line(
     }
     if let Fetch::Failed(error) = &state.details {
         ui.horizontal(|ui| {
-            ui.label(RichText::new(error.as_str()).monospace().color(palette.red));
-            if widgets::bracket_button(ui, palette, "r retry", widgets::ButtonStyle::Normal)
-                .clicked()
-            {
+            ui.label(
+                RichText::new(error.as_str())
+                    .font(theme::regular(14.0))
+                    .color(palette.red),
+            );
+            if widgets::button(ui, palette, "Retry", widgets::ButtonStyle::Normal).clicked() {
                 actions.push(Action::Refresh);
             }
         });
     }
 }
 
-/// The rating, `[ share ]` and `[ save ]`, in that order as read;
+/// The rating, Share and Save, in that order as read;
 /// `right_to_left` when the caller's layout runs that way.
 fn video_actions(
     ui: &mut Ui,
@@ -301,18 +279,19 @@ fn video_actions(
     if right_to_left {
         save_menu(ui, state, watching, actions);
         share_menu(ui, state, watching, status, actions);
-        rating_buttons(ui, state, true, actions);
+        rating_buttons(ui, state, actions);
     } else {
-        rating_buttons(ui, state, false, actions);
+        rating_buttons(ui, state, actions);
         share_menu(ui, state, watching, status, actions);
         save_menu(ui, state, watching, actions);
     }
 }
 
-/// `[ ▲ 19K ]` and `[ ▼ ]`: the account's rating, lit when given; a click
-/// on the lit one takes it back. The count moves with the rating given
-/// here. Without an account they only show the count.
-fn rating_buttons(ui: &mut Ui, state: &State, right_to_left: bool, actions: &mut Vec<Action>) {
+/// One pill as on YouTube: like (with the count) and dislike, a thin rule
+/// between them. The account's rating fills its half; a click on it takes
+/// it back. The count moves with the rating given here. Without an
+/// account the pill only shows the count.
+fn rating_buttons(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let palette = &state.palette;
     let rating = state.rating.ready().copied();
     let likes = state
@@ -332,72 +311,164 @@ fn rating_buttons(ui: &mut Ui, state: &State, right_to_left: bool, actions: &mut
     } else {
         ""
     };
-    let style = |on: bool| {
-        if on {
-            widgets::ButtonStyle::On
+    let liked = rating == Some(Rating::Like);
+    let disliked = rating == Some(Rating::Dislike);
+    let (like, dislike) = rating_pill(
+        ui,
+        palette,
+        likes.map(util::compact),
+        liked,
+        disliked,
+        enabled,
+    );
+    // Disabled halves only hover, with the reason as their hint.
+    let hover = |response: Response, on_text: &str, off_text: &str, on: bool| {
+        if enabled {
+            response.on_hover_text(if on { on_text } else { off_text })
+        } else if hint.is_empty() {
+            response
         } else {
-            widgets::ButtonStyle::Normal
+            response.on_hover_text(hint)
         }
     };
-    let like = |ui: &mut Ui, actions: &mut Vec<Action>| {
-        let label = match likes {
-            Some(likes) => format!("▲ {}", util::compact(likes)),
-            None => "▲".to_owned(),
-        };
-        let liked = rating == Some(Rating::Like);
-        let response = ui
-            .add_enabled_ui(enabled, |ui| {
-                widgets::bracket_button(ui, palette, &label, style(liked))
-            })
-            .inner;
-        let response = if hint.is_empty() {
-            response.on_hover_text(if liked { "Liked" } else { "I like this" })
+    if hover(like, "Liked", "I like this", liked).clicked() {
+        actions.push(Action::Rate(if liked {
+            Rating::None
         } else {
-            response.on_disabled_hover_text(hint)
-        };
-        if response.clicked() {
-            actions.push(Action::Rate(if liked {
-                Rating::None
-            } else {
-                Rating::Like
-            }));
-        }
-    };
-    let dislike = |ui: &mut Ui, actions: &mut Vec<Action>| {
-        let disliked = rating == Some(Rating::Dislike);
-        let response = ui
-            .add_enabled_ui(enabled, |ui| {
-                widgets::bracket_button(ui, palette, "▼", style(disliked))
-            })
-            .inner;
-        let response = if hint.is_empty() {
-            response.on_hover_text(if disliked {
-                "Disliked"
-            } else {
-                "I dislike this"
-            })
+            Rating::Like
+        }));
+    }
+    if hover(dislike, "Disliked", "I dislike this", disliked).clicked() {
+        actions.push(Action::Rate(if disliked {
+            Rating::None
         } else {
-            response.on_disabled_hover_text(hint)
-        };
-        if response.clicked() {
-            actions.push(Action::Rate(if disliked {
-                Rating::None
-            } else {
-                Rating::Dislike
-            }));
-        }
-    };
-    if right_to_left {
-        dislike(ui, actions);
-        like(ui, actions);
-    } else {
-        like(ui, actions);
-        dislike(ui, actions);
+            Rating::Dislike
+        }));
     }
 }
 
-/// `[ share ]`: the link, `Start at` the moment playing, copy, and each
-/// site's share page.
+/// Draws the rating pill: a rounded `surface` pill split in a like half
+/// (thumb and count) and a dislike half, each with its own hover and its
+/// own click; the given rating's half is filled `surface_active` with a
+/// bold count. Returns the two halves' responses.
+fn rating_pill(
+    ui: &mut Ui,
+    palette: &Palette,
+    count: Option<String>,
+    liked: bool,
+    disliked: bool,
+    enabled: bool,
+) -> (Response, Response) {
+    let height = 34.0;
+    let icon = 18.0;
+    let pad = 14.0;
+    let font = if liked {
+        theme::semibold(14.0)
+    } else {
+        theme::medium(14.0)
+    };
+    let galley = count.map(|count| ui.painter().layout_no_wrap(count, font, palette.text));
+    let like_width =
+        pad + icon + galley.as_ref().map_or(0.0, |galley| 6.0 + galley.size().x) + 12.0;
+    let dislike_width = 12.0 + icon + pad;
+    let (rect, _) = ui.allocate_exact_size(
+        vec2(like_width + 1.0 + dislike_width, height),
+        Sense::hover(),
+    );
+    let like_rect = Rect::from_min_size(rect.min, vec2(like_width, height));
+    let dislike_rect = Rect::from_min_max(pos2(rect.right() - dislike_width, rect.top()), rect.max);
+    let sense = if enabled {
+        Sense::click()
+    } else {
+        Sense::hover()
+    };
+    let cursor = if enabled {
+        egui::CursorIcon::PointingHand
+    } else {
+        egui::CursorIcon::Default
+    };
+    let like = ui
+        .interact(like_rect, ui.id().with("like"), sense)
+        .on_hover_cursor(cursor);
+    let dislike = ui
+        .interact(dislike_rect, ui.id().with("dislike"), sense)
+        .on_hover_cursor(cursor);
+    let radius = (height / 2.0) as u8;
+    let painter = ui.painter();
+    painter.rect_filled(rect, CornerRadius::same(radius), palette.surface);
+    let half = |response: &Response, on: bool, corners: CornerRadius| {
+        let fill = if on {
+            Some(palette.surface_active)
+        } else if enabled && response.hovered() {
+            Some(palette.surface_hover)
+        } else {
+            None
+        };
+        if let Some(fill) = fill {
+            painter.rect_filled(response.rect, corners, fill);
+        }
+    };
+    half(
+        &like,
+        liked,
+        CornerRadius {
+            nw: radius,
+            sw: radius,
+            ne: 0,
+            se: 0,
+        },
+    );
+    half(
+        &dislike,
+        disliked,
+        CornerRadius {
+            nw: 0,
+            sw: 0,
+            ne: radius,
+            se: radius,
+        },
+    );
+    painter.vline(
+        like_rect.right() + 0.5,
+        (rect.top() + 8.0)..=(rect.bottom() - 8.0),
+        Stroke::new(1.0, palette.outline),
+    );
+    let tint = if enabled {
+        palette.text
+    } else {
+        palette.secondary
+    };
+    let icon_rect = |left: f32| {
+        Rect::from_center_size(pos2(left + icon / 2.0, rect.center().y), vec2(icon, icon))
+    };
+    Icon::ThumbsUp
+        .image(tint, icon)
+        .paint_at(ui, icon_rect(like_rect.left() + pad));
+    if let Some(galley) = galley {
+        let pos = pos2(
+            like_rect.left() + pad + icon + 6.0,
+            rect.center().y - galley.size().y / 2.0,
+        );
+        ui.painter().galley(pos, galley, tint);
+    }
+    Icon::ThumbsDown
+        .image(tint, icon)
+        .paint_at(ui, icon_rect(dislike_rect.left() + 12.0));
+    (like, dislike)
+}
+
+/// A plain clickable label (YouTube's "more" and "Show less").
+fn text_link(ui: &mut Ui, text: &str, font: egui::FontId, color: Color32) -> Response {
+    ui.add(
+        egui::Label::new(RichText::new(text).font(font).color(color))
+            .sense(Sense::click())
+            .selectable(false),
+    )
+    .on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// Share: the link, "Start at" the moment playing, copy, and each site's
+/// share page.
 fn share_menu(
     ui: &mut Ui,
     state: &State,
@@ -406,7 +477,13 @@ fn share_menu(
     actions: &mut Vec<Action>,
 ) {
     let palette = &state.palette;
-    let response = widgets::bracket_button(ui, palette, "share", widgets::ButtonStyle::Normal);
+    let response = widgets::icon_text_button(
+        ui,
+        palette,
+        Some(Icon::Share),
+        "Share",
+        widgets::ButtonStyle::Normal,
+    );
     egui::Popup::menu(&response)
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .show(|ui| {
@@ -414,20 +491,23 @@ fn share_menu(
             let position = status.map_or(0.0, |status| status.position);
             let at = state.share_at_time.then_some(position as u64);
             let link = util::video_link(&watching.id, at);
-            ui.label(RichText::new(&link).monospace().color(palette.text));
+            ui.label(
+                RichText::new(&link)
+                    .font(theme::regular(14.0))
+                    .color(palette.text),
+            );
             let mut start_at = state.share_at_time;
             if ui
                 .checkbox(
                     &mut start_at,
-                    RichText::new(format!("Start at {}", util::duration(position))).monospace(),
+                    RichText::new(format!("Start at {}", util::duration(position)))
+                        .font(theme::regular(14.0)),
                 )
                 .changed()
             {
                 actions.push(Action::SetShareAtTime(start_at));
             }
-            if widgets::bracket_button(ui, palette, "copy link", widgets::ButtonStyle::Primary)
-                .clicked()
-            {
+            if widgets::button(ui, palette, "Copy link", widgets::ButtonStyle::Primary).clicked() {
                 actions.push(Action::CopyLink(link.clone()));
                 ui.close();
             }
@@ -439,9 +519,7 @@ fn share_menu(
                 .filter(|title| !title.is_empty())
                 .unwrap_or(&watching.title);
             for (site, url) in util::share_targets(&link, title) {
-                if widgets::bracket_button(ui, palette, site, widgets::ButtonStyle::Normal)
-                    .clicked()
-                {
+                if widgets::button(ui, palette, site, widgets::ButtonStyle::Normal).clicked() {
                     actions.push(Action::OpenUrl(url));
                     ui.close();
                 }
@@ -449,7 +527,7 @@ fn share_menu(
         });
 }
 
-/// `[ save ]`: Watch later on this computer and, signed in, the account's
+/// Save: Watch later on this computer and, signed in, the account's
 /// playlists, each a box to tick. The account's list is asked for when
 /// the menu first opens.
 fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Action>) {
@@ -464,8 +542,12 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
     } else {
         widgets::ButtonStyle::Normal
     };
-    let label = if local || account { "saved" } else { "save" };
-    let response = widgets::bracket_button(ui, palette, label, style);
+    let (icon, label) = if local || account {
+        (Icon::BookmarkFilled, "Saved")
+    } else {
+        (Icon::Bookmark, "Save")
+    };
+    let response = widgets::icon_text_button(ui, palette, Some(icon), label, style);
     egui::Popup::menu(&response)
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .show(|ui| {
@@ -474,7 +556,7 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
             if ui
                 .checkbox(
                     &mut on_device,
-                    RichText::new("Watch later on this computer").monospace(),
+                    RichText::new("Watch later on this computer").font(theme::regular(14.0)),
                 )
                 .changed()
             {
@@ -484,23 +566,29 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
             if !state.signed_in() {
                 ui.label(
                     RichText::new("Sign in to save to the account's playlists")
-                        .monospace()
-                        .small()
-                        .color(palette.dim),
+                        .font(theme::regular(13.0))
+                        .color(palette.secondary),
                 );
                 return;
             }
             match &state.save_targets {
                 Fetch::Idle => actions.push(Action::LoadSaveTargets),
-                Fetch::Loading => results::loading(ui, state, "playlists"),
+                Fetch::Loading => widgets::loading(ui, palette, "playlists"),
                 Fetch::Failed(error) => {
-                    ui.label(RichText::new(error.as_str()).monospace().color(palette.red));
+                    ui.label(
+                        RichText::new(error.as_str())
+                            .font(theme::regular(14.0))
+                            .color(palette.red),
+                    );
                 }
                 Fetch::Ready(targets) => {
                     for target in targets {
                         let mut saved = target.saved;
                         if ui
-                            .checkbox(&mut saved, RichText::new(&target.name).monospace())
+                            .checkbox(
+                                &mut saved,
+                                RichText::new(&target.name).font(theme::regular(14.0)),
+                            )
                             .changed()
                         {
                             actions.push(Action::SetSaved {
@@ -514,8 +602,8 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
         });
 }
 
-/// The description pane, YouTube's grey box: `views · published` on its
-/// first line, then the text collapsed to three rows with `[ more ]`.
+/// The description card, YouTube's grey box: `views · published` on its
+/// first line, then the text collapsed to three rows with "more".
 /// Expanded, the counts are exact and the date is added.
 fn description(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Action>) {
     let details = state.details.ready();
@@ -545,44 +633,32 @@ fn description(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<A
     if head.is_empty() && spans.is_none_or(|spans| spans.is_empty()) {
         return;
     }
-    widgets::pane(
-        ui,
-        &state.palette,
-        "description",
-        None,
-        false,
-        Some(state.palette.surface),
-        |ui| {
-            ui.set_width(ui.available_width());
-            if !head.is_empty() {
-                ui.label(
-                    RichText::new(head)
-                        .monospace()
-                        .strong()
-                        .color(state.palette.text),
-                );
+    widgets::card(ui, &state.palette, |ui| {
+        if !head.is_empty() {
+            ui.label(
+                RichText::new(head)
+                    .font(theme::semibold(14.0))
+                    .color(state.palette.text),
+            );
+        }
+        let Some(spans) = spans.filter(|spans| !spans.is_empty()) else {
+            return;
+        };
+        let collapsed = !open && widgets::spans_truncated(ui, spans, 3);
+        let max_rows = if collapsed { Some(3) } else { None };
+        if let Some(action) = widgets::rich_text(ui, &state.palette, spans, max_rows) {
+            actions.push(action);
+        }
+        if collapsed || open {
+            let label = if collapsed { "...more" } else { "Show less" };
+            if text_link(ui, label, theme::semibold(14.0), state.palette.text).clicked() {
+                actions.push(Action::ToggleDescription);
             }
-            let Some(spans) = spans.filter(|spans| !spans.is_empty()) else {
-                return;
-            };
-            let collapsed = !open && widgets::spans_truncated(ui, spans, 3);
-            let max_rows = if collapsed { Some(3) } else { None };
-            if let Some(action) = widgets::rich_text(ui, &state.palette, spans, max_rows) {
-                actions.push(action);
-            }
-            if collapsed || open {
-                let label = if collapsed { "more" } else { "less" };
-                if widgets::bracket_button(ui, &state.palette, label, widgets::ButtonStyle::Normal)
-                    .clicked()
-                {
-                    actions.push(Action::ToggleDescription);
-                }
-            }
-        },
-    );
+        }
+    });
 }
 
-/// The chapters pane: `[00:00] Intro` rows, the current one selected.
+/// The chapters section: `00:00  Intro` rows, the current one selected.
 fn chapters(ui: &mut Ui, state: &State, status: Option<&Status>, actions: &mut Vec<Action>) {
     let Fetch::Ready(details) = &state.details else {
         return;
@@ -596,22 +672,20 @@ fn chapters(ui: &mut Ui, state: &State, status: Option<&Status>, actions: &mut V
         .chapters
         .iter()
         .rposition(|chapter| f64::from(chapter.seconds) <= position);
-    ui.add_space(widgets::line(ui));
-    widgets::pane(
+    ui.add_space(24.0);
+    widgets::section(
         ui,
         &state.palette,
-        "chapters",
+        "Chapters",
         Some(details.chapters.len()),
-        false,
-        None,
         |ui| {
             for (index, chapter) in details.chapters.iter().enumerate() {
                 let parts = [
                     (
-                        format!("[{}]", util::duration(f64::from(chapter.seconds))),
-                        state.palette.yellow,
+                        util::duration(f64::from(chapter.seconds)),
+                        state.palette.secondary,
                     ),
-                    (format!(" {}", chapter.name), state.palette.text),
+                    (format!("  {}", chapter.name), state.palette.text),
                 ];
                 if widgets::row(ui, &state.palette, Some(index) == current, &parts).clicked() {
                     actions.push(Action::SeekTo {
@@ -624,8 +698,8 @@ fn chapters(ui: &mut Ui, state: &State, status: Option<&Status>, actions: &mut V
     );
 }
 
-/// The comments pane: one [`comment_row`] each, then the next page's
-/// `[ load more ]`.
+/// The comments section: one [`comment_row`] each, then the next page's
+/// "Load more".
 fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let Fetch::Ready(details) = &state.details else {
         return;
@@ -633,48 +707,56 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     if details.comments_token.is_none() && details.comment_count.is_none() {
         return;
     }
-    ui.add_space(widgets::line(ui));
+    ui.add_space(24.0);
     let count = details
         .comment_count
         .map(|count| count as usize)
         .or_else(|| state.comments.ready().map(|rows| rows.len()));
-    widgets::pane(
-        ui,
-        &state.palette,
-        "comments",
-        count,
-        false,
-        None,
-        |ui| match &state.comments {
+    let title = match count {
+        Some(1) => "1 comment".to_owned(),
+        Some(count) => format!("{} comments", util::thousands(count as u64)),
+        None => "Comments".to_owned(),
+    };
+    widgets::section(ui, &state.palette, &title, None, |ui| {
+        match &state.comments {
             Fetch::Idle => {}
-            Fetch::Loading => results::loading(ui, state, "comments"),
+            Fetch::Loading => widgets::loading(ui, &state.palette, "comments"),
             Fetch::Failed(error) => results::failed(ui, state, error, actions),
             Fetch::Ready(rows) => {
                 if rows.is_empty() {
-                    ui.label(
-                        RichText::new("-- no comments --")
-                            .monospace()
-                            .color(state.palette.dim),
-                    );
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(16.0);
+                        ui.label(
+                            RichText::new("No comments yet")
+                                .font(theme::semibold(16.0))
+                                .color(state.palette.text),
+                        );
+                        ui.label(
+                            RichText::new("Nobody has commented on this video.")
+                                .font(theme::regular(14.0))
+                                .color(state.palette.secondary),
+                        );
+                    });
                 }
-                let avatar = 2.0 * widgets::line(ui);
+                ui.add_space(8.0);
+                let avatar = 40.0;
                 for comment in rows.clone() {
                     comment_row(ui, state, &comment, avatar, actions);
                 }
                 // The tail row: the page on its way, a failed page's
                 // retry, or the button.
                 match &state.comments_more {
-                    Fetch::Loading => results::loading(ui, state, "comments"),
+                    Fetch::Loading => widgets::loading(ui, &state.palette, "comments"),
                     Fetch::Failed(error) => {
                         ui.label(
                             RichText::new(error.as_str())
-                                .monospace()
+                                .font(theme::regular(14.0))
                                 .color(state.palette.red),
                         );
-                        if widgets::bracket_button(
+                        if widgets::button(
                             ui,
                             &state.palette,
-                            "retry",
+                            "Retry",
                             widgets::ButtonStyle::Normal,
                         )
                         .clicked()
@@ -684,10 +766,10 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     }
                     _ => {
                         if state.comments_next.is_some()
-                            && widgets::bracket_button(
+                            && widgets::button(
                                 ui,
                                 &state.palette,
-                                "load more",
+                                "Load more",
                                 widgets::ButtonStyle::Normal,
                             )
                             .clicked()
@@ -697,17 +779,17 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     }
                 }
             }
-        },
-    );
+        }
+    });
 }
 
-/// The rows a long comment shows until `[ read more ]`.
+/// The rows a long comment shows until "Read more".
 const COMMENT_ROWS: usize = 5;
 
-/// One comment as on YouTube: the author's avatar at the left; beside it
-/// `@author · 3 days ago · pinned`, the text (long ones cut to a few rows),
-/// then `▲ 120 ♥ [ 4 replies ]`, and the replies under the `│` rule when
-/// open. `avatar` is the avatar's side: replies draw it smaller.
+/// One comment as on YouTube: the author's round avatar at the left;
+/// beside it `@author  3 days ago`, the text (long ones cut to a few rows),
+/// then the likes, the heart and the replies' toggle, and the replies under
+/// it when open. `avatar` is the avatar's side: replies draw it smaller.
 fn comment_row(
     ui: &mut Ui,
     state: &State,
@@ -729,24 +811,7 @@ fn comment_row(
     let palette = &state.palette;
     ui.horizontal_top(|ui| {
         let (rect, response) = ui.allocate_exact_size(vec2(avatar, avatar), Sense::click());
-        match &comment.author_avatar {
-            Some(url) => super::images::remote(ui, url)
-                .fit_to_exact_size(rect.size())
-                .corner_radius(CornerRadius::ZERO)
-                .paint_at(ui, rect),
-            None => {
-                ui.painter()
-                    .rect_filled(rect, CornerRadius::ZERO, palette.surface);
-                let initial: String = author.chars().take(1).collect();
-                ui.painter().text(
-                    rect.center(),
-                    Align2::CENTER_CENTER,
-                    initial.to_uppercase(),
-                    FontId::monospace(avatar / 2.0),
-                    palette.secondary,
-                );
-            }
-        }
+        widgets::avatar(ui, palette, comment.author_avatar.as_deref(), author, rect);
         if let Some(channel) = &channel
             && response
                 .on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -754,9 +819,10 @@ fn comment_row(
         {
             actions.push(Action::OpenChannel(channel.clone()));
         }
-        ui.add_space(widgets::cell(ui));
+        ui.add_space(if avatar >= 40.0 { 12.0 } else { 8.0 });
         ui.vertical(|ui| {
             ui.set_width(ui.available_width());
+            ui.spacing_mut().item_spacing.y = 4.0;
             comment_header(ui, state, comment, author, channel.as_ref(), actions);
             let open = state.comments_open.contains(&comment.id);
             let collapsed = !open && widgets::spans_truncated(ui, &comment.text, COMMENT_ROWS);
@@ -765,11 +831,11 @@ fn comment_row(
                 actions.push(action);
             }
             if (collapsed || open)
-                && widgets::bracket_button(
+                && text_link(
                     ui,
-                    palette,
-                    if collapsed { "read more" } else { "show less" },
-                    widgets::ButtonStyle::Normal,
+                    if collapsed { "Read more" } else { "Show less" },
+                    theme::semibold(13.0),
+                    palette.text,
                 )
                 .clicked()
             {
@@ -777,16 +843,16 @@ fn comment_row(
             }
             comment_footer(ui, state, comment, actions);
             if let Some(replies) = state.replies.get(&comment.id) {
-                ui.add_space(widgets::line(ui) / 2.0);
+                ui.add_space(4.0);
                 reply_column(ui, state, replies, actions);
             }
         });
     });
-    ui.add_space(widgets::line(ui));
+    ui.add_space(16.0);
 }
 
-/// `@author · 3 days ago · pinned · by creator`; the author opens their
-/// channel.
+/// `@author  3 days ago`, then "Pinned" / "By the creator" in small
+/// secondary text; the author opens their channel.
 fn comment_header(
     ui: &mut Ui,
     state: &State,
@@ -796,30 +862,37 @@ fn comment_header(
     actions: &mut Vec<Action>,
 ) {
     ui.horizontal(|ui| {
-        let response = ui.link(
-            RichText::new(format!("@{author}"))
-                .monospace()
-                .color(state.palette.blue),
+        let response = text_link(
+            ui,
+            &format!("@{author}"),
+            theme::semibold(13.0),
+            state.palette.text,
         );
         if let Some(channel) = channel
             && response.clicked()
         {
             actions.push(Action::OpenChannel(channel.clone()));
         }
-        let mut meta = vec![comment.published.clone()];
-        if comment.pinned {
-            meta.push("pinned".to_owned());
-        }
-        if comment.by_owner {
-            meta.push("by creator".to_owned());
-        }
         ui.label(
-            RichText::new(format!("· {}", meta.join(" · ")))
-                .monospace()
-                .small()
+            RichText::new(&comment.published)
+                .font(theme::regular(12.0))
                 .color(state.palette.secondary),
         );
     });
+    let mut badges = Vec::new();
+    if comment.pinned {
+        badges.push("Pinned");
+    }
+    if comment.by_owner {
+        badges.push("By the creator");
+    }
+    if !badges.is_empty() {
+        ui.label(
+            RichText::new(badges.join(" · "))
+                .font(theme::regular(12.0))
+                .color(state.palette.secondary),
+        );
+    }
 }
 
 /// Under the text: the likes, the creator's heart and the replies'
@@ -831,31 +904,54 @@ fn comment_footer(ui: &mut Ui, state: &State, comment: &CommentRow, actions: &mu
     }
     ui.horizontal(|ui| {
         if let Some(likes) = likes {
+            ui.add(Icon::ThumbsUp.image(state.palette.secondary, 14.0));
             ui.label(
-                RichText::new(format!("▲ {}", util::compact(u64::from(likes))))
-                    .monospace()
-                    .small()
+                RichText::new(util::compact(u64::from(likes)))
+                    .font(theme::regular(12.0))
                     .color(state.palette.secondary),
             );
         }
         if comment.hearted {
             ui.label(
                 RichText::new("♥")
-                    .monospace()
-                    .small()
+                    .font(theme::regular(13.0))
                     .color(state.palette.red),
             )
             .on_hover_text("Hearted by the creator");
         }
         if comment.replies > 0 {
-            let label = if state.replies.contains_key(&comment.id) {
-                "hide replies".to_owned()
+            let open = state.replies.contains_key(&comment.id);
+            let label = if open {
+                "Hide replies".to_owned()
             } else if comment.replies == 1 {
                 "1 reply".to_owned()
             } else {
                 format!("{} replies", comment.replies)
             };
-            if widgets::bracket_button(ui, &state.palette, &label, widgets::ButtonStyle::Normal)
+            ui.add_space(8.0);
+            let icon = if open {
+                Icon::ChevronUp
+            } else {
+                Icon::ChevronDown
+            };
+            let toggle = ui
+                .horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    ui.add(icon.image(state.palette.blue, 16.0));
+                    ui.label(
+                        RichText::new(label)
+                            .font(theme::semibold(13.0))
+                            .color(state.palette.blue),
+                    );
+                })
+                .response;
+            if ui
+                .interact(
+                    toggle.rect,
+                    ui.id().with(("replies", &comment.id)),
+                    Sense::click(),
+                )
+                .on_hover_cursor(egui::CursorIcon::PointingHand)
                 .clicked()
             {
                 actions.push(Action::ToggleReplies(comment.id.clone()));
@@ -864,36 +960,27 @@ fn comment_footer(ui: &mut Ui, state: &State, comment: &CommentRow, actions: &mu
     });
 }
 
-/// Replies two cells in, a 1 px `outline` rule at their left. Laid out in
-/// the parent's flow: a child with an unbounded height made egui's
-/// alignment NaN under the loading line.
+/// The replies, in the comment's text column under its footer. Laid out in
+/// the parent's flow (horizontal_top, a gap, then a vertical): a child with
+/// an unbounded height made egui's alignment NaN under the loading line.
 fn reply_column(
     ui: &mut Ui,
     state: &State,
     replies: &Fetch<Vec<CommentRow>>,
     actions: &mut Vec<Action>,
 ) {
-    let cell = widgets::cell(ui);
-    let column = ui.horizontal_top(|ui| {
-        // The rule's column, left of the replies.
-        ui.add_space(2.0 * cell);
+    ui.horizontal_top(|ui| {
+        ui.add_space(4.0);
         ui.vertical(|ui| match replies {
-            Fetch::Idle | Fetch::Loading => results::loading(ui, state, "replies"),
+            Fetch::Idle | Fetch::Loading => widgets::loading(ui, &state.palette, "replies"),
             Fetch::Failed(error) => results::failed(ui, state, error, actions),
             Fetch::Ready(rows) => {
-                let avatar = 1.5 * widgets::line(ui);
                 for reply in rows.clone() {
-                    comment_row(ui, state, &reply, avatar, actions);
+                    comment_row(ui, state, &reply, 24.0, actions);
                 }
             }
         });
     });
-    let rect = column.response.rect;
-    ui.painter().vline(
-        rect.left() + cell,
-        rect.y_range(),
-        Stroke::new(1.0, state.palette.outline),
-    );
 }
 
 /// The picture, with the spinner or the error over it. A click pauses; a
@@ -917,7 +1004,7 @@ fn video(
             rect.center(),
             Align2::CENTER_CENTER,
             error,
-            FontId::monospace(16.0),
+            theme::regular(16.0),
             Color32::WHITE,
         );
     } else if status.is_some_and(|status| {
@@ -1010,7 +1097,7 @@ fn quality_menu(ui: &mut Ui, state: &State, status: &Status, actions: &mut Vec<A
         state.resolutions.clone()
     };
     let menu = egui::ComboBox::from_id_salt("quality")
-        .selected_text(RichText::new(text).monospace())
+        .selected_text(RichText::new(text).font(theme::medium(13.0)))
         .width(130.0)
         .show_ui(ui, |ui| {
             let auto = format!("Auto (up to {}p)", Quality::AUTO);
@@ -1052,9 +1139,10 @@ fn playback_details(status: &Status) -> String {
     parts.join(" · ")
 }
 
-/// The seek bar: a 1-line strip, played in accent, buffered in
-/// surface_active, the rest in surface; a 1-cell block marks the position
-/// while hovered or dragged. Times are `00:00 / 12:04` at its right.
+/// The seek bar: a thin rounded track, played in `accent`, buffered in
+/// `surface_active`, the rest in `surface`; a round handle marks the
+/// position while hovered or dragged. Times are `0:00 / 12:04` at its
+/// right.
 fn seek_bar(ui: &mut Ui, state: &mut State, status: &Status, actions: &mut Vec<Action>) {
     let palette = state.palette.clone();
     ui.horizontal(|ui| {
@@ -1074,15 +1162,14 @@ fn seek_bar(ui: &mut Ui, state: &mut State, status: &Status, actions: &mut Vec<A
             .painter()
             .layout_no_wrap(
                 "00:00 / 00:00".to_owned(),
-                FontId::monospace(13.0),
+                theme::regular(13.0),
                 Color32::WHITE,
             )
             .size()
             .x
-            + widgets::cell(ui);
+            + 12.0;
         let width = ui.available_width() - time_width;
-        let (rect, response) =
-            ui.allocate_exact_size(vec2(width, widgets::line(ui)), Sense::click_and_drag());
+        let (rect, response) = ui.allocate_exact_size(vec2(width, 20.0), Sense::click_and_drag());
         let duration = status.duration;
         if duration > 0.0 {
             let pointer = response.interact_pointer_pos().map(|pointer| {
@@ -1112,7 +1199,10 @@ fn seek_bar(ui: &mut Ui, state: &mut State, status: &Status, actions: &mut Vec<A
             }
         }
 
-        let track = Rect::from_center_size(rect.center(), vec2(rect.width(), 6.0));
+        let active = (response.hovered() || response.dragged()) && duration > 0.0;
+        let thickness = if active { 6.0 } else { 4.0 };
+        let track = Rect::from_center_size(rect.center(), vec2(rect.width(), thickness));
+        let round = CornerRadius::same((thickness / 2.0) as u8);
         let fraction = |seconds: f64| {
             if duration > 0.0 {
                 (seconds / duration).clamp(0.0, 1.0) as f32
@@ -1123,27 +1213,17 @@ fn seek_bar(ui: &mut Ui, state: &mut State, status: &Status, actions: &mut Vec<A
         let x_at = |seconds: f64| track.left() + track.width() * fraction(seconds);
         let position = state.seek_preview.unwrap_or(status.position);
         let painter = ui.painter();
-        painter.rect_filled(track, CornerRadius::ZERO, palette.surface);
+        painter.rect_filled(track, round, palette.surface);
         let buffered = Rect::from_min_max(track.min, pos2(x_at(status.cached_until), track.max.y));
-        painter.rect_filled(buffered, CornerRadius::ZERO, palette.surface_active);
+        painter.rect_filled(buffered, round, palette.surface_active);
         let played = Rect::from_min_max(track.min, pos2(x_at(position), track.max.y));
-        painter.rect_filled(played, CornerRadius::ZERO, palette.accent);
-        if (response.hovered() || response.dragged()) && duration > 0.0 {
-            // A 1-cell block at the position.
-            let cell = widgets::cell(ui);
-            let block = Rect::from_center_size(
-                pos2(
-                    x_at(position).clamp(track.left() + cell / 2.0, track.right() - cell / 2.0),
-                    track.center().y,
-                ),
-                vec2(cell, track.height() + 4.0),
-            );
-            painter.rect_filled(block, CornerRadius::ZERO, palette.accent);
+        painter.rect_filled(played, round, palette.accent);
+        if active {
+            painter.circle_filled(pos2(x_at(position), track.center().y), 7.0, palette.accent);
         }
         ui.label(
             RichText::new(time)
-                .monospace()
-                .small()
+                .font(theme::regular(13.0))
                 .color(palette.secondary),
         );
     });
@@ -1160,18 +1240,9 @@ fn up_next(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     if next.is_empty() {
         return;
     }
-    let palette = state.palette.clone();
-    widgets::pane(
-        ui,
-        &palette,
-        "Up next",
-        Some(next.len()),
-        false,
-        None,
-        |ui| {
-            results::video_rows(ui, state, &next, actions);
-        },
-    );
+    widgets::section(ui, &state.palette, "Up next", Some(next.len()), |ui| {
+        results::video_rows(ui, state, &next, actions);
+    });
 }
 
 /// The recommended videos rustypipe sent with the details.
@@ -1189,17 +1260,9 @@ fn related(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     if related.is_empty() {
         return;
     }
-    widgets::pane(
-        ui,
-        &state.palette,
-        "related",
-        Some(related.len()),
-        false,
-        None,
-        |ui| {
-            results::video_rows(ui, state, &related, actions);
-        },
-    );
+    widgets::section(ui, &state.palette, "Related", Some(related.len()), |ui| {
+        results::video_rows(ui, state, &related, actions);
+    });
 }
 
 #[cfg(test)]
@@ -1243,6 +1306,8 @@ mod tests {
             };
             state.settings.theater = theater;
             let ctx = egui::Context::default();
+            // The app's named weights, as `App::new` installs them.
+            crate::theme::install_fonts(&ctx);
             let input = egui::RawInput {
                 screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(width, 3000.0))),
                 ..Default::default()

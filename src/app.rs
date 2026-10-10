@@ -294,7 +294,7 @@ impl App {
     ) -> anyhow::Result<Self> {
         let ctx = &cc.egui_ctx;
         guard.set_context(ctx);
-        crate::fonts::install(ctx);
+        theme::install_fonts(ctx);
         egui_extras::install_image_loaders(ctx);
         fastframe_icons::install::<crate::icons::Icon>(ctx);
         let dirs = Dirs::new().context("could not make the data folders")?;

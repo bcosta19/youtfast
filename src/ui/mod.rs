@@ -3,8 +3,9 @@
 //! state a view changes itself is its own (the search text, the seek bar
 //! while it is dragged).
 //!
-//! The shell is a terminal's: a command line on top, a sidebar pane, a
-//! status line at the bottom, and `?` for the keys overlay.
+//! The shell is the siblings' (Spotifast, ZapFast): a top bar with the
+//! search field, a sidebar of views and subscribed channels, notices as
+//! toasts at the bottom right, and `?` for the keyboard shortcuts.
 
 mod account;
 mod channel;
@@ -16,13 +17,17 @@ mod settings;
 mod watch;
 mod widgets;
 
-use egui::{Frame, Key, Margin, RichText, TextEdit};
+use egui::{
+    Align, CornerRadius, Frame, Key, Layout, Margin, RichText, Sense, Stroke, UiBuilder, vec2,
+};
 
 use crate::app::{AccountState, State};
+use crate::icons::Icon;
 use crate::model::{Action, ChannelTab, Fetch, Listing, View};
 use crate::mpv::{Status, VideoSurface};
+use crate::theme::{self, RADIUS};
 
-/// The command line's widget id, so `/` can focus it.
+/// The search field's widget id, so `/` can focus it.
 fn command_line_id() -> egui::Id {
     egui::Id::new("command-line")
 }
@@ -39,8 +44,7 @@ pub fn show(
         watch::fullscreen(ui, state, status, surface, actions);
         return;
     }
-    command_line(ui, state, actions);
-    status_line(ui, state, status, actions);
+    top_bar(ui, state, actions);
     sidebar(ui, state, actions);
     match state.view {
         View::Home => library::home(ui, state, actions),
@@ -61,74 +65,87 @@ pub fn show(
         View::Account => account::show(ui, state, actions),
         View::Settings => settings::show(ui, state, actions),
     }
+    notice_toast(ui.ctx(), state, actions);
     if state.keys_open {
         keys_overlay(ui.ctx(), state);
     }
 }
 
-/// `❯ search, or paste a link` — the borderless field under the prompt.
-fn command_line(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
+/// The top bar's height.
+const TOP_BAR: f32 = 56.0;
+
+/// The top bar: the back arrow when there is a page to go back to, the
+/// search field centred (Enter searches or opens a link, Esc leaves it),
+/// and the keyboard shortcuts' button at the right.
+fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
     let palette = state.palette.clone();
-    egui::Panel::top("command-line")
+    egui::Panel::top("top-bar")
+        .exact_size(TOP_BAR)
         .resizable(false)
         .show_separator_line(false)
         .frame(
             Frame::new()
-                .fill(ui.visuals().panel_fill)
-                .inner_margin(Margin::symmetric(8, 6)),
+                .fill(palette.panel)
+                .inner_margin(Margin::symmetric(16, 0)),
         )
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new("❯")
-                        .monospace()
-                        .color(palette.accent)
-                        .strong(),
-                );
-                let field = ui.add(
-                    TextEdit::singleline(&mut state.query)
-                        .id(command_line_id())
-                        .hint_text(RichText::new("search, or paste a link").color(palette.dim))
-                        .desired_width(f32::INFINITY)
-                        .frame(egui::Frame::NONE),
-                );
-                // The field's underline, accent when it has the focus.
-                let underline = if field.has_focus() {
-                    palette.accent
-                } else {
-                    palette.outline
-                };
-                ui.painter().hline(
-                    field.rect.left()..=field.rect.right(),
-                    field.rect.bottom() - 1.0,
-                    egui::Stroke::new(1.0, underline),
-                );
-                if field.has_focus() && ui.input(|input| input.key_pressed(Key::Escape)) {
-                    field.surrender_focus();
-                }
-                let submitted =
-                    field.lost_focus() && ui.input(|input| input.key_pressed(Key::Enter));
-                if submitted {
-                    actions.push(Action::Search(state.query.clone()));
-                }
-                if widgets::bracket_button(ui, &palette, "? keys", widgets::ButtonStyle::Normal)
-                    .clicked()
-                {
+            let bar = ui.max_rect();
+            let place =
+                |rect: egui::Rect, layout: Layout| UiBuilder::new().max_rect(rect).layout(layout);
+            let back = matches!(
+                state.view,
+                View::Watch | View::Channel | View::Playlist | View::Results
+            );
+            if back {
+                ui.scope_builder(place(bar, Layout::left_to_right(Align::Center)), |ui| {
+                    if widgets::icon_button(ui, Icon::Back, 20.0, "Back").clicked() {
+                        actions.push(Action::Back);
+                    }
+                });
+            }
+            ui.scope_builder(place(bar, Layout::right_to_left(Align::Center)), |ui| {
+                if widgets::icon_button(ui, Icon::Info, 20.0, "Keyboard shortcuts (?)").clicked() {
                     state.keys_open = !state.keys_open;
                 }
             });
+            // Centred, clear of the 32 px buttons at both ends.
+            let width = (bar.width() - 2.0 * 48.0).clamp(120.0, 560.0);
+            let field_rect = egui::Rect::from_center_size(bar.center(), vec2(width, 36.0));
+            ui.scope_builder(
+                place(field_rect, Layout::left_to_right(Align::Center)),
+                |ui| {
+                    let field = widgets::search_field(
+                        ui,
+                        &palette,
+                        &mut state.query,
+                        "Search, or paste a link",
+                        command_line_id(),
+                        width,
+                    );
+                    if field.has_focus() && ui.input(|input| input.key_pressed(Key::Escape)) {
+                        field.surrender_focus();
+                    }
+                    let submitted =
+                        field.lost_focus() && ui.input(|input| input.key_pressed(Key::Enter));
+                    if submitted {
+                        actions.push(Action::Search(state.query.clone()));
+                    }
+                },
+            );
         });
 }
 
 /// The sidebar's width, open and collapsed to its rail.
-const SIDEBAR_OPEN: f32 = 208.0;
+const SIDEBAR_OPEN: f32 = 240.0;
 const SIDEBAR_RAIL: f32 = 72.0;
 
-/// The sidebar: the `youtfast` pane with `[n] Label` items, and the
-/// channels subscribed to. Collapsed (`b`), it is a rail of the `[n]`
-/// keys and the channels' avatars, each named on hover.
+/// The sidebar: the `YouTFast` wordmark and the collapse toggle, the
+/// views as nav items (icon and label), then the channels subscribed to.
+/// Collapsed (`b`), it is a rail of the views' icons and the channels'
+/// avatars, each named on hover.
 fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
     let collapsed = state.settings.sidebar_collapsed;
+    let palette = &state.palette;
     egui::Panel::left("sidebar")
         .exact_size(if collapsed {
             SIDEBAR_RAIL
@@ -137,69 +154,92 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
         })
         .resizable(false)
         .show_separator_line(false)
-        .frame(Frame::new().inner_margin(Margin::symmetric(8, 6)))
+        .frame(
+            Frame::new()
+                .fill(palette.panel)
+                .inner_margin(Margin::symmetric(12, 8)),
+        )
         .show(ui, |ui| {
-            let (toggle, hint) = if collapsed {
-                ("»", "Show the sidebar (b)")
+            ui.spacing_mut().item_spacing.y = 2.0;
+            let hint = if collapsed {
+                "Show the sidebar (b)"
             } else {
-                ("«", "Collapse the sidebar (b)")
+                "Collapse the sidebar (b)"
             };
-            if widgets::bracket_button(ui, &state.palette, toggle, widgets::ButtonStyle::Normal)
-                .on_hover_text(hint)
-                .clicked()
-            {
+            let toggled = ui
+                .allocate_ui_with_layout(
+                    vec2(ui.available_width(), 40.0),
+                    Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.set_min_height(40.0);
+                        if collapsed {
+                            ui.add_space(((ui.available_width() - 32.0) / 2.0).max(0.0));
+                            return widgets::icon_button(ui, Icon::PanelLeft, 20.0, hint).clicked();
+                        }
+                        ui.add_space(12.0);
+                        ui.label(
+                            RichText::new("YouTFast")
+                                .font(theme::bold(18.0))
+                                .color(palette.text),
+                        );
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            widgets::icon_button(ui, Icon::PanelLeft, 20.0, hint).clicked()
+                        })
+                        .inner
+                    },
+                )
+                .inner;
+            if toggled {
                 actions.push(Action::ToggleSidebar);
             }
-            // Room for the pane's title, which sits on its top rule.
-            ui.add_space(widgets::line(ui) / 2.0);
-            let title = if collapsed { "" } else { "youtfast" };
-            widgets::pane(ui, &state.palette, title, None, false, None, |ui| {
-                for (key, view, label, count) in sidebar_items(state) {
-                    let selected = state.view == view
-                        || (view == View::Playlists && state.view == View::Playlist)
-                        || (view == View::Subscriptions && state.view == View::Channel);
-                    if view == View::Account {
-                        ui.add_space(widgets::line(ui));
-                    }
-                    let mut parts = vec![(format!("[{key}]"), state.palette.magenta)];
-                    let count = count.filter(|count| *count > 0);
-                    if collapsed {
-                        if count.is_some() {
-                            parts.push(("•".to_owned(), state.palette.accent));
-                        }
-                    } else {
-                        parts.push((format!(" {label}"), state.palette.text));
-                        if let Some(count) = count {
-                            parts.push((format!("{count:>4}"), state.palette.accent));
-                        }
-                    }
-                    let mut response = widgets::row(ui, &state.palette, selected, &parts);
-                    if collapsed {
-                        response = response.on_hover_text(label);
-                    }
-                    if response.clicked() {
-                        actions.push(Action::Navigate(view));
-                    }
+            ui.add_space(8.0);
+            for (icon, view, label, count) in sidebar_items(state) {
+                let selected = state.view == view
+                    || (view == View::Playlists && state.view == View::Playlist)
+                    || (view == View::Subscriptions && state.view == View::Channel);
+                if view == View::Account {
+                    ui.add_space(12.0);
                 }
-            });
+                if widgets::nav_item(ui, palette, icon, &label, count, selected, collapsed)
+                    .clicked()
+                {
+                    actions.push(Action::Navigate(view));
+                }
+            }
             sidebar_channels(ui, state, collapsed, actions);
         });
 }
 
-/// The sidebar's views: key, view, label and a count to show.
-fn sidebar_items(state: &State) -> Vec<(char, View, String, Option<usize>)> {
+/// The sidebar's views, in the number keys' order: icon, view, label and
+/// a count to show.
+fn sidebar_items(state: &State) -> Vec<(Icon, View, String, Option<usize>)> {
     let mut items = vec![
-        ('1', View::Home, "Home".to_owned(), None),
-        ('2', View::Subscriptions, "Subscriptions".to_owned(), None),
-        ('3', View::History, "History".to_owned(), None),
-        ('4', View::WatchLater, "Watch later".to_owned(), None),
+        (Icon::Home, View::Home, "Home".to_owned(), None),
+        (
+            Icon::Subscriptions,
+            View::Subscriptions,
+            "Subscriptions".to_owned(),
+            None,
+        ),
+        (Icon::History, View::History, "History".to_owned(), None),
+        (
+            Icon::Clock,
+            View::WatchLater,
+            "Watch later".to_owned(),
+            None,
+        ),
     ];
     if state.signed_in() {
-        items.push(('5', View::Liked, "Liked".to_owned(), None));
-        items.push(('6', View::Playlists, "Playlists".to_owned(), None));
+        items.push((Icon::ThumbsUp, View::Liked, "Liked".to_owned(), None));
+        items.push((
+            Icon::Playlists,
+            View::Playlists,
+            "Playlists".to_owned(),
+            None,
+        ));
     }
     items.push((
-        '7',
+        Icon::Bell,
         View::Notifications,
         "Notifications".to_owned(),
         Some(state.alerts.len()),
@@ -211,14 +251,14 @@ fn sidebar_items(state: &State) -> Vec<(char, View, String, Option<usize>)> {
             AccountState::SigningIn => "Signing in".to_owned(),
             _ => "Sign in".to_owned(),
         });
-    items.push(('8', View::Account, account, None));
-    items.push(('9', View::Settings, "Settings".to_owned(), None));
+    items.push((Icon::User, View::Account, account, None));
+    items.push((Icon::Settings, View::Settings, "Settings".to_owned(), None));
     items
 }
 
 /// YouTube's sidebar lists the channels subscribed to under the views:
 /// the account's when signed in and loaded, this device's otherwise.
-/// `collapsed` draws only their avatars.
+/// `collapsed` draws only their avatars, without the heading.
 fn sidebar_channels(ui: &mut egui::Ui, state: &State, collapsed: bool, actions: &mut Vec<Action>) {
     let channels = match state.account_subscriptions.items() {
         channels if state.signed_in() && !channels.is_empty() => channels,
@@ -233,159 +273,79 @@ fn sidebar_channels(ui: &mut egui::Ui, state: &State, collapsed: bool, actions: 
         }
         _ => None,
     };
-    ui.add_space(widgets::line(ui) / 2.0);
-    let (title, count) = if collapsed {
-        ("", None)
-    } else {
-        ("subscriptions", Some(channels.len()))
-    };
-    widgets::pane(ui, &state.palette, title, count, false, None, |ui| {
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, true])
-            .show(ui, |ui| {
-                for channel in channels {
-                    let selected = open == Some(channel.id.as_str());
-                    let response = if collapsed {
-                        widgets::channel_avatar(ui, &state.palette, channel, selected)
-                            .on_hover_text(&channel.name)
-                    } else {
-                        widgets::channel_item(ui, &state.palette, channel, selected)
-                    };
-                    if response.clicked() {
-                        actions.push(Action::OpenChannel(channel.clone()));
-                    }
-                }
-            });
-    });
-}
-
-/// The bottom line: the view's name inverted, what is loading or the
-/// last notice, then the session, quality and theme at the right.
-fn status_line(
-    ui: &mut egui::Ui,
-    state: &mut State,
-    status: Option<&Status>,
-    actions: &mut Vec<Action>,
-) {
-    let palette = state.palette.clone();
-    egui::Panel::bottom("status-line")
-        .resizable(false)
-        .show_separator_line(false)
-        .frame(
-            Frame::new()
-                .fill(ui.visuals().panel_fill)
-                .inner_margin(Margin::symmetric(8, 4)),
-        )
+    ui.add_space(16.0);
+    if !collapsed {
+        ui.horizontal(|ui| {
+            ui.add_space(12.0);
+            ui.label(
+                RichText::new("Subscriptions")
+                    .font(theme::semibold(14.0))
+                    .color(state.palette.secondary),
+            );
+        });
+        ui.add_space(4.0);
+    }
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, true])
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                // ` HOME ` as an inverted block.
-                let name = format!(" {} ", view_name(state.view).to_uppercase());
-                ui.label(
-                    RichText::new(name)
-                        .monospace()
-                        .strong()
-                        .color(palette.window)
-                        .background_color(palette.accent),
-                );
-                let loading = loading(state, status);
-                if let Some(what) = loading {
-                    ui.label(
-                        RichText::new(format!("{} loading {what}", widgets::spinner_frame(ui)))
-                            .monospace()
-                            .color(palette.secondary),
-                    );
-                } else if let Some(notice) = &state.notice {
-                    ui.label(RichText::new(notice).monospace().color(palette.text));
-                    if widgets::bracket_button(ui, &palette, "x", widgets::ButtonStyle::Normal)
-                        .clicked()
-                    {
-                        actions.push(Action::DismissNotice);
-                    }
+            for channel in channels {
+                let selected = open == Some(channel.id.as_str());
+                let response = if collapsed {
+                    widgets::channel_avatar(ui, &state.palette, channel, selected)
+                        .on_hover_text(&channel.name)
+                } else {
+                    widgets::channel_item(ui, &state.palette, channel, selected)
+                };
+                if response.clicked() {
+                    actions.push(Action::OpenChannel(channel.clone()));
                 }
-                // `[ N new ]` in accent while alerts are unseen.
-                if !state.alerts.is_empty() {
-                    let button = widgets::bracket_button(
-                        ui,
-                        &palette,
-                        &format!("{} new", state.alerts.len()),
-                        widgets::ButtonStyle::Primary,
-                    );
-                    if button.clicked() {
-                        actions.push(Action::Navigate(View::Notifications));
-                    }
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if widgets::bracket_button(ui, &palette, "?", widgets::ButtonStyle::Normal)
-                        .clicked()
-                    {
-                        state.keys_open = !state.keys_open;
-                    }
-                    let parts = [quality_label(state), theme_label(state)]
-                        .into_iter()
-                        .flatten()
-                        .collect::<Vec<_>>()
-                        .join(" · ");
-                    ui.label(RichText::new(parts).monospace().color(palette.secondary));
-                    // The active account's name opens its page.
-                    if let Some(account) = state.active_account() {
-                        if ui
-                            .link(
-                                RichText::new(&account.name)
-                                    .monospace()
-                                    .color(palette.secondary),
-                            )
-                            .clicked()
-                        {
-                            actions.push(Action::Navigate(View::Account));
-                        }
-                    } else if let Some(mode) = session_label(state) {
-                        ui.label(RichText::new(mode).monospace().color(palette.secondary));
-                    }
-                });
-            });
+            }
         });
 }
 
-/// What the status line spins about, if anything.
-fn loading<'a>(state: &'a State, status: Option<&'a Status>) -> Option<&'static str> {
-    if matches!(state.account, AccountState::SigningIn) {
-        return Some("signing in");
-    }
-
-    match state.view {
-        View::Home if matches!(state.feed, Listing::Loading) => Some("feed"),
-        View::Results if matches!(state.results, Listing::Loading) => Some("results"),
-        View::Watch
-            if state.watching.is_some()
-                && state.player_error.is_none()
-                && status.is_none_or(|s| s.idle) =>
-        {
-            Some("video")
-        }
-        View::Subscriptions if matches!(state.account_subscriptions, Listing::Loading) => {
-            Some("subscriptions")
-        }
-        View::History if matches!(state.account_history, Listing::Loading) => Some("history"),
-        View::WatchLater if matches!(state.account_watch_later, Listing::Loading) => {
-            Some("watch later")
-        }
-        View::Liked if matches!(state.liked, Listing::Loading) => Some("liked videos"),
-        View::Playlists if matches!(state.playlists, Listing::Loading) => Some("playlists"),
-        View::Playlist if matches!(state.page_videos, Listing::Loading) => Some("videos"),
-        View::Channel => match state.channel_tab {
-            crate::model::ChannelTab::About if matches!(state.channel_about, Fetch::Loading) => {
-                Some("about")
-            }
-            crate::model::ChannelTab::Playlists
-                if matches!(state.page_playlists, Listing::Loading) =>
-            {
-                Some("playlists")
-            }
-            _ if matches!(state.page_videos, Listing::Loading) => Some("the channel"),
-            _ => None,
-        },
-        _ => None,
-    }
+/// The last notice as a toast at the bottom right: an icon (the alert one
+/// for a failure), the text, and a button that dismisses it.
+fn notice_toast(ctx: &egui::Context, state: &State, actions: &mut Vec<Action>) {
+    let Some(notice) = &state.notice else {
+        return;
+    };
+    let palette = &state.palette;
+    let (icon, tint) = if notice.starts_with("Could not") {
+        (Icon::Alert, palette.red)
+    } else {
+        (Icon::Info, palette.secondary)
+    };
+    egui::Area::new(egui::Id::new("notice"))
+        .order(egui::Order::Foreground)
+        .anchor(egui::Align2::RIGHT_BOTTOM, vec2(-20.0, -20.0))
+        .show(ctx, |ui| {
+            Frame::new()
+                .fill(palette.overlay)
+                .stroke(Stroke::new(1.0, palette.outline))
+                .corner_radius(CornerRadius::same(RADIUS))
+                .inner_margin(Margin::symmetric(14, 10))
+                .shadow(ui.visuals().popup_shadow)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.add(icon.image(tint, 18.0));
+                        ui.add_space(4.0);
+                        ui.vertical(|ui| {
+                            ui.set_max_width(320.0);
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(notice)
+                                        .font(theme::medium(13.5))
+                                        .color(palette.text),
+                                )
+                                .wrap(),
+                            );
+                        });
+                        if widgets::icon_button(ui, Icon::Close, 16.0, "Dismiss").clicked() {
+                            actions.push(Action::DismissNotice);
+                        }
+                    });
+                });
+        });
 }
 
 /// The cursor's reset key: which view's listing it is on, and whether it
@@ -530,127 +490,101 @@ fn open_at(state: &State, index: usize) -> Option<Action> {
     }
 }
 
-/// A name for the status line's inverted block.
-fn view_name(view: View) -> &'static str {
-    match view {
-        View::Home => "home",
-        View::Results => "results",
-        View::Watch => "watch",
-        View::Subscriptions => "subscriptions",
-        View::History => "history",
-        View::WatchLater => "watch later",
-        View::Liked => "liked",
-        View::Playlists => "playlists",
-        View::Playlist => "playlist",
-        View::Channel => "channel",
-        View::Notifications => "new",
-        View::Account => "account",
-        View::Settings => "settings",
-    }
-}
-
-/// "signed in", or the local library's mode.
-fn session_label(state: &State) -> Option<String> {
-    match &state.account {
-        AccountState::SignedIn(_) => Some("signed in".to_owned()),
-        AccountState::SigningIn => None,
-        AccountState::SignedOut | AccountState::Failed(_) => Some("local".to_owned()),
-    }
-}
-
-/// The chosen quality: "auto" or "1080p".
-fn quality_label(state: &State) -> Option<String> {
-    Some(match state.settings.quality {
-        crate::model::Quality::Auto => "auto".to_owned(),
-        crate::model::Quality::Max(lines) => format!("{lines}p"),
-    })
-}
-
-/// The theme's display name: the picked palette's, "auto", dark, light.
-fn theme_label(state: &State) -> Option<String> {
-    Some(match &state.settings.theme {
-        crate::settings::ThemeChoice::Auto => {
-            if state.follows_omarchy {
-                state
-                    .themes
-                    .iter()
-                    .find(|(filename, _)| filename == fastframe_theme::omarchy::FILENAME)
-                    .map(|(_, name)| name.clone())
-                    .unwrap_or_else(|| "omarchy".to_owned())
-            } else {
-                "auto".to_owned()
-            }
-        }
-        crate::settings::ThemeChoice::Dark => "dark".to_owned(),
-        crate::settings::ThemeChoice::Light => "light".to_owned(),
-        crate::settings::ThemeChoice::Custom(filename) => state
-            .themes
-            .iter()
-            .find(|(file, _)| file == filename)
-            .map(|(_, name)| name.clone())
-            .unwrap_or_else(|| filename.clone()),
-    })
-}
-
-/// The `?` overlay: every binding in two columns.
+/// The `?` modal over a dimmed window: every binding in two columns, the
+/// key in a pill and what it does beside it.
 fn keys_overlay(ctx: &egui::Context, state: &State) {
+    let palette = &state.palette;
+    ctx.layer_painter(egui::LayerId::new(
+        egui::Order::Middle,
+        egui::Id::new("keys-backdrop"),
+    ))
+    .rect_filled(ctx.content_rect(), 0.0, palette.shadow);
     egui::Area::new(egui::Id::new("keys"))
         .order(egui::Order::Foreground)
         .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
         .show(ctx, |ui| {
-            // The overlay needs a body: panes are transparent otherwise.
-            let fill = if state.palette.overlay == state.palette.window {
-                state.palette.panel
-            } else {
-                state.palette.overlay
-            };
-            widgets::pane(ui, &state.palette, "keys", None, true, Some(fill), |ui| {
-                let p = &state.palette;
-                let column = |ui: &mut egui::Ui, bindings: &[(&str, &str)]| {
-                    for (key, what) in bindings {
-                        ui.horizontal(|ui| {
-                            ui.label(
-                                RichText::new(format!("{key:<7}"))
-                                    .monospace()
-                                    .color(p.magenta),
-                            );
-                            ui.label(RichText::new(*what).monospace().color(p.text));
-                        });
-                    }
-                };
-                ui.columns(2, |columns| {
-                    column(
-                        &mut columns[0],
-                        &[
-                            ("/", "the command line"),
-                            ("enter", "search, or open a link"),
-                            ("1-9", "the views"),
-                            ("?", "this list"),
-                            ("esc", "close, or go back"),
-                            ("r", "load the page again"),
-                            ("j / ↓", "next row"),
-                            ("k / ↑", "the row before"),
-                            ("g / G", "first / last row"),
-                            ("enter", "open the row"),
-                            ("h / l", "a channel's tabs"),
-                            ("a", "the next account"),
-                            ("b", "collapse the sidebar"),
-                        ],
+            Frame::new()
+                .fill(palette.overlay)
+                .stroke(Stroke::new(1.0, palette.outline))
+                .corner_radius(CornerRadius::same(RADIUS + 4))
+                .inner_margin(Margin::same(24))
+                .shadow(ui.visuals().popup_shadow)
+                .show(ui, |ui| {
+                    ui.label(
+                        RichText::new("Keyboard shortcuts")
+                            .font(theme::bold(18.0))
+                            .color(palette.text),
                     );
-                    column(
-                        &mut columns[1],
-                        &[
-                            ("space / k", "play or pause"),
-                            ("← / →", "5 s back or ahead"),
-                            ("j / l", "10 s back or ahead"),
-                            ("f", "full screen"),
-                            ("t", "theater mode"),
-                            ("esc", "leave full screen, back"),
-                        ],
-                    );
+                    ui.add_space(16.0);
+                    let column = |ui: &mut egui::Ui, id: &str, bindings: &[(&str, &str)]| {
+                        egui::Grid::new(id)
+                            .num_columns(2)
+                            .spacing([12.0, 8.0])
+                            .show(ui, |ui| {
+                                for (key, what) in bindings {
+                                    key_pill(ui, palette, key);
+                                    ui.label(
+                                        RichText::new(*what)
+                                            .font(theme::regular(14.0))
+                                            .color(palette.text),
+                                    );
+                                    ui.end_row();
+                                }
+                            });
+                    };
+                    ui.horizontal_top(|ui| {
+                        column(
+                            ui,
+                            "keys-shell",
+                            &[
+                                ("/", "Focus the search field"),
+                                ("Enter", "Search, or open a link"),
+                                ("1-9", "The views"),
+                                ("?", "This list"),
+                                ("Esc", "Close, or go back"),
+                                ("r", "Load the page again"),
+                                ("j / ↓", "Next row"),
+                                ("k / ↑", "The row before"),
+                                ("g / G", "First / last row"),
+                                ("Enter", "Open the row"),
+                                ("h / l", "A channel's tabs"),
+                                ("a", "The next account"),
+                                ("b", "Collapse the sidebar"),
+                            ],
+                        );
+                        ui.add_space(32.0);
+                        column(
+                            ui,
+                            "keys-player",
+                            &[
+                                ("Space / k", "Play or pause"),
+                                ("← / →", "5 s back or ahead"),
+                                ("j / l", "10 s back or ahead"),
+                                ("f", "Full screen"),
+                                ("t", "Theater mode"),
+                                ("Esc", "Leave full screen, back"),
+                            ],
+                        );
+                    });
                 });
-            });
         });
+}
+
+/// A key's name in a small `surface` pill, for the shortcuts' list.
+fn key_pill(ui: &mut egui::Ui, palette: &theme::Palette, key: &str) {
+    let galley = ui
+        .painter()
+        .layout_no_wrap(key.to_owned(), theme::medium(13.0), palette.text);
+    let height = 24.0;
+    let size = vec2((galley.size().x + 16.0).max(height), height);
+    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+    ui.painter().rect_filled(
+        rect,
+        CornerRadius::same((height / 2.0) as u8),
+        palette.surface,
+    );
+    ui.painter()
+        .galley(rect.center() - galley.size() / 2.0, galley, palette.text);
 }
 
 /// The shell's keys, while nobody is typing.

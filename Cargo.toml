@@ -36,6 +36,11 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "proce
 fastframe-log = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
 # The icons! table and the Lucide icons shared with the sibling apps.
 fastframe-icons = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
+# Inter at its four weights (or the platform's interface face), with the
+# installed faces behind it for the scripts Inter lacks, as in the siblings.
+fastframe-fonts = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
+# How the desktop renders text (hinting, coverage), applied to egui's.
+fastframe-text = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
 # Palette files, the shared palettes, and following the Omarchy desktop's
 # theme live.
 fastframe-theme = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }

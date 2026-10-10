@@ -4,7 +4,6 @@ mod account;
 mod alerts;
 mod app;
 mod backend;
-mod fonts;
 mod icons;
 mod innertube;
 mod instance;

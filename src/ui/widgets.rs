@@ -1,159 +1,218 @@
-//! Pieces shared by the views: the pane every screen is drawn in, the
-//! bracket buttons and subscribe, the chips, the spinner, the selectable
-//! row, the video as a row or a card, and the playlist as a row.
+//! Pieces shared by the views, in the siblings' look (Spotifast, ZapFast):
+//! sections under a heading, rounded cards, pill buttons and chips, the
+//! sidebar's items, round avatars, rounded thumbnails, the video as a row
+//! or a card, the playlist as a row, the search field, and rich text.
 
 use egui::text::LayoutJob;
 use egui::{
-    Color32, CornerRadius, CursorIcon, FontId, Galley, Margin, Pos2, Rect, Response, RichText,
-    Sense, Stroke, Ui, pos2, vec2,
+    Color32, CornerRadius, CursorIcon, FontId, Galley, Pos2, Rect, Response, Sense, Stroke, Ui,
+    pos2, vec2,
 };
 
 use crate::app::State;
 use crate::icons::Icon;
 use crate::library::Library;
 use crate::model::{Action, Channel, Fetch, PlaylistSummary, Span, Video};
-use crate::theme::Palette;
+use crate::theme::{self, Palette, RADIUS, RADIUS_SMALL};
 use crate::util;
-
-/// The size of one character of body text.
-fn glyph(ui: &Ui) -> egui::Vec2 {
-    ui.painter()
-        .layout_no_wrap("0".to_owned(), FontId::monospace(14.0), Color32::WHITE)
-        .size()
-}
-
-/// The width of one character cell, the spacing grid's unit.
-pub fn cell(ui: &Ui) -> f32 {
-    glyph(ui).x
-}
 
 /// The height of one line of body text.
 pub fn line(ui: &Ui) -> f32 {
-    glyph(ui).y
+    ui.painter()
+        .layout_no_wrap("0".to_owned(), theme::regular(14.0), Color32::WHITE)
+        .size()
+        .y
 }
 
-/// A frameless button that is just the icon.
+/// A frameless button that is just the icon, a round tint under it on
+/// hover.
 pub fn icon_button(ui: &mut Ui, icon: Icon, size: f32, hint: &str) -> Response {
-    ui.add(egui::Button::image(icon.image(ui.visuals().text_color(), size)).frame(false))
-        .on_hover_text(hint)
+    let edge = size + 12.0;
+    let (rect, response) = ui.allocate_exact_size(vec2(edge, edge), Sense::click());
+    if response.hovered() {
+        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+        ui.painter().circle_filled(
+            rect.center(),
+            edge / 2.0,
+            ui.visuals().widgets.hovered.weak_bg_fill,
+        );
+    }
+    let tint = ui.visuals().text_color();
+    icon.image(tint, size)
+        .paint_at(ui, Rect::from_center_size(rect.center(), vec2(size, size)));
+    response.on_hover_text(hint)
 }
 
-/// The braille spinner's frames.
-const SPINNER: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-
-/// The spinner's frame for now: call while work is in flight; it repaints
-/// the window itself until the work is done.
-pub fn spinner_frame(ui: &Ui) -> char {
-    let frame = (ui.input(|input| input.time) * 12.0) as usize % SPINNER.len();
-    ui.ctx()
-        .request_repaint_after(std::time::Duration::from_millis(80));
-    SPINNER[frame]
+/// egui's spinner, `size` across.
+pub fn spinner(ui: &mut Ui, size: f32) {
+    ui.add(egui::Spinner::new().size(size));
 }
 
-/// A 1 px pane whose title sits in its top rule, the way lazygit draws
-/// it: `─ title ──── 12 ─`. The focused pane's rule is the accent; the
-/// title and count are masked by the fill behind.
-pub fn pane<R>(
+/// A spinner and `Loading <what>…` in the secondary colour.
+pub fn loading(ui: &mut Ui, palette: &Palette, what: &str) {
+    ui.horizontal(|ui| {
+        spinner(ui, 16.0);
+        ui.label(
+            egui::RichText::new(format!("Loading {what}…"))
+                .font(theme::regular(13.0))
+                .color(palette.secondary),
+        );
+    });
+}
+
+/// A part of a page: its heading (and a count in the dim colour), then its
+/// contents. No box: the siblings' sections sit on the page.
+pub fn section<R>(
     ui: &mut Ui,
     palette: &Palette,
     title: &str,
     count: Option<usize>,
-    focused: bool,
-    // What fills the pane (and masks the rule behind the title); `None`
-    // leaves it transparent, over `panel_fill`.
-    fill: Option<Color32>,
     add_contents: impl FnOnce(&mut Ui) -> R,
 ) -> egui::InnerResponse<R> {
-    let font = FontId::monospace(14.0);
-    let cell = cell(ui);
-    let half_line = line(ui) / 2.0;
-    let margin = Margin {
-        left: cell as i8,
-        right: cell as i8,
-        top: (half_line + cell) as i8,
-        bottom: cell as i8,
-    };
-    let border = if focused {
-        palette.accent
-    } else {
-        palette.outline
-    };
-    let fill = fill.unwrap_or_else(|| ui.visuals().panel_fill);
-    let inner = egui::Frame::new()
-        .fill(fill)
-        .stroke(Stroke::new(1.0, border))
-        .inner_margin(margin)
-        .show(ui, add_contents);
-    let rect = inner.response.rect;
-    let painter = ui.painter();
-    // The title sits on the top rule at the left.
-    let mut title = RichText::new(format!(" {title} ")).font(font.clone());
-    if focused {
-        title = title.strong();
-    }
-    let color = if focused {
-        palette.text
-    } else {
-        palette.secondary
-    };
-    let galley = painter.layout_no_wrap(title.text().to_owned(), font.clone(), color);
-    let text_rect = Rect::from_center_size(
-        pos2(rect.left() + cell + galley.size().x / 2.0, rect.top()),
-        galley.size(),
-    );
-    painter.rect_filled(text_rect, CornerRadius::ZERO, fill);
-    painter.galley(text_rect.min, galley, color);
-    // The count on the same rule, at the right.
-    if let Some(count) = count {
-        let galley = painter.layout_no_wrap(
-            format!(" {count} "),
-            font,
-            if focused {
-                palette.text
-            } else {
-                palette.secondary
-            },
-        );
-        let rect = Rect::from_center_size(
-            pos2(rect.right() - cell - galley.size().x / 2.0, rect.top()),
-            galley.size(),
-        );
-        painter.rect_filled(rect, CornerRadius::ZERO, fill);
-        painter.galley(rect.min, galley, color);
-    }
-    inner
+    ui.vertical(|ui| {
+        if !title.is_empty() {
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new(title)
+                        .font(theme::bold(18.0))
+                        .color(palette.text),
+                );
+                if let Some(count) = count {
+                    ui.label(
+                        egui::RichText::new(util::thousands(count as u64))
+                            .font(theme::regular(14.0))
+                            .color(palette.dim),
+                    );
+                }
+            });
+            ui.add_space(4.0);
+        }
+        add_contents(ui)
+    })
 }
 
-/// How a bracket button reads.
+/// A rounded box filled with `surface`, the siblings' card: the watch
+/// page's description, a settings group, a modal's body. egui's own
+/// controls inside it (menus, sliders) sit a step brighter; pass
+/// [`on_card`]'s palette to this module's pills inside it.
+pub fn card<R>(
+    ui: &mut Ui,
+    palette: &Palette,
+    add_contents: impl FnOnce(&mut Ui) -> R,
+) -> egui::InnerResponse<R> {
+    egui::Frame::new()
+        .fill(palette.surface)
+        .corner_radius(CornerRadius::same(RADIUS))
+        .inner_margin(egui::Margin::same(12))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            let widgets = &mut ui.visuals_mut().widgets;
+            for (visuals, fill) in [
+                (&mut widgets.inactive, palette.surface_hover),
+                (&mut widgets.hovered, palette.surface_active),
+                (&mut widgets.open, palette.surface_active),
+            ] {
+                visuals.bg_fill = fill;
+                visuals.weak_bg_fill = fill;
+            }
+            add_contents(ui)
+        })
+}
+
+/// The palette for pills and chips on a [`card`]: the card is `surface`,
+/// so they sit a step brighter.
+pub fn on_card(palette: &Palette) -> Palette {
+    let mut raised = palette.clone();
+    raised.surface = palette.surface_hover;
+    raised.surface_hover = palette.surface_active;
+    raised
+}
+
+/// How a pill button reads.
 #[derive(Clone, Copy, PartialEq)]
 pub enum ButtonStyle {
-    /// `[ subscribe ]`: quiet until hovered.
+    /// A soft pill: `surface`, brighter on hover.
     Normal,
-    /// `[ subscribed ]`: on, accent and bold.
+    /// On (subscribed, saved): the soft pill with the label in bold.
     On,
-    /// Inverted: accent fill, window text.
+    /// The page's main action, YouTube's way: `text` filled, `window`
+    /// label (white on dark, black on light).
     Primary,
 }
 
-/// A button that is bracketed text: `[ subscribe ]`.
-pub fn bracket_button(ui: &mut Ui, palette: &Palette, label: &str, style: ButtonStyle) -> Response {
-    let mut text = RichText::new(format!("[ {label} ]")).monospace();
-    text = match style {
-        ButtonStyle::Normal => text.color(palette.secondary),
-        ButtonStyle::On => text.color(palette.accent).strong(),
-        ButtonStyle::Primary => text.color(palette.window),
+/// A pill-shaped button with a label.
+pub fn button(ui: &mut Ui, palette: &Palette, label: &str, style: ButtonStyle) -> Response {
+    icon_text_button(ui, palette, None, label, style)
+}
+
+/// A pill-shaped button with an icon before its label (the label may be
+/// empty: then the pill is round around the icon).
+pub fn icon_text_button(
+    ui: &mut Ui,
+    palette: &Palette,
+    icon: Option<Icon>,
+    label: &str,
+    style: ButtonStyle,
+) -> Response {
+    let font = match style {
+        ButtonStyle::Normal => theme::medium(14.0),
+        ButtonStyle::On | ButtonStyle::Primary => theme::semibold(14.0),
     };
-    let mut button = egui::Button::new(text).frame(false);
-    if style == ButtonStyle::Primary {
-        // A frameless button draws no fill: keep the frame, without its
-        // rule or corners.
-        button = button
-            .frame(true)
-            .fill(palette.accent)
-            .stroke(Stroke::NONE)
-            .corner_radius(CornerRadius::ZERO);
+    let color = match style {
+        ButtonStyle::Primary => palette.window,
+        _ => palette.text,
+    };
+    let galley = ui.painter().layout_no_wrap(label.to_owned(), font, color);
+    let icon_size = 18.0;
+    let gap = if icon.is_some() && !label.is_empty() {
+        6.0
+    } else {
+        0.0
+    };
+    let icon_width = if icon.is_some() { icon_size } else { 0.0 };
+    let height = 34.0;
+    let padding = if label.is_empty() { 8.0 } else { 14.0 };
+    let width = (icon_width + gap + galley.size().x + 2.0 * padding).max(height);
+    let (rect, response) = ui.allocate_exact_size(vec2(width, height), Sense::click());
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
+    });
+    if !ui.is_rect_visible(rect) {
+        return response;
     }
-    ui.add(button)
+    let enabled = ui.is_enabled();
+    let hovered = response.hovered() && enabled;
+    if hovered {
+        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+    }
+    let fill = match style {
+        ButtonStyle::Primary if hovered => palette.text.gamma_multiply(0.85),
+        ButtonStyle::Primary => palette.text,
+        _ if hovered => palette.surface_hover,
+        _ => palette.surface,
+    };
+    let painter = ui.painter();
+    painter.rect_filled(rect, CornerRadius::same((height / 2.0) as u8), fill);
+    let content = icon_width + gap + galley.size().x;
+    let mut x = rect.center().x - content / 2.0;
+    let tint = if enabled { color } else { palette.dim };
+    if let Some(icon) = icon {
+        icon.image(tint, icon_size).paint_at(
+            ui,
+            Rect::from_min_size(
+                pos2(x, rect.center().y - icon_size / 2.0),
+                vec2(icon_size, icon_size),
+            ),
+        );
+        x += icon_size + gap;
+    }
+    let size = galley.size();
+    ui.painter().galley_with_override_text_color(
+        pos2(x, rect.center().y - size.y / 2.0),
+        galley,
+        tint,
+    );
+    response
 }
 
 /// Subscribe on this device, or show that the account already does.
@@ -166,27 +225,25 @@ pub fn subscribe(
     actions: &mut Vec<Action>,
 ) {
     if state.subscribed_in_account(&channel.id) {
-        ui.label(
-            RichText::new("[ subscribed ]")
-                .monospace()
-                .color(state.palette.accent)
-                .strong(),
-        )
-        .on_hover_text("Your account is subscribed. Manage it on youtube.com.");
+        ui.add_enabled_ui(false, |ui| {
+            button(ui, &state.palette, "Subscribed", ButtonStyle::On)
+        })
+        .inner
+        .on_disabled_hover_text("Your account is subscribed. Manage it on youtube.com.");
         return;
     }
     let subscribed = state.library.is_subscribed(&channel.id);
     let (label, style) = if subscribed {
-        ("subscribed", ButtonStyle::On)
+        ("Subscribed", ButtonStyle::On)
     } else {
-        ("subscribe", unsubscribed)
+        ("Subscribe", unsubscribed)
     };
     let hint = if subscribed {
         "Unsubscribe on this computer"
     } else {
         "Follow this channel on this computer: its videos join your feed"
     };
-    if bracket_button(ui, &state.palette, label, style)
+    if button(ui, &state.palette, label, style)
         .on_hover_text(hint)
         .clicked()
     {
@@ -194,143 +251,270 @@ pub fn subscribe(
     }
 }
 
-/// One selectable row in a list or menu, TUI style: the cursor is the
-/// accent inverted. `parts` are `(text, colour)` runs; the colour is the
-/// unselected one (the row inverts it). Returns the click response.
+/// One selectable row in a list or menu: a rounded fill on hover, and
+/// `surface_active` when selected (the keyboard's cursor). `parts` are
+/// `(text, colour)` runs.
 pub fn row(
     ui: &mut Ui,
     palette: &Palette,
     selected: bool,
     parts: &[(String, Color32)],
 ) -> Response {
-    let font = FontId::monospace(14.0);
+    let font = theme::regular(14.0);
     let mut job = LayoutJob::default();
     for (text, color) in parts {
         job.append(text, 0.0, egui::TextFormat::simple(font.clone(), *color));
     }
     let galley = ui.painter().layout_job(job);
-    let height = galley.rect.height().max(line(ui)) + 2.0;
+    let height = galley.rect.height().max(line(ui)) + 12.0;
     let (rect, response) =
         ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
     row_fill(ui, palette, rect, &response, selected);
     let text_pos = pos2(
-        rect.left() + cell(ui),
+        rect.left() + 10.0,
         rect.center().y - galley.rect.height() / 2.0,
     );
-    if selected {
-        ui.painter()
-            .galley_with_override_text_color(text_pos, galley, palette.window);
-    } else {
-        ui.painter().galley(text_pos, galley, palette.text);
-    }
+    ui.painter().galley(text_pos, galley, palette.text);
     response
 }
 
-/// A channel in the sidebar: a square avatar a line high, the name in
-/// blue on one line. `selected` draws the TUI cursor.
-pub fn channel_item(ui: &mut Ui, palette: &Palette, channel: &Channel, selected: bool) -> Response {
-    let size = line(ui);
-    let pad = cell(ui);
+/// A sidebar item, the siblings' way: the icon and the label (bold when
+/// current), a rounded fill when current or hovered, and a count at the
+/// end. `collapsed` draws only the icon, centred, with the count as a dot.
+pub fn nav_item(
+    ui: &mut Ui,
+    palette: &Palette,
+    icon: Icon,
+    label: &str,
+    count: Option<usize>,
+    selected: bool,
+    collapsed: bool,
+) -> Response {
+    let height = 40.0;
     let (rect, response) =
-        ui.allocate_exact_size(vec2(ui.available_width(), size + 4.0), Sense::click());
+        ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
+    let hovered = response.hovered();
+    if hovered {
+        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+    }
+    if selected || hovered {
+        let fill = if selected {
+            palette.surface
+        } else {
+            palette.surface_hover
+        };
+        ui.painter()
+            .rect_filled(rect, CornerRadius::same(RADIUS), fill);
+    }
+    let color = if selected || hovered {
+        palette.text
+    } else {
+        palette.secondary
+    };
+    let icon_size = 20.0;
+    let count = count.filter(|count| *count > 0);
+    if collapsed {
+        let icon_rect = Rect::from_center_size(rect.center(), vec2(icon_size, icon_size));
+        icon.image(color, icon_size).paint_at(ui, icon_rect);
+        if count.is_some() {
+            ui.painter()
+                .circle_filled(icon_rect.right_top() + vec2(1.0, 1.0), 4.0, palette.accent);
+        }
+        return response.on_hover_text(label);
+    }
+    let icon_rect = Rect::from_min_size(
+        pos2(rect.left() + 12.0, rect.center().y - icon_size / 2.0),
+        vec2(icon_size, icon_size),
+    );
+    icon.image(color, icon_size).paint_at(ui, icon_rect);
+    let font = if selected {
+        theme::semibold(14.0)
+    } else {
+        theme::medium(14.0)
+    };
+    let mut right = rect.right() - 12.0;
+    if let Some(count) = count {
+        let galley = ui.painter().layout_no_wrap(
+            count.to_string(),
+            theme::semibold(12.0),
+            palette.on_accent,
+        );
+        let pill = Rect::from_center_size(
+            pos2(right - (galley.size().x + 12.0) / 2.0, rect.center().y),
+            vec2((galley.size().x + 12.0).max(20.0), 20.0),
+        );
+        ui.painter()
+            .rect_filled(pill, CornerRadius::same(10), palette.accent);
+        ui.painter().galley(
+            pill.center() - galley.size() / 2.0,
+            galley,
+            palette.on_accent,
+        );
+        right = pill.left() - 6.0;
+    }
+    let mut job = LayoutJob::default();
+    job.append(label, 0.0, egui::TextFormat::simple(font, color));
+    job.wrap.max_width = (right - icon_rect.right() - 14.0).max(10.0);
+    job.wrap.max_rows = 1;
+    job.wrap.overflow_character = Some('…');
+    let galley = ui.painter().layout_job(job);
+    ui.painter().galley(
+        pos2(
+            icon_rect.right() + 14.0,
+            rect.center().y - galley.size().y / 2.0,
+        ),
+        galley,
+        color,
+    );
+    response
+}
+
+/// A round avatar in `rect`: the picture, or the name's initial on
+/// `surface_active` while there is none.
+pub fn avatar(ui: &Ui, palette: &Palette, url: Option<&str>, name: &str, rect: Rect) {
+    let radius = CornerRadius::same((rect.width() / 2.0).min(255.0) as u8);
+    match url {
+        Some(url) => super::images::remote(ui, url)
+            .fit_to_exact_size(rect.size())
+            .corner_radius(radius)
+            .paint_at(ui, rect),
+        None => {
+            ui.painter()
+                .circle_filled(rect.center(), rect.width() / 2.0, palette.surface_active);
+            let initial: String = name
+                .trim_start_matches('@')
+                .chars()
+                .take(1)
+                .collect::<String>()
+                .to_uppercase();
+            ui.painter().text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                initial,
+                theme::semibold(rect.height() * 0.45),
+                palette.text,
+            );
+        }
+    }
+}
+
+/// A channel in the sidebar: its round avatar and its name on one line.
+/// `selected` marks the channel whose page is open.
+pub fn channel_item(ui: &mut Ui, palette: &Palette, channel: &Channel, selected: bool) -> Response {
+    let size = 24.0;
+    let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 36.0), Sense::click());
     row_fill(ui, palette, rect, &response, selected);
-    let avatar = Rect::from_min_size(
-        pos2(rect.left() + pad / 2.0, rect.top() + 2.0),
+    let picture = Rect::from_min_size(
+        pos2(rect.left() + 10.0, rect.center().y - size / 2.0),
         vec2(size, size),
     );
-    channel_avatar_at(ui, palette, channel, avatar);
-    let color = if selected {
-        palette.window
-    } else {
-        palette.blue
-    };
+    avatar(
+        ui,
+        palette,
+        channel.avatar.as_deref(),
+        &channel.name,
+        picture,
+    );
     let mut job = LayoutJob::default();
     job.append(
         &channel.name,
         0.0,
-        egui::TextFormat::simple(FontId::monospace(13.0), color),
+        egui::TextFormat::simple(theme::regular(14.0), palette.text),
     );
-    job.wrap.max_width = (rect.right() - avatar.right() - pad).max(10.0);
+    job.wrap.max_width = (rect.right() - picture.right() - 20.0).max(10.0);
     job.wrap.max_rows = 1;
     job.wrap.overflow_character = Some('…');
     let galley = ui.painter().layout_job(job);
-    let at = pos2(
-        avatar.right() + pad / 2.0,
-        rect.center().y - galley.size().y / 2.0,
+    ui.painter().galley(
+        pos2(
+            picture.right() + 12.0,
+            rect.center().y - galley.size().y / 2.0,
+        ),
+        galley,
+        palette.text,
     );
-    ui.painter().galley(at, galley, color);
     response
 }
 
-/// A channel in the collapsed sidebar: only its square avatar, a little
-/// over a line high and centred. `selected` draws the TUI cursor.
+/// A channel in the collapsed sidebar: only its round avatar, centred.
 pub fn channel_avatar(
     ui: &mut Ui,
     palette: &Palette,
     channel: &Channel,
     selected: bool,
 ) -> Response {
-    let size = line(ui) * 1.25;
+    let size = 28.0;
     let (rect, response) =
-        ui.allocate_exact_size(vec2(ui.available_width(), size + 4.0), Sense::click());
+        ui.allocate_exact_size(vec2(ui.available_width(), size + 10.0), Sense::click());
     row_fill(ui, palette, rect, &response, selected);
-    let avatar = Rect::from_center_size(rect.center(), vec2(size, size));
-    channel_avatar_at(ui, palette, channel, avatar);
+    let picture = Rect::from_center_size(rect.center(), vec2(size, size));
+    avatar(
+        ui,
+        palette,
+        channel.avatar.as_deref(),
+        &channel.name,
+        picture,
+    );
     response
 }
 
-/// A channel's square avatar in `rect`, or a placeholder square.
-fn channel_avatar_at(ui: &Ui, palette: &Palette, channel: &Channel, rect: Rect) {
-    match &channel.avatar {
-        Some(url) => super::images::remote(ui, url)
-            .fit_to_exact_size(rect.size())
-            .corner_radius(CornerRadius::ZERO)
-            .paint_at(ui, rect),
-        None => {
-            ui.painter()
-                .rect_filled(rect, CornerRadius::ZERO, palette.surface);
-        }
-    }
-}
-
+/// The duration (or LIVE) in the thumbnail's corner, YouTube's way.
 fn badge(ui: &Ui, thumbnail: Rect, video: &Video, palette: &Palette) {
-    let (text, color) = if video.live {
+    let (text, fill) = if video.live {
         ("LIVE".to_owned(), palette.red)
     } else if let Some(seconds) = video.duration {
-        (util::duration(seconds), palette.yellow)
+        (util::duration(seconds), Color32::from_black_alpha(200))
     } else {
         return;
     };
     let painter = ui.painter();
-    let galley = painter.layout_no_wrap(text, FontId::monospace(12.0), color);
-    let size = galley.size() + vec2(6.0, 2.0);
-    let rect = Rect::from_min_size(thumbnail.right_bottom() - size - vec2(4.0, 4.0), size);
-    painter.rect_filled(rect, CornerRadius::ZERO, Color32::BLACK);
-    painter.galley(rect.min + vec2(3.0, 1.0), galley, color);
+    let galley = painter.layout_no_wrap(text, theme::semibold(12.0), Color32::WHITE);
+    let size = galley.size() + vec2(8.0, 4.0);
+    let rect = Rect::from_min_size(thumbnail.right_bottom() - size - vec2(6.0, 6.0), size);
+    painter.rect_filled(rect, CornerRadius::same(RADIUS_SMALL), fill);
+    painter.galley(rect.min + vec2(4.0, 2.0), galley, Color32::WHITE);
 }
 
-/// The thumbnail with its corner badge, and the part watched (0..1) as a
-/// 2 px green bar under it.
+/// The thumbnail, rounded, with its corner badge, and the part watched
+/// (0..1) as YouTube's red bar along its bottom edge.
 fn thumbnail(ui: &Ui, palette: &Palette, video: &Video, rect: Rect, watched: Option<f32>) {
+    let radius = CornerRadius::same(RADIUS);
+    ui.painter().rect_filled(rect, radius, palette.surface);
     super::images::remote(ui, &video.thumbnail())
         .fit_to_exact_size(rect.size())
-        .corner_radius(CornerRadius::ZERO)
+        .corner_radius(radius)
         .paint_at(ui, rect);
     badge(ui, rect, video, palette);
     if let Some(watched) = watched {
-        let bar = Rect::from_min_size(
-            rect.left_bottom() + vec2(0.0, 1.0),
-            vec2(rect.width() * watched.clamp(0.0, 1.0), 2.0),
-        );
+        let track = Rect::from_min_max(pos2(rect.left(), rect.bottom() - 4.0), rect.right_bottom());
+        let bottom = CornerRadius {
+            nw: 0,
+            ne: 0,
+            sw: RADIUS,
+            se: RADIUS,
+        };
         ui.painter()
-            .rect_filled(bar, CornerRadius::ZERO, palette.green);
+            .rect_filled(track, bottom, Color32::from_white_alpha(70));
+        let played = Rect::from_min_size(
+            track.min,
+            vec2(track.width() * watched.clamp(0.0, 1.0), track.height()),
+        );
+        ui.painter().rect_filled(
+            played,
+            CornerRadius {
+                nw: 0,
+                ne: 0,
+                sw: RADIUS,
+                se: 0,
+            },
+            palette.accent,
+        );
     }
 }
 
 /// The text YouTube puts beside or under a thumbnail: the title on up to
-/// two lines, the channel in blue, then `views · age` (and the note).
-/// Drawn from `at`, `width` wide; `inverted` is the selected row's colours.
-/// Returns the height used.
+/// two lines, the channel, then `views · age` (and the note). Drawn from
+/// `at`, `width` wide. Returns the height used.
 fn video_text(
     ui: &Ui,
     palette: &Palette,
@@ -338,15 +522,8 @@ fn video_text(
     note: Option<&str>,
     at: Pos2,
     width: f32,
-    inverted: bool,
 ) -> f32 {
     let painter = ui.painter();
-    let small = FontId::monospace(13.0);
-    let (text, muted, channel_color) = if inverted {
-        (palette.window, palette.window, palette.window)
-    } else {
-        (palette.text, palette.secondary, palette.blue)
-    };
     let lines = |text: &str, font: FontId, color: Color32, rows: usize| {
         let mut job = LayoutJob::default();
         job.append(text, 0.0, egui::TextFormat::simple(font, color));
@@ -356,14 +533,14 @@ fn video_text(
         painter.layout_job(job)
     };
     let mut y = at.y;
-    let title = lines(&video.title, FontId::monospace(14.0), text, 2);
-    y += title.rect.height();
-    painter.galley(at, title, text);
+    let title = lines(&video.title, theme::semibold(14.0), palette.text, 2);
+    y += title.rect.height() + 4.0;
+    painter.galley(at, title, palette.text);
     if let Some(channel) = video.channel.as_deref().filter(|name| !name.is_empty()) {
-        let galley = lines(channel, small.clone(), channel_color, 1);
+        let galley = lines(channel, theme::regular(13.0), palette.secondary, 1);
         let height = galley.rect.height();
-        painter.galley(pos2(at.x, y), galley, channel_color);
-        y += height;
+        painter.galley(pos2(at.x, y), galley, palette.secondary);
+        y += height + 1.0;
     }
     let rest = [Some(meta(video)), note.map(str::to_owned)]
         .into_iter()
@@ -372,28 +549,29 @@ fn video_text(
         .collect::<Vec<_>>()
         .join(" · ");
     if !rest.is_empty() {
-        let galley = lines(&rest, small, muted, 1);
+        let galley = lines(&rest, theme::regular(13.0), palette.secondary, 1);
         let height = galley.rect.height();
-        painter.galley(pos2(at.x, y), galley, muted);
+        painter.galley(pos2(at.x, y), galley, palette.secondary);
         y += height;
     }
     y - at.y
 }
 
-/// The fill behind a row or card: the TUI cursor when selected, the
-/// hover colour under the pointer.
+/// The fill behind a row or card: `surface_active` when selected (the
+/// keyboard's cursor), `surface_hover` under the pointer; rounded.
 pub fn row_fill(ui: &Ui, palette: &Palette, rect: Rect, response: &Response, selected: bool) {
     if response.hovered() {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
     }
     let fill = if selected {
-        palette.accent
+        palette.surface_active
     } else if response.hovered() {
         palette.surface_hover
     } else {
         return;
     };
-    ui.painter().rect_filled(rect, CornerRadius::ZERO, fill);
+    ui.painter()
+        .rect_filled(rect, CornerRadius::same(RADIUS), fill);
 }
 
 /// The part of `video` watched (0..1), from its resume position.
@@ -409,9 +587,9 @@ pub fn watched(library: &Library, video: &Video) -> Option<f32> {
 }
 
 /// A video as a list row, the way YouTube's Up next column draws it: a
-/// 120x68 thumbnail, the title on up to two lines, the channel, then
+/// 168x94 thumbnail, the title on up to two lines, the channel, then
 /// `views · age` and the note when there is one. `watched` is the part
-/// watched (0..1). `selected` draws the TUI cursor.
+/// watched (0..1). `selected` marks the keyboard's cursor.
 pub fn video_row(
     ui: &mut Ui,
     palette: &Palette,
@@ -427,7 +605,7 @@ pub fn video_row(
         note,
         watched,
         selected,
-        vec2(120.0, 68.0),
+        vec2(168.0, 94.0),
     )
 }
 
@@ -439,8 +617,8 @@ pub fn video_row_large(
     watched: Option<f32>,
     selected: bool,
 ) -> Response {
-    // Up to 320x180, and never more than half the row.
-    let width = (ui.available_width() / 2.0).clamp(120.0, 320.0);
+    // Up to 360x202, and never more than half the row.
+    let width = (ui.available_width() / 2.0).clamp(168.0, 360.0);
     let thumb = vec2(width, width * 9.0 / 16.0);
     video_row_sized(ui, palette, video, None, watched, selected, thumb)
 }
@@ -454,22 +632,23 @@ fn video_row_sized(
     selected: bool,
     thumb: egui::Vec2,
 ) -> Response {
-    let pad = cell(ui);
-    let (rect, response) =
-        ui.allocate_exact_size(vec2(ui.available_width(), thumb.y + pad), Sense::click());
+    let pad = 6.0;
+    let (rect, response) = ui.allocate_exact_size(
+        vec2(ui.available_width(), thumb.y + 2.0 * pad),
+        Sense::click(),
+    );
     row_fill(ui, palette, rect, &response, selected);
-    let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad / 2.0), thumb);
+    let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), thumb);
     thumbnail(ui, palette, video, thumb_rect, watched);
-    let text_x = thumb_rect.right() + pad;
+    let text_x = thumb_rect.right() + 12.0;
     let width = (rect.right() - text_x - pad).max(20.0);
     video_text(
         ui,
         palette,
         video,
         note,
-        pos2(text_x, thumb_rect.top()),
+        pos2(text_x, thumb_rect.top() + 2.0),
         width,
-        selected,
     );
     response
 }
@@ -485,10 +664,10 @@ pub fn video_card(
     selected: bool,
     width: f32,
 ) -> Response {
-    let pad = cell(ui) / 2.0;
+    let pad = 6.0;
     let thumb = vec2(width - 2.0 * pad, (width - 2.0 * pad) * 9.0 / 16.0);
     // Room for two title lines, the channel and the meta line.
-    let text = 2.0 * line(ui) + 2.0 * (line(ui) - 1.0);
+    let text = 2.0 * line(ui) + 2.0 * line(ui) + 10.0;
     let (rect, response) =
         ui.allocate_exact_size(vec2(width, thumb.y + text + 3.0 * pad), Sense::click());
     row_fill(ui, palette, rect, &response, selected);
@@ -499,16 +678,15 @@ pub fn video_card(
         palette,
         video,
         None,
-        pos2(thumb_rect.left(), thumb_rect.bottom() + pad),
-        thumb.x,
-        selected,
+        pos2(thumb_rect.left() + 2.0, thumb_rect.bottom() + 10.0),
+        thumb.x - 4.0,
     );
     response
 }
 
-/// A playlist as a list row: its 120x68 thumbnail, the name, then
-/// `N videos` (and the playlist's channel when `with_channel`).
-/// `selected` draws the TUI cursor.
+/// A playlist as a list row: its thumbnail, the name, then `N videos`
+/// (and the playlist's channel when `with_channel`). `selected` marks the
+/// keyboard's cursor.
 pub fn playlist_row(
     ui: &mut Ui,
     palette: &Palette,
@@ -516,39 +694,38 @@ pub fn playlist_row(
     selected: bool,
     with_channel: bool,
 ) -> Response {
-    let pad = cell(ui);
-    let size = vec2(120.0, 68.0);
-    let height = size.y + pad;
-    let (rect, response) =
-        ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
+    let pad = 6.0;
+    let size = vec2(168.0, 94.0);
+    let (rect, response) = ui.allocate_exact_size(
+        vec2(ui.available_width(), size.y + 2.0 * pad),
+        Sense::click(),
+    );
     row_fill(ui, palette, rect, &response, selected);
-    let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad / 2.0), size);
-    match &playlist.thumbnail {
-        Some(url) => {
-            super::images::remote(ui, url)
-                .fit_to_exact_size(size)
-                .corner_radius(CornerRadius::ZERO)
-                .paint_at(ui, thumb_rect);
-        }
-        None => {
-            ui.painter()
-                .rect_filled(thumb_rect, CornerRadius::ZERO, palette.surface);
-        }
+    let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), size);
+    let radius = CornerRadius::same(RADIUS);
+    ui.painter()
+        .rect_filled(thumb_rect, radius, palette.surface);
+    if let Some(url) = &playlist.thumbnail {
+        super::images::remote(ui, url)
+            .fit_to_exact_size(size)
+            .corner_radius(radius)
+            .paint_at(ui, thumb_rect);
     }
-    let name_color = if selected {
-        palette.window
-    } else {
-        palette.text
-    };
-    let muted = if selected {
-        palette.window
-    } else {
-        palette.secondary
-    };
-    let text_x = thumb_rect.right() + pad;
+    let text_x = thumb_rect.right() + 12.0;
+    let width = (rect.right() - text_x - pad).max(20.0);
     let painter = ui.painter();
-    let name = painter.layout_no_wrap(playlist.name.clone(), FontId::monospace(14.0), name_color);
-    painter.galley(pos2(text_x, thumb_rect.top()), name, name_color);
+    let mut job = LayoutJob::default();
+    job.append(
+        &playlist.name,
+        0.0,
+        egui::TextFormat::simple(theme::semibold(14.0), palette.text),
+    );
+    job.wrap.max_width = width;
+    job.wrap.max_rows = 2;
+    job.wrap.overflow_character = Some('…');
+    let name = painter.layout_job(job);
+    let name_height = name.rect.height();
+    painter.galley(pos2(text_x, thumb_rect.top() + 2.0), name, palette.text);
     let details: Vec<String> = [
         playlist.videos.map(|count| format!("{count} videos")),
         playlist.channel.clone().filter(|_| with_channel),
@@ -557,26 +734,113 @@ pub fn playlist_row(
     .flatten()
     .collect();
     if !details.is_empty() {
-        let galley = painter.layout_no_wrap(details.join(" · "), FontId::monospace(13.0), muted);
-        painter.galley(pos2(text_x, thumb_rect.top() + line(ui)), galley, muted);
+        let galley =
+            painter.layout_no_wrap(details.join(" · "), theme::regular(13.0), palette.secondary);
+        painter.galley(
+            pos2(text_x, thumb_rect.top() + 6.0 + name_height),
+            galley,
+            palette.secondary,
+        );
     }
     response
 }
 
-/// One of the chips over a list: ` today `, inverted when on.
+/// One of the chips over a list, YouTube's way: a pill on `surface`,
+/// `text` filled with the `window` colour when on.
 pub fn chip(ui: &mut Ui, palette: &Palette, label: &str, on: bool) -> Response {
     let (fill, color) = if on {
-        (palette.accent, palette.window)
+        (palette.text, palette.window)
     } else {
         (palette.surface, palette.text)
     };
-    let button = egui::Button::new(RichText::new(format!(" {label} ")).monospace().color(color))
-        .fill(fill)
-        .corner_radius(CornerRadius::ZERO)
-        .stroke(Stroke::NONE);
-    let response = ui.add(button);
+    let galley = ui
+        .painter()
+        .layout_no_wrap(label.to_owned(), theme::medium(14.0), color);
+    let size = vec2(galley.size().x + 24.0, 32.0);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    let fill = if !on && response.hovered() {
+        palette.surface_hover
+    } else {
+        fill
+    };
     if response.hovered() {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+    }
+    ui.painter()
+        .rect_filled(rect, CornerRadius::same(RADIUS), fill);
+    ui.painter()
+        .galley(rect.center() - galley.size() / 2.0, galley, color);
+    response
+}
+
+/// The search field, the siblings' way: a rounded field with the search
+/// icon at its left and a clear button at its right while it has text.
+/// Returns the text edit's response (Enter is the caller's to read).
+pub fn search_field(
+    ui: &mut Ui,
+    palette: &Palette,
+    text: &mut String,
+    hint: &str,
+    id: egui::Id,
+    width: f32,
+) -> Response {
+    let height = 36.0;
+    let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
+    let focused = ui.memory(|memory| memory.has_focus(id));
+    let fill = if focused {
+        palette.surface_hover
+    } else {
+        palette.surface
+    };
+    let radius = CornerRadius::same((height / 2.0) as u8);
+    ui.painter().rect_filled(rect, radius, fill);
+    if focused {
+        ui.painter().rect_stroke(
+            rect,
+            radius,
+            Stroke::new(1.5, palette.text.gamma_multiply(0.6)),
+            egui::StrokeKind::Inside,
+        );
+    }
+    let icon = Rect::from_center_size(pos2(rect.left() + 20.0, rect.center().y), vec2(16.0, 16.0));
+    Icon::Search
+        .image(palette.secondary, 16.0)
+        .paint_at(ui, icon);
+    let clear = !text.is_empty();
+    let field_rect = Rect::from_min_max(
+        pos2(rect.left() + 36.0, rect.top()),
+        pos2(
+            rect.right() - if clear { 34.0 } else { 14.0 },
+            rect.bottom(),
+        ),
+    );
+    let response = ui.put(
+        field_rect,
+        egui::TextEdit::singleline(text)
+            .id(id)
+            .frame(egui::Frame::NONE)
+            .hint_text(egui::RichText::new(hint).color(palette.dim))
+            .font(theme::regular(14.0))
+            .vertical_align(egui::Align::Center)
+            .desired_width(field_rect.width()),
+    );
+    if clear {
+        let button =
+            Rect::from_center_size(pos2(rect.right() - 20.0, rect.center().y), vec2(24.0, 24.0));
+        let clear_response = ui.interact(button, id.with("clear"), Sense::click());
+        if clear_response.hovered() {
+            ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+            ui.painter()
+                .circle_filled(button.center(), 12.0, palette.surface_active);
+        }
+        Icon::Close.image(palette.secondary, 15.0).paint_at(
+            ui,
+            Rect::from_center_size(button.center(), vec2(15.0, 15.0)),
+        );
+        if clear_response.clicked() {
+            text.clear();
+            ui.memory_mut(|memory| memory.request_focus(id));
+        }
     }
     response
 }
@@ -620,9 +884,9 @@ fn span_job(
     for span in spans {
         let clickable = span_action(span).is_some();
         let format = egui::TextFormat::simple(
-            FontId::monospace(14.0),
+            theme::regular(14.0),
             if clickable {
-                palette.cyan
+                palette.blue
             } else {
                 palette.text
             },
@@ -671,8 +935,8 @@ fn span_at<'a>(
     None
 }
 
-/// Descriptions and comments: spans wrapped to the pane's width, links in
-/// cyan and underlined on hover. Returns the action a clicked span wants.
+/// Descriptions and comments: spans wrapped to the width, links in blue
+/// and underlined on hover. Returns the action a clicked span wants.
 pub fn rich_text(
     ui: &mut Ui,
     palette: &Palette,
@@ -703,7 +967,7 @@ pub fn rich_text(
                         pos2(base.x, base.y + glyph.font_height),
                         pos2(base.x + glyph.advance_width, base.y + glyph.font_height),
                     ],
-                    Stroke::new(1.0, palette.cyan),
+                    Stroke::new(1.0, palette.blue),
                 );
             }
         }
@@ -717,8 +981,8 @@ pub fn rich_text(
     None
 }
 
-/// The tail row of a paged list: the page on its way, a failed page's
-/// retry, or the `[ load more ]` button.
+/// The tail of a paged list: the page on its way, a failed page's retry,
+/// or `Load more`.
 pub fn more_row(
     ui: &mut Ui,
     palette: &Palette,
@@ -727,21 +991,17 @@ pub fn more_row(
     actions: &mut Vec<Action>,
 ) {
     match state {
-        Fetch::Loading => {
-            ui.label(
-                RichText::new(format!("{} loading", spinner_frame(ui)))
-                    .monospace()
-                    .color(palette.secondary),
-            );
-        }
+        Fetch::Loading => loading(ui, palette, "more"),
         Fetch::Failed(error) => {
-            ui.label(RichText::new(error.as_str()).monospace().color(palette.red));
-            if bracket_button(ui, palette, "retry", ButtonStyle::Normal).clicked() {
-                actions.push(Action::LoadMore);
-            }
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(error.as_str()).color(palette.red));
+                if button(ui, palette, "Retry", ButtonStyle::Normal).clicked() {
+                    actions.push(Action::LoadMore);
+                }
+            });
         }
         _ => {
-            if has_more && bracket_button(ui, palette, "load more", ButtonStyle::Normal).clicked() {
+            if has_more && button(ui, palette, "Load more", ButtonStyle::Normal).clicked() {
                 actions.push(Action::LoadMore);
             }
         }

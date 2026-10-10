@@ -1,42 +1,67 @@
-//! Lists of videos as rows in a pane: search results, and every other
+//! Lists of videos as rows on a page: search results, and every other
 //! page that shows videos (the feed, Watch later, liked videos, a
-//! playlist, a channel). Each pane carries its loading, empty and
-//! failed states inside it.
+//! playlist, a channel). Each list carries its loading, empty and failed
+//! states in its place. Also the page frame the list pages share: the
+//! page padding and the bold page title.
 
 use egui::{Align, Layout, RichText, Ui};
 
 use super::widgets;
 use crate::app::State;
 use crate::model::{Action, Listing, Video};
+use crate::theme;
 
-pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+/// A page's central panel with DESIGN.md's padding: 24 px at the sides,
+/// 16 px at the top.
+pub fn panel(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) {
+    let frame = egui::Frame::central_panel(ui.style()).inner_margin(egui::Margin {
+        left: 24,
+        right: 24,
+        top: 16,
+        bottom: 0,
+    });
     egui::CentralPanel::default()
-        .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 4)))
-        .show(ui, |ui| {
-            let listing = &state.results;
-            widgets::pane(
-                ui,
-                &state.palette,
-                "Results",
-                Some(listing.items().len()),
-                true,
-                None,
-                |ui| match listing {
-                    Listing::Idle => {}
-                    Listing::Loading => loading(ui, state, "results"),
-                    Listing::Failed(error) => failed(ui, state, error, actions),
-                    Listing::Ready(videos) if videos.is_empty() => {
-                        nothing(ui, state, "search for something")
-                    }
-                    Listing::Ready(videos) => rows(ui, state, videos, true, actions),
-                },
-            );
-        });
+        .frame(frame)
+        .show(ui, |ui| add_contents(ui));
 }
 
-/// A pane of video rows, or what stands in for it: the spinner, the
-/// error with `[r] retry`, or `-- nothing here --` with `empty` under
-/// it as the hint.
+/// A page's own title in bold 24, with a dim count after it.
+pub fn title(ui: &mut Ui, state: &State, title: &str, count: Option<usize>) {
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(title)
+                .font(theme::bold(24.0))
+                .color(state.palette.text),
+        );
+        if let Some(count) = count {
+            ui.label(
+                RichText::new(crate::util::thousands(count as u64))
+                    .font(theme::regular(14.0))
+                    .color(state.palette.dim),
+            );
+        }
+    });
+    ui.add_space(12.0);
+}
+
+pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    panel(ui, |ui| {
+        let listing = &state.results;
+        title(ui, state, "Search results", Some(listing.items().len()));
+        match listing {
+            Listing::Idle => {}
+            Listing::Loading => loading(ui, state, "results"),
+            Listing::Failed(error) => failed(ui, state, error, actions),
+            Listing::Ready(videos) if videos.is_empty() => {
+                nothing(ui, state, "Search for something")
+            }
+            Listing::Ready(videos) => rows(ui, state, videos, true, actions),
+        }
+    });
+}
+
+/// A titled list of video rows, or what stands in for it: the spinner,
+/// the error with Retry, or the empty state with `empty` as its hint.
 pub fn videos(
     ui: &mut Ui,
     state: &State,
@@ -45,22 +70,14 @@ pub fn videos(
     empty: &str,
     actions: &mut Vec<Action>,
 ) {
-    let count = listing.items().len();
-    widgets::pane(
-        ui,
-        &state.palette,
-        title,
-        Some(count),
-        true,
-        None,
-        |ui| match listing {
-            Listing::Idle => {}
-            Listing::Loading => loading(ui, state, title),
-            Listing::Failed(error) => failed(ui, state, error, actions),
-            Listing::Ready(videos) if videos.is_empty() => nothing(ui, state, empty),
-            Listing::Ready(videos) => video_rows(ui, state, videos, actions),
-        },
-    );
+    self::title(ui, state, title, Some(listing.items().len()));
+    match listing {
+        Listing::Idle => {}
+        Listing::Loading => loading(ui, state, "videos"),
+        Listing::Failed(error) => failed(ui, state, error, actions),
+        Listing::Ready(videos) if videos.is_empty() => nothing(ui, state, empty),
+        Listing::Ready(videos) => video_rows(ui, state, videos, actions),
+    }
 }
 
 /// The rows themselves, in a scroll area.
@@ -91,40 +108,49 @@ fn rows(ui: &mut Ui, state: &State, videos: &[Video], large: bool, actions: &mut
         });
 }
 
-/// The spinner and `loading <what>`, centred in the pane.
+/// The spinner and `Loading <what>…`, centred.
 pub fn loading(ui: &mut Ui, state: &State, what: &str) {
     centered(ui, |ui| {
-        ui.label(
-            RichText::new(format!("{} loading {what}", widgets::spinner_frame(ui)))
-                .monospace()
-                .color(state.palette.secondary),
-        );
+        ui.horizontal(|ui| {
+            // Centre the spinner line: egui's horizontal layout starts left.
+            let width = 200.0_f32.min(ui.available_width());
+            ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
+            widgets::loading(ui, &state.palette, what);
+        });
     });
 }
 
-/// `-- nothing here --`, then what would fill the list.
+/// The empty state: a centred title, then what would fill the list.
 pub fn nothing(ui: &mut Ui, state: &State, hint: &str) {
+    empty(ui, state, "Nothing here", hint);
+}
+
+/// An empty state with its own title.
+pub fn empty(ui: &mut Ui, state: &State, title: &str, hint: &str) {
     centered(ui, |ui| {
         ui.label(
-            RichText::new("-- nothing here --")
-                .monospace()
-                .color(state.palette.dim),
+            RichText::new(title)
+                .font(theme::semibold(16.0))
+                .color(state.palette.text),
         );
         ui.label(
             RichText::new(hint)
-                .monospace()
+                .font(theme::regular(14.0))
                 .color(state.palette.secondary),
         );
     });
 }
 
-/// The error in red, and `[r] retry`.
+/// The error in red, and Retry.
 pub fn failed(ui: &mut Ui, state: &State, error: &str, actions: &mut Vec<Action>) {
     centered(ui, |ui| {
-        ui.label(RichText::new(error).monospace().color(state.palette.red));
-        if widgets::bracket_button(ui, &state.palette, "r retry", widgets::ButtonStyle::Normal)
-            .clicked()
-        {
+        ui.label(
+            RichText::new(error)
+                .font(theme::regular(14.0))
+                .color(state.palette.red),
+        );
+        ui.add_space(8.0);
+        if widgets::button(ui, &state.palette, "Retry", widgets::ButtonStyle::Normal).clicked() {
             actions.push(Action::Refresh);
         }
     });

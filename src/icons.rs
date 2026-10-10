@@ -1,6 +1,6 @@
 //! Every icon the interface draws: shared Lucide icons from
 //! fastframe-icons, and YouTFast's own Lucide files in `assets/icons/`
-//! (theater mode's).
+//! (some copied from Spotifast and ZapFast, the rest from Lucide itself).
 
 fastframe_icons::icons! {
     /// Every icon the interface draws.
@@ -11,9 +11,41 @@ fastframe_icons::icons! {
         Play => lucide "play",
         Pause => lucide "pause",
         Volume => lucide "volume-2",
+        VolumeMuted => lucide "volume-x",
         Fullscreen => lucide "maximize-2",
         ExitFullscreen => lucide "minimize-2",
         Theater => "rectangle-horizontal",
         Check => lucide "check",
+        Search => lucide "search",
+        Close => lucide "x",
+        Settings => lucide "settings",
+        User => lucide "user",
+        Users => lucide "users",
+        Clock => lucide "clock",
+        Copy => lucide "copy",
+        ExternalLink => lucide "external-link",
+        Refresh => lucide "refresh-cw",
+        PanelLeft => lucide "panel-left",
+        ChevronDown => lucide "chevron-down",
+        ChevronUp => lucide "chevron-up",
+        ChevronLeft => lucide "chevron-left",
+        ChevronRight => lucide "chevron-right",
+        Alert => lucide "circle-alert",
+        Info => lucide "info",
+        More => lucide "ellipsis",
+        Trash => lucide "trash-2",
+        Pencil => lucide "pencil",
+        Plus => lucide "plus",
+        LogOut => lucide "log-out",
+        Home => "house",
+        Subscriptions => "tv",
+        History => "history",
+        Playlists => "list-video",
+        Bell => "bell",
+        ThumbsUp => "thumbs-up",
+        ThumbsDown => "thumbs-down",
+        Share => "share-2",
+        Bookmark => "bookmark",
+        BookmarkFilled => "bookmark-filled",
     }
 }
