@@ -98,6 +98,17 @@ pub fn forget_unseen(ctx: &Context) {
     });
     for url in stale {
         ctx.forget_image(&url);
+        // A cached URL is drawn through its `file://` URI, under which the
+        // texture is stored; forgetting only the URL would never free it.
+        let file = {
+            let cache = CACHE.lock().unwrap();
+            cache
+                .as_ref()
+                .map(|cache| crate::thumbs::uri(&crate::thumbs::path(&cache.dir, &url)))
+        };
+        if let Some(file) = file {
+            ctx.forget_image(&file);
+        }
     }
 }
 

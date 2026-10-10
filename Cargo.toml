@@ -22,9 +22,10 @@ log = "0.4"
 # drawn by libmpv's OpenGL renderer into a texture egui_glow blits on screen.
 eframe = { version = "0.36", default-features = false, features = ["accesskit", "glow", "default_fonts", "wayland", "x11", "persistence"] }
 egui = "0.36"
-# `http` fetches thumbnails from i.ytimg.com through egui's image loaders.
+# `http` fetches thumbnails from i.ytimg.com through egui's image loaders;
+# `file` answers the ones the disk cache already kept (src/thumbs.rs).
 # `svg` draws the icons.
-egui_extras = { version = "0.36", features = ["http", "image", "svg"] }
+egui_extras = { version = "0.36", features = ["file", "http", "image", "svg"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 # The wl_display or X11 Display handed to libmpv, so hardware decoding can
 # share frames with the GL context instead of copying them back.
