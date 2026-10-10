@@ -697,7 +697,9 @@ fn comment_footer(ui: &mut Ui, state: &State, comment: &CommentRow, actions: &mu
     });
 }
 
-/// Replies two cells in, a 1 px `outline` rule at their left.
+/// Replies two cells in, a 1 px `outline` rule at their left. Laid out in
+/// the parent's flow: a child with an unbounded height made egui's
+/// alignment NaN under the loading line.
 fn reply_column(
     ui: &mut Ui,
     state: &State,
@@ -705,37 +707,26 @@ fn reply_column(
     actions: &mut Vec<Action>,
 ) {
     let cell = widgets::cell(ui);
-    let width = ui.available_width() - 2.0 * cell;
-    ui.horizontal(|ui| {
-        let left = ui.cursor().left();
-        let top = ui.cursor().top();
-        let mut inner = ui.new_child(
-            UiBuilder::new()
-                .max_rect(Rect::from_min_size(
-                    pos2(left + 2.0 * cell, top),
-                    vec2(width, f32::INFINITY),
-                ))
-                .layout(Layout::top_down(Align::Min)),
-        );
-        match replies {
-            Fetch::Idle | Fetch::Loading => results::loading(&mut inner, state, "replies"),
-            Fetch::Failed(error) => results::failed(&mut inner, state, error, actions),
+    let column = ui.horizontal_top(|ui| {
+        // The rule's column, left of the replies.
+        ui.add_space(2.0 * cell);
+        ui.vertical(|ui| match replies {
+            Fetch::Idle | Fetch::Loading => results::loading(ui, state, "replies"),
+            Fetch::Failed(error) => results::failed(ui, state, error, actions),
             Fetch::Ready(rows) => {
                 let avatar = 1.5 * widgets::line(ui);
                 for reply in rows.clone() {
-                    comment_row(&mut inner, state, &reply, avatar, actions);
+                    comment_row(ui, state, &reply, avatar, actions);
                 }
             }
-        }
-        let bottom = inner.min_rect().bottom();
-        // Leave the rule's column to the replies' left.
-        ui.allocate_space(vec2(2.0 * cell + width, bottom - top));
-        ui.painter().vline(
-            left + cell,
-            top..=bottom,
-            Stroke::new(1.0, state.palette.outline),
-        );
+        });
     });
+    let rect = column.response.rect;
+    ui.painter().vline(
+        rect.left() + cell,
+        rect.y_range(),
+        Stroke::new(1.0, state.palette.outline),
+    );
 }
 
 /// The picture, with the spinner or the error over it. A click pauses; a
@@ -1042,4 +1033,64 @@ fn related(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             results::video_rows(ui, state, &related, actions);
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::Span;
+
+    fn row(id: &str, replies: u32) -> CommentRow {
+        CommentRow {
+            id: id.to_owned(),
+            author: Some("@someone".to_owned()),
+            author_id: Some("UCx".to_owned()),
+            author_avatar: None,
+            text: vec![Span::Text("a comment ".repeat(40))],
+            published: "1 day ago".to_owned(),
+            likes: Some(3),
+            replies,
+            replies_token: None,
+            pinned: false,
+            by_owner: false,
+            hearted: true,
+        }
+    }
+
+    /// Replies drawn inside a comment's column, in either layout and
+    /// either mode, lay out without a NaN or a negative rect (egui's debug
+    /// assertions panic on either).
+    #[test]
+    fn the_watch_page_draws_a_comment_with_its_replies_open() {
+        for (width, theater) in [(900.0, false), (1600.0, false), (1600.0, true)] {
+            let mut state = State {
+                view: crate::model::View::Watch,
+                watching: Some(Video::from_id("aaaaaaaaaaa".to_owned())),
+                details: Fetch::Ready(crate::model::Details {
+                    comments_token: Some("t".to_owned()),
+                    comment_count: Some(1),
+                    ..Default::default()
+                }),
+                comments: Fetch::Ready(vec![row("top", 1)]),
+                ..State::default()
+            };
+            state.settings.theater = theater;
+            let ctx = egui::Context::default();
+            let input = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(width, 3000.0))),
+                ..Default::default()
+            };
+            // The replies on their way, then arrived.
+            for replies in [Fetch::Loading, Fetch::Ready(vec![row("reply", 0)])] {
+                state.replies.insert("top".to_owned(), replies);
+                for _ in 0..3 {
+                    let mut output = ctx.run_ui(input.clone(), |ui| {
+                        let mut actions = Vec::new();
+                        show(ui, &mut state, None, None, &mut actions);
+                    });
+                    output.textures_delta.clear();
+                }
+            }
+        }
+    }
 }
