@@ -499,6 +499,8 @@ pub enum Action {
     SetVolume(f64),
     ToggleFullscreen,
     ExitFullscreen,
+    /// The watch page between its usual layout and theater mode.
+    ToggleTheater,
     SetQuality(Quality),
     SetTheme(crate::settings::ThemeChoice),
     /// Subscribes on this device, or unsubscribes.

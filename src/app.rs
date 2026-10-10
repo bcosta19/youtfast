@@ -1,6 +1,7 @@
 //! The application: its state, and the actions the views ask for.
 
 use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
 
 use anyhow::Context as _;
 use eframe::glow;
@@ -216,6 +217,9 @@ const DETAILS_KEPT: usize = 50;
 /// How long kept details are shown instead of asked for again, in seconds;
 /// views and likes move, and `r` asks again at once.
 const DETAILS_FRESH: i64 = 30 * 60;
+/// How long the volume stays still before it is saved: a drag of the
+/// slider is one save, not one per frame.
+const VOLUME_SAVE_AFTER: Duration = Duration::from_secs(1);
 
 pub struct App {
     state: State,
@@ -251,6 +255,8 @@ pub struct App {
     theme_transition: fastframe_theme::Transition,
     /// The cursor's reset marker: the view and listing it was zeroed for.
     cursor_key: (View, usize),
+    /// When the volume last changed, while it is not yet saved.
+    volume_changed: Option<Instant>,
     /// What later launches ask the running copy, drained each frame.
     remote: RemoteQueue,
     /// The desktop's media controls.
@@ -348,6 +354,7 @@ impl App {
             theme_waker,
             theme_transition: fastframe_theme::Transition::default(),
             cursor_key: (View::default(), 0),
+            volume_changed: None,
             remote: guard.commands(),
             media: crate::now_playing::MediaControls::start(ctx),
             _instance: guard,
@@ -511,12 +518,17 @@ impl App {
                 self.media.seeked(at);
             }
             Action::SetVolume(volume) => {
-                // Kept in the settings, saved in `on_exit`: not per tick.
                 self.state.settings.volume = volume;
                 self.with_player(|player| player.set_volume(volume));
+                self.volume_changed = Some(Instant::now());
+                ctx.request_repaint_after(VOLUME_SAVE_AFTER);
             }
             Action::ToggleFullscreen => self.set_fullscreen(ctx, !self.state.fullscreen),
             Action::ExitFullscreen => self.set_fullscreen(ctx, false),
+            Action::ToggleTheater => {
+                self.state.settings.theater = !self.state.settings.theater;
+                self.save_settings();
+            }
             Action::SetQuality(quality) => self.set_quality(quality),
             Action::SetTheme(choice) => self.set_theme(choice),
             Action::ToggleSubscription(channel) => {
@@ -632,6 +644,14 @@ impl eframe::App for App {
             self.state.cursor = 0;
             self.cursor_key = key;
         }
+        // The volume, once it has stayed still for a moment.
+        if self
+            .volume_changed
+            .is_some_and(|changed| changed.elapsed() >= VOLUME_SAVE_AFTER)
+        {
+            self.volume_changed = None;
+            self.save_settings();
+        }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -664,7 +684,7 @@ impl eframe::App for App {
         if let Err(error) = self.state.library.save(&self.dirs.library()) {
             log::error!("could not save the library: {error}");
         }
-        // The volume only lands here: the slider updates it without saving.
+        // A volume changed in the last second is not saved yet.
         if let Err(error) = self.state.settings.save(&self.dirs.settings()) {
             log::error!("could not save the settings: {error}");
         }

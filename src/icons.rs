@@ -1,6 +1,6 @@
-//! Every icon the interface draws. They are all shared Lucide icons from
-//! fastframe-icons; YouTFast's own files would join them in
-//! `assets/icons/`.
+//! Every icon the interface draws: shared Lucide icons from
+//! fastframe-icons, and YouTFast's own Lucide files in `assets/icons/`
+//! (theater mode's).
 
 fastframe_icons::icons! {
     /// Every icon the interface draws.
@@ -13,6 +13,7 @@ fastframe_icons::icons! {
         Volume => lucide "volume-2",
         Fullscreen => lucide "maximize-2",
         ExitFullscreen => lucide "minimize-2",
+        Theater => "rectangle-horizontal",
         Check => lucide "check",
     }
 }

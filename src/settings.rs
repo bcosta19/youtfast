@@ -64,6 +64,10 @@ pub struct Settings {
     /// How often, in minutes: 5, 15, 30 or 60 (the nearest wins).
     #[serde(default = "default_alerts_every")]
     pub alerts_every_minutes: u32,
+    /// The watch page's theater mode: the video across the window, the
+    /// rest under it.
+    #[serde(default)]
+    pub theater: bool,
 }
 
 fn default_alerts_every() -> u32 {
@@ -91,6 +95,7 @@ impl Default for Settings {
             alerts: on(),
             desktop_notifications: on(),
             alerts_every_minutes: default_alerts_every(),
+            theater: false,
         }
     }
 }

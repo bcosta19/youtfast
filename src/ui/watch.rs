@@ -30,19 +30,47 @@ pub fn show(
         // The video never takes more than most of the window's height, so
         // its controls stay in view.
         let max_video_height = ui.available_height() * 0.75;
+        let Some(watching) = state.watching.clone() else {
+            return;
+        };
+        let theater = state.settings.theater;
         egui::ScrollArea::vertical()
             .auto_shrink(false)
             .show(ui, |ui| {
                 // Room for the first panes' titles, which sit on their top
                 // rule; the scroll area clips what is above it.
                 ui.add_space(widgets::line(ui) / 2.0);
+                // Theater mode: the video across the window, the columns
+                // under it.
+                if theater {
+                    video_pane(
+                        ui,
+                        state,
+                        &watching,
+                        status,
+                        surface,
+                        max_video_height,
+                        actions,
+                    );
+                }
                 if ui.available_width() >= WIDE {
                     ui.horizontal_top(|ui| {
                         let gap = widgets::cell(ui);
                         let main_width = ui.available_width() - SIDEBAR_WIDTH - gap;
                         ui.vertical(|ui| {
                             ui.set_width(main_width);
-                            main_column(ui, state, status, surface, max_video_height, actions);
+                            if !theater {
+                                video_pane(
+                                    ui,
+                                    state,
+                                    &watching,
+                                    status,
+                                    surface,
+                                    max_video_height,
+                                    actions,
+                                );
+                            }
+                            about_video(ui, state, &watching, status, actions);
                         });
                         ui.add_space(gap);
                         ui.vertical(|ui| {
@@ -53,7 +81,18 @@ pub fn show(
                         });
                     });
                 } else {
-                    main_column(ui, state, status, surface, max_video_height, actions);
+                    if !theater {
+                        video_pane(
+                            ui,
+                            state,
+                            &watching,
+                            status,
+                            surface,
+                            max_video_height,
+                            actions,
+                        );
+                    }
+                    about_video(ui, state, &watching, status, actions);
                     ui.add_space(widgets::line(ui));
                     up_next(ui, state, actions);
                     ui.add_space(widgets::line(ui));
@@ -94,18 +133,17 @@ pub fn fullscreen(
         });
 }
 
-fn main_column(
+/// The pane with the video and its controls, titled with the channel's
+/// name.
+fn video_pane(
     ui: &mut Ui,
     state: &mut State,
+    watching: &Video,
     status: Option<&Status>,
     surface: Option<&VideoSurface>,
     max_video_height: f32,
     actions: &mut Vec<Action>,
 ) {
-    let Some(watching) = state.watching.clone() else {
-        return;
-    };
-    // The video pane takes the channel's name.
     let pane_title = watching
         .channel
         .clone()
@@ -121,9 +159,18 @@ fn main_column(
         controls(ui, state, status, actions);
     });
     ui.add_space(widgets::line(ui));
+}
 
-    // Under the video, as on YouTube: the title, the channel's line with
-    // the actions, then the description.
+/// Under the video, as on YouTube: the title, the channel's line with the
+/// actions, the description, chapters and comments.
+fn about_video(
+    ui: &mut Ui,
+    state: &mut State,
+    watching: &Video,
+    status: Option<&Status>,
+    actions: &mut Vec<Action>,
+) {
+    let palette = state.palette.clone();
     // A video opened from a link has no title until mpv reads it.
     let title = Some(watching.title.as_str())
         .filter(|title| !title.is_empty())
@@ -137,9 +184,9 @@ fn main_column(
             .color(palette.text),
     );
     ui.add_space(widgets::line(ui) / 2.0);
-    channel_line(ui, state, &watching, actions);
+    channel_line(ui, state, watching, actions);
     ui.add_space(widgets::line(ui) / 2.0);
-    description(ui, state, &watching, actions);
+    description(ui, state, watching, actions);
     chapters(ui, state, status, actions);
     comments(ui, state, actions);
 }
@@ -663,6 +710,17 @@ fn controls(ui: &mut Ui, state: &mut State, status: Option<&Status>, actions: &m
             };
             if widgets::icon_button(ui, icon, 18.0, label).clicked() {
                 actions.push(Action::ToggleFullscreen);
+            }
+            // Full screen has no page layout to change.
+            if !state.fullscreen {
+                let label = if state.settings.theater {
+                    "Default view (T)"
+                } else {
+                    "Theater mode (T)"
+                };
+                if widgets::icon_button(ui, Icon::Theater, 18.0, label).clicked() {
+                    actions.push(Action::ToggleTheater);
+                }
             }
             quality_menu(ui, state, status, actions);
         });

@@ -679,6 +679,7 @@ fn keys_overlay(ctx: &egui::Context, state: &State) {
                             ("← / →", "5 s back or ahead"),
                             ("j / l", "10 s back or ahead"),
                             ("f", "full screen"),
+                            ("t", "theater mode"),
                             ("esc", "leave full screen, back"),
                         ],
                     );
@@ -818,6 +819,9 @@ fn keys(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
         }
         if input.key_pressed(Key::F) {
             actions.push(Action::ToggleFullscreen);
+        }
+        if input.key_pressed(Key::T) && !state.fullscreen {
+            actions.push(Action::ToggleTheater);
         }
         if input.key_pressed(Key::Escape) {
             actions.push(if state.fullscreen {
