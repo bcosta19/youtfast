@@ -227,99 +227,77 @@ fn add_account(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         widgets::card(ui, palette, |ui| {
             risk(ui, palette);
             ui.add_space(16.0);
-            // The name is required and must be new.
+            heading(ui, palette, "Sign in with your browser");
+            note(
+                ui,
+                palette,
+                "Sign in on youtube.com in the browser first, then pick its profile here. \
+                 YouTFast reads that profile's YouTube login through yt-dlp, and again \
+                 whenever it expires.",
+            );
+            ui.add_space(8.0);
+            if state.browser_profiles.is_empty() {
+                note(
+                    ui,
+                    palette,
+                    "No supported browser was found on this computer.",
+                );
+            }
+            let busy = matches!(state.account, AccountState::SigningIn);
+            for (index, profile) in state.browser_profiles.iter().enumerate() {
+                profile_row(ui, state, index, profile, busy, actions);
+            }
+            ui.add_space(12.0);
+
+            // The name is optional: a blank one comes from the profile.
             let taken = state.library.account_name_taken(state.account_name.trim());
-            let named = !state.account_name.trim().is_empty();
-            heading(ui, palette, "Name");
             ui.horizontal(|ui| {
                 let mut name = state.account_name.clone();
                 let field = field(
                     ui,
                     palette,
                     &mut name,
-                    "A name for this account",
+                    "Name (optional)",
                     egui::Id::new("account name"),
                     240.0,
                 );
                 if field.changed() {
                     actions.push(Action::SetAccountName(name));
                 }
-                if taken {
-                    ui.label(
-                        RichText::new("That name is already used")
-                            .font(theme::regular(13.0))
-                            .color(palette.red),
-                    );
-                } else if !named {
-                    ui.label(
-                        RichText::new("Name the account first")
-                            .font(theme::regular(13.0))
-                            .color(palette.dim),
-                    );
-                }
+                let (text, color) = if taken {
+                    ("That name is already used", palette.red)
+                } else {
+                    ("Left blank, the profile names it", palette.dim)
+                };
+                ui.label(RichText::new(text).font(theme::regular(13.0)).color(color));
             });
-            ui.add_space(16.0);
-
-            let ready = named && !taken;
-            let style = if ready {
-                widgets::ButtonStyle::Primary
-            } else {
+            ui.add_space(12.0);
+            let style = if taken {
                 widgets::ButtonStyle::Normal
-            };
-            heading(ui, palette, "Use your browser's YouTube login");
-            if state.browsers.is_empty() {
-                note(
-                    ui,
-                    palette,
-                    "No supported browser was found on this computer.",
-                );
             } else {
-                ui.horizontal_wrapped(|ui| {
-                    egui::ComboBox::from_id_salt("browser")
-                        .selected_text(
-                            RichText::new(browser_label(&state.browser)).font(theme::regular(14.0)),
-                        )
-                        .show_ui(ui, |ui| {
-                            for browser in &state.browsers {
-                                if ui
-                                    .selectable_label(
-                                        state.browser == *browser,
-                                        RichText::new(browser_label(browser))
-                                            .font(theme::regular(14.0)),
-                                    )
-                                    .clicked()
-                                {
-                                    actions.push(Action::SetBrowser((*browser).to_owned()));
-                                }
-                            }
-                        });
-                    let mut profile = state.account_profile.clone();
-                    let field = field(
-                        ui,
-                        palette,
-                        &mut profile,
-                        "Profile",
-                        egui::Id::new("account profile"),
-                        140.0,
-                    );
-                    if field.changed() {
-                        actions.push(Action::SetAccountProfile(profile));
-                    }
-                    let label = format!("Sign in with {}", browser_label(&state.browser));
-                    if widgets::button(ui, &raised, &label, style).clicked() {
-                        actions.push(Action::AddAccountBrowser);
-                    }
-                });
-                ui.add_space(4.0);
-                note(
-                    ui,
-                    palette,
-                    "Sign in on youtube.com in that browser first. YouTFast reads its YouTube \
-                     cookies through yt-dlp, and again whenever they expire. On Linux, \
-                     Chromium, Chrome, Brave and the like keep them encrypted with the \
-                     desktop keyring, which needs Python's secretstorage module \
-                     (python-secretstorage on Arch).",
-                );
+                widgets::ButtonStyle::Primary
+            };
+
+            let open = state.account_advanced;
+            let chevron = if open {
+                Icon::ChevronUp
+            } else {
+                Icon::ChevronDown
+            };
+            if widgets::icon_text_button(
+                ui,
+                &raised,
+                Some(chevron),
+                "Another browser or profile",
+                widgets::ButtonStyle::Normal,
+            )
+            .clicked()
+            {
+                actions.push(Action::ToggleAccountAdvanced);
+            }
+            if open {
+                ui.add_space(8.0);
+                advanced(ui, state, style, actions);
             }
             ui.add_space(16.0);
 
@@ -339,6 +317,124 @@ fn add_account(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             }
         });
     });
+}
+
+/// A browser profile found on this computer: its initial, its name and
+/// where it is (browser, e-mail), and Sign in, or Added once an account
+/// signs in from it.
+fn profile_row(
+    ui: &mut Ui,
+    state: &State,
+    index: usize,
+    profile: &crate::account::BrowserProfile,
+    busy: bool,
+    actions: &mut Vec<Action>,
+) {
+    let palette = &state.palette;
+    let raised = widgets::on_card(palette);
+    let spec = profile.spec();
+    let added = state
+        .library
+        .accounts
+        .iter()
+        .any(|account| account.source == crate::model::AccountSource::Browser(spec.clone()));
+    let title = if profile.name.is_empty() {
+        browser_label(profile.browser)
+    } else {
+        profile.name.clone()
+    };
+    let mut detail = browser_label(profile.browser);
+    if let Some(email) = &profile.email {
+        detail.push_str(" · ");
+        detail.push_str(email);
+    }
+    ui.horizontal(|ui| {
+        let (rect, _) = ui.allocate_exact_size(vec2(36.0, 36.0), Sense::hover());
+        widgets::avatar(ui, palette, None, &title, rect);
+        ui.add_space(4.0);
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            ui.label(
+                RichText::new(&title)
+                    .font(theme::semibold(14.0))
+                    .color(palette.text),
+            );
+            ui.label(
+                RichText::new(detail)
+                    .font(theme::regular(13.0))
+                    .color(palette.secondary),
+            );
+        });
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            if added {
+                ui.label(
+                    RichText::new("Added")
+                        .font(theme::medium(13.0))
+                        .color(palette.dim),
+                );
+            } else if ui
+                .add_enabled_ui(!busy, |ui| {
+                    widgets::button(ui, &raised, "Sign in", widgets::ButtonStyle::Primary)
+                })
+                .inner
+                .clicked()
+            {
+                actions.push(Action::AddAccountProfile(index));
+            }
+        });
+    });
+    ui.add_space(6.0);
+}
+
+/// A browser and profile folder by hand, for a profile the lists missed.
+fn advanced(ui: &mut Ui, state: &State, style: widgets::ButtonStyle, actions: &mut Vec<Action>) {
+    let palette = &state.palette;
+    let raised = widgets::on_card(palette);
+    if state.browsers.is_empty() {
+        return;
+    }
+    ui.horizontal_wrapped(|ui| {
+        egui::ComboBox::from_id_salt("browser")
+            .selected_text(RichText::new(browser_label(&state.browser)).font(theme::regular(14.0)))
+            .show_ui(ui, |ui| {
+                for browser in &state.browsers {
+                    if ui
+                        .selectable_label(
+                            state.browser == *browser,
+                            RichText::new(browser_label(browser)).font(theme::regular(14.0)),
+                        )
+                        .clicked()
+                    {
+                        actions.push(Action::SetBrowser((*browser).to_owned()));
+                    }
+                }
+            });
+        let mut profile = state.account_profile.clone();
+        let field = field(
+            ui,
+            palette,
+            &mut profile,
+            "Profile folder",
+            egui::Id::new("account profile"),
+            160.0,
+        );
+        if field.changed() {
+            actions.push(Action::SetAccountProfile(profile));
+        }
+        let label = format!("Sign in with {}", browser_label(&state.browser));
+        if widgets::button(ui, &raised, &label, style).clicked() {
+            actions.push(Action::AddAccountBrowser);
+        }
+    });
+    ui.add_space(4.0);
+    note(
+        ui,
+        palette,
+        "The folder is the profile's own (\"Profile 2\" for Chromium and the like, \
+         \"xxxx.default-release\" for Firefox); blank is the default profile. On Linux, \
+         Chromium, Chrome, Brave and the like keep cookies encrypted with the desktop \
+         keyring, which needs Python's secretstorage module (python-secretstorage on Arch).",
+    );
 }
 
 /// What signing in risks, said before it is done: the info icon, then
@@ -453,4 +549,59 @@ fn field(
                     .inner_margin(Margin::symmetric(12, 8)),
             ),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::account::BrowserProfile;
+    use crate::model::AccountSource;
+
+    /// The form with profiles found, one already added, and Advanced open
+    /// lays out without a NaN or a negative rect.
+    #[test]
+    fn the_accounts_page_draws_the_profiles_found() {
+        let profile =
+            |browser, folder: Option<&str>, name: &str, email: Option<&str>| BrowserProfile {
+                browser,
+                profile: folder.map(str::to_owned),
+                name: name.to_owned(),
+                email: email.map(str::to_owned),
+            };
+        let mut state = State {
+            browsers: vec!["chromium", "firefox"],
+            browser: "chromium".to_owned(),
+            browser_profiles: vec![
+                profile("chromium", None, "Person 1", Some("ana@example.com")),
+                profile(
+                    "firefox",
+                    Some("x.default-release"),
+                    "default-release",
+                    None,
+                ),
+            ],
+            ..State::default()
+        };
+        state.library.accounts.push(Account {
+            id: 1,
+            name: "ana".to_owned(),
+            source: AccountSource::Browser("chromium".to_owned()),
+        });
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        for (width, advanced) in [(1200.0, false), (420.0, true)] {
+            state.account_advanced = advanced;
+            let input = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(width, 1400.0))),
+                ..Default::default()
+            };
+            for _ in 0..2 {
+                let mut output = ctx.run_ui(input.clone(), |ui| {
+                    let mut actions = Vec::new();
+                    show(ui, &state, &mut actions);
+                });
+                output.textures_delta.clear();
+            }
+        }
+    }
 }

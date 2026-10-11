@@ -169,6 +169,11 @@ pub struct State {
     /// The add-account form's fields.
     pub account_name: String,
     pub account_profile: String,
+    /// The browser profiles found on this computer, each signed in with
+    /// one click.
+    pub browser_profiles: Vec<account::BrowserProfile>,
+    /// The form's Advanced part (a browser and profile by hand) is open.
+    pub account_advanced: bool,
     /// The account row being renamed, and the field's text.
     pub renaming: Option<(u32, String)>,
     /// The account row asking `remove?`.
@@ -405,6 +410,7 @@ impl App {
             palette,
             settings,
             browser: browsers.first().copied().unwrap_or("chromium").to_owned(),
+            browser_profiles: account::browser_profiles(),
             browsers,
             ..State::default()
         };
@@ -596,6 +602,10 @@ impl App {
                 if view == View::Notifications {
                     self.mark_notifications_visited();
                 }
+                // A browser profile made since start-up shows up too.
+                if view == View::Account {
+                    self.state.browser_profiles = account::browser_profiles();
+                }
                 self.load(view, false);
             }
             Action::OpenChannel(channel) => {
@@ -706,6 +716,10 @@ impl App {
             }
             Action::AddAccountFile => self.add_account_file(),
             Action::AddAccountBrowser => self.add_account_browser(),
+            Action::AddAccountProfile(index) => self.add_account_profile(index),
+            Action::ToggleAccountAdvanced => {
+                self.state.account_advanced = !self.state.account_advanced;
+            }
             Action::SetAccountName(name) => self.state.account_name = name,
             Action::SetAccountProfile(profile) => self.state.account_profile = profile,
             Action::SwitchAccount(id) => self.switch_account(id),

@@ -3,14 +3,36 @@
 
 use super::*;
 
+/// `name`, or `name 2`, `name 3`… when the library already has it.
+fn unique_name(library: &Library, name: &str) -> String {
+    let name = name.trim();
+    let name = if name.is_empty() {
+        "YouTube account"
+    } else {
+        name
+    };
+    if !library.account_name_taken(name) {
+        return name.to_owned();
+    }
+    (2..)
+        .map(|number| format!("{name} {number}"))
+        .find(|candidate| !library.account_name_taken(candidate))
+        .expect("some number is free")
+}
+
 impl App {
-    /// The account the add form describes: its name must be set and new;
-    /// its id is the first free one.
-    fn new_account(&self, source: AccountSource) -> Option<Account> {
-        let name = self.state.account_name.trim();
-        if name.is_empty() || self.state.library.account_name_taken(name) {
+    /// The account the add form describes, named as typed or, left
+    /// blank, after `suggested` (made unique with a number); its id is the
+    /// first free one. A typed name already used makes none.
+    fn new_account(&self, source: AccountSource, suggested: &str) -> Option<Account> {
+        let typed = self.state.account_name.trim();
+        let name = if typed.is_empty() {
+            unique_name(&self.state.library, suggested)
+        } else if self.state.library.account_name_taken(typed) {
             return None;
-        }
+        } else {
+            typed.to_owned()
+        };
         let id = self
             .state
             .library
@@ -20,17 +42,13 @@ impl App {
             .max()
             .unwrap_or(0)
             + 1;
-        Some(Account {
-            id,
-            name: name.to_owned(),
-            source,
-        })
+        Some(Account { id, name, source })
     }
 
     /// Adds the form's account from a cookies.txt file the user picks.
     pub(super) fn add_account_file(&mut self) {
         // The name makes the account; the pick happens on the way.
-        let Some(account) = self.new_account(AccountSource::File) else {
+        let Some(account) = self.new_account(AccountSource::File, "YouTube account") else {
             return;
         };
         let picked = rfd::AsyncFileDialog::new()
@@ -50,9 +68,27 @@ impl App {
         if !profile.is_empty() {
             spec = format!("{spec}:{profile}");
         }
-        let Some(account) = self.new_account(AccountSource::Browser(spec)) else {
+        let suggested = crate::model::browser_label(&self.state.browser);
+        let Some(account) = self.new_account(AccountSource::Browser(spec), &suggested) else {
             return;
         };
+        self.backend.send(Command::AddAccount {
+            account,
+            method: SignInMethod::Browser,
+        });
+    }
+
+    /// Adds an account from a detected browser profile: one click, the
+    /// name from the profile unless one was typed.
+    pub(super) fn add_account_profile(&mut self, index: usize) {
+        let Some(profile) = self.state.browser_profiles.get(index).cloned() else {
+            return;
+        };
+        let source = AccountSource::Browser(profile.spec());
+        let Some(account) = self.new_account(source, &profile.suggested_name()) else {
+            return;
+        };
+        self.state.account_name.clear();
         self.backend.send(Command::AddAccount {
             account,
             method: SignInMethod::Browser,
@@ -144,5 +180,25 @@ impl App {
         }
         self.load(self.state.view, true);
         self.forget_account_marks();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_blank_name_becomes_a_free_one() {
+        let mut library = Library::default();
+        assert_eq!(unique_name(&library, "ana"), "ana");
+        assert_eq!(unique_name(&library, "  "), "YouTube account");
+        for name in ["ana", "ana 2"] {
+            library.accounts.push(Account {
+                id: library.accounts.len() as u32 + 1,
+                name: name.to_owned(),
+                source: AccountSource::File,
+            });
+        }
+        assert_eq!(unique_name(&library, "ana"), "ana 3");
     }
 }

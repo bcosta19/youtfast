@@ -212,6 +212,10 @@ pub fn installed_browsers() -> Vec<&'static str> {
                 "chromium" => config.join("chromium"),
                 "chrome" => config.join("google-chrome"),
                 "brave" => config.join("BraveSoftware/Brave-Browser"),
+                // Newer Firefox keeps its profiles in the XDG folder.
+                "firefox" if config.join("mozilla/firefox").exists() => {
+                    config.join("mozilla/firefox")
+                }
                 "firefox" => home.join(".mozilla/firefox"),
                 "vivaldi" => config.join("vivaldi"),
                 "edge" => config.join("microsoft-edge"),
@@ -221,6 +225,206 @@ pub fn installed_browsers() -> Vec<&'static str> {
             place.exists()
         })
         .collect()
+}
+
+/// A browser profile the sign-in form offers: one click signs in with its
+/// YouTube login, so nobody has to know the profile's folder name.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BrowserProfile {
+    /// yt-dlp's name for the browser.
+    pub browser: &'static str,
+    /// The profile as yt-dlp takes it after `browser:` (a folder under the
+    /// browser's own, or a whole path); `None` is the browser's default.
+    pub profile: Option<String>,
+    /// The name the browser shows for it ("Personal", "Person 1").
+    pub name: String,
+    /// The Google account the browser itself is signed in to, if any: a
+    /// hint for picking, shown only in the form.
+    pub email: Option<String>,
+}
+
+impl BrowserProfile {
+    /// `browser[:profile]`, as an account's source keeps it.
+    pub fn spec(&self) -> String {
+        match &self.profile {
+            Some(profile) => format!("{}:{profile}", self.browser),
+            None => self.browser.to_owned(),
+        }
+    }
+
+    /// The account name to suggest: the e-mail's user, else the profile's
+    /// own name unless it is a browser's placeholder.
+    pub fn suggested_name(&self) -> String {
+        if let Some(email) = &self.email
+            && let Some(user) = email.split('@').next()
+            && !user.is_empty()
+        {
+            return user.to_owned();
+        }
+        let placeholder = self.name.is_empty()
+            || self.name == "Default"
+            || self.name.starts_with("Person ")
+            || self.name.starts_with("Profile ")
+            || self.name.starts_with("default");
+        if placeholder {
+            crate::model::browser_label(self.browser)
+        } else {
+            self.name.clone()
+        }
+    }
+}
+
+/// Every profile of every browser on this computer, as far as the
+/// browsers' own profile lists tell (Chromium's `Local State`, Firefox's
+/// `profiles.ini`). Only names are read, never cookies.
+pub fn browser_profiles() -> Vec<BrowserProfile> {
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+        return Vec::new();
+    };
+    let config = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".config"));
+    let mut profiles = Vec::new();
+    for browser in installed_browsers() {
+        if browser == "firefox" {
+            // yt-dlp looks in ~/.mozilla/firefox; a profile kept in the
+            // XDG folder goes as its whole path.
+            let classic = home.join(".mozilla/firefox");
+            let xdg = config.join("mozilla/firefox");
+            for (root, whole_path) in [(classic, false), (xdg, true)] {
+                let Ok(ini) = std::fs::read_to_string(root.join("profiles.ini")) else {
+                    continue;
+                };
+                for (path, name, relative) in firefox_profiles(&ini) {
+                    let profile = if relative && !whole_path {
+                        path
+                    } else if relative {
+                        root.join(&path).display().to_string()
+                    } else {
+                        path
+                    };
+                    profiles.push(BrowserProfile {
+                        browser,
+                        profile: Some(profile),
+                        name,
+                        email: None,
+                    });
+                }
+            }
+            continue;
+        }
+        let Some(dir) = chromium_dir(browser, &config) else {
+            continue;
+        };
+        let found = std::fs::read_to_string(dir.join("Local State"))
+            .map(|json| chromium_profiles(&json))
+            .unwrap_or_default();
+        if found.is_empty() {
+            profiles.push(BrowserProfile {
+                browser,
+                profile: None,
+                name: String::new(),
+                email: None,
+            });
+        }
+        for (folder, name, email) in found {
+            profiles.push(BrowserProfile {
+                browser,
+                // "Default" is what yt-dlp reads with no profile at all.
+                profile: (folder != "Default").then_some(folder),
+                name,
+                email,
+            });
+        }
+    }
+    profiles
+}
+
+/// Where a Chromium-family browser keeps its profiles.
+fn chromium_dir(browser: &str, config: &std::path::Path) -> Option<PathBuf> {
+    Some(config.join(match browser {
+        "chromium" => "chromium",
+        "chrome" => "google-chrome",
+        "brave" => "BraveSoftware/Brave-Browser",
+        "vivaldi" => "vivaldi",
+        "edge" => "microsoft-edge",
+        "opera" => "opera",
+        _ => return None,
+    }))
+}
+
+/// `(folder, name, e-mail)` of each profile in a Chromium `Local State`,
+/// "Default" first, then by folder.
+fn chromium_profiles(local_state: &str) -> Vec<(String, String, Option<String>)> {
+    let Ok(json) = serde_json::from_str::<serde_json::Value>(local_state) else {
+        return Vec::new();
+    };
+    let Some(cache) = json["profile"]["info_cache"].as_object() else {
+        return Vec::new();
+    };
+    let mut profiles: Vec<(String, String, Option<String>)> = cache
+        .iter()
+        .map(|(folder, info)| {
+            let name = info["name"]
+                .as_str()
+                .or_else(|| info["gaia_name"].as_str())
+                .unwrap_or(folder)
+                .to_owned();
+            let email = info["user_name"]
+                .as_str()
+                .filter(|email| email.contains('@'))
+                .map(str::to_owned);
+            (folder.clone(), name, email)
+        })
+        .collect();
+    profiles.sort_by_key(|(folder, _, _)| (folder != "Default", folder.clone()));
+    profiles
+}
+
+/// `(path, name, relative)` of each profile in a Firefox `profiles.ini`,
+/// the default one first.
+fn firefox_profiles(ini: &str) -> Vec<(String, String, bool)> {
+    let mut profiles = Vec::new();
+    let mut defaults = Vec::new();
+    let mut section = String::new();
+    let (mut path, mut name, mut relative) = (None, None, true);
+    let mut flush = |section: &str,
+                     path: &mut Option<String>,
+                     name: &mut Option<String>,
+                     relative: &mut bool| {
+        if section.starts_with("Profile")
+            && let Some(found) = path.take()
+        {
+            let label = name.take().unwrap_or_else(|| found.clone());
+            profiles.push((found, label, *relative));
+        }
+        *name = None;
+        *relative = true;
+    };
+    for line in ini.lines().map(str::trim) {
+        if let Some(header) = line
+            .strip_prefix('[')
+            .and_then(|line| line.strip_suffix(']'))
+        {
+            flush(&section, &mut path, &mut name, &mut relative);
+            section = header.to_owned();
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        match key {
+            "Path" => path = Some(value.to_owned()),
+            "Name" => name = Some(value.to_owned()),
+            "IsRelative" => relative = value != "0",
+            // The [Install…] sections name the profile each install uses.
+            "Default" if section.starts_with("Install") => defaults.push(value.to_owned()),
+            _ => {}
+        }
+    }
+    flush(&section, &mut path, &mut name, &mut relative);
+    profiles.sort_by_key(|(path, _, _)| !defaults.contains(path));
+    profiles
 }
 
 fn credential_store() -> Result<Arc<keyring_core::api::CredentialStore>, keyring_core::Error> {
@@ -424,6 +628,70 @@ fn strip_credentials(value: &mut serde_json::Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chromium_profiles_come_with_their_names_and_accounts() {
+        let local_state = r#"{"profile": {"info_cache": {
+            "Profile 1": {"name": "Work", "user_name": "me@work.example"},
+            "Default": {"name": "Person 1", "user_name": ""}
+        }}}"#;
+        assert_eq!(
+            chromium_profiles(local_state),
+            vec![
+                ("Default".to_owned(), "Person 1".to_owned(), None),
+                (
+                    "Profile 1".to_owned(),
+                    "Work".to_owned(),
+                    Some("me@work.example".to_owned())
+                ),
+            ]
+        );
+        assert!(chromium_profiles("{}").is_empty());
+    }
+
+    #[test]
+    fn firefox_profiles_put_the_default_first() {
+        let ini = "[Profile1]\nName=default\nIsRelative=1\nPath=aaaa.default\n\n\
+                   [Profile0]\nName=Personal\nIsRelative=1\nPath=bbbb.default-release\n\n\
+                   [Profile2]\nName=Elsewhere\nIsRelative=0\nPath=/data/ff\n\n\
+                   [Install4F96D1932A9F858E]\nDefault=bbbb.default-release\nLocked=1\n";
+        assert_eq!(
+            firefox_profiles(ini),
+            vec![
+                (
+                    "bbbb.default-release".to_owned(),
+                    "Personal".to_owned(),
+                    true
+                ),
+                ("aaaa.default".to_owned(), "default".to_owned(), true),
+                ("/data/ff".to_owned(), "Elsewhere".to_owned(), false),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_profile_suggests_a_name_for_its_account() {
+        let profile = |name: &str, email: Option<&str>| BrowserProfile {
+            browser: "chrome",
+            profile: None,
+            name: name.to_owned(),
+            email: email.map(str::to_owned),
+        };
+        assert_eq!(
+            profile("Person 1", Some("ana@gmail.com")).suggested_name(),
+            "ana"
+        );
+        assert_eq!(profile("Work", None).suggested_name(), "Work");
+        assert_eq!(profile("Person 1", None).suggested_name(), "Google Chrome");
+        assert_eq!(
+            BrowserProfile {
+                profile: Some("Profile 2".to_owned()),
+                ..profile("x", None)
+            }
+            .spec(),
+            "chrome:Profile 2"
+        );
+    }
 
     #[test]
     fn yt_dlp_is_told_the_keyring_and_profile() {

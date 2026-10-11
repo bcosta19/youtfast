@@ -391,7 +391,8 @@ pub fn browser_label(spec: &str) -> String {
         "opera" => "Opera",
         other => other,
     };
-    match profile {
+    // A profile given as a whole path shows as its folder.
+    match profile.map(|profile| profile.rsplit('/').next().unwrap_or(profile)) {
         Some(profile) => format!("{name} ({profile})"),
         None => name.to_owned(),
     }
@@ -566,8 +567,14 @@ pub enum Action {
     ImportTakeout,
     /// "sign in with cookies.txt" for the account being added.
     AddAccountFile,
-    /// "sign in with <browser>" for the account being added.
+    /// "sign in with <browser>" for the account being added, with the
+    /// browser and profile typed under Advanced.
     AddAccountBrowser,
+    /// A detected browser profile's `Sign in`, by its index in
+    /// `State::browser_profiles`.
+    AddAccountProfile(usize),
+    /// The form's Advanced part opened or closed.
+    ToggleAccountAdvanced,
     /// The account name/profile fields of the add form (view-owned).
     SetAccountName(String),
     SetAccountProfile(String),
