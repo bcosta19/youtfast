@@ -41,6 +41,13 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(root.findtext("project_license"), "GPL-3.0-only")
         self.assertEqual(root.find("releases/release").get("version"), release.version())
 
+    def test_flatpak_meson_libraries_use_the_runtime_library_directory(self):
+        manifest = json.loads((release.ROOT / f"packaging/flatpak/{release.APP_ID}.json").read_text())
+        for module in manifest["modules"]:
+            if module.get("buildsystem") == "meson":
+                with self.subTest(module=module["name"]):
+                    self.assertIn("--libdir=lib", module["config-opts"])
+
     def test_flatpak_uses_bounded_permissions_and_pinned_sources(self):
         manifest = json.loads((release.ROOT / f"packaging/flatpak/{release.APP_ID}.json").read_text())
         self.assertEqual(manifest["app-id"], release.APP_ID)

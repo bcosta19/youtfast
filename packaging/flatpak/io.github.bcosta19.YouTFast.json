@@ -63,6 +63,7 @@
       "name": "libplacebo",
       "buildsystem": "meson",
       "config-opts": [
+        "--libdir=lib",
         "-Ddemos=false",
         "-Dtests=false",
         "-Dvulkan=disabled",
@@ -85,6 +86,7 @@
       "name": "libmpv",
       "buildsystem": "meson",
       "config-opts": [
+        "--libdir=lib",
         "-Dlibmpv=true",
         "-Dcplayer=false",
         "-Dbuild-date=false",
