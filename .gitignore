@@ -6,3 +6,4 @@
 /.cache/
 /dist/
 /tasks.md
+/vendor/**/Cargo.lock
