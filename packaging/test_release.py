@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -21,6 +22,18 @@ class ReleaseTests(unittest.TestCase):
             self.assertTrue(release.forbidden_path(name))
         for name in ["src/account.rs", "vendor/rustypipe/LICENSE", "packaging/test_release.py"]:
             self.assertFalse(release.forbidden_path(name))
+
+    def test_workflows_pin_actions_and_keep_contributor_tokens_read_only(self):
+        for path in (release.ROOT / ".github/workflows").glob("*.yml"):
+            text = path.read_text()
+            self.assertNotIn("pull_request_target:", text)
+            self.assertNotIn("secrets: inherit", text)
+            self.assertIn("contents: read", text.partition("jobs:")[0])
+            for action in re.findall(r"uses:\s+(\S+)", text):
+                if not action.startswith("./"):
+                    self.assertRegex(action, r"^[\w/-]+@[0-9a-f]{40}$")
+        updates = (release.ROOT / ".github/dependabot.yml").read_text()
+        self.assertEqual(updates.count("default-days: 7"), 2)
 
     def test_desktop_release_matches_application_version(self):
         root = ET.parse(release.ROOT / f"packaging/flatpak/{release.APP_ID}.metainfo.xml").getroot()
