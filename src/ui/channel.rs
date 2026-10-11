@@ -261,7 +261,7 @@ fn videos(ui: &mut Ui, state: &State, tab: &ChannelTab, actions: &mut Vec<Action
                                     selected,
                                     width,
                                 );
-                                if selected {
+                                if selected && state.cursor_moved {
                                     response.clone().scroll_to_me(None);
                                 }
                                 // The last card visible asks for the next page.
@@ -312,7 +312,7 @@ fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                         let selected = index == state.cursor;
                         let response =
                             widgets::playlist_row(ui, &state.palette, playlist, selected, false);
-                        if selected {
+                        if selected && state.cursor_moved {
                             response.clone().scroll_to_me(None);
                         }
                         if index == playlists.len() - 1 && ui.is_rect_visible(response.rect) {

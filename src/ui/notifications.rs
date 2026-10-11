@@ -113,7 +113,7 @@ fn rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 let watched = widgets::watched(&state.library, video);
                 let response =
                     widgets::video_row(ui, &state.palette, video, None, watched, selected);
-                if selected {
+                if selected && state.cursor_moved {
                     response.clone().scroll_to_me(None);
                 }
                 if response.clicked() {

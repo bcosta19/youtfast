@@ -100,6 +100,9 @@ pub struct State {
     pub keys_open: bool,
     /// The keyboard cursor: the selected row in the current view's list.
     pub cursor: usize,
+    /// Set on the frame the cursor moved, so only that frame scrolls
+    /// the row into view — asking every frame glues the page to it.
+    pub cursor_moved: bool,
     pub watching: Option<Video>,
     /// The list the video being watched was opened from.
     pub up_next: Vec<Video>,

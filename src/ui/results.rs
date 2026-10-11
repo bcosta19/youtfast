@@ -111,7 +111,7 @@ fn rows<'a>(
                 } else {
                     widgets::video_row(ui, &state.palette, video, None, watched, selected)
                 };
-                if selected {
+                if selected && state.cursor_moved {
                     response.clone().scroll_to_me(None);
                 }
                 if response.clicked() {

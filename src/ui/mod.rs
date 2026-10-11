@@ -589,6 +589,7 @@ fn key_pill(ui: &mut egui::Ui, palette: &theme::Palette, key: &str) {
 
 /// The shell's keys, while nobody is typing.
 fn keys(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
+    state.cursor_moved = false;
     if ctx.text_edit_focused() {
         return;
     }
@@ -662,14 +663,18 @@ fn keys(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
         if count > 0 && state.view != View::Watch {
             if input.key_pressed(Key::J) || input.key_pressed(Key::ArrowDown) {
                 state.cursor = (state.cursor + 1).min(count - 1);
+                state.cursor_moved = true;
             }
             if input.key_pressed(Key::K) || input.key_pressed(Key::ArrowUp) {
                 state.cursor = state.cursor.saturating_sub(1);
+                state.cursor_moved = true;
             }
             if input.key_pressed(Key::G) && input.modifiers.shift {
                 state.cursor = count - 1;
+                state.cursor_moved = true;
             } else if input.key_pressed(Key::G) {
                 state.cursor = 0;
+                state.cursor_moved = true;
             }
             if input.key_pressed(Key::Enter)
                 && let Some(action) = open_at(state, state.cursor)

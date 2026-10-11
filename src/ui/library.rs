@@ -199,7 +199,7 @@ fn feed_card(
     let selected = index == state.cursor;
     let watched = widgets::watched(&state.library, video);
     let response = widgets::video_card(ui, &state.palette, video, watched, selected, width);
-    if selected {
+    if selected && state.cursor_moved {
         response.clone().scroll_to_me(None);
     }
     if index == videos.len() - 1 && ui.is_rect_visible(response.rect) {
@@ -382,7 +382,7 @@ fn channel_row(
     let (rect, response) =
         ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
     widgets::row_fill(ui, palette, rect, &response, selected);
-    if selected {
+    if selected && state.cursor_moved {
         response.clone().scroll_to_me(None);
     }
     let avatar_rect = Rect::from_min_size(rect.min + vec2(12.0, 8.0), vec2(size, size));
@@ -487,7 +487,7 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                                     watched,
                                     selected,
                                 );
-                                if selected {
+                                if selected && state.cursor_moved {
                                     response.clone().scroll_to_me(None);
                                 }
                                 if response.clicked() {
@@ -533,7 +533,7 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                         fraction,
                         selected,
                     );
-                    if selected {
+                    if selected && state.cursor_moved {
                         response.clone().scroll_to_me(None);
                     }
                     if response.clicked() {
@@ -632,7 +632,7 @@ pub fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                             let selected = index == state.cursor;
                             let response =
                                 widgets::playlist_row(ui, &state.palette, playlist, selected, true);
-                            if selected {
+                            if selected && state.cursor_moved {
                                 response.clone().scroll_to_me(None);
                             }
                             if response.clicked() {
