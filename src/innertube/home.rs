@@ -25,6 +25,7 @@ pub async fn recommended(rp: &RustyPipe) -> Result<(Vec<Video>, Option<More>), S
             .and_then(Value::as_str)
             .map(str::to_owned),
         authenticated: true,
+        ours: false,
     });
     Ok((videos, more))
 }
@@ -61,7 +62,7 @@ fn read(page: &Value) -> (Vec<Video>, Option<String>) {
 }
 
 /// The older card: `videoRenderer`.
-fn from_renderer(renderer: &Value) -> Option<Video> {
+pub(super) fn from_renderer(renderer: &Value) -> Option<Video> {
     let id = renderer.get("videoId")?.as_str()?.to_owned();
     let owner = renderer
         .get("ownerText")
@@ -98,7 +99,7 @@ fn from_renderer(renderer: &Value) -> Option<Video> {
 
 /// The newer card: a `lockupViewModel` of a video. Its rows are the
 /// channel, then `views · age`.
-fn from_lockup(lockup: &Value) -> Option<Video> {
+pub(super) fn from_lockup(lockup: &Value) -> Option<Video> {
     if lockup.get("contentType")?.as_str()? != "LOCKUP_CONTENT_TYPE_VIDEO" {
         return None;
     }

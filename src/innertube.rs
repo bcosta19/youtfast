@@ -27,6 +27,7 @@ use crate::util;
 
 mod edit;
 mod home;
+mod playlist;
 pub use edit::{rate, rating, save_targets, set_saved};
 pub use home::recommended;
 
@@ -262,6 +263,9 @@ pub struct More {
     pub endpoint: ContinuationEndpoint,
     pub visitor_data: Option<String>,
     pub authenticated: bool,
+    /// The page is read here, not by rustypipe: a playlist in the layout
+    /// rustypipe does not know yet (`playlist.rs`).
+    pub ours: bool,
 }
 
 impl More {
@@ -272,6 +276,7 @@ impl More {
             endpoint: paginator.endpoint,
             visitor_data: paginator.visitor_data.clone(),
             authenticated: paginator.authenticated,
+            ours: false,
         })
     }
 }
@@ -292,6 +297,9 @@ pub async fn more_videos(
     rp: &RustyPipe,
     more: &More,
 ) -> Result<(Vec<Video>, Option<More>), String> {
+    if more.ours {
+        return playlist::more(rp, more).await;
+    }
     let page = continuation_query(rp, more)
         .continuation::<VideoItem, _>(&more.ctoken, more.endpoint, more.visitor_data.as_deref())
         .await
@@ -461,11 +469,34 @@ fn history_row(entry: HistoryItem<VideoItem>) -> HistoryRow {
 }
 
 pub async fn watch_later(rp: &RustyPipe) -> Result<(Vec<Video>, Option<More>), Error> {
-    Ok(playlist_page(rp.query().watch_later().await?))
+    or_ours(rp, "WL", rp.query().watch_later().await).await
 }
 
 pub async fn liked(rp: &RustyPipe) -> Result<(Vec<Video>, Option<More>), Error> {
-    Ok(playlist_page(rp.query().liked_videos().await?))
+    or_ours(rp, "LL", rp.query().liked_videos().await).await
+}
+
+/// rustypipe's reading of a playlist, or this app's when YouTube sent the
+/// newer layout rustypipe does not know: the videos as `lockupViewModel`s
+/// straight in the section, which rustypipe fails to read.
+async fn or_ours(
+    rp: &RustyPipe,
+    id: &str,
+    result: Result<Playlist, Error>,
+) -> Result<(Vec<Video>, Option<More>), Error> {
+    match result {
+        Ok(page) => Ok(playlist_page(page)),
+        Err(error) if newer_layout(&error) => playlist::videos(rp, id)
+            .await
+            .map_err(|text| Error::Other(text.into())),
+        Err(error) => Err(error),
+    }
+}
+
+fn newer_layout(error: &Error) -> bool {
+    // "itemSectionRenderer empty" for the account's lists, a missing
+    // field for public ones: any reading error is the layout.
+    matches!(error, Error::Extraction(_))
 }
 
 pub async fn playlists(rp: &RustyPipe) -> Result<(Vec<PlaylistSummary>, Option<More>), Error> {
@@ -480,7 +511,7 @@ pub async fn playlist_videos(
     rp: &RustyPipe,
     id: &str,
 ) -> Result<(Vec<Video>, Option<More>), Error> {
-    Ok(playlist_page(rp.query().playlist(id).await?))
+    or_ours(rp, id, rp.query().playlist(id).await).await
 }
 
 /// A playlist's first page of videos and its continuation.

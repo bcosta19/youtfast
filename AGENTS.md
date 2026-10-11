@@ -58,7 +58,10 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
   recommendations (`src/innertube/home.rs`: `browse` `FEwhat_to_watch`
   through rustypipe's `raw`, read here, continued by rustypipe), and when
   the account has none or there is no account, `src/recommend.rs` ranks
-  the related videos of the history's latest videos — its shorts land on the shelf, filled further
+  the related videos of the history's latest videos. Playlists (Watch later and liked videos included) come in a newer
+  layout rustypipe fails to read; when it does, `src/innertube/playlist.rs`
+  reads them through `raw` (`browse` `VL<id>`) and pages them itself
+  (`More::ours`) — its shorts land on the shelf, filled further
   by `channel_shorts` (each device channel's Shorts tab). rustypipe has no
   posts or podcasts tabs, no write actions and no home recommendations call:
   subscribing acts on the local library. The watch page's rating and the

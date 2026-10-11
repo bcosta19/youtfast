@@ -16,9 +16,22 @@ pub(super) async fn post(
     endpoint: &str,
     body: &impl Serialize,
 ) -> Result<Value, String> {
-    let text = rp
-        .query()
-        .authenticated()
+    post_as(rp, endpoint, body, true).await
+}
+
+/// [`post`], signed in or not: a public list needs no session.
+pub(super) async fn post_as(
+    rp: &RustyPipe,
+    endpoint: &str,
+    body: &impl Serialize,
+    authenticated: bool,
+) -> Result<Value, String> {
+    let query = if authenticated {
+        rp.query().authenticated()
+    } else {
+        rp.query()
+    };
+    let text = query
         .raw(ClientType::Desktop, endpoint, body)
         .await
         .map_err(|error| error.to_string())?;
