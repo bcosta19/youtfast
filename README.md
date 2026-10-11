@@ -18,7 +18,8 @@ needed.
 
 Release assets include a Linux x86_64 archive, a Flatpak bundle, corresponding
 source with locked Rust dependencies, and SHA-256 checksums. The native archive
-requires glibc 2.39 or newer (Ubuntu 24.04 baseline) and system libmpv; it is not
+requires glibc 2.39 or newer (Ubuntu 24.04 baseline), system libmpv and
+libxkbcommon-x11 on X11; it is not
 an AppImage. The Flatpak uses the Freedesktop 25.08 runtime and does not need
 host libmpv or yt-dlp. It is a release bundle, not a Flathub listing or update
 remote. See [RELEASING.md](RELEASING.md) for installation and verification.

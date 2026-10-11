@@ -56,7 +56,7 @@ jobs:
           toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
           rustup toolchain install "$toolchain" --profile minimal
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libmpv-dev libxkbcommon-dev libwayland-dev libgl1-mesa-dev libfontconfig1-dev libssl-dev xvfb xdotool imagemagick dbus-x11 libgl1-mesa-dri
+          sudo apt-get install -y build-essential pkg-config libmpv-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libgl1-mesa-dev libfontconfig1-dev libssl-dev xvfb xdotool imagemagick dbus-x11 libgl1-mesa-dri
       - name: Build without restored compiler output
         run: cargo build --release --locked
       - name: Verify and package Linux executable
@@ -78,8 +78,9 @@ jobs:
             target/release/youtfast &
             app=$!
             trap "kill $app 2>/dev/null || true" EXIT
-            window=$(xdotool search --sync --onlyvisible --name "^YouTFast$")
-            sleep 3
+            sleep 5
+            kill -0 "$app"
+            window=$(xdotool search --onlyvisible --name "^YouTFast$")
             import -window "$window" "dist/youtfast-$RELEASE_TAG-linux.png"
           '
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
