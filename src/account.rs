@@ -177,7 +177,7 @@ async fn extract(spec: &str, what: &str) -> Result<String, String> {
         // stderr is yt-dlp's and Python's text, not ours: it is matched
         // for the known failures below but never logged, since what it
         // carries besides them is not ours to vouch for.
-        log::warn!("reading {browser}'s cookies failed");
+        log::warn!("reading browser cookies failed");
         let browser = crate::model::browser_label(&browser);
         return Err(if stderr.contains("No module named 'yt_dlp'") {
             "yt-dlp is not installed for Python, so the browser cannot be read.".to_owned()
@@ -462,7 +462,8 @@ fn session_key(id: u32) -> String {
 /// One credential-store call at a time: the timeout abandons the *wait*,
 /// never the call, so a store that hangs serializes its failures instead
 /// of stacking abandoned threads.
-static STORE_CALLS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
+static STORE_CALLS: std::sync::LazyLock<std::sync::Arc<tokio::sync::Semaphore>> =
+    std::sync::LazyLock::new(|| std::sync::Arc::new(tokio::sync::Semaphore::new(1)));
 
 /// Runs a blocking credential-store call off the runtime's workers, and
 /// gives up on a store that does not answer (a keyring waiting on a
@@ -470,10 +471,26 @@ static STORE_CALLS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1
 async fn with_store<T: Send + 'static>(
     call: impl FnOnce() -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
-    let Ok(_turn) = tokio::time::timeout(STORE_TIMEOUT, STORE_CALLS.acquire()).await else {
+    with_store_timeout(STORE_CALLS.clone(), STORE_TIMEOUT, call).await
+}
+
+async fn with_store_timeout<T: Send + 'static>(
+    store: std::sync::Arc<tokio::sync::Semaphore>,
+    timeout: std::time::Duration,
+    call: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    let Ok(Ok(turn)) = tokio::time::timeout(timeout, store.acquire_owned()).await else {
         return Err("The system keyring did not respond.".to_owned());
     };
-    match tokio::time::timeout(STORE_TIMEOUT, tokio::task::spawn_blocking(call)).await {
+    match tokio::time::timeout(
+        timeout,
+        tokio::task::spawn_blocking(move || {
+            let _turn = turn;
+            call()
+        }),
+    )
+    .await
+    {
         Ok(Ok(result)) => result,
         Ok(Err(_)) => Err("The system keyring failed.".to_owned()),
         Err(_) => Err("The system keyring did not respond.".to_owned()),
@@ -566,7 +583,9 @@ impl rustypipe::cache::CacheStorage for CacheFile {
     }
 
     fn read(&self) -> Option<String> {
-        std::fs::read_to_string(&self.path).ok()
+        std::fs::read_to_string(&self.path)
+            .ok()
+            .and_then(|data| without_credentials(&data))
     }
 }
 
@@ -628,6 +647,35 @@ fn strip_credentials(value: &mut serde_json::Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn timed_out_calls_keep_the_store_permit_until_the_blocking_call_finishes() {
+        let store = std::sync::Arc::new(tokio::sync::Semaphore::new(1));
+        let (release, wait) = std::sync::mpsc::channel();
+        let timeout = std::time::Duration::from_millis(50);
+        let first = with_store_timeout(store.clone(), timeout, move || {
+            let _ = wait.recv_timeout(std::time::Duration::from_secs(2));
+            Ok(())
+        })
+        .await;
+        let available = store.available_permits();
+        let ran = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let second_ran = ran.clone();
+        let second = with_store_timeout(store.clone(), timeout, move || {
+            second_ran.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        })
+        .await;
+        release.send(()).unwrap();
+        let permit = tokio::time::timeout(std::time::Duration::from_secs(2), store.acquire_owned())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(available, 0);
+        assert!(first.is_err() && second.is_err());
+        assert!(!ran.load(std::sync::atomic::Ordering::SeqCst));
+        drop(permit);
+    }
 
     #[test]
     fn chromium_profiles_come_with_their_names_and_accounts() {
@@ -752,6 +800,21 @@ mod tests {
                 .contains("no signed-in")
         );
         assert!(cookie_header("<html>not cookies</html>").is_err());
+    }
+
+    #[test]
+    fn legacy_cache_credentials_cannot_restore_an_unselected_account() {
+        use rustypipe::cache::CacheStorage;
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("legacy-cache-{}.json", std::process::id()));
+        std::fs::write(&path, br#"{"clients":{"desktop":{"version":"2.2026"}},"auth_cookie":"SAPISID=synthetic-secret","oauth_token":{"access_token":"ya29.synthetic-secret"}}"#).unwrap();
+        let clean = CacheFile { path: path.clone() }.read().unwrap();
+        std::fs::remove_file(path).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&clean).unwrap();
+        assert_eq!(value["clients"]["desktop"]["version"], "2.2026");
+        assert!(value["auth_cookie"].is_null() && value["oauth_token"].is_null());
+        assert!(!clean.contains("synthetic-secret"));
     }
 
     #[test]

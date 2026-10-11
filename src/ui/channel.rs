@@ -309,23 +309,35 @@ fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .show(ui, |ui| {
-                    for (index, playlist) in playlists.iter().enumerate() {
-                        let selected = index == state.cursor;
-                        let response =
-                            widgets::playlist_row(ui, &state.palette, playlist, selected, false);
-                        if selected && state.cursor_moved {
-                            response.clone().scroll_to_me(None);
-                        }
-                        if index == playlists.len() - 1 && ui.is_rect_visible(response.rect) {
-                            actions.push(Action::LoadMore);
-                        }
-                        if response.clicked() {
-                            actions.push(Action::OpenPlaylist {
-                                id: playlist.id.clone(),
-                                name: playlist.name.clone(),
-                            });
-                        }
-                    }
+                    results::virtual_rows(
+                        ui,
+                        106.0,
+                        playlists.len(),
+                        state.cursor_moved.then_some(state.cursor),
+                        |ui, index| {
+                            let playlist = &playlists[index];
+                            let selected = index == state.cursor;
+                            let response = widgets::playlist_row(
+                                ui,
+                                &state.palette,
+                                playlist,
+                                selected,
+                                false,
+                            );
+                            if selected && state.cursor_moved {
+                                response.clone().scroll_to_me(None);
+                            }
+                            if index == playlists.len() - 1 && ui.is_rect_visible(response.rect) {
+                                actions.push(Action::LoadMore);
+                            }
+                            if response.clicked() {
+                                actions.push(Action::OpenPlaylist {
+                                    id: playlist.id.clone(),
+                                    name: playlist.name.clone(),
+                                });
+                            }
+                        },
+                    );
                     ui.add_space(GAP);
                     more_row(ui, state, actions);
                 });

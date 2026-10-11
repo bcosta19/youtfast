@@ -397,18 +397,25 @@ fn sidebar_channels(ui: &mut egui::Ui, state: &State, collapsed: bool, actions: 
     egui::ScrollArea::vertical()
         .auto_shrink([false, true])
         .show(ui, |ui| {
-            for channel in channels {
-                let selected = open == Some(channel.id.as_str());
-                let response = if collapsed {
-                    widgets::channel_avatar(ui, &state.palette, channel, selected)
-                        .on_hover_text(&channel.name)
-                } else {
-                    widgets::channel_item(ui, &state.palette, channel, selected)
-                };
-                if response.clicked() {
-                    actions.push(Action::OpenChannel(channel.clone()));
-                }
-            }
+            results::virtual_rows(
+                ui,
+                if collapsed { 38.0 } else { 36.0 },
+                channels.len(),
+                None,
+                |ui, index| {
+                    let channel = &channels[index];
+                    let selected = open == Some(channel.id.as_str());
+                    let response = if collapsed {
+                        widgets::channel_avatar(ui, &state.palette, channel, selected)
+                            .on_hover_text(&channel.name)
+                    } else {
+                        widgets::channel_item(ui, &state.palette, channel, selected)
+                    };
+                    if response.clicked() {
+                        actions.push(Action::OpenChannel(channel.clone()));
+                    }
+                },
+            );
         });
 }
 

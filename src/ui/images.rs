@@ -24,7 +24,29 @@ static CACHE: Mutex<Option<Cache>> = Mutex::new(None);
 struct Cache {
     dir: PathBuf,
     asked: HashSet<String>,
+    retry_at: HashMap<String, f64>,
+    loaded: HashSet<String>,
     wanted: Vec<String>,
+}
+
+impl Cache {
+    fn request(&mut self, url: &str, now: f64) {
+        if self.retry_at.get(url).is_some_and(|retry| now < *retry)
+            || !self.asked.insert(url.to_owned())
+        {
+            return;
+        }
+        self.retry_at.remove(url);
+        self.wanted.push(url.to_owned());
+    }
+
+    fn completed(&mut self, url: &str, ready: bool, now: f64, seen: bool) {
+        self.asked.remove(url);
+        self.retry_at.remove(url);
+        if !ready && seen {
+            self.retry_at.insert(url.to_owned(), now + 30.0);
+        }
+    }
 }
 
 /// Starts the disk cache: thumbnails fetched once live under `dir` and
@@ -34,6 +56,8 @@ pub fn init(dir: PathBuf) {
     *CACHE.lock().unwrap() = Some(Cache {
         dir,
         asked: HashSet::new(),
+        retry_at: HashMap::new(),
+        loaded: HashSet::new(),
         wanted: Vec::new(),
     });
 }
@@ -45,6 +69,14 @@ pub fn drain_wanted() -> Vec<String> {
         Some(cache) => std::mem::take(&mut cache.wanted),
         None => Vec::new(),
     }
+}
+
+#[cfg(test)]
+pub(crate) fn drawn_count(ctx: &Context) -> usize {
+    ctx.data(|data| {
+        data.get_temp::<Drawn>(id())
+            .map_or(0, |drawn| drawn.0.len())
+    })
 }
 
 fn id() -> Id {
@@ -71,12 +103,18 @@ pub fn remote<'a>(ui: &Ui, url: &'a str) -> Image<'a> {
         match cache.as_mut() {
             Some(cache) => {
                 let path = crate::thumbs::path(&cache.dir, url);
+                if cache.loaded.contains(url) {
+                    return Image::new(memory_uri(&cache.dir, url));
+                }
                 if path.exists() {
                     Some(path)
-                } else if cache.asked.insert(url.to_owned()) {
-                    cache.wanted.push(url.to_owned());
-                    None
                 } else {
+                    cache.request(url, now);
+                    if let Some(retry) = cache.retry_at.get(url) {
+                        ctx.request_repaint_after(std::time::Duration::from_secs_f64(
+                            (retry - now).max(0.0),
+                        ));
+                    }
                     None
                 }
             }
@@ -85,7 +123,39 @@ pub fn remote<'a>(ui: &Ui, url: &'a str) -> Image<'a> {
     };
     match file {
         Some(path) => Image::new(crate::thumbs::uri(&path)),
-        None => Image::new(url),
+        None => Image::from_bytes(
+            "bytes://youtfast-thumbnail-pending.svg",
+            &b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"/>"[..],
+        ),
+    }
+}
+
+fn memory_uri(dir: &std::path::Path, url: &str) -> String {
+    format!(
+        "bytes://thumbnail/{}",
+        crate::thumbs::path(dir, url)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+    )
+}
+
+pub fn completed(ctx: &Context, url: &str, ready: bool, bytes: Option<std::sync::Arc<[u8]>>) {
+    let now = ctx.input(|input| input.time);
+    let seen = ctx.data(|data| {
+        data.get_temp::<Drawn>(id())
+            .is_some_and(|drawn| drawn.0.contains_key(url))
+    });
+    if let Some(cache) = CACHE.lock().unwrap().as_mut() {
+        cache.completed(url, ready, now, seen);
+        if seen && let Some(bytes) = bytes {
+            ctx.include_bytes(memory_uri(&cache.dir, url), bytes);
+            cache.loaded.insert(url.to_owned());
+        }
+        ctx.forget_image(&crate::thumbs::uri(&crate::thumbs::path(&cache.dir, url)));
+    }
+    if !ready {
+        ctx.request_repaint_after(std::time::Duration::from_secs(30));
     }
 }
 
@@ -97,6 +167,11 @@ pub fn forget_unseen(ctx: &Context) {
         take_stale(drawn, now, KEEP)
     });
     for url in stale {
+        if let Some(cache) = CACHE.lock().unwrap().as_mut() {
+            cache.retry_at.remove(&url);
+            cache.loaded.remove(&url);
+            ctx.forget_image(&memory_uri(&cache.dir, &url));
+        }
         ctx.forget_image(&url);
         // A cached URL is drawn through its `file://` URI, under which the
         // texture is stored; forgetting only the URL would never free it.
@@ -128,6 +203,30 @@ fn take_stale(drawn: &mut HashMap<String, f64>, now: f64, keep: f64) -> Vec<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pending_downloads_are_not_duplicated_and_failures_retry_after_backoff() {
+        let mut cache = Cache {
+            dir: PathBuf::new(),
+            asked: HashSet::new(),
+            retry_at: HashMap::new(),
+            loaded: HashSet::new(),
+            wanted: Vec::new(),
+        };
+        cache.request("synthetic", 0.0);
+        cache.request("synthetic", 1.0);
+        assert_eq!(std::mem::take(&mut cache.wanted), ["synthetic"]);
+        cache.completed("synthetic", false, 2.0, true);
+        cache.request("synthetic", 31.0);
+        assert!(cache.wanted.is_empty());
+        cache.request("synthetic", 32.0);
+        assert_eq!(std::mem::take(&mut cache.wanted), ["synthetic"]);
+        cache.completed("synthetic", true, 33.0, true);
+        assert!(cache.asked.is_empty());
+        cache.request("forgotten", 34.0);
+        cache.completed("forgotten", false, 100.0, false);
+        assert!(cache.asked.is_empty() && cache.retry_at.is_empty());
+    }
 
     #[test]
     fn only_images_not_drawn_lately_are_forgotten() {

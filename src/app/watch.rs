@@ -2,6 +2,39 @@
 
 use super::*;
 
+impl State {
+    fn fill_comments(
+        &mut self,
+        key: CommentsKey,
+        result: Result<(Vec<CommentRow>, Option<String>), String>,
+    ) {
+        match (key, result) {
+            (CommentsKey::Top, Ok((rows, next))) => {
+                let mut comments = match std::mem::take(&mut self.comments) {
+                    Fetch::Ready(comments) => comments,
+                    _ => Vec::new(),
+                };
+                let mut known: HashSet<String> =
+                    comments.iter().map(|row| row.id.clone()).collect();
+                comments.extend(rows.into_iter().filter(|row| known.insert(row.id.clone())));
+                self.comments = Fetch::Ready(comments);
+                self.comments_next = next;
+                self.comments_more = Fetch::Idle;
+            }
+            (CommentsKey::Top, Err(error)) if matches!(self.comments_more, Fetch::Loading) => {
+                self.comments_more = Fetch::Failed(error);
+            }
+            (CommentsKey::Top, Err(error)) => self.comments = Fetch::Failed(error),
+            (CommentsKey::Replies(id), Ok((rows, _))) => {
+                self.replies.insert(id, Fetch::Ready(rows));
+            }
+            (CommentsKey::Replies(id), Err(error)) => {
+                self.replies.insert(id, Fetch::Failed(error));
+            }
+        }
+    }
+}
+
 impl App {
     /// Takes in what mpv has to say.
     pub(super) fn poll_player(&mut self) {
@@ -69,7 +102,7 @@ impl App {
     }
 
     pub(super) fn open(&mut self, mut video: Video) {
-        log::info!("opening video {}", video.id);
+        log::debug!("opening video");
         self.remember_position();
         if self.state.view != View::Watch {
             // A Short from Home's shelf goes on to the shelf's next ones.
@@ -187,23 +220,10 @@ impl App {
         if generation != self.details_generation {
             return;
         }
-        match (key, result) {
-            (CommentsKey::Top, Ok((rows, next))) => {
-                let mut comments = self.state.comments.ready().cloned().unwrap_or_default();
-                comments.extend(rows);
-                self.state.comments = Fetch::Ready(comments);
-                self.state.comments_next = next;
-            }
-            (CommentsKey::Top, Err(error)) => {
-                self.state.comments = Fetch::Failed(error);
-            }
-            (CommentsKey::Replies(id), Ok((rows, _))) => {
-                self.state.replies.insert(id, Fetch::Ready(rows));
-            }
-            (CommentsKey::Replies(id), Err(error)) => {
-                self.state.replies.insert(id, Fetch::Failed(error));
-            }
+        if key == CommentsKey::Top && result.is_ok() {
+            self.more_comments_token = None;
         }
+        self.state.fill_comments(key, result);
     }
 
     /// Asks for the next comments page.
@@ -346,8 +366,8 @@ impl App {
         let Some(player) = &mut self.player else {
             return;
         };
-        if let Some(browser) = &browser {
-            log::info!("videos refused signed out retry through {browser}");
+        if browser.is_some() {
+            log::debug!("signed-in playback retry enabled");
         }
         player.set_cookies_from_browser(browser);
     }
@@ -437,5 +457,67 @@ fn failure_message(failure: mpv::Failure) -> &'static str {
         mpv::Failure::AgeRestricted => "This video is age-restricted and needs signing in.",
         mpv::Failure::Unavailable => "This video is private or unavailable.",
         mpv::Failure::Other => "Could not play this video. Updating yt-dlp usually fixes this.",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn comment(id: &str) -> CommentRow {
+        CommentRow {
+            id: id.into(),
+            author: None,
+            author_id: None,
+            author_avatar: None,
+            text: Vec::new(),
+            published: String::new(),
+            likes: None,
+            replies: 0,
+            replies_token: None,
+            pinned: false,
+            by_owner: false,
+            hearted: false,
+        }
+    }
+
+    #[test]
+    fn comment_continuations_finish_loading_preserve_rows_on_failure_and_retry() {
+        let mut state = State::default();
+        for page in 0..3 {
+            state.comments_more = Fetch::Loading;
+            state.fill_comments(
+                CommentsKey::Top,
+                Ok((
+                    vec![comment(&page.to_string())],
+                    Some(format!("page-{}", page + 1)),
+                )),
+            );
+            assert_eq!(state.comments.ready().unwrap().len(), page + 1);
+            assert!(matches!(state.comments_more, Fetch::Idle));
+        }
+        state.comments_more = Fetch::Loading;
+        state.fill_comments(CommentsKey::Top, Err("offline".into()));
+        assert_eq!(state.comments.ready().unwrap().len(), 3);
+        assert!(matches!(state.comments_more, Fetch::Failed(_)));
+        state.comments_more = Fetch::Loading;
+        state.fill_comments(
+            CommentsKey::Top,
+            Ok((vec![comment("2"), comment("3")], None)),
+        );
+        assert_eq!(state.comments.ready().unwrap().len(), 4);
+        assert!(matches!(state.comments_more, Fetch::Idle));
+        assert!(state.comments_next.is_none());
+    }
+
+    #[test]
+    fn a_failed_alert_check_can_be_tried_again() {
+        let mut state = State {
+            alerts_checking: true,
+            ..State::default()
+        };
+        state.alerts_failed("offline".into());
+        assert!(!state.alerts_checking);
+        assert!(state.notice.unwrap().contains("offline"));
     }
 }

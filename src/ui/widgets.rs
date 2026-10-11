@@ -269,6 +269,9 @@ pub fn row(
     let height = galley.rect.height().max(line(ui)) + 12.0;
     let (rect, response) =
         ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
+    if !ui.is_rect_visible(rect) {
+        return response;
+    }
     row_fill(ui, palette, rect, &response, selected);
     let text_pos = pos2(
         rect.left() + 10.0,
@@ -372,6 +375,9 @@ pub fn nav_item(
 /// A round avatar in `rect`: the picture, or the name's initial on
 /// `surface_active` while there is none.
 pub fn avatar(ui: &Ui, palette: &Palette, url: Option<&str>, name: &str, rect: Rect) {
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
     let radius = CornerRadius::same((rect.width() / 2.0).min(255.0) as u8);
     match url {
         Some(url) => super::images::remote(ui, url)
@@ -403,6 +409,9 @@ pub fn avatar(ui: &Ui, palette: &Palette, url: Option<&str>, name: &str, rect: R
 pub fn channel_item(ui: &mut Ui, palette: &Palette, channel: &Channel, selected: bool) -> Response {
     let size = 24.0;
     let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 36.0), Sense::click());
+    if !ui.is_rect_visible(rect) {
+        return response;
+    }
     row_fill(ui, palette, rect, &response, selected);
     let picture = Rect::from_min_size(
         pos2(rect.left() + 10.0, rect.center().y - size / 2.0),
@@ -446,6 +455,9 @@ pub fn channel_avatar(
     let size = 28.0;
     let (rect, response) =
         ui.allocate_exact_size(vec2(ui.available_width(), size + 10.0), Sense::click());
+    if !ui.is_rect_visible(rect) {
+        return response;
+    }
     row_fill(ui, palette, rect, &response, selected);
     let picture = Rect::from_center_size(rect.center(), vec2(size, size));
     avatar(
@@ -478,6 +490,9 @@ fn badge(ui: &Ui, thumbnail: Rect, video: &Video, palette: &Palette) {
 /// The thumbnail, rounded, with its corner badge, and the part watched
 /// (0..1) as YouTube's red bar along its bottom edge.
 fn thumbnail(ui: &Ui, palette: &Palette, video: &Video, rect: Rect, watched: Option<f32>) {
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
     let radius = CornerRadius::same(RADIUS);
     ui.painter().rect_filled(rect, radius, palette.surface);
     super::images::remote(ui, &video.thumbnail())
@@ -637,6 +652,9 @@ fn video_row_sized(
         vec2(ui.available_width(), thumb.y + 2.0 * pad),
         Sense::click(),
     );
+    if !ui.is_rect_visible(rect) {
+        return response;
+    }
     row_fill(ui, palette, rect, &response, selected);
     let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), thumb);
     thumbnail(ui, palette, video, thumb_rect, watched);
@@ -651,6 +669,10 @@ fn video_row_sized(
         width,
     );
     response
+}
+
+pub fn video_card_height(ui: &Ui, width: f32) -> f32 {
+    (width - 12.0) * 9.0 / 16.0 + 4.0 * line(ui) + 28.0
 }
 
 /// A video as a card in a grid, the way YouTube's home draws it: the
@@ -670,6 +692,9 @@ pub fn video_card(
     let text = 2.0 * line(ui) + 2.0 * line(ui) + 10.0;
     let (rect, response) =
         ui.allocate_exact_size(vec2(width, thumb.y + text + 3.0 * pad), Sense::click());
+    if !ui.is_rect_visible(rect) {
+        return response;
+    }
     row_fill(ui, palette, rect, &response, selected);
     let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), thumb);
     thumbnail(ui, palette, video, thumb_rect, watched);
@@ -700,6 +725,9 @@ pub fn playlist_row(
         vec2(ui.available_width(), size.y + 2.0 * pad),
         Sense::click(),
     );
+    if !ui.is_rect_visible(rect) {
+        return response;
+    }
     row_fill(ui, palette, rect, &response, selected);
     let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), size);
     let radius = CornerRadius::same(RADIUS);

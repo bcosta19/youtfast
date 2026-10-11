@@ -8,6 +8,13 @@ use super::*;
 /// feed landed.
 const ALERTS_REUSE_FEED: i64 = 15 * 60;
 
+impl State {
+    pub(super) fn alerts_failed(&mut self, error: String) {
+        self.alerts_checking = false;
+        self.notice = Some(format!("Could not check for uploads: {error}"));
+    }
+}
+
 impl App {
     /// The check the timer runs: the feed's sources again, on its own
     /// slot so Home's list is undisturbed — unless the feed itself just

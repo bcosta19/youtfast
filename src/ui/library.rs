@@ -168,15 +168,26 @@ fn feed_grid(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                             capitalized(day)
                         };
                         widgets::section(ui, &state.palette, &heading, None, |ui| {
-                            for row in (start..end).collect::<Vec<_>>().chunks(columns) {
-                                ui.horizontal_top(|ui| {
-                                    ui.spacing_mut().item_spacing.x = gap;
-                                    for &index in row {
-                                        feed_card(ui, state, &videos, index, width, actions);
-                                    }
-                                });
-                                ui.add_space(gap);
-                            }
+                            let selected = (state.cursor_moved
+                                && (start..end).contains(&state.cursor))
+                            .then(|| (state.cursor - start) / columns);
+                            results::virtual_rows(
+                                ui,
+                                widgets::video_card_height(ui, width) + gap,
+                                (end - start).div_ceil(columns),
+                                selected,
+                                |ui, row| {
+                                    ui.horizontal_top(|ui| {
+                                        ui.spacing_mut().item_spacing.x = gap;
+                                        for index in (start + row * columns)
+                                            ..(start + (row + 1) * columns).min(end)
+                                        {
+                                            feed_card(ui, state, &videos, index, width, actions);
+                                        }
+                                    });
+                                    ui.add_space(gap);
+                                },
+                            );
                         });
                         ui.add_space(8.0);
                         start = end;
@@ -225,15 +236,22 @@ fn for_you(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     let gap = 16.0;
                     let (columns, width) =
                         widgets::grid_columns(ui.available_width(), CARD_WIDTH, gap, 5);
-                    for row in (0..videos.len()).collect::<Vec<_>>().chunks(columns) {
-                        ui.horizontal_top(|ui| {
-                            ui.spacing_mut().item_spacing.x = gap;
-                            for &index in row {
-                                feed_card(ui, state, &videos, index, width, actions);
-                            }
-                        });
-                        ui.add_space(gap);
-                    }
+                    results::virtual_rows(
+                        ui,
+                        widgets::video_card_height(ui, width) + gap,
+                        videos.len().div_ceil(columns),
+                        state.cursor_moved.then_some(state.cursor / columns),
+                        |ui, row| {
+                            ui.horizontal_top(|ui| {
+                                ui.spacing_mut().item_spacing.x = gap;
+                                for index in row * columns..((row + 1) * columns).min(videos.len())
+                                {
+                                    feed_card(ui, state, &videos, index, width, actions);
+                                }
+                            });
+                            ui.add_space(gap);
+                        },
+                    );
                     if state.for_you_more.is_some()
                         || !matches!(state.for_you_more_state, Fetch::Idle)
                     {
@@ -306,6 +324,9 @@ fn short_card(ui: &mut Ui, state: &State, video: &Video, actions: &mut Vec<Actio
     let width = 162.0;
     let thumb = vec2(width, 288.0);
     let (rect, response) = ui.allocate_exact_size(vec2(width, thumb.y + 64.0), Sense::click());
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
     let thumb_rect = Rect::from_min_size(rect.min, thumb);
     widgets::row_fill(ui, palette, rect.expand(4.0), &response, false);
     super::images::remote(ui, &video.thumbnail())
@@ -419,16 +440,22 @@ fn channel_rows(
     egui::ScrollArea::vertical()
         .auto_shrink(false)
         .show(ui, |ui| {
-            for (index, channel) in channels.iter().enumerate() {
-                channel_row(
-                    ui,
-                    state,
-                    channel,
-                    index == state.cursor,
-                    removable,
-                    actions,
-                );
-            }
+            results::virtual_rows(
+                ui,
+                64.0,
+                channels.len(),
+                state.cursor_moved.then_some(state.cursor),
+                |ui, index| {
+                    channel_row(
+                        ui,
+                        state,
+                        &channels[index],
+                        index == state.cursor,
+                        removable,
+                        actions,
+                    );
+                },
+            );
         });
 }
 
@@ -696,20 +723,32 @@ pub fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 egui::ScrollArea::vertical()
                     .auto_shrink(false)
                     .show(ui, |ui| {
-                        for (index, playlist) in playlists.iter().enumerate() {
-                            let selected = index == state.cursor;
-                            let response =
-                                widgets::playlist_row(ui, &state.palette, playlist, selected, true);
-                            if selected && state.cursor_moved {
-                                response.clone().scroll_to_me(None);
-                            }
-                            if response.clicked() {
-                                actions.push(Action::OpenPlaylist {
-                                    id: playlist.id.clone(),
-                                    name: playlist.name.clone(),
-                                });
-                            }
-                        }
+                        results::virtual_rows(
+                            ui,
+                            106.0,
+                            playlists.len(),
+                            state.cursor_moved.then_some(state.cursor),
+                            |ui, index| {
+                                let playlist = &playlists[index];
+                                let selected = index == state.cursor;
+                                let response = widgets::playlist_row(
+                                    ui,
+                                    &state.palette,
+                                    playlist,
+                                    selected,
+                                    true,
+                                );
+                                if selected && state.cursor_moved {
+                                    response.clone().scroll_to_me(None);
+                                }
+                                if response.clicked() {
+                                    actions.push(Action::OpenPlaylist {
+                                        id: playlist.id.clone(),
+                                        name: playlist.name.clone(),
+                                    });
+                                }
+                            },
+                        );
                     });
             }
         }
@@ -739,4 +778,74 @@ pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             actions,
         );
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn large_channel_playlist_and_feed_lists_request_only_visible_images() {
+        for kind in 0..3 {
+            let ctx = egui::Context::default();
+            crate::theme::install_fonts(&ctx);
+            let mut state = State::default();
+            if kind == 0 {
+                state.library.subscriptions = (0..20_000)
+                    .map(|index| Channel {
+                        id: format!("UC{index:022}"),
+                        name: format!("Channel {index}"),
+                        avatar: Some(format!("https://i.ytimg.com/synthetic-avatar-{index}")),
+                    })
+                    .collect();
+            } else if kind == 1 {
+                state.playlists = Listing::Ready(
+                    (0..1000)
+                        .map(|index| crate::model::PlaylistSummary {
+                            id: format!("playlist-{index}"),
+                            name: format!("Playlist {index}"),
+                            thumbnail: Some(format!(
+                                "https://i.ytimg.com/synthetic-playlist-{index}"
+                            )),
+                            channel: None,
+                            videos: Some(10),
+                        })
+                        .collect(),
+                );
+            } else {
+                state.feed = Listing::Ready(
+                    (0..1000)
+                        .map(|index| Video::from_id(format!("{index:011}")))
+                        .collect(),
+                );
+                state.feed_shown = 1000;
+                state.feed_filter = FeedFilter::All;
+            }
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(640.0, 480.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    egui::CentralPanel::default().show(ui, |ui| {
+                        let mut actions = Vec::new();
+                        match kind {
+                            0 => channel_rows(
+                                ui,
+                                &state,
+                                &state.library.subscriptions,
+                                true,
+                                &mut actions,
+                            ),
+                            1 => playlists(ui, &state, &mut actions),
+                            _ => feed_grid(ui, &state, &mut actions),
+                        }
+                    });
+                },
+            );
+            output.textures_delta.clear();
+            let drawn = super::super::images::drawn_count(&ctx);
+            assert!(drawn > 0 && drawn < 20, "list {kind} drew {drawn} images");
+        }
+    }
 }

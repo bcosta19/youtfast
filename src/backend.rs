@@ -198,6 +198,11 @@ pub enum Command {
         visitor_data: Option<String>,
     },
     ImportTakeout(Picked),
+    MergeImport {
+        library: Box<Library>,
+        import: Import,
+        revision: u64,
+    },
     /// The account's rating of a video.
     LoadRating(String),
     /// Rate a video on the account (`Rating::None` clears it).
@@ -263,6 +268,11 @@ pub enum Event {
         result: Result<(Vec<crate::model::CommentRow>, Option<String>), String>,
     },
     Imported(Result<Import, String>),
+    ImportMerged {
+        library: Box<Library>,
+        counts: (usize, usize),
+        revision: u64,
+    },
     Rating {
         id: String,
         result: Result<Rating, String>,
@@ -303,6 +313,11 @@ pub enum Event {
     Notice(String),
     /// The alerts timer fired; the app sends the check request.
     CheckAlerts,
+    Thumbnail {
+        url: String,
+        ready: bool,
+        bytes: Option<Arc<[u8]>>,
+    },
     Suggestions {
         query: String,
         items: Vec<String>,
@@ -313,9 +328,103 @@ pub enum Event {
     },
 }
 
+impl Command {
+    fn changes_session(&self) -> bool {
+        matches!(
+            self,
+            Self::AddAccount { .. } | Self::Switch(_) | Self::SignOut
+        )
+    }
+
+    fn ordered(&self) -> bool {
+        self.changes_session()
+            || matches!(
+                self,
+                Self::Rate { .. }
+                    | Self::SetSaved { .. }
+                    | Self::RemoveAccount(_)
+                    | Self::Load { .. }
+                    | Self::SaveLibrary(_)
+                    | Self::SaveSettings(_)
+                    | Self::SetAlertsEvery(_)
+            )
+    }
+}
+
+impl Event {
+    fn sanitize(mut self) -> Self {
+        match &mut self {
+            Self::Loaded {
+                result: Err(error), ..
+            }
+            | Self::Comments {
+                result: Err(error), ..
+            }
+            | Self::Rating {
+                result: Err(error), ..
+            }
+            | Self::SaveTargets {
+                result: Err(error), ..
+            }
+            | Self::RateFailed { error, .. }
+            | Self::SaveFailed { error, .. }
+            | Self::SignInFailed(error)
+            | Self::SessionExpired(error) => *error = crate::safe_error(error),
+            Self::Details { result, .. } => {
+                if let Err(error) = result.as_mut() {
+                    *error = crate::safe_error(error);
+                }
+            }
+            _ => {}
+        }
+        self
+    }
+
+    fn current(&self, epoch: u64, current: u64) -> bool {
+        epoch == current
+            || matches!(
+                self,
+                Self::Imported(_)
+                    | Self::ImportMerged { .. }
+                    | Self::Notice(_)
+                    | Self::CheckAlerts
+                    | Self::Thumbnail { .. }
+                    | Self::Suggestions { .. }
+                    | Self::Segments { .. }
+            )
+    }
+}
+
+#[derive(Default)]
+struct SaveGate(std::sync::Mutex<bool>);
+
+impl SaveGate {
+    fn write(
+        &self,
+        final_save: bool,
+        save: impl FnOnce() -> std::io::Result<()>,
+    ) -> std::io::Result<()> {
+        let mut closed = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if *closed {
+            return Ok(());
+        }
+        *closed = final_save;
+        save()
+    }
+}
+
 pub struct Backend {
-    commands: async_mpsc::UnboundedSender<Command>,
-    events: mpsc::Receiver<Event>,
+    commands: async_mpsc::UnboundedSender<(u64, Command)>,
+    events: mpsc::Receiver<(u64, Event)>,
+    epoch: std::cell::Cell<u64>,
+    waker: egui::Context,
+    library_saves: Arc<watch::Sender<Option<Library>>>,
+    settings_saves: Arc<watch::Sender<Option<Settings>>>,
+    library_gate: Arc<SaveGate>,
+    settings_gate: Arc<SaveGate>,
 }
 
 /// What every task on the runtime shares.
@@ -323,7 +432,8 @@ pub struct Backend {
 struct Context {
     rp: RustyPipe,
     dirs: Dirs,
-    events: mpsc::Sender<Event>,
+    events: mpsc::Sender<(u64, Event)>,
+    epoch: u64,
     waker: egui::Context,
     /// The running alerts timer, restarted when the interval changes.
     alerts_timer: Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>,
@@ -348,7 +458,7 @@ struct Context {
 
 impl Context {
     fn send(&self, event: Event) {
-        if self.events.send(event).is_ok() {
+        if self.events.send((self.epoch, event.sanitize())).is_ok() {
             self.waker.request_repaint();
         }
     }
@@ -357,7 +467,7 @@ impl Context {
 impl Backend {
     /// Starts the runtime. It stops when the Backend is dropped.
     pub fn start(waker: egui::Context, dirs: Dirs) -> anyhow::Result<Self> {
-        let (commands, mut incoming) = async_mpsc::unbounded_channel();
+        let (commands, mut incoming) = async_mpsc::unbounded_channel::<(u64, Command)>();
         let (outgoing, events) = mpsc::channel();
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
@@ -366,10 +476,15 @@ impl Backend {
             .build()?;
         let (library_saves, library_snapshots) = watch::channel(None);
         let (settings_saves, settings_snapshots) = watch::channel(None);
-        let context = Context {
+        let library_gate = Arc::new(SaveGate::default());
+        let settings_gate = Arc::new(SaveGate::default());
+        let writer_library_gate = library_gate.clone();
+        let writer_settings_gate = settings_gate.clone();
+        let mut context = Context {
             rp: innertube::client(&dirs)?,
             dirs,
             events: outgoing,
+            epoch: 0,
             waker,
             alerts_timer: Arc::new(tokio::sync::Mutex::new(None)),
             library_saves: Arc::new(library_saves),
@@ -379,6 +494,16 @@ impl Backend {
             rss: Arc::new(std::sync::Mutex::new(HashMap::new())),
             thumb_pending: Arc::new(std::sync::Mutex::new(HashSet::new())),
             thumb_sem: Arc::new(tokio::sync::Semaphore::new(4)),
+        };
+        let backend = Self {
+            commands,
+            events,
+            epoch: std::cell::Cell::new(0),
+            waker: context.waker.clone(),
+            library_saves: context.library_saves.clone(),
+            settings_saves: context.settings_saves.clone(),
+            library_gate,
+            settings_gate,
         };
         std::thread::Builder::new()
             .name("youtfast-backend".into())
@@ -394,6 +519,7 @@ impl Backend {
                         "library",
                         context.dirs.library(),
                         library_snapshots,
+                        writer_library_gate,
                         Library::save,
                     ));
                     tokio::spawn(writer(
@@ -401,26 +527,106 @@ impl Backend {
                         "settings",
                         context.dirs.settings(),
                         settings_snapshots,
+                        writer_settings_gate,
                         Settings::save,
                     ));
-                    while let Some(command) = incoming.recv().await {
-                        let context = context.clone();
-                        tokio::spawn(async move { handle(command, context).await });
+                    while let Some((epoch, command)) = incoming.recv().await {
+                        if command.changes_session() {
+                            context.epoch = epoch;
+                            for (_, task) in context.loads.lock().unwrap().drain() {
+                                task.abort();
+                            }
+                            match innertube::client(&context.dirs) {
+                                Ok(client) => context.rp = client,
+                                Err(_) => {
+                                    innertube::sign_out(&context.rp).await;
+                                    context.send(if matches!(command, Command::SignOut) {
+                                        Event::SignedOut
+                                    } else {
+                                        Event::SignInFailed(
+                                            "Could not start the YouTube session.".into(),
+                                        )
+                                    });
+                                    continue;
+                                }
+                            }
+                        }
+                        dispatch(command.ordered(), handle(command, context.clone())).await;
                     }
                 });
             })?;
-        Ok(Self { commands, events })
+        Ok(backend)
+    }
+
+    pub fn context(&self) -> &egui::Context {
+        &self.waker
+    }
+
+    pub fn save_final(&self, library: &Library, settings: &Settings, dirs: &Dirs) {
+        if let Err(error) = self
+            .library_gate
+            .write(true, || library.save(&dirs.library()))
+        {
+            log::error!("could not save the library: {error}");
+        }
+        if let Err(error) = self
+            .settings_gate
+            .write(true, || settings.save(&dirs.settings()))
+        {
+            log::error!("could not save the settings: {error}");
+        }
     }
 
     pub fn send(&self, command: Command) {
-        if self.commands.send(command).is_err() {
+        let command = match command {
+            Command::SaveLibrary(library) => {
+                self.library_saves.send_replace(Some(library));
+                return;
+            }
+            Command::SaveSettings(settings) => {
+                self.settings_saves.send_replace(Some(settings));
+                return;
+            }
+            command => command,
+        };
+        if command.changes_session() {
+            self.epoch.set(self.epoch.get() + 1);
+        }
+        if self.commands.send((self.epoch.get(), command)).is_err() {
             log::error!("the backend has stopped");
         }
     }
 
     /// Every event that arrived since the last call.
     pub fn poll(&self) -> Vec<Event> {
-        self.events.try_iter().collect()
+        let events: Vec<_> = self
+            .events
+            .try_iter()
+            .filter_map(|(epoch, event)| {
+                if !event.current(epoch, self.epoch.get()) {
+                    return None;
+                }
+                let epoch = if matches!(&event, Event::SignInFailed(_) | Event::SessionExpired(_)) {
+                    self.send(Command::SignOut);
+                    self.epoch.get()
+                } else {
+                    epoch
+                };
+                Some((epoch, event))
+            })
+            .collect();
+        events
+            .into_iter()
+            .filter_map(|(epoch, event)| event.current(epoch, self.epoch.get()).then_some(event))
+            .collect()
+    }
+}
+
+async fn dispatch(ordered: bool, task: impl Future<Output = ()> + Send + 'static) {
+    if ordered {
+        task.await;
+    } else {
+        tokio::spawn(task);
     }
 }
 
@@ -537,12 +743,36 @@ async fn handle(command: Command, context: Context) {
             let Some(file) = picked.await else {
                 return;
             };
-            let import = match std::fs::File::open(file.path()) {
-                Ok(file) => takeout::parse_reader(std::io::BufReader::new(file)),
-                // The handle's own read covers a path that cannot be opened.
-                Err(_) => takeout::parse(&file.read().await),
-            };
+            let path = file.path().to_owned();
+            let import = tokio::task::spawn_blocking(move || {
+                match std::fs::File::open(path) {
+                    Ok(file) => takeout::parse_reader(std::io::BufReader::new(file)),
+                    // An inaccessible file is not read without a size limit.
+                    Err(_) => Err("Could not open this Takeout file.".into()),
+                }
+            })
+            .await
+            .unwrap_or_else(|_| Err("Could not import this Takeout file.".into()));
             context.send(Event::Imported(import));
+        }
+        Command::MergeImport {
+            mut library,
+            import,
+            revision,
+        } => {
+            match tokio::task::spawn_blocking(move || {
+                let counts = library.merge(import);
+                Event::ImportMerged {
+                    library,
+                    counts,
+                    revision,
+                }
+            })
+            .await
+            {
+                Ok(event) => context.send(event),
+                Err(_) => context.send(Event::Notice("Could not merge this Takeout file.".into())),
+            }
         }
         Command::AddAccount { account, method } => {
             context.send(Event::SigningIn);
@@ -555,7 +785,10 @@ async fn handle(command: Command, context: Context) {
                             Err(error) => Err(error),
                         }
                     }
-                    None => return,
+                    None => {
+                        context.send(Event::SignedOut);
+                        return;
+                    }
                 },
                 SignInMethod::Browser => {
                     let AccountSource::Browser(spec) = &account.source else {
@@ -636,17 +869,28 @@ async fn handle(command: Command, context: Context) {
                 let path = crate::thumbs::path(&dir, &url);
                 if path.exists() {
                     context.thumb_pending.lock().unwrap().remove(&url);
+                    context.send(Event::Thumbnail {
+                        url,
+                        ready: true,
+                        bytes: None,
+                    });
                     continue;
                 }
                 let context = context.clone();
                 tokio::spawn(async move {
                     let _permit = context.thumb_sem.acquire().await;
                     let task = url.clone();
-                    let _ = tokio::task::spawn_blocking(move || {
-                        crate::thumbs::fetch(&task, &path);
-                    })
-                    .await;
+                    let bytes =
+                        tokio::task::spawn_blocking(move || crate::thumbs::fetch(&task, &path))
+                            .await
+                            .ok()
+                            .and_then(Result::ok);
                     context.thumb_pending.lock().unwrap().remove(&url);
+                    context.send(Event::Thumbnail {
+                        url,
+                        ready: bytes.is_some(),
+                        bytes,
+                    });
                 });
             }
         }
@@ -668,6 +912,7 @@ async fn writer<T: Clone + Send + Sync + 'static>(
     what: &'static str,
     path: PathBuf,
     mut snapshots: watch::Receiver<Option<T>>,
+    gate: Arc<SaveGate>,
     save: fn(&T, &Path) -> std::io::Result<()>,
 ) {
     while snapshots.changed().await.is_ok() {
@@ -676,7 +921,8 @@ async fn writer<T: Clone + Send + Sync + 'static>(
             continue;
         };
         let path = path.clone();
-        match tokio::task::spawn_blocking(move || save(&value, &path)).await {
+        let gate = gate.clone();
+        match tokio::task::spawn_blocking(move || gate.write(false, || save(&value, &path))).await {
             Ok(Ok(())) => {}
             Ok(Err(error)) => {
                 log::error!("could not save the {what}: {error}");
@@ -851,7 +1097,11 @@ async fn start_session(context: &Context, cookie: String, id: u32) -> Result<(),
         "YouTube did not accept this session. Sign in again on youtube.com and retry.",
     )
     .await?;
-    account::save_session(id, cookie).await
+    let result = account::save_session(id, cookie).await;
+    if result.is_err() {
+        innertube::sign_out(&context.rp).await;
+    }
+    result
 }
 
 /// Reads a browser's session and starts it as account `id`.
@@ -863,26 +1113,28 @@ async fn session_from_browser(context: &Context, spec: &str, id: u32) -> Result<
 /// Starts using a session; `rejected` is what to say when YouTube does
 /// not accept it.
 async fn sign_in(context: &Context, cookie: String, rejected: &str) -> Result<(), String> {
-    innertube::sign_in(&context.rp, cookie)
-        .await
-        .map_err(|error| {
-            if innertube::is_signed_out(&error) {
-                rejected.to_owned()
-            } else {
-                format!("Could not reach YouTube: {error}")
-            }
-        })
+    let result = innertube::sign_in(&context.rp, cookie).await;
+    if result.is_err() {
+        innertube::sign_out(&context.rp).await;
+    }
+    result.map_err(|error| {
+        if innertube::is_signed_out(&error) {
+            rejected.to_owned()
+        } else {
+            innertube::text(error)
+        }
+    })
 }
 
 fn finish_sign_in(context: &Context, account: Account, result: Result<(), String>) {
     match result {
         Ok(()) => {
-            log::info!("signed in as {}", account.name);
+            log::info!("signed in");
             context.send(Event::AccountAdded(account.clone()));
             signed_in(context, &account);
         }
         Err(error) => {
-            log::warn!("sign-in for {} failed: {error}", account.name);
+            log::warn!("sign-in failed: {error}");
             context.send(Event::SignInFailed(error));
         }
     }
@@ -911,7 +1163,7 @@ async fn restore(context: &Context, account: &Account) {
         Err(error) => error,
     };
     if let AccountSource::Browser(browser) = &account.source {
-        log::info!("renewing the session from {browser}: {error}");
+        log::info!("renewing the session");
         let renewed = session_from_browser(context, browser, account.id).await;
         if renewed.is_ok() {
             signed_in(context, account);
@@ -938,4 +1190,243 @@ fn signed_in(context: &Context, account: &Account) {
             Err(error) => log::warn!("videos will play signed out: {error}"),
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    type ScopedBackend = (
+        Backend,
+        mpsc::Sender<(u64, Event)>,
+        async_mpsc::UnboundedReceiver<(u64, Command)>,
+    );
+
+    fn scoped_backend(epoch: u64) -> ScopedBackend {
+        let (commands, incoming) = async_mpsc::unbounded_channel();
+        let (outgoing, events) = mpsc::channel();
+        (
+            Backend {
+                commands,
+                events,
+                epoch: std::cell::Cell::new(epoch),
+                waker: egui::Context::default(),
+                library_saves: Arc::new(watch::channel(None).0),
+                settings_saves: Arc::new(watch::channel(None).0),
+                library_gate: Arc::new(SaveGate::default()),
+                settings_gate: Arc::new(SaveGate::default()),
+            },
+            outgoing,
+            incoming,
+        )
+    }
+
+    #[test]
+    fn failed_authentication_invalidates_private_responses_before_and_after_it_in_the_batch() {
+        for failure in [
+            Event::SessionExpired("expired".into()),
+            Event::SignInFailed("failed".into()),
+        ] {
+            let (backend, outgoing, mut incoming) = scoped_backend(1);
+            outgoing
+                .send((
+                    1,
+                    Event::Rating {
+                        id: "before-failure".into(),
+                        result: Ok(Rating::Like),
+                    },
+                ))
+                .unwrap();
+            outgoing.send((1, failure)).unwrap();
+            outgoing
+                .send((
+                    1,
+                    Event::Rating {
+                        id: "same-video".into(),
+                        result: Ok(Rating::Like),
+                    },
+                ))
+                .unwrap();
+            outgoing
+                .send((
+                    1,
+                    Event::SaveTargets {
+                        id: "same-video".into(),
+                        result: Ok(Vec::new()),
+                    },
+                ))
+                .unwrap();
+            outgoing.send((0, Event::CheckAlerts)).unwrap();
+            assert_eq!(backend.poll().len(), 2);
+            assert!(matches!(incoming.try_recv(), Ok((2, Command::SignOut))));
+        }
+    }
+
+    #[test]
+    fn private_external_errors_are_sanitized_before_reaching_the_interface() {
+        let error = "https://youtube.com/private Cookie: SAPISID=synthetic-secret";
+        let events = [
+            Event::Loaded {
+                slot: Slot::History,
+                generation: 1,
+                result: Err(error.into()),
+            },
+            Event::Details {
+                generation: 1,
+                result: Box::new(Err(error.into())),
+            },
+            Event::RateFailed {
+                id: "video".into(),
+                previous: Rating::None,
+                error: error.into(),
+            },
+            Event::SignInFailed(error.into()),
+        ];
+        for event in events {
+            let event = event.sanitize();
+            let error = match event {
+                Event::Loaded {
+                    result: Err(error), ..
+                }
+                | Event::RateFailed { error, .. }
+                | Event::SignInFailed(error) => error,
+                Event::Details { result, .. } => result.unwrap_err(),
+                _ => panic!("unexpected event"),
+            };
+            assert!(!error.contains("synthetic-secret") && !error.contains("https://"));
+        }
+    }
+
+    #[test]
+    fn the_final_save_waits_for_an_old_write_and_rejects_later_old_snapshots() {
+        let gate = Arc::new(SaveGate::default());
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!(
+                "final-save-{}-{}.json",
+                std::process::id(),
+                crate::util::now()
+            ));
+        let (started, ready) = mpsc::channel();
+        let (release, wait) = mpsc::channel();
+        let old_gate = gate.clone();
+        let old_path = path.clone();
+        let old = std::thread::spawn(move || {
+            old_gate.write(false, || {
+                started.send(()).unwrap();
+                wait.recv().unwrap();
+                crate::paths::write_atomic(&old_path, b"old")
+            })
+        });
+        ready
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        let final_gate = gate.clone();
+        let final_path = path.clone();
+        let final_write = std::thread::spawn(move || {
+            final_gate.write(true, || crate::paths::write_atomic(&final_path, b"final"))
+        });
+        release.send(()).unwrap();
+        old.join().unwrap().unwrap();
+        final_write.join().unwrap().unwrap();
+        gate.write(false, || crate::paths::write_atomic(&path, b"queued-old"))
+            .unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"final");
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn changing_accounts_drops_old_private_responses_even_for_the_same_video() {
+        let (backend, outgoing, _incoming) = scoped_backend(2);
+        for epoch in [1, 2] {
+            outgoing
+                .send((
+                    epoch,
+                    Event::Rating {
+                        id: "same-video".into(),
+                        result: Ok(Rating::Like),
+                    },
+                ))
+                .unwrap();
+            outgoing
+                .send((
+                    epoch,
+                    Event::SaveTargets {
+                        id: "same-video".into(),
+                        result: Ok(Vec::new()),
+                    },
+                ))
+                .unwrap();
+            outgoing
+                .send((epoch, Event::SignedIn(epoch as u32)))
+                .unwrap();
+            outgoing
+                .send((
+                    epoch,
+                    Event::Loaded {
+                        slot: Slot::History,
+                        generation: 1,
+                        result: Ok(Payload::Videos(Vec::new())),
+                    },
+                ))
+                .unwrap();
+        }
+        outgoing.send((0, Event::CheckAlerts)).unwrap();
+        assert_eq!(backend.poll().len(), 5);
+    }
+
+    #[tokio::test]
+    async fn session_changes_wait_for_earlier_writes() {
+        let steps = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (release, wait) = tokio::sync::oneshot::channel();
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let history = steps.clone();
+        let worker = tokio::spawn(async move {
+            dispatch(true, async move {
+                history.lock().unwrap().push("write-A");
+                started.send(()).unwrap();
+                wait.await.unwrap();
+                history.lock().unwrap().push("finished-A");
+            })
+            .await;
+            let switched = steps.clone();
+            dispatch(true, async move {
+                switched.lock().unwrap().push("switch-B");
+            })
+            .await;
+            steps
+        });
+        ready.await.unwrap();
+        release.send(()).unwrap();
+        let steps = worker.await.unwrap();
+        assert_eq!(
+            *steps.lock().unwrap(),
+            ["write-A", "finished-A", "switch-B"]
+        );
+        assert!(
+            Command::Rate {
+                id: "x".into(),
+                rating: Rating::Like,
+                previous: Rating::None
+            }
+            .ordered()
+        );
+        assert!(
+            Command::SetSaved {
+                id: "x".into(),
+                playlist: "p".into(),
+                saved: true
+            }
+            .ordered()
+        );
+        assert!(Command::SignOut.ordered());
+        assert!(
+            Command::Switch(Account {
+                id: 2,
+                name: "B".into(),
+                source: AccountSource::File
+            })
+            .ordered()
+        );
+    }
 }

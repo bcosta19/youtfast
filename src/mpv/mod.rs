@@ -602,7 +602,7 @@ impl Mpv {
                             CStr::from_ptr(message.text).to_string_lossy(),
                         )
                     };
-                    log::warn!(target: "mpv", "[{prefix}] {}", text.trim_end());
+                    log::warn!(target: "mpv", "mpv reported a playback diagnostic");
                     if prefix == "ytdl_hook"
                         && let Some(failure) = Failure::from_ytdl(&text)
                     {

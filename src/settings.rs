@@ -122,7 +122,7 @@ impl Default for Settings {
 impl Settings {
     /// Reads the settings. A missing file is the defaults; an unreadable
     /// one is moved aside rather than overwritten by the next save.
-    pub fn load(path: &Path) -> Self {
+    pub fn load(path: &Path) -> std::io::Result<Self> {
         crate::paths::load_json(path, "settings")
     }
 
@@ -193,13 +193,16 @@ mod tests {
             ..Settings::default()
         };
         settings.save(&path).unwrap();
-        assert_eq!(Settings::load(&path), settings);
+        assert_eq!(Settings::load(&path).unwrap(), settings);
         std::fs::remove_file(&path).unwrap();
     }
 
     #[test]
     fn a_missing_file_is_the_defaults() {
-        assert_eq!(Settings::load(&path("missing")), Settings::default());
+        assert_eq!(
+            Settings::load(&path("missing")).unwrap(),
+            Settings::default()
+        );
     }
 
     #[test]
@@ -219,7 +222,7 @@ mod tests {
     fn an_unreadable_file_is_moved_aside() {
         let path = path("bad-settings");
         std::fs::write(&path, "not json").unwrap();
-        assert_eq!(Settings::load(&path), Settings::default());
+        assert_eq!(Settings::load(&path).unwrap(), Settings::default());
         assert!(!path.exists());
         let aside = format!("{}.unreadable-*", path.display());
         let prefix = format!(

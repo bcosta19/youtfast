@@ -208,3 +208,32 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
 Builds go through [mbx](https://mr-boxington.jdx.dev) for mise users, as in
 the sibling apps (`mise trust` once per checkout). Never put build output or
 large scratch files in `/tmp`.
+
+## Reliability regression rules
+
+- A backend session owns a fresh RustyPipe client. Authentication changes and
+  account writes are ordered; events carry a session epoch. Authentication
+  failure invalidates private events from the entire pending batch, including
+  events preceding the failure. Device-local imports and thumbnails remain
+  independent of the account. Account changes also dismiss open menus.
+- `Backend::send` publishes library/settings snapshots directly to their watch
+  channels. Writers and `save_final` share a `SaveGate`; the final write waits
+  for earlier writes and seals the gate against later old snapshots. Never
+  bypass that gate for exit saves.
+- `load_json` returns a result: read errors or failed backups stop startup.
+  Invalid JSON and UTF-8 are preserved before defaults become writable.
+  Atomic writes reject non-regular targets and synchronize the parent
+  directory on Unix. Regression fixtures belong under unique paths inside
+  `target/`, never at `target` itself: mbx manages that symbolic link.
+- Takeout parsing and merging run off the interface thread. Limits are 64 MiB,
+  20,000 unique subscriptions and the latest 1,000 unique history entries.
+  A merge must match `App::library_revision` or be rejected without replacing
+  local changes or restoring cleared history.
+- Thumbnail display and disk persistence share one download. Responses are
+  limited to 4 MiB, 4096 pixels per side and four million pixels; the disk cache
+  is limited to 2,000 files and 128 MiB. Requests retry with backoff, and late
+  failures must not recreate retry entries for images already forgotten.
+- Logs and external errors use controlled messages, also under `--verbose`
+  and `RUST_LOG`. `account::CacheFile` sanitizes both reads and writes, retaining
+  only public client/deobfuscation data; a cache cannot restore credentials.
+  Never weaken these guards to expose raw dependency or credential-store data.

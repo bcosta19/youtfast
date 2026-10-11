@@ -339,6 +339,7 @@ pub struct App {
     ratings: util::Recent<Rating>,
     /// The comments page in flight, to put its token back on failure.
     more_comments_token: Option<String>,
+    library_revision: std::cell::Cell<u64>,
     /// The channel the open page shows, to detect a channel switch.
     open_channel: Option<String>,
     /// The shelf's Shorts tabs were asked for this feed already; a new
@@ -393,7 +394,8 @@ impl App {
             Backend::start(ctx.clone(), dirs.clone()).context("could not start the backend")?;
 
         let browsers = account::installed_browsers();
-        let mut settings = Settings::load(&dirs.settings());
+        let mut settings =
+            Settings::load(&dirs.settings()).context("could not safely load the settings")?;
         // The quality eframe's storage kept before the settings file
         // existed moves over once.
         if !dirs.settings().exists()
@@ -415,7 +417,7 @@ impl App {
         let palette = settings.palette();
         theme::apply(ctx, &palette);
         let mut state = State {
-            library: Library::load(&dirs.library()),
+            library: Library::load(&dirs.library()).context("could not safely load the library")?,
             themes_dir: dirs.config.join("themes").display().to_string(),
             palette,
             settings,
@@ -463,6 +465,7 @@ impl App {
             details_cache: util::Recent::new(DETAILS_KEPT),
             ratings: util::Recent::new(RATINGS_KEPT),
             more_comments_token: None,
+            library_revision: std::cell::Cell::new(0),
             open_channel: None,
             shelf_asked: false,
             back: Vec::new(),
@@ -528,6 +531,11 @@ impl App {
             } => self.on_comments(generation, key, result),
             Event::Imported(Ok(import)) => self.on_imported(import),
             Event::Imported(Err(error)) => self.state.notice = Some(error),
+            Event::ImportMerged {
+                library,
+                counts,
+                revision,
+            } => self.on_import_merged(*library, counts, revision),
             Event::Rating { id, result } => self.on_rating(id, result),
             Event::RateFailed {
                 id,
@@ -547,19 +555,25 @@ impl App {
                 self.save_library();
             }
             Event::SignedIn(id) => self.on_signed_in(id),
-            Event::SignInFailed(error) => self.state.account = AccountState::Failed(error),
+            Event::SignInFailed(error) => {
+                self.on_signed_out();
+                self.state.account = AccountState::Failed(error);
+            }
             Event::PlaybackCookies { account, browser } => {
                 if self.state.account == AccountState::SignedIn(account) {
                     self.set_playback_cookies(Some(browser));
                 }
             }
             Event::SessionExpired(error) => {
-                self.set_playback_cookies(None);
+                self.on_signed_out();
                 self.state.account =
                     AccountState::Failed(format!("{error} Sign in again to see your account."));
             }
             Event::SignedOut => self.on_signed_out(),
             Event::CheckAlerts => self.check_alerts(),
+            Event::Thumbnail { url, ready, bytes } => {
+                ui::images::completed(self.backend.context(), &url, ready, bytes)
+            }
             Event::Suggestions { query, items } => {
                 if query == self.state.query.trim() {
                     self.state.suggestions = items;
@@ -738,7 +752,7 @@ impl App {
             Action::MarkRemoving(id) => self.state.removing = Some(id),
             Action::CancelRemoving => self.state.removing = None,
             Action::RemoveAccount(id) => self.remove_account(id),
-            Action::SignOut => self.backend.send(Command::SignOut),
+            Action::SignOut => self.sign_out(),
             Action::SetBrowser(browser) => self.state.browser = browser,
             Action::DismissNotice => self.state.notice = None,
             Action::LoadMoreComments => self.load_more_comments(),
@@ -808,6 +822,7 @@ impl App {
     }
 
     fn save_library(&self) {
+        self.library_revision.set(self.library_revision.get() + 1);
         self.backend
             .send(Command::SaveLibrary(self.state.library.clone()));
     }
@@ -903,13 +918,9 @@ impl eframe::App for App {
                 .library
                 .set_position(&video.id, status.position, status.duration);
         }
-        if let Err(error) = self.state.library.save(&self.dirs.library()) {
-            log::error!("could not save the library: {error}");
-        }
         // A volume changed in the last second is not saved yet.
-        if let Err(error) = self.state.settings.save(&self.dirs.settings()) {
-            log::error!("could not save the settings: {error}");
-        }
+        self.backend
+            .save_final(&self.state.library, &self.state.settings, &self.dirs);
         // The renderer goes first, with the GL context current, and mpv
         // after it, as libmpv requires.
         if let (Some(surface), Some(gl)) = (self.surface.take(), gl) {

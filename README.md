@@ -65,7 +65,16 @@ volume) in `~/.config/youtfast/settings.json`. The home feed comes from each
 subscribed channel's RSS. Bring an existing library over from
 [Google Takeout](https://takeout.google.com): choose YouTube and YouTube
 Music, with JSON as the history format, and import `subscriptions.csv` and
-`watch-history.json`. Nothing here touches a Google account.
+`watch-history.json`. Nothing here touches a Google account. Imports accept
+files up to 64 MiB and 20,000 unique subscriptions, and retain the 1,000 most
+recent unique history entries. Parsing and merging run in the background.
+If the library changes during the merge, retry the import; those newer
+changes are never replaced by an older import snapshot.
+
+An unreadable library or settings file is backed up before defaults can be
+saved. A read or backup failure stops startup rather than overwriting the
+original. Saves at exit wait for in-progress saves and prevent older queued
+snapshots from replacing the final state.
 
 **With your YouTube accounts**, each account is named and kept in the
 keyring under its own entry: add several, switch from the account page
@@ -85,6 +94,21 @@ may be treated by Google as automated access**: the account could be asked to
 verify itself, signed out, or suspended. A secondary account is the safe
 choice. Subscribing and saving to Watch later from YouTFast act on this
 computer; changing the account itself needs youtube.com.
+
+Account changes clear private lists and caches immediately and dismiss open
+menus. Pending writes finish on their originating session before switching,
+and late responses cannot update the new account's interface. A session
+expiration or sign-in failure also discards private responses from the same
+pending batch. Credentials found in an older rustypipe cache are ignored;
+only the selected account's keyring entry can restore its session.
+
+Logs use fixed diagnostic categories rather than account names, video IDs,
+browser profiles, URLs or external error text. This redaction also applies
+to dependencies and to `--verbose` / `RUST_LOG`; more verbose logging does
+not opt out of privacy protection. Thumbnail downloads are shared between
+display and the disk cache, capped at 4 MiB and four million pixels each,
+and retried after 30 seconds on failure. The disk cache is pruned during use
+to 2,000 files and 128 MiB.
 
 ## New-upload alerts
 

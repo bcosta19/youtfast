@@ -3,7 +3,7 @@
 //! Watch later. One JSON file, written atomically off the interface thread.
 
 use std::cmp::Reverse;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::model::{AccountSource, Channel, Video};
 
 /// History keeps the most recent this many videos.
-const HISTORY_LIMIT: usize = 1000;
+pub(crate) const HISTORY_LIMIT: usize = 1000;
 /// A video left within this many seconds of its start or end starts over.
 const RESUME_MARGIN: f64 = 15.0;
 
@@ -73,8 +73,8 @@ pub struct Import {
 impl Library {
     /// Reads the library. A missing file is an empty library; an unreadable
     /// one is moved aside rather than overwritten by the next save.
-    pub fn load(path: &Path) -> Self {
-        let mut library: Library = crate::paths::load_json(path, "library");
+    pub fn load(path: &Path) -> std::io::Result<Self> {
+        let mut library: Library = crate::paths::load_json(path, "library")?;
         // Older files' single `account` becomes account 1.
         if library.accounts.is_empty()
             && let Some(source) = library.account.take()
@@ -87,7 +87,7 @@ impl Library {
             library.active_account = Some(1);
         }
         library.reindex_watched();
-        library
+        Ok(library)
     }
 
     /// Rebuilds the video-id index `watched` reads after the history
@@ -239,9 +239,14 @@ impl Library {
     /// Adds what a Takeout file brought. Returns how many subscriptions and
     /// history entries were new.
     pub fn merge(&mut self, import: Import) -> (usize, usize) {
+        let mut known_channels: HashSet<String> = self
+            .subscriptions
+            .iter()
+            .map(|channel| channel.id.clone())
+            .collect();
         let mut new_subscriptions = 0;
         for channel in import.subscriptions {
-            if !self.is_subscribed(&channel.id) {
+            if known_channels.insert(channel.id.clone()) {
                 self.subscriptions.push(channel);
                 new_subscriptions += 1;
             }
@@ -249,15 +254,21 @@ impl Library {
         self.subscriptions
             .sort_by_cached_key(|channel| channel.name.to_lowercase());
 
+        let mut known_videos: HashMap<String, usize> = self
+            .history
+            .iter()
+            .enumerate()
+            .map(|(index, watched)| (watched.video.id.clone(), index))
+            .collect();
         let mut new_history = 0;
         for watched in import.history {
-            match self
-                .history
-                .iter_mut()
-                .find(|known| known.video.id == watched.video.id)
-            {
-                Some(known) => known.at = known.at.max(watched.at),
-                None => {
+            match known_videos.entry(watched.video.id.clone()) {
+                std::collections::hash_map::Entry::Occupied(entry) => {
+                    let known = &mut self.history[*entry.get()];
+                    known.at = known.at.max(watched.at);
+                }
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(self.history.len());
                     self.history.push(watched);
                     new_history += 1;
                 }
@@ -279,6 +290,44 @@ fn take_first<T>(list: &mut Vec<T>, matches: impl FnMut(&T) -> bool) -> Option<T
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_large_import_deduplicates_keeps_recent_history_and_preserves_resume_positions() {
+        let mut library = Library::default();
+        library.history.push(Watched {
+            video: Video::from_id("00000019999".into()),
+            at: 19_999,
+            position: 42.0,
+        });
+        let history = (0..20_000)
+            .flat_map(|index| {
+                let watched = Watched {
+                    video: Video::from_id(format!("{index:011}")),
+                    at: index,
+                    position: 0.0,
+                };
+                [watched.clone(), watched]
+            })
+            .collect();
+        let channel = Channel {
+            id: "UC_x5XG1OV2P6uZZ5FSM9Ttw".into(),
+            name: "Synthetic".into(),
+            avatar: None,
+        };
+        assert_eq!(
+            library.merge(Import {
+                subscriptions: vec![channel.clone(), channel],
+                history
+            }),
+            (1, 19_999)
+        );
+        assert_eq!(library.history.len(), HISTORY_LIMIT);
+        assert_eq!(library.history[0].at, 19_999);
+        assert_eq!(library.history[0].position, 42.0);
+        assert_eq!(library.history.last().unwrap().at, 19_000);
+        assert!(library.watched("00000019999"));
+        assert!(!library.watched("00000000000"));
+    }
 
     fn video(id: &str) -> Video {
         Video {
@@ -348,7 +397,7 @@ mod tests {
             r#"{"subscriptions":[],"history":[],"watch_later":[],"account":{"Browser":"chromium"}}"#,
         )
         .unwrap();
-        let library = Library::load(&path);
+        let library = Library::load(&path).unwrap();
         assert_eq!(
             library.accounts,
             vec![Account {

@@ -6,7 +6,8 @@
 //! - `history/watch-history.json`: what was watched and when. Takeout
 //!   writes HTML unless JSON is chosen when the export is made.
 
-use std::io::BufRead;
+use std::collections::HashMap;
+use std::io::{BufRead, Read};
 
 use serde::Deserialize;
 
@@ -15,27 +16,81 @@ use crate::model::{Channel, Video};
 use crate::youtube;
 
 /// Reads either Takeout file, told apart by its contents.
+#[cfg(test)]
 pub fn parse(bytes: &[u8]) -> Result<Import, String> {
     parse_reader(bytes)
 }
 
 /// [`parse`], streaming: a big watch-history.json is deserialized as it is
 /// read instead of sitting in memory a second time as raw bytes.
-pub fn parse_reader<R: BufRead>(mut reader: R) -> Result<Import, String> {
-    // A UTF-8 BOM first, if there is one.
-    if let Ok(buf) = reader.fill_buf()
-        && buf.starts_with(&[0xEF, 0xBB, 0xBF])
-    {
-        reader.consume(3);
+pub fn parse_reader<R: BufRead>(reader: R) -> Result<Import, String> {
+    parse_limited(reader, 64 * 1024 * 1024)
+}
+
+struct Limited<R> {
+    reader: R,
+    remaining: u64,
+}
+
+impl<R: Read> Read for Limited<R> {
+    fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+        if bytes.is_empty() {
+            return Ok(0);
+        }
+        if self.remaining == 0 {
+            return match self.reader.read(&mut [0])? {
+                0 => Ok(0),
+                _ => Err(std::io::Error::other("Takeout exceeds the size limit")),
+            };
+        }
+        let count = bytes.len().min(self.remaining as usize);
+        let read = self.reader.read(&mut bytes[..count])?;
+        self.remaining -= read as u64;
+        Ok(read)
     }
+}
+
+fn parse_limited<R: Read>(reader: R, limit: u64) -> Result<Import, String> {
+    let mut reader = Limited {
+        reader,
+        remaining: limit,
+    };
+    // A UTF-8 BOM first, if there is one.
+    let mut prefix = [0; 3];
+    let mut length = 0;
+    while length < prefix.len() {
+        let read = reader
+            .read(&mut prefix[length..])
+            .map_err(|_| "Could not read this file (64 MiB limit).")?;
+        if read == 0 {
+            break;
+        }
+        length += read;
+    }
+    let prefix = if prefix == [0xEF, 0xBB, 0xBF] {
+        &[][..]
+    } else {
+        &prefix[..length]
+    };
+    let mut reader = std::io::BufReader::new(prefix.chain(reader));
     // The first byte that is not whitespace, without consuming it: the
     // parsers below want their text whole.
-    let first = reader
-        .fill_buf()
-        .map_err(|error| format!("Could not read this file: {error}"))?
-        .iter()
-        .find(|byte| !byte.is_ascii_whitespace())
-        .copied();
+    let first = loop {
+        let buffer = reader
+            .fill_buf()
+            .map_err(|_| "Could not read this file (64 MiB limit).")?;
+        let count = buffer
+            .iter()
+            .take_while(|byte| byte.is_ascii_whitespace())
+            .count();
+        if count < buffer.len() {
+            break Some(buffer[count]);
+        }
+        if buffer.is_empty() {
+            break None;
+        }
+        reader.consume(count);
+    };
     match first {
         Some(b'[') => Ok(Import {
             history: history(reader)?,
@@ -48,9 +103,26 @@ pub fn parse_reader<R: BufRead>(mut reader: R) -> Result<Import, String> {
         ),
         Some(_) => {
             let mut subscriptions = Vec::new();
-            for line in reader.lines() {
-                let line = line.map_err(|error| format!("Could not read this file: {error}"))?;
-                if let Some(channel) = subscription(&line) {
+            let mut known = std::collections::HashSet::new();
+            loop {
+                let mut line = String::new();
+                let count = reader
+                    .by_ref()
+                    .take(1024 * 1024 + 1)
+                    .read_line(&mut line)
+                    .map_err(|_| "Could not read this subscriptions file (64 MiB limit).")?;
+                if count == 0 {
+                    break;
+                }
+                if count > 1024 * 1024 {
+                    return Err("A subscriptions row exceeds 1 MiB.".into());
+                }
+                if let Some(channel) = subscription(&line)?
+                    && known.insert(channel.id.clone())
+                {
+                    if subscriptions.len() == 20_000 {
+                        return Err("This file exceeds 20,000 subscriptions.".into());
+                    }
                     subscriptions.push(channel);
                 }
             }
@@ -77,23 +149,24 @@ pub fn parse_reader<R: BufRead>(mut reader: R) -> Result<Import, String> {
 
 /// The channel one subscriptions.csv line names, or `None` for the header
 /// row, in whatever language it is.
-fn subscription(line: &str) -> Option<Channel> {
-    let fields = csv_fields(line);
-    let id = fields.first()?.trim();
+fn subscription(line: &str) -> Result<Option<Channel>, String> {
+    let fields = csv_fields(line)
+        .ok_or_else(|| "This subscriptions CSV has an unclosed quote.".to_owned())?;
+    let id = fields.first().map_or("", String::as_str).trim();
     if !(id.starts_with("UC") && id.len() == 24) {
-        return None;
+        return Ok(None);
     }
     let name = fields.get(2).map_or(id, |name| name.trim());
-    Some(Channel {
+    Ok(Some(Channel {
         id: id.to_owned(),
         name: name.to_owned(),
         avatar: None,
-    })
+    }))
 }
 
 /// The fields of one CSV line: commas separate, double quotes enclose a
 /// field that has commas, and `""` inside quotes is one quote.
-fn csv_fields(line: &str) -> Vec<String> {
+fn csv_fields(line: &str) -> Option<Vec<String>> {
     let mut fields = Vec::new();
     let mut field = String::new();
     let mut quoted = false;
@@ -110,7 +183,7 @@ fn csv_fields(line: &str) -> Vec<String> {
         }
     }
     fields.push(field);
-    fields
+    (!quoted).then_some(fields)
 }
 
 #[derive(Deserialize)]
@@ -140,50 +213,138 @@ const WATCHED_PREFIXES: [&str; 6] = [
     "Vous avez regardé ",
 ];
 
-fn history<R: std::io::Read>(reader: R) -> Result<Vec<Watched>, String> {
-    let entries: Vec<Entry> = serde_json::from_reader(reader)
-        .map_err(|error| format!("Could not read this history file: {error}"))?;
-    Ok(entries
-        .into_iter()
-        .filter_map(|entry| {
-            // Ads and removed videos have no link to a video.
-            let id = youtube::video_id_from_link(entry.title_url.as_deref()?)?;
-            let at = entry
-                .time
-                .as_deref()
-                .and_then(|time| time.parse::<jiff::Timestamp>().ok())?
-                .as_second();
-            let mut title = entry.title.unwrap_or_default();
-            if let Some(stripped) = WATCHED_PREFIXES
-                .iter()
-                .find_map(|prefix| title.strip_prefix(prefix))
-            {
-                title = stripped.to_owned();
+fn history<R: Read>(reader: R) -> Result<Vec<Watched>, String> {
+    struct History;
+    impl<'de> serde::de::Visitor<'de> for History {
+        type Value = Vec<Watched>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a Takeout history array")
+        }
+
+        fn visit_seq<A: serde::de::SeqAccess<'de>>(
+            self,
+            mut seq: A,
+        ) -> Result<Self::Value, A::Error> {
+            let mut rows: Vec<Watched> = Vec::new();
+            let mut known: HashMap<String, usize> = HashMap::new();
+            let limit = crate::library::HISTORY_LIMIT;
+            while let Some(entry) = seq.next_element::<Entry>()? {
+                let Some(row) = watched(entry) else {
+                    continue;
+                };
+                if let Some(&index) = known.get(&row.video.id) {
+                    rows[index].at = rows[index].at.max(row.at);
+                } else {
+                    known.insert(row.video.id.clone(), rows.len());
+                    rows.push(row);
+                }
+                if rows.len() == limit * 2 {
+                    rows.sort_by_key(|row| std::cmp::Reverse(row.at));
+                    rows.truncate(limit);
+                    known = rows
+                        .iter()
+                        .enumerate()
+                        .map(|(index, row)| (row.video.id.clone(), index))
+                        .collect();
+                }
             }
-            let channel = entry.subtitles.into_iter().next();
-            let channel_id = channel
-                .as_ref()
-                .and_then(|channel| channel.url.as_deref())
-                .and_then(|url| url.rsplit("/channel/").next())
-                .filter(|id| id.starts_with("UC"))
-                .map(str::to_owned);
-            Some(Watched {
-                video: Video {
-                    title,
-                    channel: channel.and_then(|channel| channel.name),
-                    channel_id,
-                    ..Video::from_id(id)
-                },
-                at,
-                position: 0.0,
-            })
-        })
-        .collect())
+            rows.sort_by_key(|row| std::cmp::Reverse(row.at));
+            rows.truncate(limit);
+            Ok(rows)
+        }
+    }
+    let mut decoder = serde_json::Deserializer::from_reader(reader);
+    let rows = serde::Deserializer::deserialize_seq(&mut decoder, History).map_err(|_| {
+        "Could not read this history file. Check its JSON format and the 64 MiB size limit."
+            .to_owned()
+    })?;
+    decoder
+        .end()
+        .map_err(|_| "The history file has invalid or oversized trailing data.".to_owned())?;
+    Ok(rows)
+}
+
+fn watched(entry: Entry) -> Option<Watched> {
+    // Ads and removed videos have no link to a video.
+    let id = youtube::video_id_from_link(entry.title_url.as_deref()?)?;
+    let at = entry
+        .time
+        .as_deref()
+        .and_then(|time| time.parse::<jiff::Timestamp>().ok())?
+        .as_second();
+    let mut title = entry.title.unwrap_or_default();
+    if let Some(stripped) = WATCHED_PREFIXES
+        .iter()
+        .find_map(|prefix| title.strip_prefix(prefix))
+    {
+        title = stripped.to_owned();
+    }
+    let channel = entry.subtitles.into_iter().next();
+    let channel_id = channel
+        .as_ref()
+        .and_then(|channel| channel.url.as_deref())
+        .and_then(|url| url.rsplit("/channel/").next())
+        .filter(|id| id.starts_with("UC"))
+        .map(str::to_owned);
+    Some(Watched {
+        video: Video {
+            title,
+            channel: channel.and_then(|channel| channel.name),
+            channel_id,
+            ..Video::from_id(id)
+        },
+        at,
+        position: 0.0,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn whitespace_and_a_split_bom_are_detected_across_buffers() {
+        struct OneByte<'a>(&'a [u8]);
+        impl Read for OneByte<'_> {
+            fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+                let len = bytes.len().min(self.0.len()).min(1);
+                bytes[..len].copy_from_slice(&self.0[..len]);
+                self.0 = &self.0[len..];
+                Ok(len)
+            }
+        }
+        let bytes = format!("\u{feff}{}[]", " ".repeat(20_000));
+        let import = parse_reader(std::io::BufReader::with_capacity(
+            1,
+            OneByte(bytes.as_bytes()),
+        ))
+        .unwrap();
+        assert!(import.history.is_empty());
+    }
+
+    #[test]
+    fn malformed_and_oversized_inputs_never_return_a_partial_import() {
+        assert!(parse(b"[{\"title\":\"private title\"}, broken]").is_err());
+        assert!(parse(b"[] trailing").is_err());
+        assert!(parse(b"").is_err());
+        assert!(parse(b"UC_x5XG1OV2P6uZZ5FSM9Ttw,url,\"unclosed").is_err());
+        assert!(parse_limited(&b"[]          "[..], 4).is_err());
+        assert!(parse_limited(&b"[]"[..], 2).is_ok());
+    }
+
+    #[test]
+    fn streaming_history_keeps_only_the_newest_unique_videos() {
+        let entries: Vec<_> = (0..5_000).map(|index| serde_json::json!({
+            "titleUrl": format!("https://www.youtube.com/watch?v={index:011}"),
+            "time": jiff::Timestamp::from_second(1_700_000_000 + index).unwrap().to_string(),
+        })).collect();
+        let json = serde_json::to_vec(&entries).unwrap();
+        let import = parse(&json).unwrap();
+        assert_eq!(import.history.len(), crate::library::HISTORY_LIMIT);
+        assert_eq!(import.history[0].at, 1_700_004_999);
+        assert_eq!(import.history.last().unwrap().at, 1_700_004_000);
+    }
 
     #[test]
     fn subscriptions_in_any_language() {

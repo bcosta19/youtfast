@@ -2,6 +2,26 @@
 
 use super::*;
 
+impl State {
+    fn accept_import(
+        &mut self,
+        library: Library,
+        (subscriptions, history): (usize, usize),
+        revision: u64,
+        current: u64,
+    ) -> bool {
+        if revision != current {
+            self.notice = Some("The library changed while importing. Retry the import to keep your latest changes.".into());
+            return false;
+        }
+        self.library = library;
+        self.notice = Some(format!(
+            "Imported {subscriptions} new subscriptions and {history} new videos of history."
+        ));
+        true
+    }
+}
+
 impl App {
     /// Loads what a view shows: always when `force`d (Refresh, a new
     /// sign-in), otherwise only what is not there yet or failed.
@@ -309,12 +329,28 @@ impl App {
 
     /// Takes in a Takeout import and reloads the view with it.
     pub(super) fn on_imported(&mut self, import: Import) {
-        let (subscriptions, history) = self.state.library.merge(import);
-        self.state.notice = Some(format!(
-            "Imported {subscriptions} new subscriptions and {history} new videos of history."
-        ));
+        self.backend.send(Command::MergeImport {
+            library: Box::new(self.state.library.clone()),
+            import,
+            revision: self.library_revision.get(),
+        });
+    }
+
+    pub(super) fn on_import_merged(
+        &mut self,
+        library: Library,
+        counts: (usize, usize),
+        revision: u64,
+    ) {
+        if !self
+            .state
+            .accept_import(library, counts, revision, self.library_revision.get())
+        {
+            return;
+        }
         self.save_library();
         self.state.feed = Listing::Idle;
+        self.state.for_you = Listing::Idle;
         self.load(self.state.view, false);
     }
 
@@ -542,6 +578,7 @@ impl App {
             }
             (Slot::Alerts, Err(error)) => {
                 log::warn!("the alerts check failed: {error}");
+                state.alerts_failed(error);
             }
             // A continuation failing keeps the rows already shown; its
             // error lands on the continuation's own state.
@@ -716,6 +753,16 @@ fn merge_feed_page(feed: &mut Vec<Video>, shorts: &mut Vec<Video>, page: Vec<Vid
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_import_cannot_restore_history_cleared_while_it_was_merging() {
+        let mut state = State::default();
+        let mut old = Library::default();
+        old.record_watch(Video::from_id("old-history".into()), 1);
+        assert!(!state.accept_import(old, (0, 1), 1, 2));
+        assert!(state.library.history.is_empty());
+        assert!(state.notice.unwrap().contains("Retry"));
+    }
 
     #[test]
     fn a_continuation_page_splits_shorts_and_skips_repeats() {

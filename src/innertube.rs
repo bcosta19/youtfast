@@ -76,11 +76,7 @@ pub fn is_signed_out(error: &Error) -> bool {
 /// An error as text for the user and the log: reqwest's message can end in
 /// the request's URL ("... for url (...)"), which helps nobody.
 pub fn text(error: Error) -> String {
-    let text = error.to_string();
-    match text.find(" for url (") {
-        Some(at) => text[..at].to_owned(),
-        None => text,
-    }
+    crate::safe_error(&error.to_string())
 }
 
 /// Starts using a session, checking it with YouTube first.

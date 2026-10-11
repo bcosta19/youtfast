@@ -800,6 +800,42 @@ fn comment_row(
     avatar: f32,
     actions: &mut Vec<Action>,
 ) {
+    let top = ui.next_widget_position();
+    let width = ui.available_width();
+    let text: Vec<_> = comment
+        .text
+        .iter()
+        .map(|span| (std::mem::discriminant(span), span.text()))
+        .collect();
+    let key = egui::Id::new((
+        "comment-layout",
+        &comment.id,
+        (
+            width.to_bits(),
+            avatar.to_bits(),
+            ui.text_style_height(&egui::TextStyle::Body).to_bits(),
+        ),
+        (
+            &comment.author,
+            &comment.published,
+            comment.pinned,
+            comment.by_owner,
+            comment.hearted,
+            comment.likes,
+            comment.replies,
+        ),
+        text,
+    ));
+    let closed =
+        !state.comments_open.contains(&comment.id) && !state.replies.contains_key(&comment.id);
+    let cached = ui.ctx().data(|data| data.get_temp::<f32>(key));
+    if closed
+        && let Some(height) = cached
+        && !ui.is_rect_visible(Rect::from_min_size(top, vec2(width, height)))
+    {
+        ui.allocate_exact_size(vec2(width, height), Sense::hover());
+        return;
+    }
     // YouTube's handles already start with `@`.
     let author = comment
         .author
@@ -858,6 +894,10 @@ fn comment_row(
         });
     });
     ui.add_space(16.0);
+    if closed {
+        let height = (ui.next_widget_position().y - top.y - ui.spacing().item_spacing.y).max(0.0);
+        ui.ctx().data_mut(|data| data.insert_temp(key, height));
+    }
 }
 
 /// `@author  3 days ago`, then "Pinned" / "By the creator" in small
@@ -1073,6 +1113,52 @@ mod tests {
             by_owner: false,
             hearted: true,
         }
+    }
+
+    #[test]
+    fn cached_comment_heights_preserve_scroll_geometry_without_requesting_offscreen_avatars() {
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let state = State::default();
+        let comments: Vec<_> = (0..1000)
+            .map(|index| {
+                let mut comment = row(&format!("comment-{index}"), 0);
+                comment.author_avatar =
+                    Some(format!("https://i.ytimg.com/synthetic-avatar-{index}"));
+                comment
+            })
+            .collect();
+        let mut heights = Vec::new();
+        for _ in 0..3 {
+            let mut height = 0.0;
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 480.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    egui::CentralPanel::default().show(ui, |ui| {
+                        egui::ScrollArea::vertical().show(ui, |ui| {
+                            let top = ui.next_widget_position().y;
+                            for comment in &comments {
+                                comment_row(ui, &state, comment, 40.0, &mut Vec::new());
+                            }
+                            height = ui.next_widget_position().y - top;
+                        });
+                    });
+                },
+            );
+            output.textures_delta.clear();
+            heights.push(height);
+        }
+        assert!(
+            heights
+                .iter()
+                .all(|height| (height - heights[0]).abs() < 1.0),
+            "comment heights drifted: {heights:?}"
+        );
+        let drawn = super::super::images::drawn_count(&ctx);
+        assert!(drawn > 0 && drawn < 10, "drawn avatars: {drawn}");
     }
 
     /// Replies drawn inside a comment's column, in either layout and
