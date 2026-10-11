@@ -3,11 +3,11 @@
 YouTFast looks like its siblings, Spotifast and ZapFast: a native app in the
 desktop's interface face, with rounded cards, pill buttons and chips, round
 avatars and soft fills instead of borders. The layout and what each page
-offers follow youtube.com (home's grid of cards under chips, search's large
-rows, the watch page's title, channel line, actions and description box,
-the subscribed channels in the sidebar). The palette is YouTube's dark or
-light, a shared preset, or the desktop's (Omarchy), as `src/theme.rs`
-resolves it.
+offers follow what a video page expects (home's grid of cards under chips,
+search's large rows, the watch page's title, channel line, actions and
+description box, the subscribed channels in the sidebar). The palette is
+YouTFast's dark or light, a shared preset, or the desktop's (Omarchy), as
+`src/theme.rs` resolves it.
 
 Mode: Operate. Scanning a feed, opening a video, and keyboard control come
 before decoration. Every keyboard binding stays; the `?` overlay lists them.
@@ -30,11 +30,11 @@ before decoration. Every keyboard binding stays; the `?` overlay lists them.
 | What | Colour |
 | --- | --- |
 | Window, page | `window` |
-| Sidebar, top bar | `panel` (the same as `window` in YouTube's palettes) |
+| Sidebar, top bar | `panel` (the same as `window` in the built-in palettes) |
 | Cards, inputs, chips, soft buttons | `surface`; hover `surface_hover`; pressed or the keyboard's selected row `surface_active` |
 | Menus, toasts, modals | `overlay` with a 1 px `outline` and the popup shadow |
 | Body text | `text`; channel names, counts, ages and other metadata `secondary`; hints and placeholders `dim` |
-| Primary button (Subscribe), the chip that is on | `text` fill, `window` label (white on dark, as YouTube) |
+| Primary button (Subscribe), the chip that is on | `text` fill, `window` label (white on dark) |
 | Progress (seek bar played, watched bar), focus, badges' counts | `accent` |
 | LIVE, errors | `red` |
 | Links in descriptions and comments | `blue`, underlined on hover |
@@ -74,7 +74,7 @@ The video rectangle is always black.
 
 ## Lists
 
-- Home is YouTube's grid of cards: as many columns as fit at 280 px or
+- Home is a grid of cards: as many columns as fit at 280 px or
   more (up to five), each card the rounded 16:9 thumbnail across its width,
   the title (semibold, two lines), the channel and `views · age` under it.
   Day headings split the grid when the feed has dates. Chips above it:
@@ -83,7 +83,7 @@ The video rectangle is always black.
   results larger, up to 360 wide and never more than half the row), then
   the title, the channel and `views · age`. The duration sits in the
   thumbnail's corner on a dark badge (LIVE on `red`); a watched video shows
-  YouTube's red bar along the thumbnail's bottom edge.
+  a red bar along the thumbnail's bottom edge.
 - Keyboard: `j`/`k` or ↓/↑ move the selected row or card (a
   `surface_active` fill; it scrolls into view), Enter opens it, `g`/`G` go
   to the top or bottom. Hover is `surface_hover`; a click opens.
@@ -108,7 +108,7 @@ The video rectangle is always black.
 
 - The video takes the width (theater mode: the whole window's width), the
   controls under it.
-- Under it, as on YouTube: the title in 20 bold, then the channel's line —
+- Under it: the title in 20 bold, then the channel's line —
   its round avatar, the name in semibold over `11M subscribers` in
   `secondary`, `Subscribe` as the primary pill — and at the right the
   actions as pills: like (with the count) and dislike joined in one pill,

@@ -98,7 +98,7 @@ doesn't flood you.
 ## Themes
 
 Settings → Appearance. **Automatic** follows the Omarchy desktop's theme
-live on Linux, and is dark elsewhere. **Dark** and **Light** are YouTube's
+live on Linux, and is dark elsewhere. **Dark** and **Light** are YouTFast's
 own colours. The eight shared palettes (Catppuccin, Nord, Rosé Pine, Tokyo
 Night, and more) are installed into `~/.config/youtfast/themes` on the
 first run as plain JSON files you can edit, copy or delete; add your own

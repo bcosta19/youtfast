@@ -1,5 +1,6 @@
-//! The interface's colours: YouTube's own dark and light, the palettes the
-//! themes folder and the shared presets add, and Omarchy's live palette.
+//! The interface's colours: YouTFast's own dark and light, the palettes
+//! the themes folder and the shared presets add, and Omarchy's live
+//! palette.
 //! fastframe-theme reads the files; [`Palette`] is what a file can set and
 //! [`apply`] puts on egui.
 
@@ -48,7 +49,7 @@ pub struct Palette {
 }
 
 impl Palette {
-    /// YouTube's dark colours (youtube.com's dark greys, its brand red).
+    /// YouTFast's dark colours.
     pub fn dark() -> Self {
         Self {
             dark: true,
@@ -77,7 +78,7 @@ impl Palette {
         }
     }
 
-    /// YouTube's light colours.
+    /// YouTFast's light colours.
     pub fn light() -> Self {
         Self {
             dark: false,

@@ -42,7 +42,7 @@ fn appearance(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             let description = if state.follows_omarchy {
                 "Automatic follows your Omarchy theme."
             } else {
-                "Automatic is YouTube's dark."
+                "Automatic is YouTFast's dark."
             };
             setting_row(ui, palette, "Theme", description, CONTROL_WIDTH, |ui| {
                 theme_picker(ui, state, actions);
