@@ -1,0 +1,23 @@
+name: Feature request
+description: Explain a user problem and a focused improvement.
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed improvement and alternatives
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Product boundaries
+      options:
+        - label: This keeps YouTFast native, without telemetry, a browser engine or a hosted backend.
+          required: true

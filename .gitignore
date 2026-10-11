@@ -7,3 +7,13 @@
 /dist/
 /tasks.md
 /vendor/**/Cargo.lock
+/rustypipe_reports/
+/.flatpak-builder/
+/build-dir/
+/repo/
+/vendor-deps/
+__pycache__/
+*.pyc
+.env
+.env.*
+cookies.txt

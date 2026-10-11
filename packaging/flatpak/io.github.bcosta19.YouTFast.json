@@ -1,0 +1,186 @@
+{
+  "app-id": "io.github.bcosta19.YouTFast",
+  "runtime": "org.freedesktop.Platform",
+  "runtime-version": "25.08",
+  "sdk": "org.freedesktop.Sdk",
+  "command": "youtfast",
+  "finish-args": [
+    "--socket=wayland",
+    "--socket=fallback-x11",
+    "--share=ipc",
+    "--device=dri",
+    "--socket=pulseaudio",
+    "--share=network",
+    "--talk-name=org.freedesktop.secrets",
+    "--own-name=org.mpris.MediaPlayer2.youtfast"
+  ],
+  "cleanup": [
+    "*.a",
+    "*.la",
+    "/include",
+    "/lib/pkgconfig"
+  ],
+  "modules": [
+    {
+      "name": "luajit",
+      "no-autogen": true,
+      "make-args": [
+        "BUILDMODE=dynamic",
+        "PREFIX=/app"
+      ],
+      "make-install-args": [
+        "PREFIX=/app"
+      ],
+      "post-install": [
+        "install -Dm644 COPYRIGHT /app/share/licenses/luajit/COPYRIGHT"
+      ],
+      "sources": [
+        {
+          "type": "git",
+          "url": "https://github.com/openresty/luajit2.git",
+          "tag": "v2.1-20260724",
+          "commit": "982cd8323eafd8604a9e5f2a916aa50b9f67d9ed"
+        }
+      ]
+    },
+    {
+      "name": "libass",
+      "config-opts": [
+        "--disable-static"
+      ],
+      "post-install": [
+        "install -Dm644 COPYING /app/share/licenses/libass/COPYING"
+      ],
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://github.com/libass/libass/releases/download/0.17.5/libass-0.17.5.tar.xz",
+          "sha256": "2dca25c0e0c837ddf00b52011b3f82cac1e4ddd3ad018227806b0c2288864acc"
+        }
+      ]
+    },
+    {
+      "name": "libplacebo",
+      "buildsystem": "meson",
+      "config-opts": [
+        "-Ddemos=false",
+        "-Dtests=false",
+        "-Dvulkan=disabled",
+        "-Dshaderc=disabled",
+        "-Dglslang=disabled"
+      ],
+      "post-install": [
+        "for file in COPYING* LICENSE*; do if test -f \"$file\"; then install -Dm644 \"$file\" \"/app/share/licenses/libplacebo/$file\"; fi; done"
+      ],
+      "sources": [
+        {
+          "type": "git",
+          "url": "https://github.com/haasn/libplacebo.git",
+          "tag": "v7.360.1",
+          "commit": "cee9b076f2c63104ccfd497fa79c39a867293ec4"
+        }
+      ]
+    },
+    {
+      "name": "libmpv",
+      "buildsystem": "meson",
+      "config-opts": [
+        "-Dlibmpv=true",
+        "-Dcplayer=false",
+        "-Dbuild-date=false",
+        "-Dalsa=disabled",
+        "-Dlua=enabled",
+        "-Dmanpage-build=disabled",
+        "-Dvulkan=disabled"
+      ],
+      "post-install": [
+        "install -Dm644 Copyright /app/share/licenses/mpv/Copyright",
+        "install -Dm644 LICENSE.GPL /app/share/licenses/mpv/LICENSE.GPL",
+        "install -Dm644 LICENSE.LGPL /app/share/licenses/mpv/LICENSE.LGPL"
+      ],
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://github.com/mpv-player/mpv/archive/v0.41.0.tar.gz",
+          "sha256": "ee21092a5ee427353392360929dc64645c54479aefdb5babc5cfbb5fad626209"
+        }
+      ]
+    },
+    {
+      "name": "deno",
+      "buildsystem": "simple",
+      "build-commands": [
+        "install -Dm755 deno /app/bin/deno",
+        "install -Dm644 deno-LICENSE.txt /app/share/licenses/deno/LICENSE.txt"
+      ],
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-unknown-linux-gnu.zip",
+          "sha256": "c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490"
+        },
+        {
+          "type": "file",
+          "path": "deno-LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "name": "yt-dlp-ejs",
+      "buildsystem": "simple",
+      "build-commands": [
+        "pip3 install --no-index --no-deps --prefix=/app yt_dlp_ejs*.whl"
+      ],
+      "sources": [
+        {
+          "type": "file",
+          "url": "https://files.pythonhosted.org/packages/e3/bd/520769863744b669440a924271a6159ddd82ad5ae26b4ac4d4b69e9f8d44/yt_dlp_ejs-0.8.0-py3-none-any.whl",
+          "sha256": "79300e5fca7f937a1eeede11f0456862c1b41107ce1d726871e0207424f4bdb4"
+        }
+      ]
+    },
+    {
+      "name": "yt-dlp",
+      "buildsystem": "simple",
+      "build-commands": [
+        "make yt-dlp PYTHON=/usr/bin/python3",
+        "install -Dm755 yt-dlp /app/bin/yt-dlp",
+        "purelib=$(python3 -c 'import sysconfig; print(sysconfig.get_path(\"purelib\", vars={\"base\": \"/app\", \"platbase\": \"/app\"}))'); install -d \"$purelib\"; cp -a yt_dlp \"$purelib/\"",
+        "install -Dm644 LICENSE /app/share/licenses/yt-dlp/LICENSE"
+      ],
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.tar.gz",
+          "sha256": "072aad4f2a7604e92155f61a275a4752dc64046c8f6d90df3710525d94cd37c1"
+        }
+      ]
+    },
+    {
+      "name": "youtfast",
+      "buildsystem": "simple",
+      "build-commands": [
+        "install -Dm755 youtfast /app/bin/youtfast",
+        "install -Dm644 packaging/applications/youtfast.desktop /app/share/applications/io.github.bcosta19.YouTFast.desktop",
+        "sed -i 's/^Icon=.*/Icon=io.github.bcosta19.YouTFast/' /app/share/applications/io.github.bcosta19.YouTFast.desktop",
+        "install -Dm644 packaging/icons/youtfast.svg /app/share/icons/hicolor/scalable/apps/io.github.bcosta19.YouTFast.svg",
+        "install -Dm644 packaging/flatpak/io.github.bcosta19.YouTFast.metainfo.xml /app/share/metainfo/io.github.bcosta19.YouTFast.metainfo.xml",
+        "install -Dm644 LICENSE /app/share/licenses/youtfast/LICENSE",
+        "install -Dm644 assets/icons/LICENSE.txt /app/share/licenses/youtfast/icons/LICENSE.txt",
+        "install -Dm644 THIRD_PARTY_NOTICES.md /app/share/licenses/youtfast/THIRD_PARTY_NOTICES.md",
+        "install -Dm644 vendor/rustypipe/LICENSE /app/share/licenses/rustypipe/LICENSE"
+      ],
+      "sources": [
+        {
+          "type": "dir",
+          "path": "built"
+        },
+        {
+          "type": "file",
+          "path": "io.github.bcosta19.YouTFast.metainfo.xml",
+          "dest": "packaging/flatpak"
+        }
+      ]
+    }
+  ]
+}

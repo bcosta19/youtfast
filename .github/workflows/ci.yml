@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_BUILD_JOBS: 2
+
+jobs:
+  linux:
+    name: linux-quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned compiler
+        run: |
+          toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$toolchain" --profile minimal --component rustfmt --component clippy
+      - name: System dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libmpv-dev libxkbcommon-dev libwayland-dev libgl1-mesa-dev libfontconfig1-dev libssl-dev desktop-file-utils appstream
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          shared-key: linux-quality
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - name: Packaging regressions and release metadata
+        run: |
+          python3 -m unittest discover -s packaging -p 'test_*.py'
+          python3 packaging/release.py check
+          desktop-file-validate packaging/applications/youtfast.desktop
+          appstreamcli validate --no-net packaging/flatpak/io.github.bcosta19.YouTFast.metainfo.xml
+      - name: Formatting
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test --locked --all-targets
+      - name: Documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --locked --no-deps
+
+  macos:
+    name: macos-native-tests
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned compiler and libmpv
+        run: |
+          toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$toolchain" --profile minimal
+          brew install mpv
+          echo "LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          shared-key: macos-tests
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - run: cargo test --locked --all-targets
+      - name: Build and version smoke test
+        run: |
+          cargo build --locked
+          test "$(target/debug/youtfast --version)" = "youtfast $(python3 packaging/release.py check)"
+
+  windows:
+    name: windows-native-tests
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: gcc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned compiler
+        shell: pwsh
+        run: |
+          $toolchain = (Select-String -Path rust-toolchain.toml -Pattern '^channel = "([^"]+)"').Matches[0].Groups[1].Value
+          rustup toolchain install $toolchain --profile minimal --target x86_64-pc-windows-gnu
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e
+        with:
+          msystem: MINGW64
+          path-type: inherit
+          update: true
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-mpv
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          shared-key: windows-gnu-tests
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - name: Native build and headless tests
+        shell: msys2 {0}
+        run: |
+          export LIBRARY_PATH=/mingw64/lib
+          cargo test --locked --all-targets --target x86_64-pc-windows-gnu
+          cargo build --locked --target x86_64-pc-windows-gnu
+          target/x86_64-pc-windows-gnu/debug/youtfast.exe --version
+
+  release-gate:
+    name: release-gate
+    if: always()
+    needs: [linux, macos, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every platform check
+        env:
+          LINUX: ${{ needs.linux.result }}
+          MACOS: ${{ needs.macos.result }}
+          WINDOWS: ${{ needs.windows.result }}
+        run: test "$LINUX" = success && test "$MACOS" = success && test "$WINDOWS" = success

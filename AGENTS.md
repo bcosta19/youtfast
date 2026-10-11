@@ -1,9 +1,10 @@
 # YouTFast agent guide
 
 YouTFast is a small native YouTube client: Rust, egui, and libmpv for
-playback. `../spotifast` and `../zapfast` are its references. When in doubt
-about a convention (structure, naming, comments, release process), do what
-they do; their `AGENTS.md` files apply here unless this file says otherwise.
+playback. Follow `CONTRIBUTING.md` for contributor policy and `RELEASING.md`
+for release gates. This repository can be built without sibling checkouts.
+`../spotifast` and `../zapfast`, when available, are convention references;
+this guide and the repository's own contribution policy take precedence.
 
 ## Product boundaries
 
@@ -237,3 +238,26 @@ large scratch files in `/tmp`.
   and `RUST_LOG`. `account::CacheFile` sanitizes both reads and writes, retaining
   only public client/deobfuscation data; a cache cannot restore credentials.
   Never weaken these guards to expose raw dependency or credential-store data.
+
+## Contributor CI and releases
+
+- Run `python3 -m unittest discover -s packaging -p 'test_*.py'` and
+  `python3 packaging/release.py check` alongside the Rust checks. Validate
+  workflows with actionlint when available. Version tags must match Cargo,
+  Cargo.lock, AppStream metadata and committed written release notes.
+- CI builds Linux, macOS and Windows on hosted GitHub runners. Do not perform
+  heavy local release builds when the maintainer asks to use those runners.
+  The release workflow publishes only after its reusable CI gate and every
+  required artifact job passes. Native platform tests are not interactive QA.
+- Keep Actions pinned to reviewed SHAs and contributor permissions read-only.
+  Never execute contributor code through `pull_request_target` with secrets.
+- The repository remains private. A raw RustyPipe report remains in old git
+  history but is no longer tracked or included in release source packages.
+  Never open that report or expose its contents to debug. Public visibility
+  requires a separate privacy/history review and explicit maintainer approval.
+- The current private repository plan does not support branch protection.
+  Document this limitation rather than claiming the CI gate blocks merges.
+- GPL-3.0-only is the release license, with original dependency notices retained.
+  Ship corresponding source, including locked Rust dependencies and native
+  Flatpak sources, alongside binary assets. A Flatpak bundle is not a Flathub
+  listing; public submission and Windows/macOS installers remain separate work.

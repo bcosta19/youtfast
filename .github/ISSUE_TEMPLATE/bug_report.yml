@@ -1,0 +1,38 @@
+name: Bug report
+description: Report a reproducible problem using synthetic or redacted data.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include cookies, keyring data, Takeout exports, browser profiles or raw API reports. Follow SECURITY.md for vulnerabilities."
+  - type: input
+    id: version
+    attributes:
+      label: YouTFast version
+      description: Include release version or commit and installation method.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Distribution and desktop
+      description: Include OS version, CPU architecture and Wayland/X11.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: behaviour
+    attributes:
+      label: Expected and actual behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Safe diagnostic details
+      description: Use synthetic data. Do not attach personal account information.

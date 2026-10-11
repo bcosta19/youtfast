@@ -1,0 +1,170 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_BUILD_JOBS: 2
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate version and main ancestry
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 packaging/release.py check --tag "$RELEASE_TAG"
+          git merge-base --is-ancestor HEAD origin/main
+
+  checks:
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  linux:
+    needs: [validate, checks]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned compiler and dependencies
+        run: |
+          toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$toolchain" --profile minimal
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libmpv-dev libxkbcommon-dev libwayland-dev libgl1-mesa-dev libfontconfig1-dev libssl-dev xvfb xdotool imagemagick dbus-x11 libgl1-mesa-dri
+      - name: Build without restored compiler output
+        run: cargo build --release --locked
+      - name: Verify and package Linux executable
+        run: |
+          test "$(target/release/youtfast --version)" = "youtfast $(python3 packaging/release.py check)"
+          ldd target/release/youtfast
+          ! ldd target/release/youtfast | grep 'not found'
+          python3 packaging/release.py linux
+      - name: Capture fresh signed-out profile
+        timeout-minutes: 3
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          mkdir -p "$RUNNER_TEMP/youtfast-preview/config" "$RUNNER_TEMP/youtfast-preview/data" "$RUNNER_TEMP/youtfast-preview/cache"
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/youtfast-preview/config"
+          export XDG_DATA_HOME="$RUNNER_TEMP/youtfast-preview/data"
+          export XDG_CACHE_HOME="$RUNNER_TEMP/youtfast-preview/cache"
+          dbus-run-session -- xvfb-run -a -s '-screen 0 1400x1000x24' bash -e -c '
+            target/release/youtfast &
+            app=$!
+            trap "kill $app 2>/dev/null || true" EXIT
+            window=$(xdotool search --sync --onlyvisible --name "^YouTFast$")
+            sleep 3
+            import -window "$window" "dist/youtfast-$RELEASE_TAG-linux.png"
+          '
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: linux
+          path: |
+            dist/*.tar.gz
+            dist/*.png
+          if-no-files-found: error
+          retention-days: 7
+
+  source:
+    needs: [validate, checks]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned compiler
+        run: |
+          toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$toolchain" --profile minimal
+      - name: Archive corresponding source and dependency licenses
+        run: python3 packaging/release.py source
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: source
+          path: dist/*-source-with-dependencies.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  flatpak:
+    needs: linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: linux
+          path: dist
+      - name: Install builder and runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08
+      - name: Build restricted bundle and native corresponding sources
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          mkdir packaging/flatpak/built
+          tar -xzf "dist/youtfast-$RELEASE_TAG-x86_64-unknown-linux-gnu.tar.gz" -C packaging/flatpak/built --strip-components=1
+          flatpak-builder --user --install --repo=repo --default-branch=stable --bundle-sources build-dir packaging/flatpak/io.github.bcosta19.YouTFast.json
+          flatpak run io.github.bcosta19.YouTFast --version
+          flatpak build-bundle --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo repo "dist/youtfast-$RELEASE_TAG-x86_64.flatpak" io.github.bcosta19.YouTFast stable
+          flatpak build-bundle --runtime repo "dist/youtfast-$RELEASE_TAG-flatpak-sources.flatpak" io.github.bcosta19.YouTFast.Sources stable
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: flatpak
+          path: dist/*.flatpak
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [checks, linux, source, flatpak]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Require artifacts, checksum and publish committed notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test -s "dist/youtfast-$RELEASE_TAG-x86_64-unknown-linux-gnu.tar.gz"
+          test -s "dist/youtfast-$RELEASE_TAG-source-with-dependencies.tar.gz"
+          test -s "dist/youtfast-$RELEASE_TAG-x86_64.flatpak"
+          test -s "dist/youtfast-$RELEASE_TAG-flatpak-sources.flatpak"
+          test -s "dist/youtfast-$RELEASE_TAG-linux.png"
+          (cd dist && sha256sum *.tar.gz *.flatpak *.png > checksums.txt && sha256sum --check checksums.txt)
+          gh release create "$RELEASE_TAG" dist/* --verify-tag --latest --title "YouTFast ${RELEASE_TAG#v}" --notes-file "packaging/release-notes/$RELEASE_TAG.md"

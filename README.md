@@ -9,9 +9,24 @@ same way: same egui and winit forks, same `ui → Action → app` architecture,
 and the [fastframe](https://github.com/crmne/fastframe) crates as they are
 needed.
 
-> Early prototype. Search, in-window playback, a library on this computer and
-> an optional YouTube account are in place; see [AGENTS.md](AGENTS.md#roadmap)
-> for what comes next.
+> Version 0.1.0 is the first early-stage release. Linux is the initial release
+> target; Windows and macOS build/test jobs do not yet imply portable installers
+> or validated interactive playback. The repository and releases currently remain
+> private to invited collaborators.
+
+## Installation and releases
+
+Release assets include a Linux x86_64 archive, a Flatpak bundle, corresponding
+source with locked Rust dependencies, and SHA-256 checksums. The native archive
+requires glibc 2.39 or newer (Ubuntu 24.04 baseline) and system libmpv; it is not
+an AppImage. The Flatpak uses the Freedesktop 25.08 runtime and does not need
+host libmpv or yt-dlp. It is a release bundle, not a Flathub listing or update
+remote. See [RELEASING.md](RELEASING.md) for installation and verification.
+
+To contribute, start with [CONTRIBUTING.md](CONTRIBUTING.md). Read
+[SECURITY.md](SECURITY.md) before reporting account or data-handling issues.
+CI runs on pull requests and pushes to `main`; release tags must match package
+and desktop metadata and pass all checks before assets are published.
 
 ## Requirements
 
@@ -139,4 +154,7 @@ Use it at your own risk.
 
 ## License
 
-MIT. The icons are [Lucide](https://lucide.dev) (ISC).
+GPL-3.0-only. See [LICENSE](LICENSE) and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Dependencies retain their own
+licenses and notices. The icons are [Lucide](https://lucide.dev) (ISC, with
+MIT notices for Feather-derived icons).

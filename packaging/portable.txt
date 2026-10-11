@@ -1,0 +1,17 @@
+YouTFast 0.1.0: Linux x86_64 package
+
+Built on Ubuntu 24.04. Requires glibc 2.39 or newer and system libmpv.so.2,
+libxkbcommon, libwayland, OpenGL and fontconfig. This is not a static AppImage.
+On Ubuntu 24.04: sudo apt-get install libmpv2 libxkbcommon0 libwayland-client0 libgl1 libfontconfig1 yt-dlp
+Keep yt-dlp current and use libmpv built with Lua support.
+Run ./youtfast from the extracted directory. --version does not open the app.
+Desktop entry and SVG icon are included for optional manual installation.
+
+Use the Flatpak bundle on older compatible distributions instead of assuming
+the native archive will work there. A Flatpak runtime is downloaded separately.
+Flatpak browser-cookie extraction is intentionally not granted access to host
+browser profiles; use the cookies.txt picker or remain signed out.
+
+GPL-3.0-only. See LICENSE, THIRD_PARTY_NOTICES.md and the corresponding
+source-with-dependencies archive from the same release. Keep notices intact.
+SHA-256 checksums detect corruption, not publisher identity or code signing.
