@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=YouTFast
+GenericName=Video Player
+Comment=A native YouTube client
+Exec=youtfast %u
+Icon=youtfast
+Terminal=false
+Categories=AudioVideo;Video;Player;
+Keywords=youtube;video;player;youtfast;
+StartupNotify=true
+StartupWMClass=youtfast

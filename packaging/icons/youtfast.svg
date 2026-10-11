@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="rim" x1="0" y1="2" x2="0" y2="126" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7b4dff"/><stop offset="1" stop-color="#4a23c9"/></linearGradient>
+    <linearGradient id="face" x1="0" y1="8" x2="0" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#b9a2ff"/><stop offset="0.55" stop-color="#8f6bff"/><stop offset="1" stop-color="#6c43f0"/></linearGradient>
+    <linearGradient id="edge" x1="0" y1="8" x2="0" y2="120" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#efe8ff"/><stop offset="0.5" stop-color="#c3b0ff" stop-opacity="0.35"/><stop offset="1" stop-color="#2e1286" stop-opacity="0.9"/></linearGradient>
+    <filter id="lift" color-interpolation-filters="sRGB" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.6"/><feOffset dy="1.6"/><feComponentTransfer><feFuncA type="linear" slope="0.35"/></feComponentTransfer><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <circle cx="64" cy="64" r="62" fill="url(#rim)"/>
+  <circle cx="64" cy="64" r="54.4" fill="url(#face)"/>
+  <circle cx="64" cy="64" r="55" fill="none" stroke="url(#edge)" stroke-width="1.2"/>
+  <g fill="#0b0e0c" stroke="#0b0e0c" stroke-width="6" stroke-linejoin="round" filter="url(#lift)" transform="translate(4 0)">
+    <path d="M32 45 L59 64 L32 83 Z"/>
+    <path d="M62 45 L89 64 L62 83 Z"/>
+  </g>
+</svg>

@@ -69,7 +69,8 @@ fn main() -> eframe::Result {
             .with_title("YouTFast")
             .with_app_id("youtfast")
             .with_inner_size([1280.0, 800.0])
-            .with_min_inner_size([480.0, 360.0]),
+            .with_min_inner_size([480.0, 360.0])
+            .with_icon(app_icon(128)),
         // The video is drawn by libmpv's OpenGL renderer, so OpenGL it is.
         renderer: eframe::Renderer::Glow,
         ..Default::default()
@@ -101,4 +102,62 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| Ok(Box::new(app::App::new(cc, open, guard)?))),
     )
+}
+
+/// The app's mark, the one the desktop entry names: the full drawing, or
+/// its flat variant when small enough that the shading would blur.
+const MARK: &[u8] = include_bytes!("../packaging/icons/youtfast.svg");
+const SMALL_MARK: &[u8] = include_bytes!("../packaging/icons/youtfast-small.svg");
+const SMALL_BELOW: u32 = 40;
+
+/// The window's icon at `size` pixels, an empty one if the drawing cannot
+/// be rendered.
+fn app_icon(size: u32) -> egui::IconData {
+    let mark = if size < SMALL_BELOW { SMALL_MARK } else { MARK };
+    let rgba = render_mark(mark, size).unwrap_or_default();
+    if rgba.is_empty() {
+        return egui::IconData::default();
+    }
+    egui::IconData {
+        rgba,
+        width: size,
+        height: size,
+    }
+}
+
+fn render_mark(mark: &[u8], size: u32) -> Option<Vec<u8>> {
+    let tree = resvg::usvg::Tree::from_data(mark, &resvg::usvg::Options::default()).ok()?;
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(size, size)?;
+    let scale = size as f32 / tree.size().width();
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::from_scale(scale, scale),
+        &mut pixmap.as_mut(),
+    );
+    Some(
+        pixmap
+            .pixels()
+            .iter()
+            .flat_map(|pixel| {
+                let color = pixel.demultiply();
+                [color.red(), color.green(), color.blue(), color.alpha()]
+            })
+            .collect(),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_icon_renders_at_both_sizes() {
+        for size in [24, 128] {
+            let icon = app_icon(size);
+            assert_eq!(icon.rgba.len(), (size * size * 4) as usize);
+            // The middle is the mark or the disc, never see-through.
+            let middle = ((size / 2 * size + size / 2) * 4 + 3) as usize;
+            assert_eq!(icon.rgba[middle], 255);
+        }
+    }
 }
