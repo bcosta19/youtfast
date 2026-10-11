@@ -71,7 +71,7 @@
         "-Dglslang=disabled"
       ],
       "post-install": [
-        "for file in COPYING* LICENSE*; do if test -f \"$file\"; then install -Dm644 \"$file\" \"/app/share/licenses/libplacebo/$file\"; fi; done"
+        "install -Dm644 ../LICENSE /app/share/licenses/libplacebo/LICENSE"
       ],
       "sources": [
         {
@@ -96,9 +96,9 @@
         "-Dvulkan=disabled"
       ],
       "post-install": [
-        "install -Dm644 Copyright /app/share/licenses/mpv/Copyright",
-        "install -Dm644 LICENSE.GPL /app/share/licenses/mpv/LICENSE.GPL",
-        "install -Dm644 LICENSE.LGPL /app/share/licenses/mpv/LICENSE.LGPL"
+        "install -Dm644 ../Copyright /app/share/licenses/mpv/Copyright",
+        "install -Dm644 ../LICENSE.GPL /app/share/licenses/mpv/LICENSE.GPL",
+        "install -Dm644 ../LICENSE.LGPL /app/share/licenses/mpv/LICENSE.LGPL"
       ],
       "sources": [
         {

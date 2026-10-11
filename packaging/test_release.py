@@ -48,6 +48,20 @@ class ReleaseTests(unittest.TestCase):
                 with self.subTest(module=module["name"]):
                     self.assertIn("--libdir=lib", module["config-opts"])
 
+    def test_flatpak_meson_notices_are_copied_from_the_source_directory(self):
+        manifest = json.loads((release.ROOT / f"packaging/flatpak/{release.APP_ID}.json").read_text())
+        modules = {module["name"]: module for module in manifest["modules"]}
+        for name, directory, files in [
+            ("libplacebo", "libplacebo", ["LICENSE"]),
+            ("libmpv", "mpv", ["Copyright", "LICENSE.GPL", "LICENSE.LGPL"]),
+        ]:
+            for filename in files:
+                with self.subTest(module=name, filename=filename):
+                    self.assertIn(
+                        f"install -Dm644 ../{filename} /app/share/licenses/{directory}/{filename}",
+                        modules[name]["post-install"],
+                    )
+
     def test_flatpak_uses_bounded_permissions_and_pinned_sources(self):
         manifest = json.loads((release.ROOT / f"packaging/flatpak/{release.APP_ID}.json").read_text())
         self.assertEqual(manifest["app-id"], release.APP_ID)
