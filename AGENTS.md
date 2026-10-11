@@ -54,9 +54,13 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
   seeks), and channel pages are its tabs (`channel_tab`, `channel_about`):
   videos, shorts, live, playlists and the channel's own search, paged through
   `More` continuations (`more_videos`, `more_playlists`), as is the home
-  feed (`more_videos` again) — its shorts land on the shelf, filled further
+  feed (`more_videos` again). Home's For you is the account's own
+  recommendations (`src/innertube/home.rs`: `browse` `FEwhat_to_watch`
+  through rustypipe's `raw`, read here, continued by rustypipe), and when
+  the account has none or there is no account, `src/recommend.rs` ranks
+  the related videos of the history's latest videos — its shorts land on the shelf, filled further
   by `channel_shorts` (each device channel's Shorts tab). rustypipe has no
-  posts or podcasts tabs, no write actions and no home recommendations:
+  posts or podcasts tabs, no write actions and no home recommendations call:
   subscribing acts on the local library. The watch page's rating and the
   account playlists of `[ save ]` are the only writes to the account
   (`src/innertube/edit.rs`, through rustypipe's `raw` request to

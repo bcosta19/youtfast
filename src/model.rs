@@ -411,7 +411,10 @@ pub enum Source {
 /// Home's chips: which of the feed's videos it shows.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum FeedFilter {
+    /// Recommendations rather than the subscriptions' uploads: the
+    /// account's own, or made from the history here (`State::for_you`).
     #[default]
+    ForYou,
     All,
     /// Published since local midnight.
     Today,
@@ -421,7 +424,8 @@ pub enum FeedFilter {
 }
 
 impl FeedFilter {
-    pub const ALL: [FeedFilter; 4] = [
+    pub const ALL: [FeedFilter; 5] = [
+        FeedFilter::ForYou,
         FeedFilter::All,
         FeedFilter::Today,
         FeedFilter::Unwatched,
@@ -430,6 +434,7 @@ impl FeedFilter {
 
     pub fn label(self) -> &'static str {
         match self {
+            FeedFilter::ForYou => "for you",
             FeedFilter::All => "all",
             FeedFilter::Today => "today",
             FeedFilter::Unwatched => "unwatched",
@@ -441,7 +446,7 @@ impl FeedFilter {
     /// history.
     pub fn keeps(self, video: &Video, watched: bool, now: i64) -> bool {
         match self {
-            FeedFilter::All => true,
+            FeedFilter::ForYou | FeedFilter::All => true,
             FeedFilter::Today => crate::util::age_bucket(video.published_at, now) == "today",
             FeedFilter::Unwatched => !watched,
             FeedFilter::Live => video.live,

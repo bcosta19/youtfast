@@ -12,6 +12,7 @@ mod model;
 mod mpv;
 mod now_playing;
 mod paths;
+mod recommend;
 mod settings;
 mod sponsorblock;
 mod takeout;

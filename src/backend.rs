@@ -46,6 +46,8 @@ pub enum Slot {
     Shorts,
     /// The timer's new-upload check (same sources as the feed).
     Alerts,
+    /// Home's For you.
+    ForYou,
 }
 
 pub enum Request {
@@ -95,6 +97,13 @@ pub enum Request {
     Shorts {
         channels: Vec<String>,
     },
+    /// Home's For you: the account's recommendations when `account` and
+    /// it has some, else the seeds' related videos ranked by the taste.
+    ForYou {
+        account: bool,
+        seeds: Vec<crate::recommend::Seed>,
+        taste: crate::recommend::Taste,
+    },
 }
 
 pub enum Payload {
@@ -133,6 +142,12 @@ pub enum Payload {
     },
     /// A channel's About tab.
     About(ChannelAbout),
+    /// Home's For you, and whether it is the account's own.
+    ForYou {
+        videos: Vec<Video>,
+        more: Option<crate::innertube::More>,
+        from_account: bool,
+    },
     /// A continued page of a paged list.
     More {
         items: PageItems,
@@ -672,6 +687,36 @@ async fn writer<T: Clone + Send + Sync + 'static>(
     }
 }
 
+/// The seeds' related videos, asked for together, ranked. A seed whose
+/// details fail is skipped.
+async fn local_recommendations(
+    rp: &RustyPipe,
+    seeds: Vec<crate::recommend::Seed>,
+    taste: &crate::recommend::Taste,
+) -> Vec<Video> {
+    let mut tasks = tokio::task::JoinSet::new();
+    for seed in seeds {
+        let rp = rp.clone();
+        tasks.spawn(async move {
+            let related = innertube::details(&rp, &seed.id)
+                .await
+                .map(|details| details.related);
+            (seed.weight, related)
+        });
+    }
+    let mut related = Vec::new();
+    while let Some(done) = tasks.join_next().await {
+        match done {
+            Ok((weight, Ok(videos))) => related.push((weight, videos)),
+            Ok((_, Err(error))) => log::warn!("a seed's related videos failed: {error}"),
+            Err(error) => log::warn!("a seed's lookup stopped: {error}"),
+        }
+    }
+    // The order the answers came in is not the seeds': keep it stable.
+    related.sort_by(|a, b| b.0.total_cmp(&a.0));
+    crate::recommend::rank(&related, taste)
+}
+
 async fn load(context: &Context, request: Request) -> Result<Payload, String> {
     let rp = &context.rp;
     let text = innertube::text;
@@ -683,6 +728,30 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
         Request::Feed { channels, account } => {
             let (videos, more) = innertube::feed(rp, channels, account, &context.rss).await?;
             Payload::Feed { videos, more }
+        }
+        Request::ForYou {
+            account,
+            seeds,
+            taste,
+        } => {
+            if account {
+                match innertube::recommended(rp).await {
+                    Ok((videos, more)) if !videos.is_empty() => {
+                        return Ok(Payload::ForYou {
+                            videos,
+                            more,
+                            from_account: true,
+                        });
+                    }
+                    Ok(_) => log::info!("the account has no recommendations; making some here"),
+                    Err(error) => log::warn!("the account's recommendations failed: {error}"),
+                }
+            }
+            Payload::ForYou {
+                videos: local_recommendations(rp, seeds, &taste).await,
+                more: None,
+                from_account: false,
+            }
         }
         Request::MoreFeed(more)
         | Request::MoreVideos(more)

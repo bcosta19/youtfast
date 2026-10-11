@@ -15,7 +15,15 @@ impl App {
         let account = self.state.source() == Source::Account;
         let state = &self.state;
         match view {
-            View::Home if force || stale(&state.feed) => {
+            View::Home if force || stale(&state.feed) || stale(&state.for_you) => {
+                if force || stale(&state.for_you) {
+                    self.load_for_you();
+                }
+                let state = &self.state;
+                if !force && !stale(&state.feed) {
+                    self.ask_shelf();
+                    return;
+                }
                 let signed_in = state.signed_in();
                 let channels = state.device_only_subscriptions();
                 self.state.feed_shown = 40;
@@ -98,6 +106,27 @@ impl App {
         self.ask_shelf();
     }
 
+    /// Asks for Home's For you: the account's when signed in, with this
+    /// computer's history as the seeds either way, in case it has none.
+    fn load_for_you(&mut self) {
+        let state = &self.state;
+        let signed_in = state.signed_in();
+        let seeds = crate::recommend::seeds(&state.library.history);
+        if seeds.is_empty() && !signed_in {
+            self.state.for_you = Listing::Ready(Vec::new());
+            return;
+        }
+        let taste = crate::recommend::taste(&state.library.history, &state.library.subscriptions);
+        self.request(
+            Slot::ForYou,
+            Request::ForYou {
+                account: signed_in,
+                seeds,
+                taste,
+            },
+        );
+    }
+
     /// Asks the backend for a list, marking it loading.
     pub(super) fn request(&mut self, slot: Slot, request: Request) {
         let state = &mut self.state;
@@ -144,6 +173,11 @@ impl App {
             }
             Slot::Shorts => state.shorts = Listing::Loading,
             Slot::Alerts => {}
+            Slot::ForYou => {
+                state.for_you = Listing::Loading;
+                state.for_you_more = None;
+                state.for_you_more_state = Fetch::Idle;
+            }
         }
         self.send_request(slot, request);
     }
@@ -175,6 +209,15 @@ impl App {
     /// Shows more of Home's feed or of the page's list, asking for the
     /// next page when the rows here run out.
     pub(super) fn load_more(&mut self) {
+        if self.state.view == View::Home && self.state.feed_filter == FeedFilter::ForYou {
+            if !matches!(self.state.for_you_more_state, Fetch::Loading)
+                && let Some(more) = self.state.for_you_more.clone()
+            {
+                self.state.for_you_more_state = Fetch::Loading;
+                self.send_continuation(Slot::ForYou, Request::MoreVideos(more));
+            }
+            return;
+        }
         if self.state.view == View::Home {
             let len = self.state.feed.items().len();
             if self.state.feed_shown < len {
@@ -462,6 +505,38 @@ impl App {
                 }
             }
             (Slot::Shorts, Err(_)) => {}
+            (
+                Slot::ForYou,
+                Ok(Payload::ForYou {
+                    videos,
+                    more,
+                    from_account,
+                }),
+            ) => {
+                state.for_you_more = more;
+                state.for_you_more_state = Fetch::Idle;
+                state.for_you_from_account = from_account;
+                put(&mut state.for_you, Ok(videos));
+            }
+            (Slot::ForYou, Ok(Payload::More { items, more })) => {
+                state.for_you_more = more;
+                state.for_you_more_state = Fetch::Idle;
+                if let PageItems::Videos(videos) = items {
+                    let list = state.for_you.items_mut();
+                    for video in videos {
+                        if !video.short && !list.iter().any(|known| known.id == video.id) {
+                            list.push(video);
+                        }
+                    }
+                }
+            }
+            (Slot::ForYou, Err(error)) => {
+                if matches!(state.for_you_more_state, Fetch::Loading) {
+                    state.for_you_more_state = Fetch::Failed(error);
+                } else {
+                    put(&mut state.for_you, Err(error));
+                }
+            }
             (Slot::Alerts, Ok(Payload::Feed { videos, .. })) => {
                 feed_page = Some(videos);
             }

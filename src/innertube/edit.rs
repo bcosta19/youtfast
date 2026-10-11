@@ -11,7 +11,11 @@ use serde_json::{Value, json};
 use crate::model::{Rating, SaveTarget};
 
 /// Sends `body` to an InnerTube endpoint as the signed-in web client.
-async fn post(rp: &RustyPipe, endpoint: &str, body: &impl Serialize) -> Result<Value, String> {
+pub(super) async fn post(
+    rp: &RustyPipe,
+    endpoint: &str,
+    body: &impl Serialize,
+) -> Result<Value, String> {
     let text = rp
         .query()
         .authenticated()
@@ -108,7 +112,7 @@ fn save_targets_in(answer: &Value) -> Vec<SaveTarget> {
 }
 
 /// YouTube's text object: `simpleText`, or `runs` joined.
-fn text(value: Option<&Value>) -> Option<String> {
+pub(super) fn text(value: Option<&Value>) -> Option<String> {
     let value = value?;
     if let Some(simple) = value.get("simpleText").and_then(Value::as_str) {
         return Some(simple.to_owned());
@@ -122,7 +126,7 @@ fn text(value: Option<&Value>) -> Option<String> {
 }
 
 /// The first answer `pick` gives, searching depth first.
-fn find<'a, T>(value: &'a Value, pick: &impl Fn(&'a Value) -> Option<T>) -> Option<T> {
+pub(super) fn find<'a, T>(value: &'a Value, pick: &impl Fn(&'a Value) -> Option<T>) -> Option<T> {
     if let Some(found) = pick(value) {
         return Some(found);
     }
@@ -134,7 +138,7 @@ fn find<'a, T>(value: &'a Value, pick: &impl Fn(&'a Value) -> Option<T>) -> Opti
 }
 
 /// Shows `visit` every object and array, depth first, in document order.
-fn collect<'a>(value: &'a Value, visit: &mut impl FnMut(&'a Value)) {
+pub(super) fn collect<'a>(value: &'a Value, visit: &mut impl FnMut(&'a Value)) {
     visit(value);
     match value {
         Value::Object(map) => map.values().for_each(|child| collect(child, visit)),

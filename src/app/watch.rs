@@ -301,6 +301,9 @@ impl App {
         let state = &self.state;
         let account = state.source() == Source::Account;
         match state.view {
+            View::Home if state.feed_filter == crate::model::FeedFilter::ForYou => {
+                state.for_you.items().to_vec()
+            }
             View::Home => state.feed.items().to_vec(),
             View::Results => state.results.items().to_vec(),
             View::Liked => state.liked.items().to_vec(),

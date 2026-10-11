@@ -471,6 +471,7 @@ pub fn cursor_key(state: &State) -> usize {
     }
     let source = usize::from(state.source() == crate::model::Source::Device) * 10;
     match state.view {
+        View::Home if state.feed_filter == crate::model::FeedFilter::ForYou => tag(&state.for_you),
         View::Home => tag(&state.feed) + 10 * state.feed_filter as usize,
         View::Results => tag(&state.results),
         View::Subscriptions => tag(&state.account_subscriptions) + source,

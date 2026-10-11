@@ -26,7 +26,9 @@ use crate::paths::Dirs;
 use crate::util;
 
 mod edit;
+mod home;
 pub use edit::{rate, rating, save_targets, set_saved};
+pub use home::recommended;
 
 /// Channel feeds fetched at once: RSS is cheap, but hundreds of
 /// subscriptions should not open hundreds of connections.

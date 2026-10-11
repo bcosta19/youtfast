@@ -64,6 +64,13 @@ pub struct State {
     pub feed_more_state: Fetch<()>,
     /// Home's shorts shelf.
     pub shorts: Listing<Video>,
+    /// Home's For you, its next page (the account's only) and a page on
+    /// its way.
+    pub for_you: Listing<Video>,
+    pub for_you_more: Option<innertube::More>,
+    pub for_you_more_state: Fetch<()>,
+    /// For you came from the account, not from this computer's history.
+    pub for_you_from_account: bool,
     /// When the feed last landed; one fresh enough already is the
     /// alerts check's answer.
     pub feed_loaded_at: Option<i64>,
@@ -254,9 +261,12 @@ impl State {
         }
     }
 
-    /// The feed's videos home shows: the first `feed_shown`, through the
-    /// chip.
+    /// The feed's videos home shows: For you's, or the first
+    /// `feed_shown` of the feed through the chip.
     pub fn visible_feed(&self) -> Vec<&Video> {
+        if self.feed_filter == FeedFilter::ForYou {
+            return self.for_you.items().iter().collect();
+        }
         let now = util::now();
         let videos = self.feed.items();
         videos[..videos.len().min(self.feed_shown)]

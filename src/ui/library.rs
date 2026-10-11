@@ -8,7 +8,7 @@ use egui::{Align2, CornerRadius, Rect, RichText, Sense, Ui, pos2, vec2};
 use super::notifications::capitalized;
 use super::{results, widgets};
 use crate::app::{AccountState, Page, State};
-use crate::model::{Action, Channel, FeedFilter, Listing, Source, Video, View};
+use crate::model::{Action, Channel, FeedFilter, Fetch, Listing, Source, Video, View};
 use crate::theme;
 use crate::util;
 
@@ -39,7 +39,9 @@ fn controls(
 
 pub fn home(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     results::panel(ui, |ui| {
+        // With a history, For you has something to offer already.
         let follows_nothing = state.library.subscriptions.is_empty()
+            && state.library.history.is_empty()
             && !state.signed_in()
             && state.account != AccountState::SigningIn;
         if follows_nothing {
@@ -93,6 +95,7 @@ fn feed_chips(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     ui.horizontal_wrapped(|ui| {
         for filter in FeedFilter::ALL {
             let hidden = match filter {
+                FeedFilter::ForYou => false,
                 FeedFilter::Live => !live,
                 FeedFilter::Today => !dated,
                 _ => false,
@@ -119,6 +122,10 @@ fn feed_chips(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 /// `feed_shown`, under the chips and the shorts shelf; the last card in
 /// view asks for more.
 fn feed_grid(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    if state.feed_filter == FeedFilter::ForYou {
+        for_you(ui, state, actions);
+        return;
+    }
     if !matches!(state.feed, Listing::Ready(ref videos) if !videos.is_empty()) {
         shorts_shelf(ui, state, actions);
     }
@@ -181,6 +188,63 @@ fn feed_grid(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                         state.feed_more.is_some() || state.feed_shown < state.feed.items().len(),
                         actions,
                     );
+                });
+        }
+    }
+}
+
+/// For you as a grid of cards, under the chips and a line saying where it
+/// comes from; the last card in view asks for the account's next page.
+fn for_you(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    feed_chips(ui, state, actions);
+    match &state.for_you {
+        Listing::Idle => {}
+        Listing::Loading => results::loading(ui, state, "recommendations"),
+        Listing::Failed(error) => results::failed(ui, state, error, actions),
+        Listing::Ready(videos) if videos.is_empty() => results::nothing(
+            ui,
+            state,
+            "Watch a few videos and recommendations show up here",
+        ),
+        Listing::Ready(_) => {
+            let source = if state.for_you_from_account {
+                "Recommended by YouTube for your account"
+            } else {
+                "Picked here from the videos related to what you watched"
+            };
+            ui.label(
+                RichText::new(source)
+                    .font(theme::regular(13.0))
+                    .color(state.palette.secondary),
+            );
+            ui.add_space(12.0);
+            let videos = state.visible_feed();
+            egui::ScrollArea::vertical()
+                .auto_shrink(false)
+                .show(ui, |ui| {
+                    let gap = 16.0;
+                    let (columns, width) =
+                        widgets::grid_columns(ui.available_width(), CARD_WIDTH, gap, 5);
+                    for row in (0..videos.len()).collect::<Vec<_>>().chunks(columns) {
+                        ui.horizontal_top(|ui| {
+                            ui.spacing_mut().item_spacing.x = gap;
+                            for &index in row {
+                                feed_card(ui, state, &videos, index, width, actions);
+                            }
+                        });
+                        ui.add_space(gap);
+                    }
+                    if state.for_you_more.is_some()
+                        || !matches!(state.for_you_more_state, Fetch::Idle)
+                    {
+                        widgets::more_row(
+                            ui,
+                            &state.palette,
+                            &state.for_you_more_state,
+                            state.for_you_more.is_some(),
+                            actions,
+                        );
+                    }
                 });
         }
     }
