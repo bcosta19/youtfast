@@ -67,6 +67,8 @@ rfd = "0.17.2"
 # never in a file. One API, with each target's native provider below.
 keyring-core = "1"
 ehttp = "0.7"
+# SponsorBlock's lookups name a prefix of the video id's SHA-256, not the id.
+sha2 = "0.11"
 
 # libmpv is linked from the system (src/mpv/ffi.rs). On Arch it comes with the
 # `mpv` package; Debian and Ubuntu need `libmpv-dev` to build.

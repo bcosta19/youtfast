@@ -16,7 +16,7 @@ use crate::library::{Account, Import, Library};
 use crate::model::{
     AccountSource, Action, Channel, ChannelAbout, ChannelHeader, ChannelTab, CommentRow, Details,
     FeedFilter, Fetch, HistoryRow, Listing, PlaylistSummary, Quality, Rating, Resolution, Results,
-    SaveTarget, Source, Video, View,
+    SaveTarget, Segment, Source, Video, View,
 };
 use crate::mpv::{self, Mpv, NativeDisplay, VideoSurface};
 use crate::paths::Dirs;
@@ -181,9 +181,54 @@ pub struct State {
     pub last_checked: Option<i64>,
     /// A check is in flight.
     pub alerts_checking: bool,
+    /// The player's controls over the video stay until then: the pointer
+    /// moved over it lately.
+    pub controls_until: Option<Instant>,
+    /// The player's own menu (speed, quality, captions), drawn over the
+    /// video.
+    pub player_menu: PlayerMenu,
+    /// A short note over the video ("+10 s", "1.5×") and when it goes.
+    pub osd: Option<(String, Instant)>,
+    /// What plays next, before Up next: `Add to queue` and `Play next`.
+    pub queue: Vec<Video>,
+    /// The video the end-of-video countdown leads to, and when it starts.
+    pub autoplay: Option<(Video, Instant)>,
+    /// SponsorBlock's segments of the video being watched.
+    pub segments: Vec<Segment>,
+    /// The segments already skipped, by index: seeking back into one plays
+    /// it.
+    pub skipped: HashSet<usize>,
+    /// What YouTube suggests for the search being typed.
+    pub suggestions: Vec<String>,
+    /// The suggestion the arrow keys picked, if any.
+    pub suggestion_cursor: Option<usize>,
+    /// The mini player was closed: the video stays paused until reopened.
+    pub mini_closed: bool,
+}
+
+/// Which page of the player's menu is open.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PlayerMenu {
+    #[default]
+    Closed,
+    Main,
+    Speed,
+    Quality,
+    Captions,
 }
 
 impl State {
+    /// The video being watched is a live stream now: yt-dlp's word once it
+    /// has loaded, the list's or rustypipe's until then.
+    pub fn watching_live(&self) -> bool {
+        self.watching.as_ref().is_some_and(|video| video.live)
+    }
+
+    /// The video being watched is a Short: drawn upright, looping.
+    pub fn watching_short(&self) -> bool {
+        self.watching.as_ref().is_some_and(|video| video.short)
+    }
+
     pub fn signed_in(&self) -> bool {
         matches!(self.account, AccountState::SignedIn(_))
     }
@@ -299,6 +344,13 @@ pub struct App {
     cursor_key: (View, usize),
     /// When the volume last changed, while it is not yet saved.
     volume_changed: Option<Instant>,
+    /// The search text suggestions were last asked for, and when the
+    /// field last changed: they are asked once typing pauses.
+    suggested: String,
+    query_changed: Option<(String, Instant)>,
+    /// The kept captions language still has to be picked for the video
+    /// loaded.
+    captions_pending: bool,
     /// What later launches ask the running copy, drained each frame.
     remote: RemoteQueue,
     /// The desktop's media controls.
@@ -356,29 +408,32 @@ impl App {
             browsers,
             ..State::default()
         };
-        let (player, surface) =
-            match Mpv::new(ctx, state.settings.quality.limit(), state.settings.volume) {
-                Ok(player) => {
-                    let surface = cc.get_proc_address.clone().map(|get_proc_address| {
-                        VideoSurface::new(
-                            player.handle(),
-                            get_proc_address,
-                            native_display(cc),
-                            ctx.clone(),
-                        )
-                    });
-                    if surface.is_none() {
-                        state.player_error =
-                            Some("This window has no OpenGL context for video".into());
-                    }
-                    (Some(player), surface)
+        let (player, surface) = match Mpv::new(
+            ctx,
+            state.settings.quality.limit(),
+            state.settings.volume,
+            player::caption_languages(&state.settings),
+        ) {
+            Ok(player) => {
+                let surface = cc.get_proc_address.clone().map(|get_proc_address| {
+                    VideoSurface::new(
+                        player.handle(),
+                        get_proc_address,
+                        native_display(cc),
+                        ctx.clone(),
+                    )
+                });
+                if surface.is_none() {
+                    state.player_error = Some("This window has no OpenGL context for video".into());
                 }
-                Err(error) => {
-                    log::error!("could not start mpv: {error}");
-                    state.player_error = Some(format!("Could not start mpv ({error})"));
-                    (None, None)
-                }
-            };
+                (Some(player), surface)
+            }
+            Err(error) => {
+                log::error!("could not start mpv: {error}");
+                state.player_error = Some(format!("Could not start mpv ({error})"));
+                (None, None)
+            }
+        };
 
         let mut app = Self {
             state,
@@ -400,6 +455,9 @@ impl App {
             theme_transition: fastframe_theme::Transition::default(),
             cursor_key: (View::default(), 0),
             volume_changed: None,
+            suggested: String::new(),
+            query_changed: None,
+            captions_pending: false,
             remote: guard.commands(),
             media: crate::now_playing::MediaControls::start(ctx),
             _instance: guard,
@@ -486,6 +544,23 @@ impl App {
             }
             Event::SignedOut => self.on_signed_out(),
             Event::CheckAlerts => self.check_alerts(),
+            Event::Suggestions { query, items } => {
+                if query == self.state.query.trim() {
+                    self.state.suggestions = items;
+                    self.state.suggestion_cursor = None;
+                }
+            }
+            Event::Segments { id, segments } => {
+                if self
+                    .state
+                    .watching
+                    .as_ref()
+                    .is_some_and(|video| video.id == id)
+                {
+                    self.state.segments = segments;
+                    self.state.skipped.clear();
+                }
+            }
             Event::Notice(notice) => self.state.notice = Some(notice),
         }
     }
@@ -503,6 +578,8 @@ impl App {
                 }
                 self.leave_video(ctx);
                 self.back.clear();
+                self.state.suggestions.clear();
+                self.suggested = text.to_owned();
                 self.state.view = View::Results;
                 self.request(Slot::Search, Request::Search(text.to_owned()));
             }
@@ -542,16 +619,17 @@ impl App {
             }
             Action::TogglePause => {
                 if let Some(paused) = self.player.as_ref().map(|player| player.status().paused) {
-                    // Unpausing shows the video: come back to its page.
+                    // Unpausing shows the video: in the mini player, or back
+                    // on its page once that was closed.
                     if paused {
-                        self.return_to_watch();
+                        self.show_playing();
                     }
                     self.with_player(|player| player.set_paused(!paused));
                 }
             }
             Action::SetPaused(paused) => {
                 if !paused {
-                    self.return_to_watch();
+                    self.show_playing();
                 }
                 self.with_player(|player| player.set_paused(paused));
             }
@@ -568,6 +646,11 @@ impl App {
                 self.media.seeked(seconds);
             }
             Action::SeekBy(seconds) => {
+                self.show_osd(if seconds < 0.0 {
+                    format!("−{:.0} s", -seconds)
+                } else {
+                    format!("+{seconds:.0} s")
+                });
                 self.with_player(|player| player.seek_by(seconds));
                 let at = self
                     .player
@@ -577,6 +660,13 @@ impl App {
             }
             Action::SetVolume(volume) => {
                 self.state.settings.volume = volume;
+                if self
+                    .player
+                    .as_ref()
+                    .is_some_and(|player| player.status().muted)
+                {
+                    self.with_player(|player| player.set_muted(false));
+                }
                 self.with_player(|player| player.set_volume(volume));
                 self.volume_changed = Some(Instant::now());
                 ctx.request_repaint_after(VOLUME_SAVE_AFTER);
@@ -666,6 +756,30 @@ impl App {
             Action::SetAlertsEvery(minutes) => self.set_alerts_every(minutes),
             Action::SetChannelQuery(text) => self.state.channel_query = text,
             Action::LoadMore => self.load_more(),
+            Action::SetSpeed(speed) => self.set_speed(speed),
+            Action::ToggleMute => self.toggle_mute(),
+            Action::FrameStep(forward) => self.with_player(|player| player.frame_step(forward)),
+            Action::SeekFraction(fraction) => self.seek_fraction(fraction),
+            Action::SetSubtitle(id) => self.set_subtitle(id),
+            Action::ToggleCaptions => self.toggle_captions(),
+            Action::GoLive => self.go_live(),
+            Action::PlayNext => self.play_next(),
+            Action::PlayPrevious => self.play_previous(),
+            Action::CancelAutoplay => self.state.autoplay = None,
+            Action::SetAutoplay(on) => {
+                self.state.settings.autoplay = on;
+                if !on {
+                    self.state.autoplay = None;
+                }
+                self.save_settings();
+            }
+            Action::Enqueue { video, next } => self.enqueue(video, next),
+            Action::Dequeue(id) => self.state.queue.retain(|video| video.id != id),
+            Action::ClearQueue => self.state.queue.clear(),
+            Action::SetSponsorBlock(on) => self.set_sponsorblock(on),
+            Action::SkipSegment => self.skip_segment(),
+            Action::ReturnToWatch => self.return_to_watch(),
+            Action::CloseMiniPlayer => self.close_mini_player(),
         }
     }
 
@@ -724,6 +838,8 @@ impl eframe::App for App {
             self.state.cursor = 0;
             self.cursor_key = key;
         }
+        self.playback_tick(ctx);
+        self.suggest_tick(ctx);
         // The volume, once it has stayed still for a moment.
         if self
             .volume_changed
@@ -755,7 +871,9 @@ impl eframe::App for App {
     fn on_exit(&mut self, gl: Option<&glow::Context>) {
         // The position of the video playing, written here and now: the
         // backend may not get to a queued save before the process ends.
-        if let (Some(video), Some(player)) = (&self.state.watching, &self.player) {
+        if let (Some(video), Some(player)) = (&self.state.watching, &self.player)
+            && !video.live
+        {
             let status = player.status();
             self.state
                 .library
@@ -800,6 +918,7 @@ fn native_display(cc: &eframe::CreationContext<'_>) -> NativeDisplay {
 mod accounts;
 mod loading;
 mod notifications;
+pub mod player;
 mod themes;
 mod video_actions;
 mod watch;

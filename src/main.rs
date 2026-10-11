@@ -13,6 +13,7 @@ mod mpv;
 mod now_playing;
 mod paths;
 mod settings;
+mod sponsorblock;
 mod takeout;
 mod theme;
 mod thumbs;

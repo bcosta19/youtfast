@@ -489,6 +489,12 @@ fn playlist_page(playlist: Playlist) -> (Vec<Video>, Option<More>) {
 
 /// The watch page's data: metadata, description, chapters, recommended
 /// videos and the comments' continuation token. Works signed in or out.
+/// What YouTube suggests for a search being typed. Signed out: the request
+/// carries no session.
+pub async fn suggestions(rp: &RustyPipe, query: &str) -> Result<Vec<String>, String> {
+    rp.query().search_suggestion(query).await.map_err(text)
+}
+
 pub async fn details(rp: &RustyPipe, id: &str) -> Result<Details, String> {
     let details = rp.query().video_details(id).await.map_err(text)?;
     Ok(video_details(details, id))

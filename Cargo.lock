@@ -6304,6 +6304,7 @@ dependencies = [
  "rustypipe",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
  "windows-native-keyring-store",
  "zbus-secret-service-keyring-store",

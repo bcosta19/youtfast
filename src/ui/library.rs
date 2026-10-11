@@ -208,6 +208,7 @@ fn feed_card(
     if response.clicked() {
         actions.push(Action::Open(video.clone()));
     }
+    results::video_menu(&response, state, video, actions);
 }
 
 /// The Shorts shelf above the feed's grid, when there are shorts.
@@ -275,6 +276,7 @@ fn short_card(ui: &mut Ui, state: &State, video: &Video, actions: &mut Vec<Actio
     if response.clicked() {
         actions.push(Action::Open(video.clone()));
     }
+    results::video_menu(&response, state, video, actions);
 }
 
 pub fn subscriptions(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
@@ -493,6 +495,7 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                                 if response.clicked() {
                                     actions.push(Action::Open(video.clone()));
                                 }
+                                results::video_menu(&response, state, video, actions);
                             }
                         });
                 }
@@ -539,6 +542,7 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     if response.clicked() {
                         actions.push(Action::Open(video.clone()));
                     }
+                    results::video_menu(&response, state, video, actions);
                 }
             });
     });

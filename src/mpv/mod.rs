@@ -35,6 +35,10 @@ const FPS: u64 = 11;
 const CODEC: u64 = 12;
 const HWDEC: u64 = 13;
 const SEEKABLE: u64 = 14;
+const SPEED: u64 = 15;
+const MUTE: u64 = 16;
+const TRACKS: u64 = 17;
+const EOF_REACHED: u64 = 18;
 
 #[derive(Debug)]
 pub struct Error {
@@ -121,6 +125,51 @@ pub struct Status {
     /// The hardware decoder in use ("vaapi", "nvdec"), or `None` while the
     /// CPU decodes.
     pub hwdec: Option<String>,
+    /// The playback speed, 1 at normal speed.
+    pub speed: f64,
+    pub muted: bool,
+    /// The captions the video offers, as yt-dlp handed them to mpv.
+    pub subtitles: Vec<Subtitle>,
+}
+
+/// A captions track of the video playing.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Subtitle {
+    /// mpv's track id, for `sid`.
+    pub id: i64,
+    /// The language code yt-dlp gave ("en", "pt-BR", "en-orig").
+    pub lang: String,
+    /// The name to show ("English", "English (auto-generated)").
+    pub title: String,
+    pub selected: bool,
+}
+
+impl Subtitle {
+    /// The captions tracks in mpv's `track-list`, which it hands over as
+    /// JSON.
+    fn from_track_list(json: &str) -> Vec<Self> {
+        let Ok(serde_json::Value::Array(tracks)) = serde_json::from_str(json) else {
+            return Vec::new();
+        };
+        tracks
+            .iter()
+            .filter(|track| track["type"] == "sub")
+            .filter_map(|track| {
+                let id = track["id"].as_i64()?;
+                let lang = track["lang"].as_str().unwrap_or_default().to_owned();
+                let title = track["title"]
+                    .as_str()
+                    .filter(|title| !title.is_empty())
+                    .map_or_else(|| lang.clone(), str::to_owned);
+                Some(Self {
+                    id,
+                    lang,
+                    title,
+                    selected: track["selected"].as_bool().unwrap_or(false),
+                })
+            })
+            .collect()
+    }
 }
 
 /// Something the app acts on after [`Mpv::poll`].
@@ -176,6 +225,8 @@ pub struct Mpv {
     ytdl_failure: Option<Failure>,
     /// What [`Mpv::set_max_resolution`] last set.
     max_resolution: u32,
+    /// The captions' languages yt-dlp is asked for (see [`raw_options`]).
+    captions: Vec<String>,
     /// yt-dlp's `--cookies-from-browser`, when an account's browser is
     /// known: a video YouTube refuses signed out is tried again with it.
     cookies_from_browser: Option<String>,
@@ -183,6 +234,8 @@ pub struct Mpv {
     current: Option<(String, Option<f64>)>,
     /// The video loaded last went through the browser's session.
     signed_in: bool,
+    /// mpv sits at the end of the video (`eof-reached`).
+    at_end: bool,
 }
 
 impl Mpv {
@@ -190,7 +243,12 @@ impl Mpv {
     /// shows until a [`VideoSurface`] draws it.
     /// `max_resolution` bounds the streams picked, as
     /// [`Mpv::set_max_resolution`] does; `volume` is where it starts.
-    pub fn new(repaint: &egui::Context, max_resolution: u32, volume: f64) -> Result<Self, Error> {
+    pub fn new(
+        repaint: &egui::Context,
+        max_resolution: u32,
+        volume: f64,
+        captions: Vec<String>,
+    ) -> Result<Self, Error> {
         // SAFETY: plain constructor. It returns null when the locale's
         // LC_NUMERIC is not "C"; Rust programs keep "C" unless something
         // calls setlocale, which YouTFast does not.
@@ -199,7 +257,7 @@ impl Mpv {
             return Err(Error::new(0, "creating mpv (is LC_NUMERIC \"C\"?)"));
         }
         let handle = Arc::new(Handle(ptr));
-        let format_sort = format_sort(max_resolution);
+        let raw_options = raw_options(max_resolution, &captions);
         let volume = volume.clamp(0.0, 100.0);
         let initial_volume = volume_text(volume);
         let options: [(&CStr, &str); 14] = [
@@ -207,7 +265,7 @@ impl Mpv {
             (c"hwdec", "auto-safe"),
             (c"ytdl", "yes"),
             (c"ytdl-format", FORMAT),
-            (c"ytdl-raw-options", &format_sort),
+            (c"ytdl-raw-options", &raw_options),
             // Stay on the last frame at the end instead of unloading.
             (c"keep-open", "yes"),
             (c"idle", "yes"),
@@ -240,7 +298,7 @@ impl Mpv {
         // SAFETY: valid handle, options set, not yet initialized.
         check(unsafe { ffi::mpv_initialize(handle.ptr()) }, "starting mpv")?;
 
-        let observed: [(u64, &CStr, ffi::mpv_format); 14] = [
+        let observed: [(u64, &CStr, ffi::mpv_format); 18] = [
             (TIME_POS, c"time-pos", ffi::MPV_FORMAT_DOUBLE),
             (DURATION, c"duration", ffi::MPV_FORMAT_DOUBLE),
             (PAUSE, c"pause", ffi::MPV_FORMAT_FLAG),
@@ -255,6 +313,13 @@ impl Mpv {
             (CODEC, c"video-format", ffi::MPV_FORMAT_STRING),
             (HWDEC, c"hwdec-current", ffi::MPV_FORMAT_STRING),
             (SEEKABLE, c"seekable", ffi::MPV_FORMAT_FLAG),
+            (SPEED, c"speed", ffi::MPV_FORMAT_DOUBLE),
+            (MUTE, c"mute", ffi::MPV_FORMAT_FLAG),
+            // A node; as a string mpv writes it as JSON.
+            (TRACKS, c"track-list", ffi::MPV_FORMAT_STRING),
+            // keep-open holds the last frame instead of ending the file, so
+            // the end is this flag turning on, not an end-file event.
+            (EOF_REACHED, c"eof-reached", ffi::MPV_FORMAT_FLAG),
         ];
         for (id, name, format) in observed {
             // SAFETY: valid handle and a static property name.
@@ -275,14 +340,17 @@ impl Mpv {
             status: Status {
                 idle: true,
                 volume,
+                speed: 1.0,
                 ..Status::default()
             },
             wakeup,
             ytdl_failure: None,
             max_resolution,
+            captions,
             cookies_from_browser: None,
             current: None,
             signed_in: false,
+            at_end: false,
         })
     }
 
@@ -359,7 +427,51 @@ impl Mpv {
     /// YouTube labels it. Below that, yt-dlp picks the best.
     pub fn set_max_resolution(&mut self, resolution: u32) -> Result<(), Error> {
         self.max_resolution = resolution;
-        self.set_property("ytdl-raw-options", &format_sort(resolution))
+        self.set_property("ytdl-raw-options", &raw_options(resolution, &self.captions))
+    }
+
+    /// The captions' languages yt-dlp offers from the next video loaded,
+    /// besides the original language's automatic captions.
+    pub fn set_caption_languages(&mut self, languages: Vec<String>) -> Result<(), Error> {
+        if languages == self.captions {
+            return Ok(());
+        }
+        self.captions = languages;
+        self.set_property(
+            "ytdl-raw-options",
+            &raw_options(self.max_resolution, &self.captions),
+        )
+    }
+
+    /// Shows the captions track `id` (from [`Status::subtitles`]), or none.
+    pub fn set_subtitle(&self, id: Option<i64>) -> Result<(), Error> {
+        match id {
+            Some(id) => self.set_property("sid", &id.to_string()),
+            None => self.set_property("sid", "no"),
+        }
+    }
+
+    /// 0.25 to 2, as YouTube offers.
+    pub fn set_speed(&self, speed: f64) -> Result<(), Error> {
+        self.set_property("speed", &format!("{:.2}", speed.clamp(0.25, 2.0)))
+    }
+
+    pub fn set_muted(&self, muted: bool) -> Result<(), Error> {
+        self.set_property("mute", if muted { "yes" } else { "no" })
+    }
+
+    /// One frame ahead or back, pausing: the `.` and `,` keys.
+    pub fn frame_step(&self, forward: bool) -> Result<(), Error> {
+        self.command(&[if forward {
+            "frame-step"
+        } else {
+            "frame-back-step"
+        }])
+    }
+
+    /// Plays the video over and over, as Shorts do, from the next load on.
+    pub fn set_looping(&self, looping: bool) -> Result<(), Error> {
+        self.set_property("loop-file", if looping { "inf" } else { "no" })
     }
 
     /// The browser whose YouTube session yt-dlp reads itself
@@ -450,6 +562,7 @@ impl Mpv {
     /// the interface thread; the wakeup callback asks for that frame.
     pub fn poll(&mut self) -> Vec<Event> {
         let mut events = Vec::new();
+        let was_at_end = self.at_end;
         loop {
             // SAFETY: valid handle; a zero timeout never blocks, and the
             // event stays valid until the next mpv_wait_event call.
@@ -500,6 +613,9 @@ impl Mpv {
                 _ => {}
             }
         }
+        if self.at_end && !was_at_end && !events.contains(&Event::Finished) {
+            events.push(Event::Finished);
+        }
         events
     }
 
@@ -522,6 +638,10 @@ impl Mpv {
                 .to_string_lossy()
                 .into_owned()
         });
+        if id == EOF_REACHED {
+            self.at_end = flag.unwrap_or(false);
+            return;
+        }
         let status = &mut self.status;
         match id {
             TIME_POS => status.position = double.unwrap_or(0.0),
@@ -539,6 +659,14 @@ impl Mpv {
             CODEC => status.codec = string,
             // "no" (or nothing) while the CPU decodes.
             HWDEC => status.hwdec = string.filter(|name| !name.is_empty() && name != "no"),
+            SPEED => status.speed = double.unwrap_or(1.0),
+            MUTE => status.muted = flag.unwrap_or(false),
+            TRACKS => {
+                status.subtitles = string
+                    .as_deref()
+                    .map(Subtitle::from_track_list)
+                    .unwrap_or_default();
+            }
             _ => {}
         }
     }
@@ -555,10 +683,28 @@ impl Drop for Mpv {
     }
 }
 
-/// yt-dlp's format sort for streams up to `resolution`: `res` is a format's
-/// smaller side, and `res:1080` prefers the largest at or below 1080.
-fn format_sort(resolution: u32) -> String {
-    format!("format-sort=res:{resolution}")
+/// yt-dlp's options for every load. The format sort bounds the streams to
+/// `resolution`: `res` is a format's smaller side, and `res:1080` prefers
+/// the largest at or below 1080. The captions are the uploader's and
+/// YouTube's automatic ones in `captions`' languages (base codes, "pt"),
+/// plus the automatic captions in the video's own language (`-orig`); mpv
+/// opens a track only once it is shown. A list value goes in brackets, mpv's quoting, so its
+/// commas stay inside it.
+fn raw_options(resolution: u32, captions: &[String]) -> String {
+    let mut languages: Vec<String> = captions
+        .iter()
+        .filter(|lang| !lang.is_empty() && lang.chars().all(|c| c.is_ascii_alphanumeric()))
+        // The language, a region ("pt-BR") and one translation into it
+        // ("pt-en"), not the translations' own regions ("pt-PT-de-DE").
+        .map(|lang| format!("{lang}(-[a-zA-Z0-9]+)?"))
+        .collect();
+    languages.push(".*-orig".to_owned());
+    // A finished live stream's chat replay is listed as captions.
+    languages.push("-live_chat".to_owned());
+    format!(
+        "format-sort=res:{resolution},write-auto-subs=,sub-langs=[{}]",
+        languages.join(",")
+    )
 }
 
 /// The per-file option that adds the browser's session to yt-dlp's
@@ -624,6 +770,46 @@ mod tests {
             failure("WARNING: [youtube] abc: HTTP Error 429: Too Many Requests"),
             None
         );
+    }
+
+    #[test]
+    fn yt_dlp_is_asked_for_the_captions_languages() {
+        assert_eq!(
+            raw_options(1080, &["pt".to_owned(), "en".to_owned()]),
+            "format-sort=res:1080,write-auto-subs=,sub-langs=[pt(-[a-zA-Z0-9]+)?,en(-[a-zA-Z0-9]+)?,.*-orig,-live_chat]"
+        );
+        // Nothing that could close the brackets gets in.
+        assert_eq!(
+            raw_options(720, &["e]n".to_owned(), String::new(), "pt-BR".to_owned()]),
+            "format-sort=res:720,write-auto-subs=,sub-langs=[.*-orig,-live_chat]"
+        );
+    }
+
+    #[test]
+    fn captions_tracks_are_read_from_the_track_list() {
+        let json = r#"[
+            {"id": 1, "type": "video", "selected": true},
+            {"id": 1, "type": "sub", "lang": "en", "title": "English", "selected": false},
+            {"id": 2, "type": "sub", "lang": "pt-orig", "selected": true}
+        ]"#;
+        assert_eq!(
+            Subtitle::from_track_list(json),
+            vec![
+                Subtitle {
+                    id: 1,
+                    lang: "en".to_owned(),
+                    title: "English".to_owned(),
+                    selected: false,
+                },
+                Subtitle {
+                    id: 2,
+                    lang: "pt-orig".to_owned(),
+                    title: "pt-orig".to_owned(),
+                    selected: true,
+                },
+            ]
+        );
+        assert!(Subtitle::from_track_list("not json").is_empty());
     }
 
     #[test]

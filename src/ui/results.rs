@@ -117,6 +117,7 @@ fn rows<'a>(
                 if response.clicked() {
                     actions.push(Action::Open(video.clone()));
                 }
+                video_menu(&response, state, video, actions);
             }
             if more {
                 widgets::more_row(
@@ -128,6 +129,41 @@ fn rows<'a>(
                 );
             }
         });
+}
+
+/// A video's right-click menu: the queue, and this device's Watch later.
+pub fn video_menu(
+    response: &egui::Response,
+    state: &State,
+    video: &Video,
+    actions: &mut Vec<Action>,
+) {
+    response.context_menu(|ui| {
+        if ui.button("Play next").clicked() {
+            actions.push(Action::Enqueue {
+                video: video.clone(),
+                next: true,
+            });
+            ui.close();
+        }
+        if ui.button("Add to queue").clicked() {
+            actions.push(Action::Enqueue {
+                video: video.clone(),
+                next: false,
+            });
+            ui.close();
+        }
+        let later = state.library.in_watch_later(&video.id);
+        let label = if later {
+            "Remove from Watch later"
+        } else {
+            "Save to Watch later"
+        };
+        if ui.button(label).clicked() {
+            actions.push(Action::ToggleWatchLater(video.clone()));
+            ui.close();
+        }
+    });
 }
 
 /// The spinner and `Loading <what>…`, centred.

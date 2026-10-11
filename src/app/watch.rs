@@ -16,7 +16,10 @@ impl App {
             .flatten();
         for event in events {
             match event {
-                mpv::Event::Loaded => self.state.player_error = None,
+                mpv::Event::Loaded => {
+                    self.state.player_error = None;
+                    self.captions_pending = self.state.settings.captions.is_some();
+                }
                 mpv::Event::Failed(failure) => {
                     // What the session can fix is tried again with it.
                     let fixable = matches!(
@@ -43,6 +46,7 @@ impl App {
                         self.state.library.mark_finished(&video.id);
                         self.save_library();
                     }
+                    self.start_autoplay();
                 }
             }
         }
@@ -54,6 +58,9 @@ impl App {
                 && details.id == watching.id
             {
                 watching.complete_from(&details);
+                // Whether it is live now: a list may still call a finished
+                // stream live.
+                watching.live = details.live;
                 let watching = watching.clone();
                 self.state.library.update_video(&watching);
                 self.save_library();
@@ -65,9 +72,22 @@ impl App {
         log::info!("opening video {}", video.id);
         self.remember_position();
         if self.state.view != View::Watch {
-            self.state.up_next = self.visible_videos();
+            // A Short from Home's shelf goes on to the shelf's next ones.
+            self.state.up_next = if video.short && self.state.view == View::Home {
+                self.state.shorts.items().to_vec()
+            } else {
+                self.visible_videos()
+            };
             self.back.push(self.state.view);
         }
+        // What plays now leaves the queue.
+        self.state.queue.retain(|queued| queued.id != video.id);
+        self.state.autoplay = None;
+        self.state.mini_closed = false;
+        self.state.player_menu = crate::app::PlayerMenu::Closed;
+        self.state.segments.clear();
+        self.state.skipped.clear();
+        self.captions_pending = false;
         // A video opened from a link knows only its id; the history may know
         // more until yt-dlp answers.
         if let Some(known) = self
@@ -91,7 +111,15 @@ impl App {
         self.state.comments_visitor_data = None;
         self.state.description_open = false;
         self.state.comments_open.clear();
+        if self.state.settings.sponsorblock && !video.live {
+            self.backend.send(Command::LoadSegments(video.id.clone()));
+        }
+        // A live stream starts at its live edge, not where it was left.
+        let start = start.filter(|_| !video.live);
         if let Some(player) = &mut self.player {
+            if let Err(error) = player.set_looping(video.short) {
+                log::warn!("mpv: {error}");
+            }
             self.state.player_error = player
                 .load(&video.url(), start)
                 .err()
@@ -295,11 +323,12 @@ impl App {
         }
     }
 
-    /// Remembers where the video being watched was left.
-    fn remember_position(&mut self) {
+    /// Remembers where the video being watched was left; a live stream has
+    /// no such place.
+    pub(super) fn remember_position(&mut self) {
         if let (Some(video), Some(player)) = (&self.state.watching, &self.player) {
             let status = player.status();
-            if !status.idle {
+            if !status.idle && !video.live {
                 self.state
                     .library
                     .set_position(&video.id, status.position, status.duration);
@@ -348,22 +377,35 @@ impl App {
         }
     }
 
-    /// Playing while another page is on screen comes back to the watch
-    /// page: an undrawn render-API video output stalls.
+    /// Back to the watch page of the video playing, from the mini player
+    /// or the desktop's media controls.
     pub(super) fn return_to_watch(&mut self) {
         if self.state.watching.is_some() && self.state.view != View::Watch {
             self.back.push(self.state.view);
             self.state.view = View::Watch;
         }
+        self.state.mini_closed = false;
     }
 
-    /// Leaving the watch page pauses the video (nothing draws it there) and
+    /// A video playing must be drawn: the mini player does it, and once it
+    /// was closed the watch page does.
+    pub(super) fn show_playing(&mut self) {
+        if self.state.mini_closed {
+            self.return_to_watch();
+        }
+    }
+
+    /// Leaving the watch page hands the video to the mini player, which
+    /// keeps drawing it (an undrawn render-API video output stalls), and
     /// remembers where it was left.
     pub(super) fn leave_video(&mut self, ctx: &egui::Context) {
         self.set_fullscreen(ctx, false);
+        self.state.player_menu = crate::app::PlayerMenu::Closed;
         if self.state.view == View::Watch {
             self.remember_position();
-            self.with_player(|player| player.set_paused(true));
+            if self.state.mini_closed {
+                self.with_player(|player| player.set_paused(true));
+            }
         }
     }
 

@@ -154,6 +154,40 @@ impl Span {
     }
 }
 
+/// A part of the video SponsorBlock's users marked.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Segment {
+    /// "sponsor", "selfpromo", "intro"…
+    pub category: String,
+    pub start: f64,
+    pub end: f64,
+}
+
+impl Segment {
+    /// Skipped as it starts; the other categories only offer a button.
+    pub fn skipped_at_once(&self) -> bool {
+        matches!(
+            self.category.as_str(),
+            "sponsor" | "selfpromo" | "interaction"
+        )
+    }
+
+    /// The category as the skip button names it.
+    pub fn label(&self) -> &'static str {
+        match self.category.as_str() {
+            "sponsor" => "sponsor",
+            "selfpromo" => "self-promotion",
+            "interaction" => "reminder to subscribe",
+            "intro" => "intro",
+            "outro" => "credits",
+            "preview" => "preview",
+            "music_offtopic" => "non-music part",
+            "filler" => "tangent",
+            _ => "segment",
+        }
+    }
+}
+
 /// A chapter of the video: `[00:00] Intro`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Chapter {
@@ -601,6 +635,42 @@ pub enum Action {
     SetChannelQuery(String),
     /// The next page of the current channel tab's list.
     LoadMore,
+    /// 0.25 to 2.
+    SetSpeed(f64),
+    ToggleMute,
+    /// One frame ahead (`true`) or back, paused.
+    FrameStep(bool),
+    /// A part of the video from its start (0 to 1): the number keys.
+    SeekFraction(f64),
+    /// Shows the captions track (mpv's id) and keeps its language for the
+    /// next videos; `None` turns captions off.
+    SetSubtitle(Option<i64>),
+    /// `c`: captions on in the language kept (or the first offered), or off.
+    ToggleCaptions,
+    /// A live stream back to its live edge.
+    GoLive,
+    /// The queue's next video, else Up next's, else the first related.
+    PlayNext,
+    /// The video before the one playing in Up next (a Short's ↑).
+    PlayPrevious,
+    /// Stops the countdown to the next video.
+    CancelAutoplay,
+    SetAutoplay(bool),
+    /// Adds a video to the queue: at its end, or first (`next`).
+    Enqueue {
+        video: Video,
+        next: bool,
+    },
+    /// Takes a video out of the queue, by its id.
+    Dequeue(String),
+    ClearQueue,
+    SetSponsorBlock(bool),
+    /// Jumps over the SponsorBlock segment being played.
+    SkipSegment,
+    /// The mini player's video, back on its watch page.
+    ReturnToWatch,
+    /// The mini player's close: pauses and hides it.
+    CloseMiniPlayer,
 }
 
 #[cfg(test)]

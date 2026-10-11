@@ -271,6 +271,7 @@ fn videos(ui: &mut Ui, state: &State, tab: &ChannelTab, actions: &mut Vec<Action
                                 if response.clicked() {
                                     actions.push(Action::Open(video.clone()));
                                 }
+                                results::video_menu(&response, state, video, actions);
                             }
                         });
                     }

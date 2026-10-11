@@ -119,6 +119,7 @@ fn rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 if response.clicked() {
                     actions.push(Action::Open(video.clone()));
                 }
+                results::video_menu(&response, state, video, actions);
             }
         });
         ui.add_space(16.0);

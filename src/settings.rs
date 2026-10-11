@@ -71,6 +71,18 @@ pub struct Settings {
     /// The sidebar collapsed to its rail of keys and avatars.
     #[serde(default)]
     pub sidebar_collapsed: bool,
+    /// At a video's end, the next one (the queue's, Up next's, then the
+    /// first related) plays after a short countdown.
+    #[serde(default = "on")]
+    pub autoplay: bool,
+    /// The captions' language ("en", "pt-BR"), or `None` while they are
+    /// off. A video without that language shows none.
+    #[serde(default)]
+    pub captions: Option<String>,
+    /// Skip sponsored segments through SponsorBlock (sponsor.ajay.app),
+    /// asked by a prefix of the id's hash so the video is not named.
+    #[serde(default)]
+    pub sponsorblock: bool,
 }
 
 fn default_alerts_every() -> u32 {
@@ -100,6 +112,9 @@ impl Default for Settings {
             alerts_every_minutes: default_alerts_every(),
             theater: false,
             sidebar_collapsed: false,
+            autoplay: on(),
+            captions: None,
+            sponsorblock: false,
         }
     }
 }

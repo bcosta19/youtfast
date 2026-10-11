@@ -12,6 +12,7 @@ mod channel;
 pub mod images;
 mod library;
 mod notifications;
+mod player;
 mod results;
 mod settings;
 mod watch;
@@ -39,7 +40,7 @@ pub fn show(
     surface: Option<&VideoSurface>,
     actions: &mut Vec<Action>,
 ) {
-    keys(ui.ctx(), state, actions);
+    keys(ui.ctx(), state, status, actions);
     if state.view == View::Watch && state.fullscreen {
         watch::fullscreen(ui, state, status, surface, actions);
         return;
@@ -64,6 +65,10 @@ pub fn show(
         }
         View::Account => account::show(ui, state, actions),
         View::Settings => settings::show(ui, state, actions),
+    }
+    // The video goes on in the corner while other pages show.
+    if state.view != View::Watch && !state.mini_closed {
+        player::mini(ui.ctx(), state, status, surface, actions);
     }
     notice_toast(ui.ctx(), state, actions);
     if state.keys_open {
@@ -124,15 +129,119 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                     );
                     if field.has_focus() && ui.input(|input| input.key_pressed(Key::Escape)) {
                         field.surrender_focus();
+                        state.suggestions.clear();
+                    }
+                    if field.changed() {
+                        state.suggestion_cursor = None;
                     }
                     let submitted =
                         field.lost_focus() && ui.input(|input| input.key_pressed(Key::Enter));
                     if submitted {
+                        let picked = state
+                            .suggestion_cursor
+                            .and_then(|index| state.suggestions.get(index).cloned());
+                        if let Some(picked) = picked {
+                            state.query = picked;
+                        }
                         actions.push(Action::Search(state.query.clone()));
                     }
+                    suggestions(ui, state, &field, field_rect, actions);
                 },
             );
         });
+}
+
+/// YouTube's suggestions under the search field while it is focused; ↑/↓
+/// pick one for Enter, a click searches it.
+fn suggestions(
+    ui: &mut egui::Ui,
+    state: &mut State,
+    field: &egui::Response,
+    field_rect: egui::Rect,
+    actions: &mut Vec<Action>,
+) {
+    let id = egui::Id::new("search-suggestions");
+    // A click on a row takes the focus from the field first; the list stays
+    // for that frame while the pointer is over it.
+    let hovered_last = ui
+        .ctx()
+        .data(|data| data.get_temp::<egui::Rect>(id))
+        .is_some_and(|rect| ui.rect_contains_pointer(rect));
+    if state.suggestions.is_empty() || state.query.trim().is_empty() {
+        return;
+    }
+    if !field.has_focus() && !hovered_last {
+        return;
+    }
+    if field.has_focus() {
+        let (down, up) = ui.input(|input| {
+            (
+                input.key_pressed(Key::ArrowDown),
+                input.key_pressed(Key::ArrowUp),
+            )
+        });
+        let last = state.suggestions.len() - 1;
+        if down {
+            state.suggestion_cursor =
+                Some(state.suggestion_cursor.map_or(0, |at| (at + 1).min(last)));
+        }
+        if up {
+            state.suggestion_cursor = state.suggestion_cursor.and_then(|at| at.checked_sub(1));
+        }
+    }
+    let palette = state.palette.clone();
+    let area = egui::Area::new(id.with("area"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(field_rect.left_bottom() + vec2(0.0, 4.0))
+        .show(ui.ctx(), |ui| {
+            Frame::new()
+                .fill(palette.overlay)
+                .stroke(Stroke::new(1.0, palette.outline))
+                .corner_radius(CornerRadius::same(RADIUS + 4))
+                .inner_margin(Margin::symmetric(0, 8))
+                .shadow(ui.visuals().popup_shadow)
+                .show(ui, |ui| {
+                    ui.set_width(field_rect.width());
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    for (index, text) in state.suggestions.iter().enumerate() {
+                        let (rect, response) =
+                            ui.allocate_exact_size(vec2(field_rect.width(), 32.0), Sense::click());
+                        let selected = state.suggestion_cursor == Some(index);
+                        if response.hovered() || selected {
+                            ui.painter().rect_filled(
+                                rect,
+                                CornerRadius::ZERO,
+                                palette.surface_hover,
+                            );
+                        }
+                        let icon = egui::Rect::from_center_size(
+                            egui::pos2(rect.left() + 20.0, rect.center().y),
+                            vec2(14.0, 14.0),
+                        );
+                        Icon::Search
+                            .image(palette.secondary, 14.0)
+                            .paint_at(ui, icon);
+                        ui.painter().text(
+                            egui::pos2(rect.left() + 40.0, rect.center().y),
+                            egui::Align2::LEFT_CENTER,
+                            text,
+                            theme::regular(14.0),
+                            palette.text,
+                        );
+                        if response
+                            .on_hover_cursor(egui::CursorIcon::PointingHand)
+                            .clicked()
+                        {
+                            actions.push(Action::Search(text.clone()));
+                        }
+                    }
+                });
+        });
+    ui.ctx()
+        .data_mut(|data| data.insert_temp(id, area.response.rect));
+    if let Some(Action::Search(text)) = actions.last() {
+        state.query.clone_from(text);
+    }
 }
 
 /// The sidebar's width, open and collapsed to its rail.
@@ -539,7 +648,7 @@ fn keys_overlay(ctx: &egui::Context, state: &State) {
                             &[
                                 ("/", "Focus the search field"),
                                 ("Enter", "Search, or open a link"),
-                                ("1-9", "The views"),
+                                ("1-9", "The views (not while watching)"),
                                 ("?", "This list"),
                                 ("Esc", "Close, or go back"),
                                 ("r", "Load the page again"),
@@ -560,6 +669,13 @@ fn keys_overlay(ctx: &egui::Context, state: &State) {
                                 ("Space / k", "Play or pause"),
                                 ("← / →", "5 s back or ahead"),
                                 ("j / l", "10 s back or ahead"),
+                                ("0-9", "Seek to 0-90%"),
+                                (", / .", "A frame back or ahead"),
+                                ("< / >", "Slower / faster"),
+                                ("m", "Mute"),
+                                ("c", "Captions"),
+                                ("N / P", "Next / previous video"),
+                                ("↑ / ↓", "A Short's neighbours"),
                                 ("f", "Full screen"),
                                 ("t", "Theater mode"),
                                 ("Esc", "Leave full screen, back"),
@@ -588,7 +704,12 @@ fn key_pill(ui: &mut egui::Ui, palette: &theme::Palette, key: &str) {
 }
 
 /// The shell's keys, while nobody is typing.
-fn keys(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
+fn keys(
+    ctx: &egui::Context,
+    state: &mut State,
+    status: Option<&Status>,
+    actions: &mut Vec<Action>,
+) {
     state.cursor_moved = false;
     if ctx.text_edit_focused() {
         return;
@@ -606,7 +727,28 @@ fn keys(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
         if input.key_pressed(Key::Slash) {
             ctx.memory_mut(|memory| memory.request_focus(command_line_id()));
         }
-        // The number keys jump to the views.
+        // On the watch page the number keys seek, as on YouTube: 0 is the
+        // start, 5 the middle.
+        if state.view == View::Watch {
+            let digit = [
+                Key::Num0,
+                Key::Num1,
+                Key::Num2,
+                Key::Num3,
+                Key::Num4,
+                Key::Num5,
+                Key::Num6,
+                Key::Num7,
+                Key::Num8,
+                Key::Num9,
+            ]
+            .into_iter()
+            .position(|key| input.key_pressed(key));
+            if let Some(digit) = digit {
+                actions.push(Action::SeekFraction(digit as f64 / 10.0));
+            }
+        }
+        // Elsewhere they jump to the views.
         let digit = [
             Key::Num1,
             Key::Num2,
@@ -619,7 +761,8 @@ fn keys(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
             Key::Num9,
         ]
         .into_iter()
-        .position(|key| input.key_pressed(key));
+        .position(|key| input.key_pressed(key))
+        .filter(|_| state.view != View::Watch);
         if let Some(digit) = digit {
             let views = [
                 View::Home,
@@ -712,6 +855,45 @@ fn keys(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
         if input.key_pressed(Key::Space) || input.key_pressed(Key::K) {
             actions.push(Action::TogglePause);
         }
+        if input.key_pressed(Key::M) {
+            actions.push(Action::ToggleMute);
+        }
+        if input.key_pressed(Key::C) {
+            actions.push(Action::ToggleCaptions);
+        }
+        if input.key_pressed(Key::N) && input.modifiers.shift {
+            actions.push(Action::PlayNext);
+        }
+        if input.key_pressed(Key::P) && input.modifiers.shift {
+            actions.push(Action::PlayPrevious);
+        }
+        // A Short's ↑/↓ go through the shelf, as YouTube's do.
+        if state.watching_short() {
+            if input.key_pressed(Key::ArrowDown) {
+                actions.push(Action::PlayNext);
+            }
+            if input.key_pressed(Key::ArrowUp) {
+                actions.push(Action::PlayPrevious);
+            }
+        }
+        // `<` and `>` step the speed, `,` and `.` a frame: by the text
+        // typed, so any keyboard layout works.
+        let speed = status.map_or(1.0, |status| status.speed);
+        for event in &input.events {
+            if let egui::Event::Text(text) = event {
+                match text.as_str() {
+                    "<" => actions.push(Action::SetSpeed(crate::app::player::step_speed(
+                        speed, false,
+                    ))),
+                    ">" => actions.push(Action::SetSpeed(crate::app::player::step_speed(
+                        speed, true,
+                    ))),
+                    "," => actions.push(Action::FrameStep(false)),
+                    "." => actions.push(Action::FrameStep(true)),
+                    _ => {}
+                }
+            }
+        }
         if input.key_pressed(Key::ArrowLeft) {
             actions.push(Action::SeekBy(-5.0));
         }
@@ -731,11 +913,17 @@ fn keys(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
             actions.push(Action::ToggleTheater);
         }
         if input.key_pressed(Key::Escape) {
-            actions.push(if state.fullscreen {
-                Action::ExitFullscreen
+            if state.player_menu != crate::app::PlayerMenu::Closed {
+                state.player_menu = crate::app::PlayerMenu::Closed;
+            } else if state.autoplay.is_some() {
+                actions.push(Action::CancelAutoplay);
             } else {
-                Action::Back
-            });
+                actions.push(if state.fullscreen {
+                    Action::ExitFullscreen
+                } else {
+                    Action::Back
+                });
+            }
         }
     });
 }

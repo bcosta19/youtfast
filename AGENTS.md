@@ -120,9 +120,26 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
 - The eframe fork exposes `CreationContext::get_proc_address`, which the
   render API needs. That is one more reason to stay on the shared egui and
   winit forks; move their revisions together with the sibling apps.
-- Leaving the watch page pauses the video: nothing draws it there, and an
-  undrawn render-API video output stalls. Playing again from the desktop's
-  media controls comes back to the watch page (`App::return_to_watch`).
+- Leaving the watch page hands the video to the mini player
+  (`ui::player::mini`), which keeps drawing it: an undrawn render-API video
+  output stalls. Closing the mini player pauses the video; playing again
+  from the desktop's media controls then comes back to the watch page
+  (`App::show_playing`).
+- `src/ui/player.rs` is the player as YouTube draws it: the controls over
+  the video's bottom edge (shown while the pointer moves, kept while
+  paused), the seek bar with chapters and SponsorBlock's segments, the
+  settings menu (speed, quality, captions, autoplay), notes over the
+  picture, the countdown to the next video and the live badge. A live
+  stream has no timeline: mpv only seeks inside its cache (some 25 s), so
+  it gets the badge and "back to live" instead of a DVR bar. Shorts are
+  drawn upright and loop (`loop-file`). `src/app/player.rs` is the logic
+  behind them: what plays next (the queue, Up next, then related), the
+  kept captions language, the skips. mpv runs with `keep-open`, so the end
+  of a video is `eof-reached` turning on, not an end-file event.
+- `src/sponsorblock.rs` asks sponsor.ajay.app for a video's segments by
+  the first four hex digits of its id's SHA-256, never the id; it is off
+  unless the settings turn it on. Search suggestions come from rustypipe's
+  `search_suggestion`, signed out, once typing pauses.
 - `src/settings.rs` is what survives between runs (quality, volume, the
   theme choice and its palette caches), in one JSON file at
   `paths::Dirs::settings`. Loads and saves mirror `library.rs`; the backend
@@ -159,8 +176,8 @@ they do; their `AGENTS.md` files apply here unless this file says otherwise.
    per-search yt-dlp start-up (about a second), keeping yt-dlp for streams.
    A cookies.txt account needs its session handed to yt-dlp without
    writing it to a file for the signed-in retry.
-5. **More:** comments, captions (mpv `sub-add`), chapters, SponsorBlock,
-   mini player, downloads.
+5. **More:** live chat, downloads. (Captions, chapters, SponsorBlock and
+   the mini player are in.)
 
 ## Definition of done
 

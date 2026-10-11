@@ -28,6 +28,8 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 results::title(ui, state, "Settings", None);
                 appearance(ui, state, actions);
                 ui.add_space(24.0);
+                playback(ui, state, actions);
+                ui.add_space(24.0);
                 notifications(ui, state, actions);
                 ui.add_space(24.0);
             });
@@ -102,6 +104,45 @@ fn theme_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 }
             }
         });
+}
+
+/// The Playback group: autoplay, SponsorBlock.
+fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let palette = &state.palette;
+    widgets::section(ui, palette, "Playback", None, |ui| {
+        widgets::card(ui, palette, |ui| {
+            let autoplay = state.settings.autoplay;
+            setting_row(
+                ui,
+                palette,
+                "Autoplay",
+                "At a video's end the next one plays after a countdown: the queue's, then \
+                 Up next's, then the first related video.",
+                CONTROL_WIDTH,
+                |ui| {
+                    if switch(ui, palette, autoplay, "Autoplay").clicked() {
+                        actions.push(Action::SetAutoplay(!autoplay));
+                    }
+                },
+            );
+            ui.add_space(12.0);
+            let sponsorblock = state.settings.sponsorblock;
+            setting_row(
+                ui,
+                palette,
+                "Skip sponsors (SponsorBlock)",
+                "Skips sponsored segments and offers to skip intros, credits and the like, \
+                 as SponsorBlock's users marked them. It asks sponsor.ajay.app by a prefix \
+                 of the video's hash, which names thousands of videos, not this one.",
+                CONTROL_WIDTH,
+                |ui| {
+                    if switch(ui, palette, sponsorblock, "SponsorBlock").clicked() {
+                        actions.push(Action::SetSponsorBlock(!sponsorblock));
+                    }
+                },
+            );
+        });
+    });
 }
 
 /// The Notifications group: the check, desktop popups, the interval.

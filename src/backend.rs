@@ -217,6 +217,10 @@ pub enum Command {
     /// Thumbnail URLs the interface is drawing from the network, for the
     /// disk cache to keep next time.
     CacheThumbnails(Vec<String>),
+    /// What YouTube suggests for the search being typed.
+    Suggest(String),
+    /// The SponsorBlock segments of a video, by its id.
+    LoadSegments(String),
 }
 
 /// How a new account proves itself.
@@ -284,6 +288,14 @@ pub enum Event {
     Notice(String),
     /// The alerts timer fired; the app sends the check request.
     CheckAlerts,
+    Suggestions {
+        query: String,
+        items: Vec<String>,
+    },
+    Segments {
+        id: String,
+        segments: Vec<crate::model::Segment>,
+    },
 }
 
 pub struct Backend {
@@ -446,6 +458,19 @@ async fn handle(command: Command, context: Context) {
                 key,
                 result,
             });
+        }
+        Command::Suggest(query) => match innertube::suggestions(&context.rp, &query).await {
+            Ok(items) => context.send(Event::Suggestions { query, items }),
+            Err(error) => log::warn!("search suggestions failed: {error}"),
+        },
+        Command::LoadSegments(id) => {
+            let lookup = id.clone();
+            match tokio::task::spawn_blocking(move || crate::sponsorblock::segments(&lookup)).await
+            {
+                Ok(Ok(segments)) => context.send(Event::Segments { id, segments }),
+                Ok(Err(error)) => log::warn!("{error}"),
+                Err(error) => log::warn!("the SponsorBlock lookup stopped: {error}"),
+            }
         }
         Command::LoadRating(id) => {
             let result = innertube::rating(&context.rp, &id).await;

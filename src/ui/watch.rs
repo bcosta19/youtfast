@@ -3,14 +3,15 @@
 //! description, chapters and comments, and the Up next pane beside them.
 
 use egui::{
-    Align, Align2, Color32, CornerRadius, Frame, Layout, Margin, Rect, Response, RichText, Sense,
-    Slider, Stroke, Ui, UiBuilder, pos2, vec2,
+    Align, Color32, CornerRadius, Frame, Layout, Margin, Rect, Response, RichText, Sense, Stroke,
+    Ui, pos2, vec2,
 };
 
+use super::player::{self, Mode};
 use super::{results, widgets};
 use crate::app::State;
 use crate::icons::Icon;
-use crate::model::{Action, Channel, CommentRow, Fetch, Quality, Rating, Resolution, Video};
+use crate::model::{Action, Channel, CommentRow, Fetch, Rating, Video};
 use crate::mpv::{Status, VideoSurface};
 use crate::theme::{self, Palette};
 use crate::util;
@@ -66,6 +67,7 @@ pub fn show(
                             ui.add_space(gap);
                             ui.vertical(|ui| {
                                 ui.set_width(SIDEBAR_WIDTH);
+                                queue(ui, state, actions);
                                 up_next(ui, state, actions);
                                 ui.add_space(24.0);
                                 related(ui, state, actions);
@@ -77,6 +79,7 @@ pub fn show(
                         }
                         about_video(ui, state, &watching, status, actions);
                         ui.add_space(24.0);
+                        queue(ui, state, actions);
                         up_next(ui, state, actions);
                         ui.add_space(24.0);
                         related(ui, state, actions);
@@ -85,8 +88,7 @@ pub fn show(
         });
 }
 
-/// The video over the whole window, with the controls over its bottom edge
-/// while the pointer is there.
+/// The video over the whole window, with the controls over its bottom edge.
 pub fn fullscreen(
     ui: &mut Ui,
     state: &mut State,
@@ -98,25 +100,12 @@ pub fn fullscreen(
         .frame(Frame::new().fill(Color32::BLACK))
         .show(ui, |ui| {
             let rect = ui.max_rect();
-            video(ui, rect, state, status, surface, actions);
-            let strip = Rect::from_min_max(pos2(rect.left(), rect.bottom() - 96.0), rect.max);
-            // The quality menu opens outside the strip; keep the strip while
-            // it is open.
-            let pinned = state.seek_preview.is_some() || ui.ctx().any_popup_open();
-            if ui.rect_contains_pointer(strip) || pinned {
-                ui.painter()
-                    .rect_filled(strip, CornerRadius::ZERO, Color32::from_black_alpha(170));
-                let mut bar = ui.new_child(
-                    UiBuilder::new()
-                        .max_rect(strip.shrink2(vec2(24.0, 16.0)))
-                        .layout(Layout::top_down(Align::Min)),
-                );
-                controls(&mut bar, state, status, actions);
-            }
+            player::player(ui, rect, state, status, surface, Mode::Fullscreen, actions);
         });
 }
 
-/// The video and, under it, its controls strip.
+/// The video with its controls over it: 16:9 across the column, or a
+/// Short upright in the middle of it.
 fn video_pane(
     ui: &mut Ui,
     state: &mut State,
@@ -126,11 +115,20 @@ fn video_pane(
     actions: &mut Vec<Action>,
 ) {
     let width = ui.available_width();
-    let height = (width * 9.0 / 16.0).min(max_video_height);
-    let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
-    video(ui, rect, state, status, surface, actions);
-    ui.add_space(8.0);
-    controls(ui, state, status, actions);
+    let (row, _) = if state.watching_short() {
+        let height = max_video_height.max(320.0);
+        ui.allocate_exact_size(vec2(width, height), Sense::hover())
+    } else {
+        let height = (width * 9.0 / 16.0).min(max_video_height);
+        ui.allocate_exact_size(vec2(width, height), Sense::hover())
+    };
+    let rect = if state.watching_short() {
+        let short_width = (row.height() * 9.0 / 16.0).min(width);
+        Rect::from_center_size(row.center(), vec2(short_width, row.height()))
+    } else {
+        row
+    };
+    player::player(ui, rect, state, status, surface, Mode::Page, actions);
     ui.add_space(16.0);
 }
 
@@ -609,8 +607,12 @@ fn description(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<A
     let details = state.details.ready();
     let open = state.description_open;
     let views = details.map(|details| details.views).or(watching.views);
+    // A live stream's count is of the people watching it now.
+    let live = watching.live;
     let views = views.map(|views| {
-        if open {
+        if live {
+            format!("{} watching now", util::thousands(views))
+        } else if open {
             format!("{} views", util::thousands(views))
         } else {
             util::views(views)
@@ -990,248 +992,31 @@ fn reply_column(
     });
 }
 
-/// The picture, with the spinner or the error over it. A click pauses; a
-/// double click goes full screen.
-fn video(
-    ui: &mut Ui,
-    rect: Rect,
-    state: &State,
-    status: Option<&Status>,
-    surface: Option<&VideoSurface>,
-    actions: &mut Vec<Action>,
-) {
-    let response = ui.interact(rect, ui.id().with("video"), Sense::click());
-    ui.painter()
-        .rect_filled(rect, CornerRadius::ZERO, Color32::BLACK);
-    if let Some(surface) = surface {
-        surface.paint(ui, rect);
-    }
-    if let Some(error) = &state.player_error {
-        ui.painter().text(
-            rect.center(),
-            Align2::CENTER_CENTER,
-            error,
-            theme::regular(16.0),
-            Color32::WHITE,
-        );
-    } else if status.is_some_and(|status| {
-        !status.idle && (status.buffering || (status.position <= 0.0 && !status.paused))
-    }) {
-        egui::Spinner::new()
-            .size(40.0)
-            .color(Color32::WHITE)
-            .paint_at(ui, Rect::from_center_size(rect.center(), vec2(40.0, 40.0)));
-        ui.ctx().request_repaint();
-    }
-    if response.double_clicked() {
-        actions.push(Action::ToggleFullscreen);
-    } else if response.clicked() {
-        actions.push(Action::TogglePause);
-    }
-}
-
-fn controls(ui: &mut Ui, state: &mut State, status: Option<&Status>, actions: &mut Vec<Action>) {
-    let Some(status) = status else {
+/// The videos queued to play next, in order, with Clear; a right click
+/// takes one out.
+fn queue(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    if state.queue.is_empty() {
         return;
-    };
-    ui.horizontal(|ui| {
-        let icon = if status.paused {
-            Icon::Play
-        } else {
-            Icon::Pause
-        };
-        if widgets::icon_button(ui, icon, 20.0, "Play or pause (Space)").clicked() {
-            actions.push(Action::TogglePause);
+    }
+    widgets::section(ui, &state.palette, "Queue", Some(state.queue.len()), |ui| {
+        if widgets::button(ui, &state.palette, "Clear", widgets::ButtonStyle::Normal).clicked() {
+            actions.push(Action::ClearQueue);
         }
-        ui.add(Icon::Volume.image(ui.visuals().text_color(), 18.0));
-        ui.spacing_mut().slider_width = 90.0;
-        let mut volume = status.volume;
-        if ui
-            .add(Slider::new(&mut volume, 0.0..=100.0).show_value(false))
-            .changed()
-        {
-            actions.push(Action::SetVolume(volume));
-        }
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            let (icon, label) = if state.fullscreen {
-                (Icon::ExitFullscreen, "Exit full screen (F)")
-            } else {
-                (Icon::Fullscreen, "Full screen (F)")
-            };
-            if widgets::icon_button(ui, icon, 18.0, label).clicked() {
-                actions.push(Action::ToggleFullscreen);
+        for video in &state.queue {
+            let watched = widgets::watched(&state.library, video);
+            let response = widgets::video_row(ui, &state.palette, video, None, watched, false);
+            if response.clicked() {
+                actions.push(Action::Open(video.clone()));
             }
-            // Full screen has no page layout to change.
-            if !state.fullscreen {
-                let label = if state.settings.theater {
-                    "Default view (T)"
-                } else {
-                    "Theater mode (T)"
-                };
-                if widgets::icon_button(ui, Icon::Theater, 18.0, label).clicked() {
-                    actions.push(Action::ToggleTheater);
+            response.context_menu(|ui| {
+                if ui.button("Remove from queue").clicked() {
+                    actions.push(Action::Dequeue(video.id.clone()));
+                    ui.close();
                 }
-            }
-            quality_menu(ui, state, status, actions);
-        });
-    });
-    seek_bar(ui, state, status, actions);
-}
-
-/// The quality chosen and the resolution playing, with the decoding details
-/// on hover. Lists what the video offers once it has loaded, and the usual
-/// resolutions before that.
-fn quality_menu(ui: &mut Ui, state: &State, status: &Status, actions: &mut Vec<Action>) {
-    let playing = (status.video_width > 0 && status.video_height > 0).then(|| {
-        Resolution::from_size(
-            status.video_width as u32,
-            status.video_height as u32,
-            status.fps.round() as u32,
-        )
-    });
-    let text = match (state.settings.quality, playing) {
-        (Quality::Auto, Some(playing)) => format!("Auto · {}", playing.label()),
-        (Quality::Auto, None) => "Auto".to_owned(),
-        (_, Some(playing)) => playing.label(),
-        (Quality::Max(lines), None) => format!("{lines}p"),
-    };
-    let fallback = [2160, 1440, 1080, 720, 480, 360].map(|lines| Resolution { lines, fps: 0 });
-    let offered: &[Resolution] = if state.resolutions.is_empty() {
-        &fallback
-    } else {
-        &state.resolutions
-    };
-    let menu = egui::ComboBox::from_id_salt("quality")
-        .selected_text(RichText::new(text).font(theme::medium(13.0)))
-        .width(130.0)
-        .show_ui(ui, |ui| {
-            let auto = format!("Auto (up to {}p)", Quality::AUTO);
-            if ui
-                .selectable_label(state.settings.quality == Quality::Auto, auto)
-                .clicked()
-            {
-                actions.push(Action::SetQuality(Quality::Auto));
-            }
-            for resolution in offered {
-                let quality = Quality::Max(resolution.lines);
-                if ui
-                    .selectable_label(state.settings.quality == quality, resolution.label())
-                    .clicked()
-                {
-                    actions.push(Action::SetQuality(quality));
-                }
-            }
-        });
-    menu.response.on_hover_text(playback_details(status));
-}
-
-/// "1920×1080 · 60 fps · vp9 · hardware decoding (vaapi)".
-fn playback_details(status: &Status) -> String {
-    if status.video_width <= 0 || status.video_height <= 0 {
-        return "Quality".to_owned();
-    }
-    let mut parts = vec![format!("{}×{}", status.video_width, status.video_height)];
-    if status.fps > 0.0 {
-        parts.push(format!("{:.0} fps", status.fps));
-    }
-    if let Some(codec) = &status.codec {
-        parts.push(codec.clone());
-    }
-    parts.push(match &status.hwdec {
-        Some(decoder) => format!("hardware decoding ({decoder})"),
-        None => "software decoding".to_owned(),
-    });
-    parts.join(" · ")
-}
-
-/// The seek bar: a thin rounded track, played in `accent`, buffered in
-/// `surface_active`, the rest in `surface`; a round handle marks the
-/// position while hovered or dragged. Times are `0:00 / 12:04` at its
-/// right.
-fn seek_bar(ui: &mut Ui, state: &mut State, status: &Status, actions: &mut Vec<Action>) {
-    let palette = state.palette.clone();
-    ui.horizontal(|ui| {
-        let time = {
-            let position = state.seek_preview.unwrap_or(status.position);
-            if status.duration > 0.0 {
-                format!(
-                    "{} / {}",
-                    util::duration(position),
-                    util::duration(status.duration)
-                )
-            } else {
-                util::duration(position)
-            }
-        };
-        let time_width = ui
-            .painter()
-            .layout_no_wrap(
-                "00:00 / 00:00".to_owned(),
-                theme::regular(13.0),
-                Color32::WHITE,
-            )
-            .size()
-            .x
-            + 12.0;
-        let width = ui.available_width() - time_width;
-        let (rect, response) = ui.allocate_exact_size(vec2(width, 20.0), Sense::click_and_drag());
-        let duration = status.duration;
-        if duration > 0.0 {
-            let pointer = response.interact_pointer_pos().map(|pointer| {
-                f64::from(((pointer.x - rect.left()) / rect.width()).clamp(0.0, 1.0)) * duration
             });
-            if response.drag_stopped() || response.clicked() {
-                if let Some(seconds) = pointer.or(state.seek_preview) {
-                    actions.push(Action::SeekTo {
-                        seconds,
-                        exact: true,
-                    });
-                }
-                state.seek_preview = None;
-            } else if response.dragged()
-                && let Some(seconds) = pointer
-            {
-                if state
-                    .seek_preview
-                    .is_none_or(|shown| (shown - seconds).abs() >= 0.5)
-                {
-                    actions.push(Action::SeekTo {
-                        seconds,
-                        exact: false,
-                    });
-                }
-                state.seek_preview = Some(seconds);
-            }
         }
-
-        let active = (response.hovered() || response.dragged()) && duration > 0.0;
-        let thickness = if active { 6.0 } else { 4.0 };
-        let track = Rect::from_center_size(rect.center(), vec2(rect.width(), thickness));
-        let round = CornerRadius::same((thickness / 2.0) as u8);
-        let fraction = |seconds: f64| {
-            if duration > 0.0 {
-                (seconds / duration).clamp(0.0, 1.0) as f32
-            } else {
-                0.0
-            }
-        };
-        let x_at = |seconds: f64| track.left() + track.width() * fraction(seconds);
-        let position = state.seek_preview.unwrap_or(status.position);
-        let painter = ui.painter();
-        painter.rect_filled(track, round, palette.surface);
-        let buffered = Rect::from_min_max(track.min, pos2(x_at(status.cached_until), track.max.y));
-        painter.rect_filled(buffered, round, palette.surface_active);
-        let played = Rect::from_min_max(track.min, pos2(x_at(position), track.max.y));
-        painter.rect_filled(played, round, palette.accent);
-        if active {
-            painter.circle_filled(pos2(x_at(position), track.center().y), 7.0, palette.accent);
-        }
-        ui.label(
-            RichText::new(time)
-                .font(theme::regular(13.0))
-                .color(palette.secondary),
-        );
     });
+    ui.add_space(24.0);
 }
 
 fn up_next(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {

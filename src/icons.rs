@@ -47,5 +47,11 @@ fastframe_icons::icons! {
         Share => "share-2",
         Bookmark => "bookmark",
         BookmarkFilled => "bookmark-filled",
+        SkipForward => "skip-forward",
+        Captions => "captions",
+        Speed => "gauge",
+        Queue => "list-plus",
+        MiniPlayer => "picture-in-picture-2",
+        Live => "radio",
     }
 }
