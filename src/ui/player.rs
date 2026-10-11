@@ -296,7 +296,7 @@ fn buttons(
     });
 }
 
-/// "Next: <title> (N)" for the next button's hover.
+/// `Next: <title> (N)` for the next button's hover.
 fn next_hint(video: &Video) -> String {
     if video.title.is_empty() {
         "Next (N)".to_owned()

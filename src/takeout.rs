@@ -21,7 +21,7 @@ pub fn parse(bytes: &[u8]) -> Result<Import, String> {
     parse_reader(bytes)
 }
 
-/// [`parse`], streaming: a big watch-history.json is deserialized as it is
+/// Streaming: a big watch-history.json is deserialized as it is
 /// read instead of sitting in memory a second time as raw bytes.
 pub fn parse_reader<R: BufRead>(reader: R) -> Result<Import, String> {
     parse_limited(reader, 64 * 1024 * 1024)

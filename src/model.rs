@@ -572,7 +572,7 @@ pub enum Action {
     ImportTakeout,
     /// "sign in with cookies.txt" for the account being added.
     AddAccountFile,
-    /// "sign in with <browser>" for the account being added, with the
+    /// `sign in with <browser>` for the account being added, with the
     /// browser and profile typed under Advanced.
     AddAccountBrowser,
     /// A detected browser profile's `Sign in`, by its index in
