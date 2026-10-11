@@ -100,10 +100,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           path-type: inherit
           update: true
-          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-mpv
+          install: mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-mpv
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
           shared-key: windows-gnu-tests
@@ -111,7 +111,7 @@ jobs:
       - name: Native build and headless tests
         shell: msys2 {0}
         run: |
-          export LIBRARY_PATH=/mingw64/lib
+          export LIBRARY_PATH=/ucrt64/lib
           cargo test --locked --all-targets --target x86_64-pc-windows-gnu
           cargo build --locked --target x86_64-pc-windows-gnu
           target/x86_64-pc-windows-gnu/debug/youtfast.exe --version

@@ -13,8 +13,10 @@ file-format stability across all future 0.x releases.
 3. Commit on `main`, preserving a linear history, then push. All required CI
    jobs on that exact commit must pass before tagging. Build work happens on
    hosted GitHub runners, not a maintainer's laptop.
-4. Create an annotated version tag on that tested commit and push the tag.
-   Never move or overwrite a published tag.
+4. Run the Release workflow manually on that commit with the intended version
+   input. This dry run validates every package and source asset without publishing.
+   Only after it passes, create an annotated version tag and push it. Never move
+   or overwrite a published tag.
 5. The Release workflow reuses CI, checks tag/version agreement and ancestry
    from `main`, builds Linux x86_64, captures a signed-out preview, archives
    corresponding source including locked Rust dependencies, and builds Flatpak.

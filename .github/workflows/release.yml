@@ -3,6 +3,13 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Version to validate and package without publishing
+        required: true
+        default: v0.1.0
+        type: string
 
 permissions:
   contents: read
@@ -14,6 +21,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_BUILD_JOBS: 2
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   validate:
@@ -25,8 +33,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Validate version and main ancestry
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           python3 packaging/release.py check --tag "$RELEASE_TAG"
           git merge-base --is-ancestor HEAD origin/main
@@ -62,7 +68,6 @@ jobs:
       - name: Capture fresh signed-out profile
         timeout-minutes: 3
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
           LIBGL_ALWAYS_SOFTWARE: '1'
         run: |
           mkdir -p "$RUNNER_TEMP/youtfast-preview/config" "$RUNNER_TEMP/youtfast-preview/data" "$RUNNER_TEMP/youtfast-preview/cache"
@@ -126,8 +131,6 @@ jobs:
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08
       - name: Build restricted bundle and native corresponding sources
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           mkdir packaging/flatpak/built
           tar -xzf "dist/youtfast-$RELEASE_TAG-x86_64-unknown-linux-gnu.tar.gz" -C packaging/flatpak/built --strip-components=1
@@ -143,6 +146,7 @@ jobs:
           retention-days: 7
 
   publish:
+    if: github.event_name == 'push'
     needs: [checks, linux, source, flatpak]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -159,7 +163,6 @@ jobs:
       - name: Require artifacts, checksum and publish committed notes
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           test -s "dist/youtfast-$RELEASE_TAG-x86_64-unknown-linux-gnu.tar.gz"
           test -s "dist/youtfast-$RELEASE_TAG-source-with-dependencies.tar.gz"
@@ -167,4 +170,5 @@ jobs:
           test -s "dist/youtfast-$RELEASE_TAG-flatpak-sources.flatpak"
           test -s "dist/youtfast-$RELEASE_TAG-linux.png"
           (cd dist && sha256sum *.tar.gz *.flatpak *.png > checksums.txt && sha256sum --check checksums.txt)
-          gh release create "$RELEASE_TAG" dist/* --verify-tag --latest --title "YouTFast ${RELEASE_TAG#v}" --notes-file "packaging/release-notes/$RELEASE_TAG.md"
+          gh release create "$RELEASE_TAG" dist/* --verify-tag --draft --title "YouTFast ${RELEASE_TAG#v}" --notes-file "packaging/release-notes/$RELEASE_TAG.md"
+          gh release edit "$RELEASE_TAG" --draft=false --latest
