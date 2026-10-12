@@ -97,6 +97,16 @@ panic = "abort"
 [profile.dev.package."*"]
 opt-level = 2
 
+# CI only checks and tests, so it skips the optimised dependencies and the
+# debug info the interactive profile carries.
+[profile.ci]
+inherits = "dev"
+debug = 0
+incremental = false
+
+[profile.ci.package."*"]
+opt-level = 0
+
 [patch.crates-io]
 # crmne/egui apps-0.36 and crmne/winit apps-0.30, the same revisions Spotifast
 # and ZapFast pin: Wayland frame pacing by the compositor's frame callbacks

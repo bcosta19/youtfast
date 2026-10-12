@@ -54,9 +54,9 @@ jobs:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --locked --no-deps
       - name: Clippy
-        run: cargo clippy --locked --all-targets -- -D warnings
+        run: cargo clippy --locked --profile ci --all-targets -- -D warnings
       - name: Tests
-        run: cargo test --locked --all-targets
+        run: cargo test --locked --profile ci --all-targets
 
   macos:
     name: macos-native-tests
@@ -76,11 +76,11 @@ jobs:
         with:
           shared-key: macos-tests
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-      - run: cargo test --locked --all-targets
+      - run: cargo test --locked --profile ci --all-targets
       - name: Build and version smoke test
         run: |
-          cargo build --locked
-          test "$(target/debug/youtfast --version)" = "youtfast $(python3 packaging/release.py check)"
+          cargo build --locked --profile ci
+          test "$(target/ci/youtfast --version)" = "youtfast $(python3 packaging/release.py check)"
 
   windows:
     name: windows-native-tests
@@ -112,9 +112,9 @@ jobs:
         shell: msys2 {0}
         run: |
           export LIBRARY_PATH=/ucrt64/lib
-          cargo test --locked --all-targets --target x86_64-pc-windows-gnu
-          cargo build --locked --target x86_64-pc-windows-gnu
-          target/x86_64-pc-windows-gnu/debug/youtfast.exe --version
+          cargo test --locked --profile ci --all-targets --target x86_64-pc-windows-gnu
+          cargo build --locked --profile ci --target x86_64-pc-windows-gnu
+          target/x86_64-pc-windows-gnu/ci/youtfast.exe --version
 
   release-gate:
     name: release-gate
