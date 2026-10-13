@@ -1,0 +1,8 @@
+# ai-memory project marker.
+#
+# Without this file the hooks and the MCP server derive the project name from
+# the checkout root or fall back to the server default, which sent reads to the
+# wrong project's memory. A marker-declared `project` is deliberate routing
+# and does not yield to session-sticky attribution, so this stays authoritative.
+workspace = "default"
+project = "youtfast"

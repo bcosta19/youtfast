@@ -61,8 +61,11 @@ cargo test --locked --all-targets
 RUSTDOCFLAGS='-D warnings' cargo doc --locked --no-deps
 ```
 
-GitHub Actions runs checks on pull requests, pushes to `main`, merge queues and
-manual requests. Linux is the release target for 0.1.0. Windows and macOS jobs
+Automatic GitHub Actions triggers are temporarily paused to conserve runner
+minutes, including tag releases. Checks and release validation remain available
+through manual requests. Restore the `push`, `pull_request` and `merge_group`
+triggers in CI and the `push` tag trigger in Release to resume automation.
+Linux is the release target for 0.1.0. Windows and macOS jobs
 exercise native compilation and headless tests; green jobs do not certify
 interactive playback, account login or portable installers on those platforms.
 Do not run ignored network tests as part of default CI. Tests must not access

@@ -1,8 +1,7 @@
 name: Release
 
 on:
-  push:
-    tags: ['v*']
+  # Automatic tag releases are temporarily paused to conserve Actions minutes.
   workflow_dispatch:
     inputs:
       tag:
