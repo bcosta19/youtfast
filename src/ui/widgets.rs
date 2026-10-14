@@ -1017,6 +1017,17 @@ pub fn rich_text(
     {
         return Some(action.clone());
     }
+    // Lets the description or a comment's text be copied to the
+    // clipboard, since the galley is painted by hand and cannot be
+    // selected the way an ordinary label can. The plain text is built
+    // only when the menu is actually opened, not every frame.
+    response.context_menu(|ui| {
+        if ui.button("Copy").clicked() {
+            let plain: String = spans.iter().map(Span::text).collect::<Vec<_>>().join("");
+            ui.ctx().copy_text(plain);
+            ui.close();
+        }
+    });
     None
 }
 

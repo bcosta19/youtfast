@@ -350,7 +350,7 @@ pub fn apply(ctx: &egui::Context, palette: &Palette) {
             foreground_color: true,
             ..egui::style::ScrollStyle::floating()
         };
-        style.interaction.selectable_labels = false;
+        style.interaction.selectable_labels = true;
         style.interaction.tooltip_delay = 0.4;
         style.animation_time = 0.12;
         style.url_in_tooltip = false;
