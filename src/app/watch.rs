@@ -456,13 +456,47 @@ fn failure_message(failure: mpv::Failure) -> &'static str {
         }
         mpv::Failure::AgeRestricted => "This video is age-restricted and needs signing in.",
         mpv::Failure::Unavailable => "This video is private or unavailable.",
-        mpv::Failure::Other => "Could not play this video. Updating yt-dlp usually fixes this.",
+        mpv::Failure::Forbidden => {
+            "YouTube refused access to the stream (HTTP 403). The stream link may have expired or access may be restricted. Try reopening the video."
+        }
+        mpv::Failure::RateLimited => {
+            "YouTube is limiting requests (HTTP 429). Wait a while before trying again."
+        }
+        mpv::Failure::Extraction => {
+            "yt-dlp could not extract the stream signature. Try updating yt-dlp and reopening the video."
+        }
+        mpv::Failure::Loading => {
+            "mpv could not open the video stream. Check your connection and try reopening the video."
+        }
+        mpv::Failure::Interrupted => {
+            "Playback was interrupted after the video loaded. The player did not identify the cause; the connection or stream link may no longer be valid. Try reopening the video."
+        }
+        mpv::Failure::AudioOutput => {
+            "mpv could not initialize audio output. Check your audio device and try again."
+        }
+        mpv::Failure::VideoOutput => {
+            "mpv could not initialize video output. Try restarting the app."
+        }
+        mpv::Failure::UnknownFormat => "mpv could not recognize the stream format.",
+        mpv::Failure::Other => {
+            "Could not play this video. The player did not identify the cause. Try reopening the video."
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn interruption_feedback_does_not_recommend_an_extractor_update() {
+        let message = failure_message(mpv::Failure::Interrupted);
+        assert!(message.contains("after the video loaded"));
+        assert!(message.contains("did not identify the cause"));
+        assert!(!message.contains("yt-dlp"));
+        assert!(failure_message(mpv::Failure::Forbidden).contains("HTTP 403"));
+        assert!(failure_message(mpv::Failure::Extraction).contains("updating yt-dlp"));
+    }
 
     fn comment(id: &str) -> CommentRow {
         CommentRow {

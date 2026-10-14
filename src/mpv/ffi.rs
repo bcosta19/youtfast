@@ -41,6 +41,11 @@ pub const MPV_END_FILE_REASON_QUIT: c_int = 3;
 pub const MPV_END_FILE_REASON_ERROR: c_int = 4;
 pub const MPV_END_FILE_REASON_REDIRECT: c_int = 5;
 
+pub const MPV_ERROR_LOADING_FAILED: c_int = -13;
+pub const MPV_ERROR_AO_INIT_FAILED: c_int = -14;
+pub const MPV_ERROR_VO_INIT_FAILED: c_int = -15;
+pub const MPV_ERROR_UNKNOWN_FORMAT: c_int = -17;
+
 #[repr(C)]
 pub struct mpv_event {
     pub event_id: mpv_event_id,

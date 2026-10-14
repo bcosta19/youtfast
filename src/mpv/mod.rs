@@ -183,7 +183,7 @@ pub enum Event {
     Failed(Failure),
 }
 
-/// Why a video could not play, as far as yt-dlp's error tells.
+/// Controlled categories from yt-dlp diagnostics and libmpv error codes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Failure {
     /// YouTube asked to sign in to prove this is not a bot: it has
@@ -193,7 +193,15 @@ pub enum Failure {
     AgeRestricted,
     /// Private, removed, or not available here.
     Unavailable,
-    /// Anything else, an outdated yt-dlp included.
+    Forbidden,
+    RateLimited,
+    Extraction,
+    Loading,
+    Interrupted,
+    AudioOutput,
+    VideoOutput,
+    UnknownFormat,
+    /// No more specific cause was reported.
     Other,
 }
 
@@ -210,9 +218,31 @@ impl Failure {
             Self::AgeRestricted
         } else if line.contains("Private video") || line.contains("Video unavailable") {
             Self::Unavailable
+        } else if line.contains("HTTP Error 403") {
+            Self::Forbidden
+        } else if line.contains("HTTP Error 429") {
+            Self::RateLimited
+        } else if line.contains("nsig extraction failed")
+            || line.contains("signature extraction failed")
+        {
+            Self::Extraction
         } else {
             Self::Other
         })
+    }
+
+    fn from_playback(code: c_int, loaded: bool, diagnostic: Option<Self>) -> Self {
+        if let Some(failure) = diagnostic.filter(|failure| *failure != Self::Other) {
+            return failure;
+        }
+        match code {
+            ffi::MPV_ERROR_AO_INIT_FAILED => Self::AudioOutput,
+            ffi::MPV_ERROR_VO_INIT_FAILED => Self::VideoOutput,
+            ffi::MPV_ERROR_UNKNOWN_FORMAT => Self::UnknownFormat,
+            _ if loaded => Self::Interrupted,
+            ffi::MPV_ERROR_LOADING_FAILED => Self::Loading,
+            _ => Self::Other,
+        }
     }
 }
 
@@ -223,6 +253,8 @@ pub struct Mpv {
     wakeup: *mut egui::Context,
     /// yt-dlp's last error, until the load it belongs to ends.
     ytdl_failure: Option<Failure>,
+    /// Whether the current file reached FILE_LOADED before failing.
+    loaded: bool,
     /// What [`Mpv::set_max_resolution`] last set.
     max_resolution: u32,
     /// The captions' languages yt-dlp is asked for (see [`raw_options`]).
@@ -345,6 +377,7 @@ impl Mpv {
             },
             wakeup,
             ytdl_failure: None,
+            loaded: false,
             max_resolution,
             captions,
             cookies_from_browser: None,
@@ -569,6 +602,10 @@ impl Mpv {
             let event = unsafe { &*ffi::mpv_wait_event(self.handle.ptr(), 0.0) };
             match event.event_id {
                 ffi::MPV_EVENT_NONE => break,
+                ffi::MPV_EVENT_START_FILE => {
+                    self.loaded = false;
+                    self.ytdl_failure = None;
+                }
                 ffi::MPV_EVENT_PROPERTY_CHANGE => {
                     // SAFETY: mpv documents data as mpv_event_property here.
                     let property = unsafe { &*(event.data as *const ffi::mpv_event_property) };
@@ -576,6 +613,7 @@ impl Mpv {
                     unsafe { self.apply_property(event.reply_userdata, property) };
                 }
                 ffi::MPV_EVENT_FILE_LOADED => {
+                    self.loaded = true;
                     self.ytdl_failure = None;
                     events.push(Event::Loaded);
                 }
@@ -586,7 +624,11 @@ impl Mpv {
                         ffi::MPV_END_FILE_REASON_EOF => events.push(Event::Finished),
                         ffi::MPV_END_FILE_REASON_ERROR => {
                             log::warn!("mpv could not play: {}", Error::new(end.error, "playback"));
-                            let failure = self.ytdl_failure.take().unwrap_or(Failure::Other);
+                            let failure = Failure::from_playback(
+                                end.error,
+                                self.loaded,
+                                self.ytdl_failure.take(),
+                            );
                             events.push(Event::Failed(failure));
                         }
                         _ => self.ytdl_failure = None,
@@ -764,12 +806,59 @@ mod tests {
         );
         assert_eq!(
             failure("ERROR: [youtube] abc: nsig extraction failed"),
-            Some(Failure::Other)
+            Some(Failure::Extraction)
         );
         assert_eq!(
             failure("WARNING: [youtube] abc: HTTP Error 429: Too Many Requests"),
             None
         );
+    }
+
+    #[test]
+    fn stream_access_errors_are_classified_without_retaining_diagnostics() {
+        assert_eq!(
+            Failure::from_ytdl("ERROR: HTTP Error 403: Forbidden https://example.invalid/private"),
+            Some(Failure::Forbidden)
+        );
+        assert_eq!(
+            Failure::from_ytdl("ERROR: HTTP Error 429: Too Many Requests"),
+            Some(Failure::RateLimited)
+        );
+    }
+
+    #[test]
+    fn playback_failures_distinguish_loading_from_interruption() {
+        assert_eq!(
+            Failure::from_playback(ffi::MPV_ERROR_LOADING_FAILED, false, None),
+            Failure::Loading
+        );
+        assert_eq!(
+            Failure::from_playback(ffi::MPV_ERROR_LOADING_FAILED, true, None),
+            Failure::Interrupted
+        );
+        assert_eq!(
+            Failure::from_playback(-20, false, Some(Failure::Other)),
+            Failure::Other
+        );
+        assert_eq!(
+            Failure::from_playback(-20, true, Some(Failure::Other)),
+            Failure::Interrupted
+        );
+        assert_eq!(
+            Failure::from_playback(
+                ffi::MPV_ERROR_LOADING_FAILED,
+                false,
+                Some(Failure::BotCheck)
+            ),
+            Failure::BotCheck
+        );
+        for (code, expected) in [
+            (ffi::MPV_ERROR_AO_INIT_FAILED, Failure::AudioOutput),
+            (ffi::MPV_ERROR_VO_INIT_FAILED, Failure::VideoOutput),
+            (ffi::MPV_ERROR_UNKNOWN_FORMAT, Failure::UnknownFormat),
+        ] {
+            assert_eq!(Failure::from_playback(code, true, None), expected);
+        }
     }
 
     #[test]

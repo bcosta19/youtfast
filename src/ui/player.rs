@@ -139,13 +139,14 @@ fn picture(
         surface.paint(ui, rect);
     }
     if let Some(error) = &state.player_error {
-        ui.painter().text(
-            rect.center(),
-            Align2::CENTER_CENTER,
-            error,
+        let galley = ui.painter().layout(
+            error.clone(),
             theme::regular(16.0),
             Color32::WHITE,
+            (rect.width() - 32.0).max(1.0),
         );
+        ui.painter()
+            .galley(rect.center() - galley.size() / 2.0, galley, Color32::WHITE);
     } else if status.is_some_and(|status| {
         !status.idle && (status.buffering || (status.position <= 0.0 && !status.paused))
     }) {
