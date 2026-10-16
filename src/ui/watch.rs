@@ -824,7 +824,7 @@ fn comment_row(
             comment.likes,
             comment.replies,
         ),
-        text,
+        (text, &comment.image),
     ));
     let closed =
         !state.comments_open.contains(&comment.id) && !state.replies.contains_key(&comment.id);
@@ -886,6 +886,9 @@ fn comment_row(
             {
                 actions.push(Action::ToggleCommentText(comment.id.clone()));
             }
+            if let Some(url) = &comment.image {
+                comment_image(ui, url);
+            }
             comment_footer(ui, state, comment, actions);
             if let Some(replies) = state.replies.get(&comment.id) {
                 ui.add_space(4.0);
@@ -897,6 +900,16 @@ fn comment_row(
     if closed {
         let height = (ui.next_widget_position().y - top.y - ui.spacing().item_spacing.y).max(0.0);
         ui.ctx().data_mut(|data| data.insert_temp(key, height));
+    }
+}
+
+/// Reserve a stable box so loading an attachment does not move the comments.
+/// Only visible attachments fetch, decode or schedule animation frames.
+fn comment_image(ui: &mut Ui, url: &str) {
+    let size = vec2(ui.available_width().min(320.0), 200.0);
+    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+    if ui.is_rect_visible(rect) {
+        super::images::attachment(ui, url, rect);
     }
 }
 
@@ -1105,6 +1118,7 @@ mod tests {
             author_id: Some("UCx".to_owned()),
             author_avatar: None,
             text: vec![Span::Text("a comment ".repeat(40))],
+            image: None,
             published: "1 day ago".to_owned(),
             likes: Some(3),
             replies,
@@ -1125,6 +1139,7 @@ mod tests {
                 let mut comment = row(&format!("comment-{index}"), 0);
                 comment.author_avatar =
                     Some(format!("https://i.ytimg.com/synthetic-avatar-{index}"));
+                comment.image = Some(format!("https://example.invalid/comment-{index}.gif"));
                 comment
             })
             .collect();
@@ -1166,7 +1181,15 @@ mod tests {
     /// assertions panic on either).
     #[test]
     fn the_watch_page_draws_a_comment_with_its_replies_open() {
-        for (width, theater) in [(900.0, false), (1600.0, false), (1600.0, true)] {
+        for (width, theater, light) in [
+            (480.0, false, true),
+            (900.0, false, false),
+            (1600.0, false, true),
+            (1600.0, true, false),
+        ] {
+            let mut top = row("top", 1);
+            top.text.clear();
+            top.image = Some("https://example.invalid/top.gif".into());
             let mut state = State {
                 view: crate::model::View::Watch,
                 watching: Some(Video::from_id("aaaaaaaaaaa".to_owned())),
@@ -1175,7 +1198,12 @@ mod tests {
                     comment_count: Some(1),
                     ..Default::default()
                 }),
-                comments: Fetch::Ready(vec![row("top", 1)]),
+                comments: Fetch::Ready(vec![top]),
+                palette: if light {
+                    Palette::light()
+                } else {
+                    Palette::dark()
+                },
                 ..State::default()
             };
             state.settings.theater = theater;
@@ -1187,7 +1215,9 @@ mod tests {
                 ..Default::default()
             };
             // The replies on their way, then arrived.
-            for replies in [Fetch::Loading, Fetch::Ready(vec![row("reply", 0)])] {
+            let mut reply = row("reply", 0);
+            reply.image = Some("https://example.invalid/reply.webp".into());
+            for replies in [Fetch::Loading, Fetch::Ready(vec![reply])] {
                 state.replies.insert("top".to_owned(), replies);
                 for _ in 0..3 {
                     let mut output = ctx.run_ui(input.clone(), |ui| {

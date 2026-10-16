@@ -733,6 +733,15 @@ pub(crate) struct CommentEntityPayload {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CommentSurfaceEntityPayload {
     pub voice_reply_container_view_model: Option<VoiceReplyContainer>,
+    #[serde(default)]
+    #[serde_as(as = "DefaultOnError")]
+    pub image_attachment_view_model: Option<CommentImageAttachment>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CommentImageAttachment {
+    pub comment_image_attachment_view_model: ImageView,
 }
 
 #[serde_as]

@@ -556,6 +556,7 @@ fn map_comment(
     Comment {
         id: c.comment_id,
         text: c.content_text.into(),
+        image: Vec::new(),
         author: match (c.author_endpoint, c.author_text) {
             (Some(aep), Some(name)) => Some(ChannelTag {
                 id: aep.browse_endpoint.browse_id,
@@ -614,13 +615,18 @@ fn map_comment_vm(
     } else {
         false
     };
-    let voice_reply = if let Some(Payload::CommentSurfaceEntityPayload(sf)) =
+    let (voice_reply, image) = if let Some(Payload::CommentSurfaceEntityPayload(sf)) =
         mutations.remove(&vm.comment_surface_key)
     {
-        sf.voice_reply_container_view_model
-            .map(|vr| vr.voice_reply_container_view_model.transcript_text)
+        (
+            sf.voice_reply_container_view_model
+                .map(|vr| vr.voice_reply_container_view_model.transcript_text),
+            sf.image_attachment_view_model
+                .map(|attachment| attachment.comment_image_attachment_view_model.image.into())
+                .unwrap_or_default(),
+        )
     } else {
-        None
+        (None, Vec::new())
     };
 
     let mut parse_num = |s: &str| -> Option<u32> {
@@ -636,6 +642,7 @@ fn map_comment_vm(
 
     Some(Comment {
         id: vm.comment_id,
+        image,
         text: voice_reply
             .filter(|_| ce.properties.content.is_empty())
             .unwrap_or(ce.properties.content)
@@ -763,5 +770,59 @@ mod tests {
         insta::assert_ron_snapshot!(format!("map_comments_{name}"), map_res.c, {
             ".items[].publish_date" => "[date]",
         });
+    }
+
+    #[test]
+    fn image_attachments_survive_mapping_on_comments_and_replies() {
+        use serde_json::json;
+        use crate::model::richtext::ToPlaintext;
+
+        for reply in [false, true] {
+            for text in ["", "a GIF with text"] {
+                for attachment in [
+                    json!({"commentImageAttachmentViewModel": {
+                        "image": {"sources": [{
+                            "url": "https://example.invalid/comment.gif", "width": 320, "height": 180
+                        }]}
+                    }}),
+                    json!(null),
+                    json!({"unknownFutureShape": true}),
+                ] {
+                    let has_image = attachment.get("commentImageAttachmentViewModel").is_some();
+                    let vm = json!({
+                        "commentId": "synthetic", "commentKey": "comment",
+                        "commentSurfaceKey": "surface", "toolbarStateKey": "toolbar"
+                    });
+                    let item = if reply {
+                        json!({"commentViewModel": vm})
+                    } else {
+                        json!({"commentThreadRenderer": {"commentViewModel": {"commentViewModel": vm}}})
+                    };
+                    let response: response::VideoComments = serde_json::from_value(json!({
+                        "onResponseReceivedEndpoints": [{"appendContinuationItemsAction": {
+                            "continuationItems": [item]
+                        }}],
+                        "frameworkUpdates": {"entityBatchUpdate": {"mutations": [
+                            {"entityKey": "comment", "payload": {"commentEntityPayload": {
+                                "properties": {"content": {"content": text}, "publishedTime": "1 day ago"},
+                                "toolbar": {"likeCountNotliked": "2", "replyCount": "0"}
+                            }}},
+                            {"entityKey": "surface", "payload": {"commentSurfaceEntityPayload": {
+                                "imageAttachmentViewModel": attachment
+                            }}}
+                        ]}}
+                    })).unwrap();
+                    let mapped = response.map_response(&MapRespCtx::test("")).unwrap();
+                    assert!(mapped.warnings.is_empty(), "{:?}", mapped.warnings);
+                    assert_eq!(mapped.c.items.len(), 1);
+                    let comment = &mapped.c.items[0];
+                    assert_eq!(comment.text.to_plaintext(), text);
+                    assert_eq!(comment.image.len(), usize::from(has_image));
+                    if has_image {
+                        assert_eq!(comment.image[0].url, "https://example.invalid/comment.gif");
+                    }
+                }
+            }
+        }
     }
 }

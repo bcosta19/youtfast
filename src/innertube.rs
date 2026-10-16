@@ -597,6 +597,7 @@ fn comment(item: &Comment) -> CommentRow {
             .iter()
             .map(|component| span(component, ""))
             .collect(),
+        image: at_least(&item.image, 320),
         published: item.publish_date_txt.clone(),
         likes: item.like_count,
         replies: item.reply_count,
@@ -851,6 +852,35 @@ mod tests {
             Some("https://yt3.ggpht.com/48")
         );
         assert_eq!(at_least(&[], 64), None);
+    }
+
+    #[test]
+    fn comment_attachments_keep_text_and_choose_a_small_display_source() {
+        let mut json = serde_json::json!({
+            "id": "synthetic-comment", "text": [{"Text": {"text": "hello"}}],
+            "author": null, "publish_date": null, "publish_date_txt": "1 day ago",
+            "like_count": 0, "reply_count": 0,
+            "replies": {"items": [], "ctoken": null, "count": 0, "endpoint": "browse"},
+            "by_owner": false, "pinned": false, "hearted": false
+        });
+        let old: Comment = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(comment(&old).image, None);
+        json["image"] = serde_json::json!([
+            {"url": "//example.invalid/large.gif", "width": 1280, "height": 720},
+            {"url": "//example.invalid/display.gif", "width": 320, "height": 180},
+            {"url": "//example.invalid/tiny.gif", "width": 100, "height": 56}
+        ]);
+        let with_image: Comment = serde_json::from_value(json.clone()).unwrap();
+        let mapped = comment(&with_image);
+        assert_eq!(mapped.text, [Span::Text("hello".into())]);
+        assert_eq!(
+            mapped.image.as_deref(),
+            Some("https://example.invalid/display.gif")
+        );
+        json["text"] = serde_json::json!([]);
+        let image_only: Comment = serde_json::from_value(json).unwrap();
+        assert!(comment(&image_only).text.is_empty());
+        assert!(comment(&image_only).image.is_some());
     }
 
     #[test]

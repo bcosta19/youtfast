@@ -3,6 +3,12 @@
 use super::*;
 
 impl State {
+    fn renew_comment_image(&mut self, comment: &str, manual: bool) -> bool {
+        // Bound the entire renewal chain, even if each refused request produces
+        // a different signed URL. A deliberate retry starts one new attempt.
+        let first = self.comment_image_refreshes.insert(comment.to_owned());
+        manual || first
+    }
     fn fill_comments(
         &mut self,
         key: CommentsKey,
@@ -30,6 +36,30 @@ impl State {
             }
             (CommentsKey::Replies(id), Err(error)) => {
                 self.replies.insert(id, Fetch::Failed(error));
+            }
+            (CommentsKey::ImageRefresh { comment, old_url }, result) => {
+                let fresh = result
+                    .ok()
+                    .and_then(|(rows, _)| rows.into_iter().find(|row| row.id == comment))
+                    .and_then(|row| row.image);
+                let Some(fresh) = fresh.filter(|url| url != &old_url) else {
+                    log::warn!("image: source refresh failed");
+                    return;
+                };
+                let replace = |rows: &mut Fetch<Vec<CommentRow>>| {
+                    if let Fetch::Ready(rows) = rows {
+                        for row in rows.iter_mut().filter(|row| {
+                            row.id == comment && row.image.as_deref() == Some(&old_url)
+                        }) {
+                            row.image = Some(fresh.clone());
+                        }
+                    }
+                };
+                replace(&mut self.comments);
+                for replies in self.replies.values_mut() {
+                    replace(replies);
+                }
+                log::debug!("image: source refreshed");
             }
         }
     }
@@ -142,6 +172,8 @@ impl App {
         // The watch page's other panes start fresh and fill as they load.
         self.reset_watch_panes();
         self.state.comments_visitor_data = None;
+        self.state.comment_pages.clear();
+        self.state.comment_image_refreshes.clear();
         self.state.description_open = false;
         self.state.comments_open.clear();
         if self.state.settings.sponsorblock && !video.live {
@@ -215,15 +247,56 @@ impl App {
         &mut self,
         generation: u64,
         key: CommentsKey,
+        token: String,
         result: Result<(Vec<CommentRow>, Option<String>), String>,
     ) {
         if generation != self.details_generation {
             return;
         }
+        if !matches!(key, CommentsKey::ImageRefresh { .. })
+            && let Ok((rows, _)) = &result
+        {
+            for row in rows.iter().filter(|row| row.image.is_some()) {
+                self.state
+                    .comment_pages
+                    .insert(row.id.clone(), token.clone());
+            }
+        }
         if key == CommentsKey::Top && result.is_ok() {
             self.more_comments_token = None;
         }
         self.state.fill_comments(key, result);
+    }
+
+    /// Re-request exactly the page which produced this attachment. A failed or
+    /// unchanged source leaves the comment intact and stops automatic renewal.
+    pub(super) fn refresh_comment_image(&mut self, old_url: String, manual: bool) {
+        let row = self
+            .state
+            .comments
+            .ready()
+            .into_iter()
+            .flatten()
+            .chain(
+                self.state
+                    .replies
+                    .values()
+                    .filter_map(|rows| rows.ready())
+                    .flatten(),
+            )
+            .find(|row| row.image.as_deref() == Some(old_url.as_str()))
+            .map(|row| row.id.clone());
+        if let Some(comment) = row
+            && self.state.renew_comment_image(&comment, manual)
+            && let Some(token) = self.state.comment_pages.get(&comment)
+        {
+            self.backend.send(Command::LoadComments {
+                generation: self.details_generation,
+                key: CommentsKey::ImageRefresh { comment, old_url },
+                token: token.clone(),
+                visitor_data: self.state.comments_visitor_data.clone(),
+            });
+        }
     }
 
     /// Asks for the next comments page.
@@ -505,6 +578,7 @@ mod tests {
             author_id: None,
             author_avatar: None,
             text: Vec::new(),
+            image: None,
             published: String::new(),
             likes: None,
             replies: 0,
@@ -553,5 +627,72 @@ mod tests {
         state.alerts_failed("offline".into());
         assert!(!state.alerts_checking);
         assert!(state.notice.unwrap().contains("offline"));
+    }
+    #[test]
+    fn refreshing_an_attachment_preserves_text_paging_and_newer_sources() {
+        let mut original = comment("top");
+        original.image = Some("expired".into());
+        let mut reply = comment("reply");
+        reply.image = Some("already-new".into());
+        let mut state = State {
+            comments: Fetch::Ready(vec![original]),
+            comments_next: Some("next-page".into()),
+            ..Default::default()
+        };
+        state
+            .replies
+            .insert("top".into(), Fetch::Ready(vec![reply]));
+        let mut fresh = comment("top");
+        fresh.image = Some("renewed".into());
+        fresh.author = Some("must not replace author".into());
+        state.fill_comments(
+            CommentsKey::ImageRefresh {
+                comment: "top".into(),
+                old_url: "expired".into(),
+            },
+            Ok((vec![fresh], None)),
+        );
+        assert_eq!(
+            state.comments.ready().unwrap()[0].image.as_deref(),
+            Some("renewed")
+        );
+        assert_ne!(
+            state.comments.ready().unwrap()[0].author.as_deref(),
+            Some("must not replace author")
+        );
+        assert_eq!(state.comments_next.as_deref(), Some("next-page"));
+        let mut old = comment("reply");
+        old.image = Some("stale".into());
+        state.fill_comments(
+            CommentsKey::ImageRefresh {
+                comment: "reply".into(),
+                old_url: "expired".into(),
+            },
+            Ok((vec![old], None)),
+        );
+        assert_eq!(
+            state.replies["top"].ready().unwrap()[0].image.as_deref(),
+            Some("already-new")
+        );
+        state.fill_comments(
+            CommentsKey::ImageRefresh {
+                comment: "top".into(),
+                old_url: "renewed".into(),
+            },
+            Err("offline".into()),
+        );
+        assert_eq!(
+            state.comments.ready().unwrap()[0].image.as_deref(),
+            Some("renewed")
+        );
+    }
+    #[test]
+    fn renewed_urls_cannot_create_an_automatic_refresh_loop() {
+        let mut state = State::default();
+        assert!(state.renew_comment_image("comment", false));
+        assert!(!state.renew_comment_image("comment", false));
+        assert!(state.renew_comment_image("comment", true));
+        assert!(!state.renew_comment_image("comment", false));
+        assert!(state.renew_comment_image("other", false));
     }
 }

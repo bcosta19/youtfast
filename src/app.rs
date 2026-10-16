@@ -144,6 +144,9 @@ pub struct State {
     pub comments_more: Fetch<()>,
     /// Visitor data the comments requests carry.
     pub comments_visitor_data: Option<String>,
+    /// Original page tokens, kept only in memory to renew attachment URLs.
+    pub comment_pages: HashMap<String, String>,
+    pub comment_image_refreshes: HashSet<String>,
     /// Each comment's replies by comment id, when opened.
     pub replies: HashMap<String, Fetch<Vec<CommentRow>>>,
     /// The description expanded past its first rows.
@@ -387,6 +390,7 @@ impl App {
         guard.set_context(ctx);
         theme::install_fonts(ctx);
         egui_extras::install_image_loaders(ctx);
+        ui::images::install_animation_loader(ctx);
         fastframe_icons::install::<crate::icons::Icon>(ctx);
         let dirs = Dirs::new().context("could not make the data folders")?;
         ui::images::init(dirs.cache.join("thumbnails"));
@@ -527,8 +531,9 @@ impl App {
             Event::Comments {
                 generation,
                 key,
+                token,
                 result,
-            } => self.on_comments(generation, key, result),
+            } => self.on_comments(generation, key, token, result),
             Event::Imported(Ok(import)) => self.on_imported(import),
             Event::Imported(Err(error)) => self.state.notice = Some(error),
             Event::ImportMerged {
@@ -571,8 +576,8 @@ impl App {
             }
             Event::SignedOut => self.on_signed_out(),
             Event::CheckAlerts => self.check_alerts(),
-            Event::Thumbnail { url, ready, bytes } => {
-                ui::images::completed(self.backend.context(), &url, ready, bytes)
+            Event::Thumbnail { url, result } => {
+                ui::images::completed(self.backend.context(), &url, result)
             }
             Event::Suggestions { query, items } => {
                 if query == self.state.query.trim() {
@@ -837,6 +842,9 @@ impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll();
         ui::images::forget_unseen(ctx);
+        for (url, manual) in ui::images::drain_expired() {
+            self.refresh_comment_image(url, manual);
+        }
         // Thumbnails drawn from the network go to the disk cache.
         let wanted = ui::images::drain_wanted();
         if !wanted.is_empty() {

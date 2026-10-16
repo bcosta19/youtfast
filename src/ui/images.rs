@@ -1,76 +1,129 @@
-//! Remote images drawn through egui's loaders (`remote`), and the ones
-//! not drawn for [`KEEP`] seconds forgotten again (`forget_unseen`):
-//! egui keeps textures for anything it can still reach, so the second
-//! half is what bounds memory. Thumbnails that went through
-//! [`thumbs`](crate::thumbs)' disk cache answer from a file afterwards.
+//! One bounded download supplies both display and disk. Animations use their
+//! own adaptive decoder; ordinary thumbnails retain egui's image loader.
 
+mod animation;
+pub use animation::install as install_animation_loader;
+
+use crate::thumbs::Failure;
+use egui::{Context, Id, Image, Ui};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
-use egui::{Context, Id, Image, Ui};
-
-/// How long an undrawn image stays before it is forgotten.
 const KEEP: f64 = 60.0;
-
-/// When each image was last drawn, in egui's input time.
 #[derive(Clone, Default)]
 struct Drawn(HashMap<String, f64>);
-
-/// The thumbnails' directory on disk, and the URLs this run already sent
-/// to the backend so they are not asked for twice.
 static CACHE: Mutex<Option<Cache>> = Mutex::new(None);
-
+struct Failed {
+    reason: Failure,
+    attempt: u32,
+    retry_at: Option<f64>,
+    manual_after: f64,
+}
 struct Cache {
     dir: PathBuf,
     asked: HashSet<String>,
-    retry_at: HashMap<String, f64>,
+    failed: HashMap<String, Failed>,
     loaded: HashSet<String>,
-    wanted: Vec<String>,
+    wanted: Vec<(String, bool)>,
+    expired: Vec<(String, bool)>,
+    refreshed: HashSet<String>,
+    repaired: HashSet<String>,
 }
-
 impl Cache {
     fn request(&mut self, url: &str, now: f64) {
-        if self.retry_at.get(url).is_some_and(|retry| now < *retry)
+        if self
+            .failed
+            .get(url)
+            .is_some_and(|f| f.retry_at.is_none_or(|at| now < at))
             || !self.asked.insert(url.to_owned())
         {
             return;
         }
-        self.retry_at.remove(url);
-        self.wanted.push(url.to_owned());
+        self.wanted.push((url.to_owned(), false));
     }
-
-    fn completed(&mut self, url: &str, ready: bool, now: f64, seen: bool) {
+    fn completed(&mut self, url: &str, result: &Result<Arc<[u8]>, Failure>, now: f64, seen: bool) {
         self.asked.remove(url);
-        self.retry_at.remove(url);
-        if !ready && seen {
-            self.retry_at.insert(url.to_owned(), now + 30.0);
+        if !seen {
+            self.failed.remove(url);
+            return;
+        }
+        match result {
+            Ok(_) => {
+                self.failed.remove(url);
+            }
+            Err(reason) => {
+                let attempt = self.failed.get(url).map_or(1, |f| f.attempt + 1);
+                self.failed.insert(
+                    url.to_owned(),
+                    Failed {
+                        reason: *reason,
+                        attempt,
+                        retry_at: reason.retry_delay(attempt).map(|delay| now + delay),
+                        manual_after: if let Failure::RateLimited(seconds) = reason {
+                            now + (*seconds).max(30) as f64
+                        } else {
+                            now
+                        },
+                    },
+                );
+                if *reason == Failure::Access && self.refreshed.insert(url.to_owned()) {
+                    self.expired.push((url.to_owned(), false));
+                }
+            }
         }
     }
+    fn retry(&mut self, url: &str, now: f64, repair: bool) -> bool {
+        if self.asked.contains(url)
+            || self.failed.get(url).is_some_and(|f| now < f.manual_after)
+            || (repair && !self.repaired.insert(url.to_owned()))
+        {
+            return false;
+        }
+        if self
+            .failed
+            .get(url)
+            .is_some_and(|f| f.reason == Failure::Access)
+        {
+            self.expired.push((url.to_owned(), true));
+        }
+        self.failed.remove(url);
+        self.loaded.remove(url);
+        self.asked.insert(url.to_owned());
+        self.wanted.push((url.to_owned(), true));
+        true
+    }
 }
-
-/// Starts the disk cache: thumbnails fetched once live under `dir` and
-/// answer from a file afterwards.
 pub fn init(dir: PathBuf) {
-    let _ = std::fs::create_dir_all(&dir);
+    // Directory creation and all disk reads/writes belong to the backend.
     *CACHE.lock().unwrap() = Some(Cache {
         dir,
         asked: HashSet::new(),
-        retry_at: HashMap::new(),
+        failed: HashMap::new(),
         loaded: HashSet::new(),
         wanted: Vec::new(),
+        expired: Vec::new(),
+        refreshed: HashSet::new(),
+        repaired: HashSet::new(),
     });
 }
-
-/// The URLs seen since the last drain, for the backend to put on disk.
-pub fn drain_wanted() -> Vec<String> {
-    let mut cache = CACHE.lock().unwrap();
-    match cache.as_mut() {
-        Some(cache) => std::mem::take(&mut cache.wanted),
-        None => Vec::new(),
-    }
+pub fn drain_wanted() -> Vec<(String, bool)> {
+    CACHE
+        .lock()
+        .unwrap()
+        .as_mut()
+        .map_or_else(Vec::new, |c| std::mem::take(&mut c.wanted))
 }
-
+pub fn drain_expired() -> Vec<(String, bool)> {
+    CACHE
+        .lock()
+        .unwrap()
+        .as_mut()
+        .map_or_else(Vec::new, |c| std::mem::take(&mut c.expired))
+}
+fn id() -> Id {
+    Id::new("youtfast-remote-images")
+}
 #[cfg(test)]
 pub(crate) fn drawn_count(ctx: &Context) -> usize {
     ctx.data(|data| {
@@ -78,58 +131,6 @@ pub(crate) fn drawn_count(ctx: &Context) -> usize {
             .map_or(0, |drawn| drawn.0.len())
     })
 }
-
-fn id() -> Id {
-    Id::new("youtfast-remote-images")
-}
-
-/// The image at `url`, marked as drawn now. When the URL's bytes are on
-/// disk already they are drawn from there; otherwise the network answers
-/// this time and the backend is asked to keep them.
-pub fn remote<'a>(ui: &Ui, url: &'a str) -> Image<'a> {
-    let ctx = ui.ctx();
-    let now = ctx.input(|input| input.time);
-    ctx.data_mut(|data| {
-        let drawn = &mut data.get_temp_mut_or_default::<Drawn>(id()).0;
-        match drawn.get_mut(url) {
-            Some(at) => *at = now,
-            None => {
-                drawn.insert(url.to_owned(), now);
-            }
-        }
-    });
-    let file = {
-        let mut cache = CACHE.lock().unwrap();
-        match cache.as_mut() {
-            Some(cache) => {
-                let path = crate::thumbs::path(&cache.dir, url);
-                if cache.loaded.contains(url) {
-                    return Image::new(memory_uri(&cache.dir, url));
-                }
-                if path.exists() {
-                    Some(path)
-                } else {
-                    cache.request(url, now);
-                    if let Some(retry) = cache.retry_at.get(url) {
-                        ctx.request_repaint_after(std::time::Duration::from_secs_f64(
-                            (retry - now).max(0.0),
-                        ));
-                    }
-                    None
-                }
-            }
-            None => None,
-        }
-    };
-    match file {
-        Some(path) => Image::new(crate::thumbs::uri(&path)),
-        None => Image::from_bytes(
-            "bytes://youtfast-thumbnail-pending.svg",
-            &b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"/>"[..],
-        ),
-    }
-}
-
 fn memory_uri(dir: &std::path::Path, url: &str) -> String {
     format!(
         "bytes://thumbnail/{}",
@@ -139,57 +140,149 @@ fn memory_uri(dir: &std::path::Path, url: &str) -> String {
             .to_string_lossy()
     )
 }
+/// Only the backend accesses files or the network, including a disk cache hit.
+pub fn remote<'a>(ui: &Ui, url: &'a str) -> Image<'a> {
+    let ctx = ui.ctx();
+    let now = ctx.input(|input| input.time);
+    ctx.data_mut(|data| {
+        data.get_temp_mut_or_default::<Drawn>(id())
+            .0
+            .insert(url.to_owned(), now);
+    });
+    if let Some(cache) = CACHE.lock().unwrap().as_mut() {
+        if cache.loaded.contains(url) {
+            return Image::new(memory_uri(&cache.dir, url));
+        }
+        cache.request(url, now);
+        if let Some(retry) = cache.failed.get(url).and_then(|f| f.retry_at) {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64(
+                (retry - now).clamp(0.1, 60.0),
+            ));
+        }
+    }
+    Image::from_bytes(
+        "bytes://youtfast-thumbnail-pending.svg",
+        &b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"/>"[..],
+    )
+}
 
-pub fn completed(ctx: &Context, url: &str, ready: bool, bytes: Option<std::sync::Arc<[u8]>>) {
+pub fn attachment(ui: &mut Ui, url: &str, rect: egui::Rect) {
+    let image = remote(ui, url);
+    let status = CACHE.lock().unwrap().as_ref().and_then(|c| {
+        if c.loaded.contains(url) {
+            Some(Ok(memory_uri(&c.dir, url)))
+        } else {
+            c.failed.get(url).map(|f| Err(f.reason))
+        }
+    });
+    match status {
+        Some(Ok(uri)) => match ui.ctx().try_load_bytes(&uri) {
+            Ok(egui::load::BytesPoll::Ready { bytes, .. })
+                if egui::has_gif_magic_header(&bytes) || egui::has_webp_header(&bytes) =>
+            {
+                animation::install(ui.ctx());
+                let bytes = match bytes {
+                    egui::load::Bytes::Shared(bytes) => bytes,
+                    egui::load::Bytes::Static(bytes) => Arc::from(bytes),
+                };
+                if let Some(repair) = animation::show(ui, &uri, bytes, rect) {
+                    retry(ui.ctx(), url, repair);
+                }
+            }
+            _ => {
+                if ui
+                    .ctx()
+                    .try_load_image(&uri, egui::load::SizeHint::default())
+                    .is_err()
+                {
+                    let manual = ui
+                        .put(rect, egui::Button::new("Image data invalid · Retry"))
+                        .clicked();
+                    retry(ui.ctx(), url, !manual);
+                } else {
+                    ui.put(
+                        rect,
+                        image
+                            .fit_to_exact_size(rect.size())
+                            .corner_radius(8)
+                            .alt_text("Comment image"),
+                    );
+                }
+            }
+        },
+        Some(Err(reason)) => {
+            let label = match reason {
+                Failure::Access => "Image unavailable · Retry source",
+                Failure::Unavailable => "Image removed or unavailable · Retry",
+                Failure::RateLimited(_) => "Image temporarily limited · Retry later",
+                Failure::TooLarge => "Image exceeds safety limits · Retry",
+                Failure::Invalid => "Image data invalid · Retry",
+                _ => "Could not load image · Retry",
+            };
+            if ui.put(rect, egui::Button::new(label)).clicked() {
+                retry(ui.ctx(), url, false);
+            }
+        }
+        None => {
+            ui.put(rect, egui::Label::new("Loading image…"));
+        }
+    }
+}
+fn retry(ctx: &Context, url: &str, repair: bool) {
+    if let Some(c) = CACHE.lock().unwrap().as_mut()
+        && c.retry(url, ctx.input(|i| i.time), repair)
+    {
+        let uri = memory_uri(&c.dir, url);
+        animation::install(ctx);
+        animation::forget(ctx, &uri);
+        ctx.forget_image(&uri);
+        ctx.request_repaint();
+    }
+}
+pub fn completed(ctx: &Context, url: &str, result: Result<Arc<[u8]>, Failure>) {
     let now = ctx.input(|input| input.time);
     let seen = ctx.data(|data| {
         data.get_temp::<Drawn>(id())
             .is_some_and(|drawn| drawn.0.contains_key(url))
     });
     if let Some(cache) = CACHE.lock().unwrap().as_mut() {
-        cache.completed(url, ready, now, seen);
-        if seen && let Some(bytes) = bytes {
+        cache.completed(url, &result, now, seen);
+        if seen && let Ok(bytes) = result {
             ctx.include_bytes(memory_uri(&cache.dir, url), bytes);
             cache.loaded.insert(url.to_owned());
         }
-        ctx.forget_image(&crate::thumbs::uri(&crate::thumbs::path(&cache.dir, url)));
-    }
-    if !ready {
-        ctx.request_repaint_after(std::time::Duration::from_secs(30));
+        if let Some(retry) = cache.failed.get(url).and_then(|f| f.retry_at) {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64(
+                (retry - now).clamp(0.1, 60.0),
+            ));
+        }
     }
 }
-
-/// Forgets the images not drawn for [`KEEP`] seconds. Call once a frame.
 pub fn forget_unseen(ctx: &Context) {
+    animation::install(ctx);
+    animation::sweep(ctx);
     let now = ctx.input(|input| input.time);
     let stale = ctx.data_mut(|data| {
-        let drawn = &mut data.get_temp_mut_or_default::<Drawn>(id()).0;
-        take_stale(drawn, now, KEEP)
+        take_stale(
+            &mut data.get_temp_mut_or_default::<Drawn>(id()).0,
+            now,
+            KEEP,
+        )
     });
-    for url in stale {
-        if let Some(cache) = CACHE.lock().unwrap().as_mut() {
-            cache.retry_at.remove(&url);
-            cache.loaded.remove(&url);
-            ctx.forget_image(&memory_uri(&cache.dir, &url));
-        }
-        ctx.forget_image(&url);
-        // A cached URL is drawn through its `file://` URI, under which the
-        // texture is stored; forgetting only the URL would never free it.
-        let file = {
-            let cache = CACHE.lock().unwrap();
-            cache
-                .as_ref()
-                .map(|cache| crate::thumbs::uri(&crate::thumbs::path(&cache.dir, &url)))
-        };
-        if let Some(file) = file {
-            ctx.forget_image(&file);
+    if let Some(c) = CACHE.lock().unwrap().as_mut() {
+        for url in stale {
+            c.failed.remove(&url);
+            c.loaded.remove(&url);
+            c.refreshed.remove(&url);
+            c.repaired.remove(&url);
+            let uri = memory_uri(&c.dir, &url);
+            animation::forget(ctx, &uri);
+            ctx.forget_image(&uri);
         }
     }
 }
-
-/// Removes and returns the URLs last drawn more than `keep` seconds ago.
 fn take_stale(drawn: &mut HashMap<String, f64>, now: f64, keep: f64) -> Vec<String> {
-    let stale: Vec<String> = drawn
+    let stale: Vec<_> = drawn
         .iter()
         .filter(|(_, at)| now - **at > keep)
         .map(|(url, _)| url.clone())
@@ -203,36 +296,52 @@ fn take_stale(drawn: &mut HashMap<String, f64>, now: f64, keep: f64) -> Vec<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn pending_downloads_are_not_duplicated_and_failures_retry_after_backoff() {
-        let mut cache = Cache {
+    fn cache() -> Cache {
+        Cache {
             dir: PathBuf::new(),
             asked: HashSet::new(),
-            retry_at: HashMap::new(),
+            failed: HashMap::new(),
             loaded: HashSet::new(),
             wanted: Vec::new(),
-        };
-        cache.request("synthetic", 0.0);
-        cache.request("synthetic", 1.0);
-        assert_eq!(std::mem::take(&mut cache.wanted), ["synthetic"]);
-        cache.completed("synthetic", false, 2.0, true);
-        cache.request("synthetic", 31.0);
-        assert!(cache.wanted.is_empty());
-        cache.request("synthetic", 32.0);
-        assert_eq!(std::mem::take(&mut cache.wanted), ["synthetic"]);
-        cache.completed("synthetic", true, 33.0, true);
-        assert!(cache.asked.is_empty());
-        cache.request("forgotten", 34.0);
-        cache.completed("forgotten", false, 100.0, false);
-        assert!(cache.asked.is_empty() && cache.retry_at.is_empty());
+            expired: Vec::new(),
+            refreshed: HashSet::new(),
+            repaired: HashSet::new(),
+        }
     }
-
     #[test]
-    fn only_images_not_drawn_lately_are_forgotten() {
+    fn retries_are_bounded_respect_server_delay_and_ignore_late_failures() {
+        let mut c = cache();
+        for (now, expected) in [(0.0, 1), (11.0, 2), (32.0, 3)] {
+            c.request("synthetic", now);
+            c.request("synthetic", now);
+            assert_eq!(c.wanted.len(), expected);
+            c.completed("synthetic", &Err(Failure::Server), now, true);
+        }
+        c.request("synthetic", 1000.0);
+        assert_eq!(c.wanted.len(), 3);
+        c.completed("late", &Err(Failure::Network), 1000.0, false);
+        assert!(!c.failed.contains_key("late"));
+        c.completed("limited", &Err(Failure::RateLimited(300)), 0.0, true);
+        c.request("limited", 299.0);
+        assert!(!c.retry("limited", 299.0, false));
+        c.request("limited", 300.0);
+        assert_eq!(c.wanted.last(), Some(&("limited".to_owned(), false)));
+    }
+    #[test]
+    fn expired_source_and_corrupt_cache_are_retried_only_once() {
+        let mut c = cache();
+        for _ in 0..2 {
+            c.completed("expired", &Err(Failure::Access), 0.0, true);
+        }
+        assert_eq!(c.expired, [("expired".to_owned(), false)]);
+        assert!(c.retry("bad", 0.0, true));
+        c.completed("bad", &Err(Failure::Invalid), 0.0, true);
+        assert!(!c.retry("bad", 0.0, true));
+    }
+    #[test]
+    fn only_unseen_images_are_forgotten() {
         let mut drawn = HashMap::from([("old".to_owned(), 10.0), ("recent".to_owned(), 100.0)]);
-        assert_eq!(take_stale(&mut drawn, 120.0, 60.0), vec!["old".to_owned()]);
-        assert_eq!(drawn.keys().collect::<Vec<_>>(), vec!["recent"]);
-        assert!(take_stale(&mut drawn, 150.0, 60.0).is_empty());
+        assert_eq!(take_stale(&mut drawn, 120.0, 60.0), ["old"]);
+        assert!(drawn.contains_key("recent"));
     }
 }

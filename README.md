@@ -59,7 +59,10 @@ cargo run --release -- "rust egui"                      # or search
 | Esc | Leave full screen, then go back to the results |
 
 The watch page also shows the description (timestamps seek), chapters
-and comments, loaded through rustypipe. Channel pages have tabs — videos,
+and comments, loaded through rustypipe. Comments and replies also display
+image and animated GIF/WebP attachments. Attachments use the bounded thumbnail
+cache, decode in the background and animate only while visible.
+Channel pages have tabs — videos,
 shorts, live, playlists and about — and a search of the channel's own
 videos.
 
@@ -123,8 +126,47 @@ browser profiles, URLs or external error text. This redaction also applies
 to dependencies and to `--verbose` / `RUST_LOG`; more verbose logging does
 not opt out of privacy protection. Thumbnail downloads are shared between
 display and the disk cache, capped at 4 MiB and four million pixels each,
-and retried after 30 seconds on failure. The disk cache is pruned during use
-to 2,000 files and 128 MiB.
+with at most three automatic attempts for transient failures. HTTP 429 honors
+`Retry-After` (seconds or HTTP-date); access failures renew the original comment
+page once per comment without attaching account cookies to image downloads. Removed images,
+unchanged/expired links, unsupported data and exhausted limits show a retry
+control. A corrupt cache item can be replaced independently of other images.
+The disk cache is pruned during use to 2,000 files and 128 MiB; `no-store`
+responses are only kept for the current display.
+
+Application-wide diagnostics persist locally under
+`$XDG_STATE_HOME/youtfast/logs` (normally `~/.local/state/youtfast/logs` on Linux).
+`youtfast.log` rotates into `youtfast.log.1`; each is limited to 2 MiB. These
+files cover the whole application, including image download and decoder failure
+categories. They are not uploaded. On Unix the directory is owner-only (0700)
+and log files are 0600. The same privacy redactor runs before stderr and files,
+including for dependency diagnostics. `--verbose` adds cached/streaming animation
+mode categories; there are no per-frame log records. Logging starts when this
+binary next owns a running instance; rebuilding does not update an existing
+process. To follow the current log on Linux (including rotation):
+
+```sh
+tail -F "${XDG_STATE_HOME:-$HOME/.local/state}/youtfast/logs/youtfast.log"
+```
+
+On platforms without an XDG state directory, logs use the `logs` subdirectory
+of the platform's local application data directory for YouTFast. If opening or writing the
+file fails, diagnostics continue on stderr.
+
+Comment GIF/WebP playback uses one decoder worker and one reused texture per
+visible attachment, with at most two active attachments. Frames are reduced to
+fit 320×200 while preserving aspect ratio. Small animations cache up to about
+8 MiB; longer ones continue sequentially instead of retaining every source-size
+frame or rejecting the whole clip at a frame-count threshold. Controlled frame,
+canvas and texture reservations share a 64 MiB budget; decoder/library/driver
+bookkeeping and the ordinary thumbnail cache are additional process memory.
+A frame which takes over 200 ms to decode stops further automatic decoding
+and retains a preview; this is an observed work limit, not preemption of a
+native decoder in the middle of a frame. Offscreen animations are reclaimed,
+pause controls stop frame requests, and
+finite source loop counts are respected. Decode failures after a successful
+frame retain that frame as a preview. External blocks, removed media or an
+unusable source may still prevent a preview or playback.
 
 ## New-upload alerts
 

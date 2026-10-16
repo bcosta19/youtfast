@@ -234,6 +234,8 @@ pub struct CommentRow {
     /// The author's avatar, small.
     pub author_avatar: Option<String>,
     pub text: Vec<Span>,
+    /// Image or animated GIF attached by the commenter.
+    pub image: Option<String>,
     /// YouTube's wording ("3 days ago").
     pub published: String,
     pub likes: Option<u32>,

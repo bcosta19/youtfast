@@ -4,6 +4,7 @@ mod account;
 mod alerts;
 mod app;
 mod backend;
+mod diagnostics;
 mod icons;
 mod innertube;
 mod instance;
@@ -53,6 +54,9 @@ fn redact_log(record: &log::Record<'_>, message: &str) -> Option<std::borrow::Co
         std::env::consts::ARCH
     );
     if record.target() == "youtfast" && message == startup {
+        return None;
+    }
+    if record.target().starts_with("youtfast") && diagnostics::controlled(message) {
         return None;
     }
     let category = if record.target() == "mpv" {
@@ -171,13 +175,6 @@ fn main() -> eframe::Result {
     } else {
         "warn,youtfast=info,mpv=warn"
     };
-    if let Err(error) = fastframe_log::Logging::new("youtfast", env!("CARGO_PKG_VERSION"))
-        .filter(filter)
-        .redact(redact_log)
-        .init()
-    {
-        eprintln!("could not start logging: {error}");
-    }
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -208,6 +205,11 @@ fn main() -> eframe::Result {
             return Ok(());
         }
     };
+    // Only the owning instance opens the rotating log, avoiding writers from
+    // short-lived launcher processes racing with log rotation.
+    if diagnostics::init(filter).is_err() {
+        eprintln!("could not start logging");
+    }
     // The app holds the instance guard for the run; the creator closure is
     // dropped as soon as it returns, so it cannot keep it.
     let guard = Arc::new(guard);

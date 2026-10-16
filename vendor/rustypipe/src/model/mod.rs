@@ -763,6 +763,9 @@ pub struct Comment {
     pub id: String,
     /// Comment text
     pub text: RichText,
+    /// Image or animated GIF attached to the comment, in available sizes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image: Vec<Thumbnail>,
     /// Comment author
     ///
     /// There may be comments with missing authors (possibly deleted users?).

@@ -18,18 +18,77 @@ pub fn path(dir: &Path, url: &str) -> PathBuf {
     dir.join(format!("{:x}", std::hash::Hasher::finish(&hash)))
 }
 
-/// `url` as a `file://` URI egui's image loaders read.
-pub fn uri(path: &Path) -> String {
-    format!("file://{}", path.display())
+/// Controlled failures never retain a URL, response body or dependency error.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Failure {
+    Network,
+    Access,
+    Unavailable,
+    RateLimited(u64),
+    Server,
+    TooLarge,
+    Invalid,
+}
+impl Failure {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::Network => "image: download failed",
+            Self::Access => "image: HTTP access denied",
+            Self::Unavailable => "image: unavailable",
+            Self::RateLimited(_) => "image: rate limited",
+            Self::Server => "image: server error",
+            Self::TooLarge => "image: response too large",
+            Self::Invalid => "image: invalid data",
+        }
+    }
+    pub fn retry_delay(self, attempt: u32) -> Option<f64> {
+        if attempt >= 3 {
+            return None;
+        }
+        match self {
+            Self::Network | Self::Server => Some(2.0_f64.powi(attempt as i32) * 5.0),
+            Self::RateLimited(seconds) => Some(seconds.max(30) as f64),
+            _ => None,
+        }
+    }
 }
 
-/// Downloads `url` to `path`; failures are quiet: the interface just
-/// keeps drawing the image from the network. The write is atomic so a
-/// crash mid-download never leaves half a picture to be served whole.
-pub fn fetch(url: &str, path: &Path) -> Result<std::sync::Arc<[u8]>, String> {
-    let bytes = download(url)?;
+/// A cache hit and a network response follow the same bounded validation path.
+/// A corrupt regular cache entry is repaired once; no other files are touched.
+pub fn load_or_fetch(
+    url: &str,
+    path: &Path,
+    refresh: bool,
+) -> Result<std::sync::Arc<[u8]>, Failure> {
+    use std::io::Read;
+    if let Ok(meta) = std::fs::symlink_metadata(path) {
+        if !meta.is_file() {
+            return fetch(url, path);
+        }
+        if !refresh && meta.len() <= MAX_BYTES {
+            let cached = std::fs::File::open(path).and_then(|file| {
+                let mut bytes = Vec::new();
+                file.take(MAX_BYTES + 1).read_to_end(&mut bytes)?;
+                Ok(bytes)
+            });
+            if let Ok(bytes) = cached
+                && validate(&bytes).is_ok()
+            {
+                return Ok(bytes.into());
+            }
+        }
+        let _disk = DISK.lock().unwrap();
+        let _ = std::fs::remove_file(path);
+        log::debug!("image: cache repaired");
+    }
+    fetch(url, path)
+}
+
+pub fn fetch(url: &str, path: &Path) -> Result<std::sync::Arc<[u8]>, Failure> {
+    let (bytes, store) = download(url)?;
     let _disk = DISK.lock().unwrap();
-    if crate::paths::write_atomic(path, &bytes).is_ok()
+    if store
+        && crate::paths::write_atomic(path, &bytes).is_ok()
         && let Some(dir) = path.parent()
     {
         prune_locked(dir, KEEP, DISK_BYTES);
@@ -37,39 +96,79 @@ pub fn fetch(url: &str, path: &Path) -> Result<std::sync::Arc<[u8]>, String> {
     Ok(bytes.into())
 }
 
-fn download(url: &str) -> Result<Vec<u8>, String> {
+fn retry_after(value: Option<&str>) -> u64 {
+    let Some(value) = value else {
+        return 30;
+    };
+    if let Ok(seconds) = value.trim().parse::<u64>() {
+        return seconds;
+    }
+    // HTTP-date (IMF-fixdate); an invalid header falls back to backoff.
+    jiff::civil::DateTime::strptime("%a, %d %b %Y %H:%M:%S GMT", value)
+        .ok()
+        .and_then(|date| date.to_zoned(jiff::tz::TimeZone::UTC).ok())
+        .map(|date| {
+            (date.timestamp().as_second() - jiff::Timestamp::now().as_second()).max(0) as u64
+        })
+        .unwrap_or(30)
+}
+fn download(url: &str) -> Result<(Vec<u8>, bool), Failure> {
     use std::io::Read;
     let mut response = ehttp::Request::get(url)
         .with_timeout(Some(std::time::Duration::from_secs(20)))
         .fetch_raw_native(true)
-        .map_err(|_| "thumbnail request failed")?;
-    if !response.status().is_success() {
-        return Err("thumbnail status failed".into());
+        .map_err(|_| Failure::Network)?;
+    let status = response.status().as_u16();
+    if !(200..300).contains(&status) {
+        return Err(match status {
+            401 | 403 | 410 => Failure::Access,
+            429 => Failure::RateLimited(retry_after(
+                response
+                    .headers()
+                    .get("retry-after")
+                    .and_then(|h| h.to_str().ok()),
+            )),
+            500..=599 => Failure::Server,
+            _ => Failure::Unavailable,
+        });
     }
+    let store = !response
+        .headers()
+        .get("cache-control")
+        .and_then(|h| h.to_str().ok())
+        .is_some_and(|header| {
+            header
+                .split(',')
+                .any(|v| v.trim().eq_ignore_ascii_case("no-store"))
+        });
     let mut bytes = Vec::new();
     response
         .body_mut()
         .as_reader()
         .take(MAX_BYTES + 1)
         .read_to_end(&mut bytes)
-        .map_err(|_| "thumbnail body failed")?;
+        .map_err(|_| Failure::Network)?;
+    validate(&bytes)?;
+    Ok((bytes, store))
+}
+fn validate(bytes: &[u8]) -> Result<(), Failure> {
     if bytes.len() as u64 > MAX_BYTES {
-        return Err("thumbnail is too large".into());
+        return Err(Failure::TooLarge);
     }
-    let (width, height) = image::ImageReader::new(std::io::Cursor::new(&bytes))
+    let (width, height) = image::ImageReader::new(std::io::Cursor::new(bytes))
         .with_guessed_format()
-        .map_err(|_| "thumbnail format failed")?
+        .map_err(|_| Failure::Invalid)?
         .into_dimensions()
-        .map_err(|_| "thumbnail dimensions failed")?;
+        .map_err(|_| Failure::Invalid)?;
     if width == 0
         || height == 0
         || width > 4096
         || height > 4096
         || u64::from(width) * u64::from(height) > 4_000_000
     {
-        return Err("thumbnail dimensions are too large".into());
+        return Err(Failure::TooLarge);
     }
-    Ok(bytes)
+    Ok(())
 }
 
 /// Keeps the newest [`KEEP`] files; the rest, oldest first, are deleted.
@@ -124,6 +223,13 @@ mod tests {
     use super::*;
 
     fn server(responses: Vec<(u16, Vec<u8>)>) -> (String, std::thread::JoinHandle<usize>) {
+        server_headers(responses, "")
+    }
+    fn server_headers(
+        responses: Vec<(u16, Vec<u8>)>,
+        headers: &str,
+    ) -> (String, std::thread::JoinHandle<usize>) {
+        let headers = headers.to_owned();
         use std::io::{Read, Write};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}/thumbnail", listener.local_addr().unwrap());
@@ -136,7 +242,7 @@ mod tests {
                     .unwrap();
                 let _ = stream.read(&mut [0; 8192]);
                 let header = format!(
-                    "HTTP/1.1 {status} Test\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    "HTTP/1.1 {status} Test\r\nContent-Length: {}\r\nConnection: close\r\n{headers}\r\n",
                     body.len()
                 );
                 let _ = stream
@@ -233,5 +339,65 @@ mod tests {
         );
         // No slash, no query: it is one file name in one directory.
         assert_eq!(name.components().count(), 2);
+    }
+    #[test]
+    fn corrupt_cache_is_repaired_but_valid_cache_needs_no_network() {
+        let bytes = png();
+        let (url, worker) = server(vec![(200, bytes.clone())]);
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("corrupt-thumbnail-{}", std::process::id()));
+        std::fs::write(&path, b"broken").unwrap();
+        assert_eq!(load_or_fetch(&url, &path, false).unwrap().as_ref(), bytes);
+        assert_eq!(worker.join().unwrap(), 1);
+        assert_eq!(
+            load_or_fetch("http://127.0.0.1:1/unreachable", &path, false)
+                .unwrap()
+                .as_ref(),
+            bytes
+        );
+        std::fs::remove_file(path).unwrap();
+    }
+    #[test]
+    fn http_failures_are_classified_and_retry_after_supports_dates() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("failed-thumbnail-{}", std::process::id()));
+        for (code, expected) in [
+            (403, Failure::Access),
+            (410, Failure::Access),
+            (404, Failure::Unavailable),
+            (429, Failure::RateLimited(30)),
+            (503, Failure::Server),
+        ] {
+            let (url, worker) = server(vec![(code, Vec::new())]);
+            assert_eq!(fetch(&url, &path).err(), Some(expected));
+            assert_eq!(worker.join().unwrap(), 1);
+            assert!(!path.exists());
+        }
+        assert_eq!(retry_after(Some("300")), 300);
+        let future = jiff::Timestamp::now()
+            .checked_add(std::time::Duration::from_secs(600))
+            .unwrap()
+            .to_zoned(jiff::tz::TimeZone::UTC)
+            .strftime("%a, %d %b %Y %H:%M:%S GMT")
+            .to_string();
+        assert!((598..=600).contains(&retry_after(Some(&future))));
+        assert_eq!(retry_after(Some("invalid")), 30);
+    }
+    #[test]
+    fn response_headers_control_disk_storage_and_retry_delay() {
+        let image = png();
+        let (url, worker) = server_headers(
+            vec![(200, image.clone()), (429, Vec::new())],
+            "Cache-Control: no-store\r\nRetry-After: 120\r\n",
+        );
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("no-store-thumbnail-{}", std::process::id()));
+        assert_eq!(fetch(&url, &path).unwrap().as_ref(), image);
+        assert!(!path.exists());
+        assert_eq!(fetch(&url, &path).err(), Some(Failure::RateLimited(120)));
+        assert_eq!(worker.join().unwrap(), 2);
     }
 }

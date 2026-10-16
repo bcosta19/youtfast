@@ -170,6 +170,8 @@ pub enum CommentsKey {
     Top,
     /// A comment's replies.
     Replies(String),
+    /// Renew only the attachment URL, leaving the comment and paging intact.
+    ImageRefresh { comment: String, old_url: String },
 }
 
 pub enum Command {
@@ -236,7 +238,7 @@ pub enum Command {
     SaveSettings(Settings),
     /// Thumbnail URLs the interface is drawing from the network, for the
     /// disk cache to keep next time.
-    CacheThumbnails(Vec<String>),
+    CacheThumbnails(Vec<(String, bool)>),
     /// What YouTube suggests for the search being typed.
     Suggest(String),
     /// The SponsorBlock segments of a video, by its id.
@@ -265,6 +267,7 @@ pub enum Event {
     Comments {
         generation: u64,
         key: CommentsKey,
+        token: String,
         result: Result<(Vec<crate::model::CommentRow>, Option<String>), String>,
     },
     Imported(Result<Import, String>),
@@ -315,8 +318,7 @@ pub enum Event {
     CheckAlerts,
     Thumbnail {
         url: String,
-        ready: bool,
-        bytes: Option<Arc<[u8]>>,
+        result: Result<Arc<[u8]>, crate::thumbs::Failure>,
     },
     Suggestions {
         query: String,
@@ -677,6 +679,7 @@ async fn handle(command: Command, context: Context) {
             context.send(Event::Comments {
                 generation,
                 key,
+                token,
                 result,
             });
         }
@@ -862,35 +865,25 @@ async fn handle(command: Command, context: Context) {
         Command::CacheThumbnails(urls) => {
             let dir = context.dirs.cache.join("thumbnails");
             let _ = std::fs::create_dir_all(&dir);
-            for url in urls {
+            for (url, refresh) in urls {
                 if !context.thumb_pending.lock().unwrap().insert(url.clone()) {
                     continue;
                 }
                 let path = crate::thumbs::path(&dir, &url);
-                if path.exists() {
-                    context.thumb_pending.lock().unwrap().remove(&url);
-                    context.send(Event::Thumbnail {
-                        url,
-                        ready: true,
-                        bytes: None,
-                    });
-                    continue;
-                }
                 let context = context.clone();
                 tokio::spawn(async move {
                     let _permit = context.thumb_sem.acquire().await;
                     let task = url.clone();
-                    let bytes =
-                        tokio::task::spawn_blocking(move || crate::thumbs::fetch(&task, &path))
-                            .await
-                            .ok()
-                            .and_then(Result::ok);
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::thumbs::load_or_fetch(&task, &path, refresh)
+                    })
+                    .await
+                    .unwrap_or(Err(crate::thumbs::Failure::Network));
+                    if let Err(reason) = &result {
+                        log::warn!("{}", reason.code());
+                    }
                     context.thumb_pending.lock().unwrap().remove(&url);
-                    context.send(Event::Thumbnail {
-                        url,
-                        ready: bytes.is_some(),
-                        bytes,
-                    });
+                    context.send(Event::Thumbnail { url, result });
                 });
             }
         }

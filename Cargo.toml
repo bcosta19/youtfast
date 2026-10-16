@@ -21,6 +21,8 @@ clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 log = "0.4"
+# Rotated local logs; all messages pass the application privacy redactor.
+env_logger = "0.11"
 # The whole UI, as in Spotifast and ZapFast. glow, not wgpu: the video is
 # drawn by libmpv's OpenGL renderer into a texture egui_glow blits on screen.
 eframe = { version = "0.36", default-features = false, features = ["accesskit", "glow", "default_fonts", "wayland", "x11", "persistence"] }
@@ -29,15 +31,13 @@ egui = "0.36"
 # `file` answers the ones the disk cache already kept (src/thumbs.rs).
 # `svg` draws the icons.
 egui_extras = { version = "0.36", features = ["file", "http", "image", "svg"] }
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif"] }
 # The wl_display or X11 Display handed to libmpv, so hardware decoding can
 # share frames with the GL context instead of copying them back.
 raw-window-handle = "0.6"
 # The backend runtime: yt-dlp runs as a child process off the UI thread.
 # `time` bounds credential-store calls; a locked keyring must not hang.
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "process", "io-util", "time"] }
-# Logs to stderr and a per-run file, the same logger the sibling apps use.
-fastframe-log = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
 # The icons! table and the Lucide icons shared with the sibling apps.
 fastframe-icons = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
 # Inter at its four weights (or the platform's interface face), with the
@@ -124,7 +124,8 @@ epaint = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce
 # rustypipe 0.11.4 with ThetaDev/rustypipe PR #80 applied (codeberg.org):
 # comment authors' avatars, which YouTube now sends as
 # `author.avatarThumbnailUrl`, and the comment count from the engagement
-# panel. Drop the copy once a release carries it.
+# panel, plus image/GIF attachments on comments. Drop the copy once a
+# release carries these changes.
 rustypipe = { path = "vendor/rustypipe" }
 epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
 winit = { git = "https://github.com/crmne/winit", rev = "ed7caa9023f10b397f5b6ec8284a840cbd8a6f65" }

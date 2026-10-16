@@ -67,6 +67,8 @@ impl State {
         self.comments_next = None;
         self.comments_more = Fetch::Idle;
         self.comments_visitor_data = None;
+        self.comment_pages.clear();
+        self.comment_image_refreshes.clear();
         self.replies.clear();
         self.comments_open.clear();
         self.rating = Fetch::Idle;
