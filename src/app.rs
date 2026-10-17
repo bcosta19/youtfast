@@ -401,6 +401,8 @@ pub struct App {
     remote: RemoteQueue,
     /// The desktop's media controls.
     media: crate::now_playing::MediaControls,
+    /// The installed fonts for other scripts, until they are in.
+    fonts: Option<theme::SystemFonts>,
     /// Held so the instance lock and channel outlive the app; the app
     /// creator closure is dropped once it has run.
     _instance: std::sync::Arc<instance::Guard>,
@@ -412,10 +414,11 @@ impl App {
         cc: &eframe::CreationContext<'_>,
         open: Option<String>,
         guard: std::sync::Arc<instance::Guard>,
+        fonts: theme::SystemFonts,
     ) -> anyhow::Result<Self> {
         let ctx = &cc.egui_ctx;
         guard.set_context(ctx);
-        theme::install_fonts(ctx);
+        let fonts = (!fonts.install(ctx)).then_some(fonts);
         egui_extras::install_image_loaders(ctx);
         ui::images::install_animation_loader(ctx);
         fastframe_icons::install::<crate::icons::Icon>(ctx);
@@ -512,6 +515,7 @@ impl App {
             captions_pending: false,
             remote: guard.commands(),
             media: crate::now_playing::MediaControls::start(ctx),
+            fonts,
             _instance: guard,
         };
         app.set_alerts_timer();
@@ -977,6 +981,9 @@ impl App {
 
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.fonts.as_ref().is_some_and(|fonts| fonts.poll(ctx)) {
+            self.fonts = None;
+        }
         self.poll();
         ui::images::forget_unseen(ctx);
         for (url, manual) in ui::images::drain_expired() {

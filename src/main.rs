@@ -234,6 +234,9 @@ fn main() -> eframe::Result {
             return Ok(());
         }
     };
+    // The installed fonts for other scripts are looked for while the window
+    // and its OpenGL context are made.
+    let fonts = theme::SystemFonts::find();
     // Only the owning instance opens the rotating log, avoiding writers from
     // short-lived launcher processes racing with log rotation.
     if diagnostics::init(filter).is_err() {
@@ -246,7 +249,7 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "YouTFast",
         options,
-        Box::new(move |cc| Ok(Box::new(app::App::new(cc, open, guard)?))),
+        Box::new(move |cc| Ok(Box::new(app::App::new(cc, open, guard, fonts)?))),
     )
 }
 
