@@ -8,7 +8,8 @@ arch=('x86_64')
 url='https://github.com/bcosta19/youtfast'
 license=('GPL-3.0-only')
 # makepkg's GCC LTO turns ring's C objects into bytecode Rust's linker cannot use.
-options=('!lto')
+# A stripped Rust binary leaves makepkg's debug split package empty.
+options=('!lto' '!debug')
 depends=('mpv' 'yt-dlp' 'deno' 'libxkbcommon' 'libxkbcommon-x11' 'wayland'
          'libglvnd' 'fontconfig' 'gcc-libs' 'glibc' 'openssl')
 makedepends=('cargo' 'rust>=@RUST_VERSION@' 'pkgconf')

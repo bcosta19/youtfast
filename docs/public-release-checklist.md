@@ -63,19 +63,25 @@ Opening the source does not mean 0.1.0 binaries are released or tested.
   evidence record for the exact count and unavailable validators.
 - [x] Prepare source-identity collectors and require Windows/macOS source
   archives at assembly. Verify one real upstream mpv/MSYS2 source package.
-- [x] Prepare Arch build/install/namcap verification in a clean official
-  container, export `.pkg.tar.zst`, PKGBUILD and `.SRCINFO`. Not executed yet.
-- [ ] Required hosted CI/package jobs pass on the exact reviewed commit and all
-  assets/checksums are downloaded and checked. New jobs are not certified by
-  local unit tests or workflow syntax validation.
+- [x] Build, namcap-check and install the Arch package in a clean official
+  container on hosted runners, exporting `.pkg.tar.zst`, PKGBUILD and `.SRCINFO`.
+- [x] Required hosted CI/package jobs pass on the tagged commit (`8ffe761`,
+  Release run 39055941759), and every asset was downloaded and checked against
+  `checksums.txt`. An empty Arch debug split package was removed from the
+  draft and from the checksum list; later recipes disable it.
 - [ ] Review the complete native source closures/notices from those actual
-  Windows/macOS runs. Inventories and one upstream probe are not that closure.
+  Windows/macOS runs. The published source archives (1.25 GB Windows, 486 MB
+  macOS) were collected by the runners but have not been reviewed by a person.
 - [ ] Perform/record clean-machine platform QA from [distribution.md](distribution.md).
   Local demo rendering and `--version` do not prove playback/keyring behaviour.
-- [ ] Freeze the publication date, align changelog/AppStream/notes, update
-  candidate/readiness notices and create the immutable annotated release tag.
-- [ ] Inspect the tag build's final draft, notes/exclusions and every asset;
-  publish only after approval, then verify anonymous downloads/checksums.
+  Tracked in [#5](https://github.com/bcosta19/youtfast/issues/5) (Windows) and
+  [#6](https://github.com/bcosta19/youtfast/issues/6) (macOS); promote the
+  pre-release to latest afterwards.
+- [x] Freeze the publication date (2026-10-17), align changelog/AppStream/notes
+  and create the annotated `v0.1.0` tag. Before any release existed the tag
+  was moved to each packaging fix; it is immutable from publication on.
+- [x] Inspect the draft, notes and every asset, publish as a pre-release
+  (2026-10-17) and verify anonymous downloads against the published checksums.
 
 ## Separate distribution channels
 
