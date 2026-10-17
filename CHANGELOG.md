@@ -8,9 +8,11 @@ are the distribution record.
 
 ## [Unreleased]
 
-No additional changes recorded yet. Put implemented changes awaiting the next
-release here. Unimplemented work belongs in [ROADMAP.md](ROADMAP.md), not in
-this section.
+### Changed
+
+- The player no longer loads mpv's own interface scripts (statistics,
+  console, menus, command palette), which YouTFast never shows: six fewer
+  threads and a little less memory from the start.
 
 ## [0.1.0] - 2026-10-17
 

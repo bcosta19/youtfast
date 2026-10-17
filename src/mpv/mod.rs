@@ -292,7 +292,7 @@ impl Mpv {
         let raw_options = raw_options(max_resolution, &captions);
         let volume = volume.clamp(0.0, 100.0);
         let initial_volume = volume_text(volume);
-        let options: [(&CStr, &str); 14] = [
+        let options: [(&CStr, &str); 21] = [
             (c"vo", "libmpv"),
             (c"hwdec", "auto-safe"),
             (c"ytdl", "yes"),
@@ -302,6 +302,17 @@ impl Mpv {
             (c"keep-open", "yes"),
             (c"idle", "yes"),
             (c"osc", "no"),
+            // mpv's own interface scripts (statistics, console, menus,
+            // command palette, conditional profiles) each start a Lua thread
+            // at initialize; YouTFast draws its own interface and keeps only
+            // the ytdl hook.
+            (c"load-stats-overlay", "no"),
+            (c"load-console", "no"),
+            (c"load-select", "no"),
+            (c"load-positioning", "no"),
+            (c"load-context-menu", "no"),
+            (c"load-commands", "no"),
+            (c"load-auto-profiles", "no"),
             (c"input-default-bindings", "no"),
             (c"terminal", "no"),
             // The name PipeWire and PulseAudio show in their mixers.
@@ -803,6 +814,26 @@ unsafe extern "C" fn wake(context: *mut c_void) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Scripts start on threads of their own during initialize, and Linux
+    /// lists threads by name.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn of_mpvs_own_scripts_only_the_ytdl_hook_runs() {
+        let player = Mpv::new(&egui::Context::default(), 1080, 0.0, Vec::new()).unwrap();
+        let scripts: Vec<String> = std::fs::read_dir("/proc/self/task")
+            .unwrap()
+            .filter_map(|task| std::fs::read_to_string(task.ok()?.path().join("comm")).ok())
+            .map(|name| name.trim().to_owned())
+            .filter(|name| name.starts_with("lua/"))
+            .collect();
+        // An mpv built without Lua runs no script at all.
+        assert!(
+            scripts.is_empty() || scripts == ["lua/ytdl_hook"],
+            "{scripts:?}"
+        );
+        drop(player);
+    }
 
     #[test]
     fn reads_why_yt_dlp_failed() {
