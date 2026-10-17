@@ -1,5 +1,7 @@
 import hashlib
+import io
 import json
+import shutil
 import tarfile
 import tempfile
 import unittest
@@ -8,6 +10,17 @@ from unittest.mock import patch
 
 import native_sources
 from release import ROOT
+
+
+def write_source_package(destination, files):
+    with tarfile.open(destination, "w:zst") as archive:
+        directory = tarfile.TarInfo("mingw-w64-example")
+        directory.type = tarfile.DIRTYPE
+        archive.addfile(directory)
+        for name, data in files.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
 
 
 class NativeSourcesTests(unittest.TestCase):
@@ -77,20 +90,35 @@ class NativeSourcesTests(unittest.TestCase):
         output.mkdir()
 
         def download(_url, destination):
-            destination.write_bytes(b"synthetic source package")
+            write_source_package(destination, {
+                "mingw-w64-example/.SRCINFO": b"pkgbase = mingw-w64-example\npkgver = 1.0\npkgrel = 2\n",
+                "mingw-w64-example/PKGBUILD": b"# synthetic recipe",
+                "mingw-w64-example/source.tar.gz": b"synthetic upstream source",
+            })
             return "f" * 64
 
-        def run(*args, **_kwargs):
-            if args[1] == "-tf":
-                return "mingw-w64-example/\nmingw-w64-example/.SRCINFO\nmingw-w64-example/PKGBUILD\nmingw-w64-example/source.tar.gz\n"
-            return "pkgbase = mingw-w64-example\npkgver = 1.0\npkgrel = 2\n"
-
+        # The archive is read without invoking any external tar.
         with patch.object(native_sources, "download", side_effect=download) as fetch, \
-                patch.object(native_sources, "run", side_effect=run):
+                patch.object(native_sources, "run", side_effect=AssertionError):
             sources = native_sources.collect_windows(candidate, output)
         self.assertEqual(fetch.call_count, 1)
         self.assertEqual(sources[0]["base"], "mingw-w64-example")
         self.assertTrue((output / "notices/LICENSE").is_file())
+
+    def test_msys_source_metadata_falls_back_to_zstd_without_python_support(self):
+        archive = self.root / "example.src.tar.zst"
+        write_source_package(archive, {"mingw-w64-example/.SRCINFO": b"pkgbase = mingw-w64-example\n"})
+        real_open = tarfile.open
+
+        def without_zstd(*args, **kwargs):
+            if len(args) > 1 and args[1] == "r|zst":
+                raise tarfile.CompressionError("unknown compression type 'zst'")
+            return real_open(*args, **kwargs)
+
+        with patch.object(native_sources.tarfile, "open", side_effect=without_zstd):
+            count, srcinfo = native_sources.msys_source_metadata(archive, "mingw-w64-example")
+        self.assertEqual(count, 2)
+        self.assertEqual(srcinfo, "pkgbase = mingw-w64-example\n")
 
     def test_macos_collects_source_downloads_using_the_installed_recipe_and_a_private_cache(self):
         candidate = self.root / "candidate"
@@ -99,12 +127,16 @@ class NativeSourcesTests(unittest.TestCase):
         (licenses / "LICENSE").write_text("synthetic upstream notice")
         keg = self.root / "Cellar/example/1.0_2"
         (keg / ".brew").mkdir(parents=True)
-        recipe = b"# synthetic formula; never executed by this test\n"
+        checksum = "a" * 64
+        recipe = f'# synthetic formula; never executed by this test\nsha256 "{checksum}"\n'.encode()
         (keg / ".brew/example.rb").write_bytes(recipe)
         (keg / "INSTALL_RECEIPT.json").write_text("{}")
+        # The current homebrew-core recipe digest may differ from the keg's.
         formula = {"name": "example", "versions": {"stable": "1.0"}, "revision": 2,
                    "installed": [{"version": "1.0_2"}],
-                   "ruby_source_checksum": {"sha256": hashlib.sha256(recipe).hexdigest()}}
+                   "urls": {"stable": {"url": "https://example.invalid/example-1.0.tar.gz",
+                                       "checksum": checksum}},
+                   "ruby_source_checksum": {"sha256": "0" * 64}}
         (candidate / "native-dependencies.json").write_text(json.dumps({"formulae": [formula]}))
         output = self.root / "sources"
         output.mkdir()
@@ -122,8 +154,18 @@ class NativeSourcesTests(unittest.TestCase):
         with patch.object(native_sources, "run", side_effect=run):
             result = native_sources.collect_macos(candidate, output)
         self.assertEqual(result[0]["version"], "1.0_2")
+        self.assertEqual(result[0]["source_identity"], checksum)
+        self.assertEqual(result[0]["recipe_sha256"], hashlib.sha256(recipe).hexdigest())
         self.assertEqual((output / "recipes/example.rb").read_bytes(), recipe)
         self.assertTrue((output / "notices/LICENSE").is_file())
+
+        formula["urls"]["stable"]["checksum"] = "b" * 64
+        (candidate / "native-dependencies.json").write_text(json.dumps({"formulae": [formula]}))
+        shutil.rmtree(output)
+        output.mkdir()
+        with patch.object(native_sources, "run", side_effect=run), \
+                self.assertRaisesRegex(ValueError, "example recipe does not declare"):
+            native_sources.collect_macos(candidate, output)
 
 
 if __name__ == "__main__":

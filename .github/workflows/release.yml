@@ -47,6 +47,7 @@ jobs:
             test "$(git cat-file -t "$RELEASE_TAG")" = tag
           fi
 
+  # Packages build in parallel with CI; assembly and the draft still need both.
   checks:
     needs: validate
     uses: ./.github/workflows/ci.yml
@@ -54,7 +55,7 @@ jobs:
       contents: read
 
   linux:
-    needs: [validate, checks]
+    needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -103,7 +104,7 @@ jobs:
           retention-days: 7
 
   source:
-    needs: [validate, checks]
+    needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -124,7 +125,7 @@ jobs:
           retention-days: 7
 
   arch:
-    needs: [validate, checks, source]
+    needs: [validate, source]
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     container:
@@ -144,6 +145,8 @@ jobs:
           path: dist
       - name: Generate exact source recipe and build as an unprivileged user
         run: |
+          # The container user does not own the runner's checkout.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           python3 packaging/arch.py "dist/youtfast-$RELEASE_TAG-source-with-dependencies.tar.gz"
           cp -a dist/aur/youtfast /home/builder/youtfast
           cp "dist/youtfast-$RELEASE_TAG-source-with-dependencies.tar.gz" /home/builder/youtfast/
@@ -200,7 +203,7 @@ jobs:
           retention-days: 7
 
   windows:
-    needs: [validate, checks]
+    needs: validate
     runs-on: windows-2022
     timeout-minutes: 90
     env:
@@ -248,7 +251,7 @@ jobs:
           retention-days: 7
 
   macos:
-    needs: [validate, checks]
+    needs: validate
     runs-on: macos-15
     timeout-minutes: 90
     steps:

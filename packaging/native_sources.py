@@ -27,8 +27,34 @@ def run(*args, env=None):
     result = subprocess.run([str(arg) for arg in args], env=env,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode:
-        raise ValueError(f"Native source command failed: {Path(args[0]).name}")
+        detail = result.stderr.decode("utf-8", "replace").strip()[-500:]
+        raise ValueError(f"Native source command failed: {Path(args[0]).name}: {detail}")
     return result.stdout.decode("utf-8")
+
+
+def msys_source_metadata(archive, base):
+    """Return the member count and `.SRCINFO` of a `.src.tar.zst` in one pass.
+
+    Native Windows Python resolves a bare `tar` to System32's bsdtar before
+    MSYS2's PATH, so the archive is read here rather than through a tool.
+    """
+    process = None
+    try:
+        opened = tarfile.open(archive, "r|zst")
+    except tarfile.CompressionError:
+        # Python before 3.14 has no zstd support; MSYS2 ships zstd with pacman.
+        process = subprocess.Popen(["zstd", "-dc", str(archive)],
+                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        opened = tarfile.open(fileobj=process.stdout, mode="r|")
+    count, srcinfo = 0, None
+    with opened as members:
+        for member in members:
+            count += 1
+            if member.name == f"{base}/.SRCINFO" and member.isfile():
+                srcinfo = members.extractfile(member).read(1024 * 1024).decode("utf-8")
+    if process and process.wait():
+        raise ValueError("Native source command failed: zstd")
+    return count, srcinfo
 
 
 def fields(text, separator=" = "):
@@ -99,11 +125,10 @@ def collect_windows(candidate, output):
         url = f"https://repo.msys2.org/mingw/sources/{filename}"
         archive = output / filename
         digest = download(url, archive)
-        members = run("tar", "-tf", archive).splitlines()
-        srcinfo = next((name for name in members if name == f"{base}/.SRCINFO"), None)
-        if srcinfo is None or len(members) < 4:
+        count, srcinfo = msys_source_metadata(archive, base)
+        if srcinfo is None or count < 4:
             raise ValueError("MSYS2 full source package or metadata is missing")
-        validate_msys_source(run("tar", "-xOf", archive, srcinfo), base, version)
+        validate_msys_source(srcinfo, base, version)
         sources[key] = {"base": base, "version": version, "url": url,
                         "archive": filename, "sha256": digest}
     if not sources:
@@ -136,14 +161,20 @@ def collect_macos(candidate, output):
         if prefix.name != version:
             raise ValueError("Homebrew installed keg does not match candidate metadata")
         recipe = prefix / f".brew/{name}.rb"
-        expected = formula["ruby_source_checksum"]["sha256"]
-        if hashlib.sha256(recipe.read_bytes()).hexdigest() != expected:
-            raise ValueError("Installed Homebrew recipe differs from the recorded source identity")
+        text = recipe.read_bytes()
+        # The keg keeps the recipe it was installed with; homebrew-core may have
+        # edited that file since without changing the version, so the identity
+        # is the upstream source it declares, not the current recipe digest.
+        stable = formula["urls"]["stable"]
+        identity = stable.get("checksum") or stable.get("revision")
+        if not identity or identity.encode() not in text:
+            raise ValueError(f"Installed {name} recipe does not declare the recorded upstream source")
         copied = recipes / f"{name}.rb"
         shutil.copy2(recipe, copied)
         shutil.copy2(prefix / "INSTALL_RECEIPT.json", recipes / f"{name}-receipt.json")
         formula_paths.append(copied)
-        sources.append({"formula": name, "version": version, "recipe_sha256": expected})
+        sources.append({"formula": name, "version": version, "source_url": stable["url"],
+                        "source_identity": identity, "recipe_sha256": hashlib.sha256(text).hexdigest()})
     if not sources:
         raise ValueError("No bundled macOS dependencies were identified")
     # A dedicated cache includes all downloaded resources/patches without
