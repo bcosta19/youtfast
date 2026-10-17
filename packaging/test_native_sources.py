@@ -181,5 +181,77 @@ class NativeSourcesTests(unittest.TestCase):
         self.assertEqual((output / "recipes/example.rb").read_bytes(), recipe)
 
 
+    def test_only_recipes_without_patches_or_build_resources_are_plain(self):
+        dav1d = b"""class Dav1d < Formula
+  url "https://code.videolan.org/videolan/dav1d/-/archive/1.5.4/dav1d-1.5.4.tar.bz2"
+  sha256 "2abfb0c89212e6e4733a54e0ae509ec00a5b845a6360946f918806e14aedb011"
+  resource "homebrew-00000000.ivf", :test do
+    url "https://code.videolan.org/videolan/dav1d-test-data/raw/1.1.0/8-bit/data/00000000.ivf"
+  end
+end
+"""
+        self.assertTrue(native_sources.recipe_is_plain(dav1d))
+        self.assertFalse(native_sources.recipe_is_plain(dav1d + b'  resource "lib" do\n  end\n'))
+        self.assertFalse(native_sources.recipe_is_plain(dav1d + b"  patch do\n  end\n"))
+        self.assertFalse(native_sources.recipe_is_plain(dav1d + b"  patch :DATA\n"))
+
+    def test_macos_falls_back_to_the_declared_tarball_only_for_plain_recipes(self):
+        candidate = self.root / "candidate"
+        licenses = candidate / "YouTFast.app/Contents/Resources/licenses"
+        licenses.mkdir(parents=True)
+        (licenses / "LICENSE").write_text("synthetic upstream notice")
+        checksum = "c" * 64
+        kegs = {}
+        formulae = []
+        for name, extra in [("plain", b""), ("patched", b"  patch do\n  end\n")]:
+            keg = self.root / f"Cellar/{name}/1.0"
+            (keg / ".brew").mkdir(parents=True)
+            (keg / f".brew/{name}.rb").write_bytes(f'sha256 "{checksum}"\n'.encode() + extra)
+            (keg / "INSTALL_RECEIPT.json").write_text("{}")
+            kegs[name] = keg
+            formulae.append({"name": name, "versions": {"stable": "1.0"}, "installed": [{"version": "1.0"}],
+                             "urls": {"stable": {"url": f"https://example.invalid/{name}-1.0.tar.gz",
+                                                 "checksum": checksum}}})
+        downloaded = []
+
+        def run(*args, env=None):
+            if args[:2] == ("brew", "--prefix"):
+                return str(kegs[args[2]])
+            if args[:2] == ("brew", "cat"):
+                return ""
+            if args[-1] in failing or len(args) > 5:
+                raise ValueError("Native source command failed: brew: synthetic Homebrew error")
+            Path(env["HOMEBREW_CACHE"]).mkdir(exist_ok=True)
+            (Path(env["HOMEBREW_CACHE"]) / f"{args[-1]}.tar.gz").write_bytes(b"source")
+            return ""
+
+        def fetch(url, destination, sha256):
+            self.assertEqual(sha256, checksum)
+            destination.write_bytes(b"upstream source")
+            downloaded.append(url)
+
+        for failing, expect_error in [({"plain"}, False), ({"patched"}, True)]:
+            (candidate / "native-dependencies.json").write_text(json.dumps({"formulae": formulae}))
+            output = self.root / "sources"
+            shutil.rmtree(output, ignore_errors=True)
+            output.mkdir()
+            with self.subTest(failing=failing), \
+                    patch.object(native_sources, "run", side_effect=run), \
+                    patch.object(native_sources, "download_checked", side_effect=fetch):
+                if expect_error:
+                    with self.assertRaisesRegex(ValueError, "could not fetch patched"):
+                        native_sources.collect_macos(candidate, output)
+                else:
+                    result = {item["formula"]: item for item in native_sources.collect_macos(candidate, output)}
+                    self.assertEqual(result["plain"]["fetched_by"], "upstream-url")
+                    self.assertEqual(result["patched"]["fetched_by"], "homebrew")
+                    self.assertEqual(downloaded, ["https://example.invalid/plain-1.0.tar.gz"])
+                    self.assertTrue((output / "downloads/upstream/plain--plain-1.0.tar.gz").is_file())
+
+    def test_checked_download_rejects_insecure_urls(self):
+        for url in ["http://example.com/source.tar.gz", "https://user:secret@example.com/source.tar.gz"]:
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                native_sources.download_checked(url, self.root / "unused", "0" * 64)
+
 if __name__ == "__main__":
     unittest.main()

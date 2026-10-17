@@ -27,7 +27,10 @@ def run(*args, env=None):
     result = subprocess.run([str(arg) for arg in args], env=env,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode:
-        detail = result.stderr.decode("utf-8", "replace").strip()[-500:]
+        stderr = result.stderr.decode("utf-8", "replace").strip()
+        errors = [line for line in stderr.splitlines() if "error" in line.lower()]
+        # Progress lines bury the cause; prefer the lines that state it.
+        detail = "\n".join(errors)[-1000:] if errors else stderr[-500:]
         raise ValueError(f"Native source command failed: {Path(args[0]).name}: {detail}")
     return result.stdout.decode("utf-8")
 
@@ -101,6 +104,34 @@ def download(url, destination, maximum=MAX_SOURCE_BYTES):
     return digest.hexdigest()
 
 
+def download_checked(url, destination, sha256, maximum=MAX_SOURCE_BYTES):
+    """Download an upstream source over HTTPS and require its published digest."""
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme != "https" or parsed.username or parsed.password or not parsed.hostname:
+        raise ValueError("Upstream source download requires HTTPS without credentials")
+    digest = hashlib.sha256()
+    total = 0
+    with urllib.request.urlopen(url, timeout=120) as response, destination.open("xb") as output:
+        while chunk := response.read(1024 * 1024):
+            total += len(chunk)
+            if total > maximum:
+                raise ValueError("Upstream source exceeds the download limit")
+            output.write(chunk)
+            digest.update(chunk)
+    if digest.hexdigest() != sha256:
+        destination.unlink()
+        raise ValueError(f"Upstream source digest mismatch: {destination.name}")
+
+
+def recipe_is_plain(text):
+    """True when a recipe builds only its main source: no patches, and no
+    resources other than test data, so the stable tarball is the whole source."""
+    if re.search(rb"^\s*patch\b", text, re.MULTILINE):
+        return False
+    return all(b":test" in match.group(1)
+               for match in re.finditer(rb'^\s*resource\s+"[^"]*"([^\n]*)', text, re.MULTILINE))
+
+
 def validate_msys_source(text, base, installed_version):
     metadata = fields(text)
     epoch = metadata.get("epoch", [None])[0]
@@ -166,6 +197,7 @@ def collect_macos(candidate, output):
     recipes.mkdir()
     formula_paths = []
     sources = []
+    plain = {}
     for formula in inventory["formulae"]:
         name = formula["name"]
         version = matching_brew_version(formula)
@@ -184,6 +216,11 @@ def collect_macos(candidate, output):
         shutil.copy2(recipe, copied)
         shutil.copy2(prefix / "INSTALL_RECEIPT.json", recipes / f"{name}-receipt.json")
         formula_paths.append(copied)
+        declared = bool(identity) and identity.encode() in text
+        # Only a plain recipe whose keg declares this exact tarball digest may
+        # fall back to downloading it directly.
+        if declared and stable.get("checksum") and recipe_is_plain(text):
+            plain[name] = (stable["url"], stable["checksum"])
         sources.append({"formula": name, "version": version, "recipe_sha256": hashlib.sha256(text).hexdigest(),
                         "current_source_url": stable.get("url"), "current_source_identity": identity,
                         "installed_recipe_declares_current_source": bool(identity) and identity.encode() in text})
@@ -207,7 +244,32 @@ def collect_macos(candidate, output):
         except ValueError:
             # Only a reference copy; the keg recipe is archived regardless.
             source["current_recipe_archived"] = False
-    run("brew", "fetch", "--build-from-source", "--retry", *names, env=environment)
+    try:
+        run("brew", "fetch", "--build-from-source", "--retry", *names, env=environment)
+        failed = {}
+    except ValueError:
+        # One formula Homebrew cannot fetch fails the whole batch; retry each
+        # (already cached downloads are reused) to name the failures.
+        failed = {}
+        for name in names:
+            try:
+                run("brew", "fetch", "--build-from-source", "--retry", name, env=environment)
+            except ValueError as error:
+                failed[name] = error
+    fallback = output / "downloads/upstream"
+    for source in sources:
+        name = source["formula"]
+        source["fetched_by"] = "homebrew"
+        if name not in failed:
+            continue
+        if name not in plain:
+            raise ValueError(f"Homebrew could not fetch {name}, whose recipe has patches or "
+                             f"build resources: {failed[name]}")
+        url, checksum = plain[name]
+        fallback.mkdir(parents=True, exist_ok=True)
+        filename = f"{name}--" + Path(urllib.parse.urlsplit(url).path).name
+        download_checked(url, fallback / filename, checksum)
+        source["fetched_by"] = "upstream-url"
     if not any(path.is_file() for path in (output / "downloads").rglob("*")):
         raise ValueError("Homebrew did not collect source downloads")
     shutil.copy2(candidate / "native-dependencies.json", output / "native-dependencies.json")
