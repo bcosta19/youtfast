@@ -70,7 +70,7 @@ are still in progress. Download from
 | Linux x86_64 | Native archive | glibc 2.39+, system libmpv and current yt-dlp/Deno |
 | Windows x86_64 | ZIP with libmpv and DLLs | Current yt-dlp/Deno on PATH; no installer or publisher signature |
 | macOS 15+ Apple Silicon | ZIP with app and dylibs | Current yt-dlp/Deno; ad-hoc signed, not notarized |
-| Arch Linux x86_64 | Pacman package and source PKGBUILD | Hosted package validation and separate AUR submission pending |
+| Arch Linux x86_64 | Pacman package and source PKGBUILD | Built and installed in a clean Arch container by CI; AUR submission pending |
 
 The Flatpak bundles its playback/extraction tools and targets compatible Linux
 distributions at x86_64. It is not yet a Flathub listing or an app update remote.

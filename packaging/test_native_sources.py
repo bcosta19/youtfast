@@ -40,8 +40,9 @@ class NativeSourcesTests(unittest.TestCase):
         native_sources.validate_msys_source(text, "mingw-w64-mpv", "0.41.0-6")
         native_sources.validate_msys_source(text + "epoch = 0\n", "mingw-w64-mpv", "0.41.0-6")
         native_sources.validate_msys_source(text + "epoch = 1\n", "mingw-w64-mpv", "1:0.41.0-6")
+        native_sources.validate_msys_source(text + "epoch = 1\n", "mingw-w64-mpv", "1~0.41.0-6")
         for base, version in [("another-package", "0.41.0-6"), ("mingw-w64-mpv", "0.41.0-7"),
-                              ("mingw-w64-mpv", "1:0.41.0-6")]:
+                              ("mingw-w64-mpv", "1:0.41.0-6"), ("mingw-w64-mpv", "1~0.41.0-6")]:
             with self.subTest(base=base, version=version), self.assertRaises(ValueError):
                 native_sources.validate_msys_source(text, base, version)
 
@@ -146,18 +147,30 @@ class NativeSourcesTests(unittest.TestCase):
         output = self.root / "sources"
         output.mkdir()
 
+        tap = self.root / "tap"
+
         def run(*args, env=None):
             if args[:2] == ("brew", "--prefix"):
                 return str(keg)
-            self.assertEqual(args[:4], ("brew", "fetch", "--build-from-source", "--retry"))
+            if args[:2] == ("brew", "tap-new"):
+                self.assertEqual(args[2:], ("--no-git", "youtfast/native-sources"))
+                return ""
+            if args[:2] == ("brew", "--repository"):
+                return str(tap)
+            self.assertEqual(args, ("brew", "fetch", "--build-from-source", "--retry",
+                                    "youtfast/native-sources/example"))
+            # The installed recipe, not the current homebrew-core one, is fetched.
+            self.assertEqual((tap / "Formula/example.rb").read_bytes(), recipe)
             cache = Path(env["HOMEBREW_CACHE"])
             self.assertTrue(cache.is_relative_to(output.resolve()))
             cache.mkdir()
             (cache / "upstream-source.tar.gz").write_bytes(b"synthetic upstream source")
             return ""
 
-        with patch.object(native_sources, "run", side_effect=run):
+        untap = patch.object(native_sources.subprocess, "run")
+        with patch.object(native_sources, "run", side_effect=run), untap as untapped:
             result = native_sources.collect_macos(candidate, output)
+        self.assertEqual(untapped.call_count, 2)
         self.assertEqual(result[0]["version"], "1.0_2")
         self.assertTrue(result[0]["installed_recipe_declares_current_source"])
         self.assertEqual(result[0]["recipe_sha256"], hashlib.sha256(recipe).hexdigest())
@@ -169,7 +182,9 @@ class NativeSourcesTests(unittest.TestCase):
         (candidate / "native-dependencies.json").write_text(json.dumps({"formulae": [formula]}))
         shutil.rmtree(output)
         output.mkdir()
-        with patch.object(native_sources, "run", side_effect=run):
+        shutil.rmtree(tap)
+        with patch.object(native_sources, "run", side_effect=run), \
+                patch.object(native_sources.subprocess, "run"):
             result = native_sources.collect_macos(candidate, output)
         self.assertFalse(result[0]["installed_recipe_declares_current_source"])
         self.assertEqual((output / "recipes/example.rb").read_bytes(), recipe)

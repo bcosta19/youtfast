@@ -107,7 +107,9 @@ def validate_msys_source(text, base, installed_version):
     version = metadata.get("pkgver", [""])[0] + "-" + metadata.get("pkgrel", [""])[0]
     if epoch and epoch != "0":
         version = epoch + ":" + version
-    if metadata.get("pkgbase") != [base] or version != installed_version:
+    # MSYS2 writes the epoch separator as `~` because Windows file names
+    # cannot contain `:`; `1~2.0-1` and `1:2.0-1` are the same version.
+    if metadata.get("pkgbase") != [base] or version != re.sub(r"^(\d+)~", r"\1:", installed_version):
         found = ",".join(metadata.get("pkgbase", ["?"]))
         raise ValueError(f"{base} {installed_version} installed, source has {found} {version}")
 
@@ -192,7 +194,22 @@ def collect_macos(candidate, output):
     environment = os.environ.copy()
     environment.update(HOMEBREW_CACHE=str((output / "downloads").resolve()),
                        HOMEBREW_NO_AUTO_UPDATE="1", HOMEBREW_NO_ANALYTICS="1")
-    run("brew", "fetch", "--build-from-source", "--retry", *formula_paths, env=environment)
+    # Homebrew only loads formulae from taps, so the installed recipes go into
+    # a temporary local tap and are fetched by their qualified names.
+    tap = "youtfast/native-sources"
+    subprocess.run(["brew", "untap", "--force", tap], env=environment,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    run("brew", "tap-new", "--no-git", tap, env=environment)
+    try:
+        formulae = Path(run("brew", "--repository", tap, env=environment).strip()) / "Formula"
+        formulae.mkdir(parents=True, exist_ok=True)
+        for path in formula_paths:
+            shutil.copy2(path, formulae / path.name)
+        run("brew", "fetch", "--build-from-source", "--retry",
+            *(f"{tap}/{path.stem}" for path in formula_paths), env=environment)
+    finally:
+        subprocess.run(["brew", "untap", "--force", tap], env=environment,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if not any(path.is_file() for path in (output / "downloads").rglob("*")):
         raise ValueError("Homebrew did not collect source downloads")
     shutil.copy2(candidate / "native-dependencies.json", output / "native-dependencies.json")
