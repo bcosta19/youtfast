@@ -12,11 +12,10 @@ No additional changes recorded yet. Put implemented changes awaiting the next
 release here. Unimplemented work belongs in [ROADMAP.md](ROADMAP.md), not in
 this section.
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-10-17
 
-First release in preparation. Set the publication date here and in AppStream
-metadata when the release is approved. The scope includes Linux x86_64,
-Windows x86_64 and macOS Apple Silicon; platform qualification is still pending.
+First release, published as a pre-release for Linux x86_64, Windows x86_64 and
+macOS Apple Silicon. Interactive Windows/macOS qualification is still pending.
 
 ### Added
 
@@ -35,8 +34,7 @@ Windows x86_64 and macOS Apple Silicon; platform qualification is still pending.
 - Offline demo fixtures and bounded, redacted local diagnostic logs.
 - Release documentation, source archives with locked Rust dependencies,
   checksums, Linux/Flatpak packaging, Windows/macOS candidate/source bundling
-  and a clean Arch package build with an AUR recipe. Hosted execution and
-  platform QA remain gates.
+  and a clean Arch package build with an AUR recipe.
 
 ### Fixed
 

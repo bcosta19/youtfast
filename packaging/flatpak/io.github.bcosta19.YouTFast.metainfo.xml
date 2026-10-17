@@ -15,7 +15,7 @@
   <url type="bugtracker">https://github.com/bcosta19/youtfast/issues</url>
   <content_rating type="oars-1.1" />
   <releases>
-    <release version="0.1.0" date="2026-10-11">
+    <release version="0.1.0" date="2026-10-17">
       <description><p>First release with native playback, local library, optional accounts and reliability and privacy protections.</p></description>
     </release>
   </releases>
