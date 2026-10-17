@@ -8,9 +8,11 @@ are the distribution record.
 
 ## [Unreleased]
 
-No additional changes recorded yet. Put implemented changes awaiting the next
-release here. Unimplemented work belongs in [ROADMAP.md](ROADMAP.md), not in
-this section.
+### Fixed
+
+- A network failure while fetching YouTube's visitor data, which the first
+  requests of a session do, no longer closes the app: the page shows the
+  error and can be retried.
 
 ## [0.1.0] - 2026-10-17
 

@@ -6390,6 +6390,7 @@ dependencies = [
  "log",
  "notify-rust",
  "raw-window-handle",
+ "reqwest",
  "resvg",
  "rfd",
  "rustypipe",
