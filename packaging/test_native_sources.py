@@ -194,6 +194,25 @@ end
         self.assertFalse(native_sources.recipe_is_plain(dav1d + b'  resource "lib" do\n  end\n'))
         self.assertFalse(native_sources.recipe_is_plain(dav1d + b"  patch do\n  end\n"))
         self.assertFalse(native_sources.recipe_is_plain(dav1d + b"  patch :DATA\n"))
+        # The recipe kept in the published 1.5.4 bottle declares its test data
+        # inside `test do`, without the `:test` tag.
+        bottle = b"""class Dav1d < Formula
+  url "https://code.videolan.org/videolan/dav1d/-/archive/1.5.4/dav1d-1.5.4.tar.bz2"
+  sha256 "2abfb0c89212e6e4733a54e0ae509ec00a5b845a6360946f918806e14aedb011"
+  def install
+    system "meson", "setup", "build"
+  end
+
+  test do
+    resource "homebrew-00000000.ivf" do
+      url "https://code.videolan.org/videolan/dav1d-test-data/raw/1.1.0/8-bit/data/00000000.ivf"
+    end
+    testpath.install resource("homebrew-00000000.ivf")
+  end
+end
+"""
+        self.assertTrue(native_sources.recipe_is_plain(bottle))
+        self.assertFalse(native_sources.recipe_is_plain(bottle.replace(b"  def install", b'  resource "lib" do\n  end\n  def install')))
 
     def test_macos_falls_back_to_the_declared_tarball_only_for_plain_recipes(self):
         candidate = self.root / "candidate"

@@ -125,11 +125,16 @@ def download_checked(url, destination, sha256, maximum=MAX_SOURCE_BYTES):
 
 def recipe_is_plain(text):
     """True when a recipe builds only its main source: no patches, and no
-    resources other than test data, so the stable tarball is the whole source."""
-    if re.search(rb"^\s*patch\b", text, re.MULTILINE):
+    resources other than test data, so the stable tarball is the whole source.
+
+    `test do` is a formula's last block; resources declared inside it (the
+    older style) or tagged `:test` before it are test data, not build input.
+    """
+    build = re.split(rb"^\s*test do\b", text, maxsplit=1, flags=re.MULTILINE)[0]
+    if re.search(rb"^\s*patch\b", build, re.MULTILINE):
         return False
     return all(b":test" in match.group(1)
-               for match in re.finditer(rb'^\s*resource\s+"[^"]*"([^\n]*)', text, re.MULTILINE))
+               for match in re.finditer(rb'^\s*resource\s+"[^"]*"([^\n]*)', build, re.MULTILINE))
 
 
 def validate_msys_source(text, base, installed_version):
