@@ -292,7 +292,7 @@ impl Mpv {
         let raw_options = raw_options(max_resolution, &captions);
         let volume = volume.clamp(0.0, 100.0);
         let initial_volume = volume_text(volume);
-        let options: [(&CStr, &str); 21] = [
+        let options: [(&CStr, &str); 14] = [
             (c"vo", "libmpv"),
             (c"hwdec", "auto-safe"),
             (c"ytdl", "yes"),
@@ -302,17 +302,6 @@ impl Mpv {
             (c"keep-open", "yes"),
             (c"idle", "yes"),
             (c"osc", "no"),
-            // mpv's own interface scripts (statistics, console, menus,
-            // command palette, conditional profiles) each start a Lua thread
-            // at initialize; YouTFast draws its own interface and keeps only
-            // the ytdl hook.
-            (c"load-stats-overlay", "no"),
-            (c"load-console", "no"),
-            (c"load-select", "no"),
-            (c"load-positioning", "no"),
-            (c"load-context-menu", "no"),
-            (c"load-commands", "no"),
-            (c"load-auto-profiles", "no"),
             (c"input-default-bindings", "no"),
             (c"terminal", "no"),
             // The name PipeWire and PulseAudio show in their mixers.
@@ -336,6 +325,31 @@ impl Mpv {
                     name.to_string_lossy(),
                     Error::new(code, "setting an option")
                 );
+            }
+        }
+        // mpv's own interface scripts (statistics, console, menus, command
+        // palette, conditional profiles) each start a Lua thread at
+        // initialize; YouTFast draws its own interface and keeps only the
+        // ytdl hook. Each option goes by mpv's current name, then the one
+        // older releases used; a release without either lacks the script
+        // too, so a rejection says nothing worth logging.
+        for names in [
+            &[c"load-stats-overlay"][..],
+            &[c"load-console", c"load-osd-console"],
+            &[c"load-select"],
+            &[c"load-positioning"],
+            &[c"load-context-menu"],
+            &[c"load-commands"],
+            &[c"load-auto-profiles"],
+        ] {
+            for name in names {
+                // SAFETY: valid handle and NUL-terminated strings.
+                if unsafe {
+                    ffi::mpv_set_option_string(handle.ptr(), name.as_ptr(), c"no".as_ptr())
+                } >= 0
+                {
+                    break;
+                }
             }
         }
         // SAFETY: valid handle, options set, not yet initialized.
