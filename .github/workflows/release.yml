@@ -240,8 +240,11 @@ jobs:
           Expand-Archive $archive.FullName $unpacked
           $exe = Get-ChildItem $unpacked -Filter youtfast.exe -Recurse | Select-Object -First 1
           $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
-          $actual = & $exe.FullName --version
-          if ($LASTEXITCODE -ne 0 -or $actual -ne "youtfast $($env:RELEASE_TAG.Substring(1))") { throw 'Packaged Windows startup failed' }
+          # A GUI-subsystem executable is not awaited by `&`; redirect explicitly.
+          $out = Join-Path $env:RUNNER_TEMP 'youtfast-version.txt'
+          $process = Start-Process -FilePath $exe.FullName -ArgumentList '--version' -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out
+          $actual = (Get-Content $out -Raw).Trim()
+          if ($process.ExitCode -ne 0 -or $actual -ne "youtfast $($env:RELEASE_TAG.Substring(1))") { throw "Packaged Windows startup failed: exit $($process.ExitCode), output '$actual'" }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: windows

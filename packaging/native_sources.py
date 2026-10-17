@@ -194,22 +194,20 @@ def collect_macos(candidate, output):
     environment = os.environ.copy()
     environment.update(HOMEBREW_CACHE=str((output / "downloads").resolve()),
                        HOMEBREW_NO_AUTO_UPDATE="1", HOMEBREW_NO_ANALYTICS="1")
-    # Homebrew only loads formulae from taps, so the installed recipes go into
-    # a temporary local tap and are fetched by their qualified names.
-    tap = "youtfast/native-sources"
-    subprocess.run(["brew", "untap", "--force", tap], env=environment,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    run("brew", "tap-new", "--no-git", tap, env=environment)
-    try:
-        formulae = Path(run("brew", "--repository", tap, env=environment).strip()) / "Formula"
-        formulae.mkdir(parents=True, exist_ok=True)
-        for path in formula_paths:
-            shutil.copy2(path, formulae / path.name)
-        run("brew", "fetch", "--build-from-source", "--retry",
-            *(f"{tap}/{path.stem}" for path in formula_paths), env=environment)
-    finally:
-        subprocess.run(["brew", "untap", "--force", tap], env=environment,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # Homebrew loads formulae only from official taps (homebrew-core DSL is
+    # rejected elsewhere). matching_brew_version already required the current
+    # entry to have the installed version and revision, and Homebrew bumps the
+    # revision whenever patches change, so fetching by name collects the same
+    # sources and patches. The current recipe is archived beside the keg's.
+    names = [path.stem for path in formula_paths]
+    for name, source in zip(names, sources):
+        try:
+            (recipes / f"{name}.current.rb").write_text(run("brew", "cat", name, env=environment))
+            source["current_recipe_archived"] = True
+        except ValueError:
+            # Only a reference copy; the keg recipe is archived regardless.
+            source["current_recipe_archived"] = False
+    run("brew", "fetch", "--build-from-source", "--retry", *names, env=environment)
     if not any(path.is_file() for path in (output / "downloads").rglob("*")):
         raise ValueError("Homebrew did not collect source downloads")
     shutil.copy2(candidate / "native-dependencies.json", output / "native-dependencies.json")

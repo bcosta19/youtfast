@@ -161,7 +161,12 @@ fn ytdl_browser_spec(browser: &str, keyring: &str, profile: Option<&str>) -> Str
 /// `keyring`, and the script's output comes back as text.
 async fn extract(spec: &str, what: &str) -> Result<String, String> {
     let (browser, profile) = split_browser(spec);
-    let output = Command::new("python3")
+    let mut command = Command::new("python3");
+    // The release build is a GUI app on Windows; without this flag every
+    // import would flash a console window.
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let output = command
         .arg("-c")
         .arg(EXTRACT_COOKIES)
         .arg(&browser)

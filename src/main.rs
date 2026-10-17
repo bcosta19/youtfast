@@ -1,4 +1,6 @@
 //! YouTFast: YouTube, native and fast.
+// Release builds open no console window on Windows, like Spotifast and ZapFast.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod account;
 mod alerts;
