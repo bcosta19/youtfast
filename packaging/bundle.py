@@ -88,7 +88,28 @@ def macho_imports(text):
             for line in text.splitlines()[1:] if line.strip()]
 
 
-def verify_macho(paths, executable_dir, inspect):
+def macho_rpaths(text):
+    """LC_RPATH entries from `otool -l` output, in load-command order."""
+    return re.findall(r"cmd LC_RPATH\s+cmdsize \d+\s+path (.+?) \(offset \d+\)", text)
+
+
+def dedupe_rpaths(path, inspect, tool):
+    """dylibbundler rewrites every rpath to the bundle prefix, so a library
+    with several (libmpv's Swift toolchain ones) ends up with duplicates, and
+    macOS 15's dyld refuses to load it. Keep one of each."""
+    entries = macho_rpaths(inspect(path))
+    for entry in sorted({entry for entry in entries if entries.count(entry) > 1}):
+        for _ in range(entries.count(entry)):
+            if entry not in macho_rpaths(inspect(path)):
+                break
+            tool("install_name_tool", "-delete_rpath", entry, path)
+        tool("install_name_tool", "-add_rpath", entry, path)
+    remaining = macho_rpaths(inspect(path))
+    if len(remaining) != len(set(remaining)):
+        raise ValueError(f"Duplicate LC_RPATH remains in {path.name}")
+
+
+def verify_macho(paths, executable_dir, inspect, inspect_rpaths=None):
     for path in paths:
         for dependency in macho_imports(inspect(path)):
             if dependency.startswith(("/usr/lib/", "/System/Library/")):
@@ -103,6 +124,10 @@ def verify_macho(paths, executable_dir, inspect):
                 raise ValueError("macOS dependency escapes the application bundle")
             if not resolved.is_file():
                 raise ValueError("macOS candidate is missing a bundled dependency")
+        if inspect_rpaths:
+            rpaths = macho_rpaths(inspect_rpaths(path))
+            if len(rpaths) != len(set(rpaths)):
+                raise ValueError("macOS dyld rejects duplicate LC_RPATH entries")
 
 
 def macos(binary, dist):
@@ -132,7 +157,10 @@ def macos(binary, dist):
     libraries = list((app / "Frameworks").glob("*.dylib"))
     if not any("mpv" in path.name for path in libraries):
         raise ValueError("The macOS candidate must bundle libmpv")
-    verify_macho([executable, *libraries], executable_dir, lambda path: run("otool", "-L", path))
+    for path in [executable, *libraries]:
+        dedupe_rpaths(path, lambda item: run("otool", "-l", item), run)
+    verify_macho([executable, *libraries], executable_dir, lambda path: run("otool", "-L", path),
+                 lambda path: run("otool", "-l", path))
     # Preserve the exact installed formula inventory and upstream notices.
     formulas = ["mpv", *run("brew", "deps", "mpv").split()]
     inventory = json.loads(run("brew", "info", "--json=v2", *formulas))

@@ -104,5 +104,42 @@ class BundleTests(unittest.TestCase):
                     arch.render(self.root / name, self.root / "unused")
 
 
+    def test_duplicate_rpaths_left_by_dylibbundler_are_reduced_to_one(self):
+        prefix = "@executable_path/../Frameworks/"
+
+        def otool(entries):
+            # The layout `otool -l` prints for each LC_RPATH command.
+            return "".join(f"Load command {n}\n          cmd LC_RPATH\n      cmdsize 48\n"
+                           f"         path {entry} (offset 12)\n" for n, entry in enumerate(entries))
+
+        for deletes_all in (False, True):
+            state = [prefix, "/usr/lib/extra", prefix]
+            calls = []
+
+            def tool(*args):
+                calls.append(args[:2])
+                if args[1] == "-delete_rpath":
+                    if deletes_all:
+                        state[:] = [entry for entry in state if entry != args[2]]
+                    else:
+                        state.remove(args[2])
+                elif args[1] == "-add_rpath":
+                    state.append(args[2])
+                return ""
+
+            with self.subTest(deletes_all=deletes_all):
+                bundle.dedupe_rpaths(self.root / "libmpv.2.dylib", lambda _: otool(state), tool)
+                self.assertEqual(sorted(state), sorted([prefix, "/usr/lib/extra"]))
+                self.assertIn(("install_name_tool", "-add_rpath"), calls)
+
+        executable_dir = self.root / "YouTFast.app/Contents/MacOS"
+        executable_dir.mkdir(parents=True)
+        listing = "lib:\n/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 2.0.0)\n"
+        with self.assertRaisesRegex(ValueError, "duplicate LC_RPATH"):
+            bundle.verify_macho([executable_dir / "lib"], executable_dir, lambda _: listing,
+                                lambda _: otool([prefix, prefix]))
+        bundle.verify_macho([executable_dir / "lib"], executable_dir, lambda _: listing,
+                            lambda _: otool([prefix]))
+
 if __name__ == "__main__":
     unittest.main()
