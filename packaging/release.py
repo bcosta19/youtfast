@@ -16,7 +16,7 @@ PUBLIC_FILES = [
     "docs/actions.md", "docs/distribution.md", "docs/public-release-checklist.md", "docs/user-guide.md",
     "docs/release-review-2026-10-17.md",
     "packaging/arch/README.md", "assets/icons/LICENSE.txt", "vendor/rustypipe/LICENSE",
-    "packaging/icons/youtfast.svg", "assets/screenshots/watch-dark.png",
+    "packaging/icons/youtfast.svg", "assets/screenshots/search.png",
 ]
 
 

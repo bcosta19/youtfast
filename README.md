@@ -15,10 +15,16 @@ Search, watch and keep your library in a desktop interface, with hardware video
 decoding where supported. No browser engine, telemetry or YouTFast-operated
 backend. Start signed out; accounts are optional.
 
-![YouTFast watch page in the dark theme](assets/screenshots/watch-dark.png)
+![YouTFast showing search results for Blender open movies, full screen](assets/screenshots/search.png)
 
-*Native demo capture using synthetic data. The preview does not connect to
-YouTube, access accounts or play a real video.*
+*YouTFast 0.1.0 on Linux, signed out, searching for Blender's open movies.*
+
+> [!NOTE]
+> **YouTFast is young and still needs work.** It has a single maintainer and
+> 0.1.0 is its first release: it already plays, searches and keeps a library,
+> but expect rough edges and missing pieces. If something
+> breaks or feels less polished than YouTube in the browser, that is a great
+> place to help. See [how to contribute](#help-wanted).
 
 ## What you can do
 
@@ -35,11 +41,28 @@ Optional accounts use the system credential store. Account ratings and playlist
 edits affect the selected account; device subscriptions and device Watch later
 stay local. [Read about accounts and stored data](docs/user-guide.md#your-library-with-or-without-an-account).
 
+## Lighter than a website in a window
+
+Many "YouTube desktop apps" are the website inside Electron. Measured on one
+Linux laptop with the same search results, full screen, signed out
+([method, all runs and caveats](docs/benchmarks.md)):
+
+| | YouTFast 0.1.0 | Electron + youtube.com |
+|---|---:|---:|
+| Memory (PSS, all processes) | **161 MiB** | 658 MiB |
+| CPU while idle on the page | **0%** | 18% of a core |
+| Processes | **1** | 8 |
+| On disk | **31 MB** (13 MB download) | 296 MB runtime alone |
+
+Electron does show its first, still empty, window sooner. Playback has not
+been compared yet; numbers from other machines are welcome.
+
 ## Installation
 
-**0.1.0 is being prepared.** The table describes candidate packages; check
-[GitHub Releases](https://github.com/bcosta19/youtfast/releases) for actual
-availability. Interactive platform qualification is still required.
+**0.1.0 is a pre-release.** Packages are built and tested headlessly on
+GitHub-hosted runners; interactive checks on clean Windows and macOS machines
+are still in progress. Download from
+[GitHub Releases](https://github.com/bcosta19/youtfast/releases).
 
 | Platform | Package | Requirements |
 |---|---|---|
@@ -71,6 +94,22 @@ Playback needs libmpv with Lua support, current yt-dlp and its matching EJS/JS
 runtime. Optional browser-session import also needs `python3` with the `yt_dlp`
 module. See the [requirements](docs/user-guide.md#requirements).
 
+## Help wanted
+
+YouTFast gets better with every bug report, test run and pull request, and you
+do not need to know Rust to help:
+
+- **Try it and tell us what breaks.** Especially on Windows and macOS, which
+  have only been tested by CI so far. Steps to reproduce help the most.
+- **Pick an issue.** Look for
+  [good first issues](https://github.com/bcosta19/youtfast/labels/good%20first%20issue)
+  and [help wanted](https://github.com/bcosta19/youtfast/labels/help%20wanted).
+- **Translate.** English and Brazilian Portuguese exist; more languages are welcome.
+- **Package it.** Flathub and AUR submissions are open tasks.
+- **Measure it.** Run the [benchmarks](docs/benchmarks.md) on your machine.
+
+Start with [CONTRIBUTING.md](CONTRIBUTING.md); questions in issues are welcome.
+
 ## Guides and project status
 
 | You want to… | Read |
@@ -81,7 +120,8 @@ module. See the [requirements](docs/user-guide.md#requirements).
 | See work that is not implemented yet | [Roadmap](ROADMAP.md) |
 | Report a bug or contribute | [Contributing](CONTRIBUTING.md) |
 | Report a security issue privately | [Security policy](SECURITY.md) |
-| Prepare a release or public opening | [Release process](RELEASING.md) and [checklist](docs/public-release-checklist.md) |
+| Compare resource use | [Benchmarks](docs/benchmarks.md) |
+| Prepare a release | [Release process](RELEASING.md) and [checklist](docs/public-release-checklist.md) |
 
 Library/settings stay on this device. Account cookies belong in the native
 credential store, and local diagnostics redact private details. Account access
