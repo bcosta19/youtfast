@@ -94,7 +94,7 @@ jobs:
             window=$(xdotool search --onlyvisible --name "^YouTFast$")
             import -window "$window" "dist/youtfast-$RELEASE_TAG-linux.png"
           '
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: linux
           path: |
@@ -117,7 +117,7 @@ jobs:
           rustup toolchain install "$toolchain" --profile minimal
       - name: Archive corresponding source and dependency licenses
         run: python3 packaging/release.py source
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: source
           path: dist/*-source-with-dependencies.tar.gz
@@ -161,7 +161,7 @@ jobs:
           pacman -U --noconfirm dist/*.pkg.tar.zst
           test "$(youtfast --version)" = "youtfast ${RELEASE_TAG#v}"
           tar -czf "dist/youtfast-$RELEASE_TAG-aur.tar.gz" -C dist/aur youtfast
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: arch
           path: |
@@ -196,7 +196,7 @@ jobs:
           flatpak run io.github.bcosta19.YouTFast --version
           flatpak build-bundle --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo repo "dist/youtfast-$RELEASE_TAG-x86_64.flatpak" io.github.bcosta19.YouTFast stable
           flatpak build-bundle --runtime repo "dist/youtfast-$RELEASE_TAG-flatpak-sources.flatpak" io.github.bcosta19.YouTFast.Sources stable
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: flatpak
           path: dist/*.flatpak
@@ -245,7 +245,7 @@ jobs:
           $process = Start-Process -FilePath $exe.FullName -ArgumentList '--version' -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out
           $actual = (Get-Content $out -Raw).Trim()
           if ($process.ExitCode -ne 0 -or $actual -ne "youtfast $($env:RELEASE_TAG.Substring(1))") { throw "Packaged Windows startup failed: exit $($process.ExitCode), output '$actual'" }
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: windows
           path: |
@@ -280,7 +280,7 @@ jobs:
           app="$RUNNER_TEMP/youtfast-macos-smoke/youtfast-$RELEASE_TAG-aarch64-apple-darwin/YouTFast.app"
           codesign --verify --deep --strict "$app"
           test "$("$app/Contents/MacOS/youtfast" --version)" = "youtfast ${RELEASE_TAG#v}"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: macos
           path: |
@@ -312,7 +312,7 @@ jobs:
           test -s "dist/youtfast-$RELEASE_TAG-windows-native-sources.tar.gz"
           test -s "dist/youtfast-$RELEASE_TAG-macos-native-sources.tar.gz"
           (cd dist && sha256sum *.tar.gz *.flatpak *.png *.zip *.pkg.tar.zst > checksums.txt && sha256sum --check checksums.txt)
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: checksums
           path: dist/checksums.txt
