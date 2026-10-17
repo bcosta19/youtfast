@@ -27,8 +27,17 @@ pub fn line(ui: &Ui) -> f32 {
 /// A frameless button that is just the icon, a round tint under it on
 /// hover.
 pub fn icon_button(ui: &mut Ui, icon: Icon, size: f32, hint: &str) -> Response {
-    let edge = size + 12.0;
+    let edge = (size + 12.0).max(32.0);
     let (rect, response) = ui.allocate_exact_size(vec2(edge, edge), Sense::click());
+    response
+        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), hint));
+    if response.has_focus() {
+        ui.painter().circle_stroke(
+            rect.center(),
+            edge / 2.0,
+            Stroke::new(1.5, ui.visuals().selection.stroke.color),
+        );
+    }
     if response.hovered() {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
         ui.painter().circle_filled(
@@ -53,7 +62,7 @@ pub fn loading(ui: &mut Ui, palette: &Palette, what: &str) {
     ui.horizontal(|ui| {
         spinner(ui, 16.0);
         ui.label(
-            egui::RichText::new(format!("Loading {what}…"))
+            egui::RichText::new(format!("Carregando {what}…"))
                 .font(theme::regular(13.0))
                 .color(palette.secondary),
         );
@@ -226,22 +235,22 @@ pub fn subscribe(
 ) {
     if state.subscribed_in_account(&channel.id) {
         ui.add_enabled_ui(false, |ui| {
-            button(ui, &state.palette, "Subscribed", ButtonStyle::On)
+            button(ui, &state.palette, "Inscrito", ButtonStyle::On)
         })
         .inner
-        .on_disabled_hover_text("Your account is subscribed. Manage it on youtube.com.");
+        .on_disabled_hover_text("Inscrição da conta. Gerencie em youtube.com.");
         return;
     }
     let subscribed = state.library.is_subscribed(&channel.id);
     let (label, style) = if subscribed {
-        ("Subscribed", ButtonStyle::On)
+        ("Inscrito", ButtonStyle::On)
     } else {
-        ("Subscribe", unsubscribed)
+        ("Inscrever-se", unsubscribed)
     };
     let hint = if subscribed {
-        "Unsubscribe on this computer"
+        "Deixar de seguir neste dispositivo"
     } else {
-        "Follow this channel on this computer: its videos join your feed"
+        "Seguir neste dispositivo: os vídeos entram no seu feed"
     };
     if button(ui, &state.palette, label, style)
         .on_hover_text(hint)
@@ -535,6 +544,7 @@ fn video_text(
     palette: &Palette,
     video: &Video,
     note: Option<&str>,
+    id: Id,
     at: Pos2,
     width: f32,
 ) -> f32 {
@@ -554,6 +564,9 @@ fn video_text(
     if let Some(channel) = video.channel.as_deref().filter(|name| !name.is_empty()) {
         let galley = lines(channel, theme::regular(13.0), palette.secondary, 1);
         let height = galley.rect.height();
+        let rect = Rect::from_min_size(pos2(at.x, y), vec2(galley.size().x, height));
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(id.with("channel-rect"), rect));
         painter.galley(pos2(at.x, y), galley, palette.secondary);
         y += height + 1.0;
     }
@@ -659,12 +672,13 @@ fn video_row_sized(
     let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), thumb);
     thumbnail(ui, palette, video, thumb_rect, watched);
     let text_x = thumb_rect.right() + 12.0;
-    let width = (rect.right() - text_x - pad).max(20.0);
+    let width = (rect.right() - text_x - pad - 34.0).max(20.0);
     video_text(
         ui,
         palette,
         video,
         note,
+        response.id,
         pos2(text_x, thumb_rect.top() + 2.0),
         width,
     );
@@ -673,6 +687,139 @@ fn video_row_sized(
 
 pub fn video_card_height(ui: &Ui, width: f32) -> f32 {
     (width - 12.0) * 9.0 / 16.0 + 4.0 * line(ui) + 28.0
+}
+
+/// Shared card/row actions. Child hit targets never also open the video.
+pub fn video_interactions(
+    ui: &mut Ui,
+    response: &Response,
+    state: &State,
+    video: &Video,
+    actions: &mut Vec<Action>,
+) {
+    let mut handled = false;
+    if !ui.is_rect_visible(response.rect) {
+        return;
+    }
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), &video.title)
+    });
+    // `put` advances its Ui's layout cursor. These controls overlay a card
+    // already allocated by the parent, so keep their layout and automatic
+    // widget IDs in a stable child instead of moving the next card/row.
+    let mut overlay = ui.new_child(
+        egui::UiBuilder::new()
+            .id_salt(response.id.with("video-actions"))
+            .max_rect(response.rect)
+            .layout(egui::Layout::top_down(egui::Align::Min)),
+    );
+    let ui = &mut overlay;
+    for part in ["channel-rect", "avatar-rect"] {
+        if let (Some(id), Some(rect)) = (
+            &video.channel_id,
+            ui.ctx()
+                .data(|d| d.get_temp::<Rect>(response.id.with(part))),
+        ) {
+            let link = ui
+                .interact(
+                    rect,
+                    response.id.with(("open-channel", part)),
+                    Sense::click(),
+                )
+                .on_hover_cursor(CursorIcon::PointingHand)
+                .on_hover_text("Abrir canal");
+            if link.clicked() {
+                handled = true;
+                actions.push(Action::OpenChannel(Channel {
+                    id: id.clone(),
+                    name: video.channel.clone().unwrap_or_default(),
+                    avatar: video.channel_avatar.clone(),
+                }));
+            }
+        }
+    }
+    let menu_rect = Rect::from_min_size(
+        pos2(response.rect.right() - 30.0, response.rect.bottom() - 62.0),
+        vec2(28.0, 28.0),
+    );
+    let menu = ui
+        .put(
+            menu_rect,
+            egui::Button::new(Icon::More.image(state.palette.text, 18.0)).frame(false),
+        )
+        .on_hover_text("Mais ações");
+    handled |= menu.clicked();
+    egui::Popup::menu(&menu).show(|ui| {
+        for (label, action) in [
+            (
+                "Reproduzir a seguir",
+                Action::Enqueue {
+                    video: video.clone(),
+                    next: true,
+                },
+            ),
+            (
+                "Adicionar à fila",
+                Action::Enqueue {
+                    video: video.clone(),
+                    next: false,
+                },
+            ),
+            (
+                if state.library.in_watch_later(&video.id) {
+                    "Remover de assistir mais tarde"
+                } else {
+                    "Assistir mais tarde neste dispositivo"
+                },
+                Action::ToggleWatchLater(video.clone()),
+            ),
+            ("Copiar link", Action::CopyLink(video.url())),
+            ("Abrir no navegador", Action::OpenUrl(video.url())),
+        ] {
+            if ui.button(label).clicked() {
+                actions.push(action);
+                ui.close();
+            }
+        }
+    });
+    if response.hovered() || response.has_focus() || ui.rect_contains_pointer(response.rect) {
+        let clock = Rect::from_min_size(
+            response.rect.left_top() + vec2(10.0, 10.0),
+            vec2(32.0, 32.0),
+        );
+        let add = Rect::from_min_size(clock.min + vec2(36.0, 0.0), clock.size());
+        if ui
+            .put(
+                clock,
+                egui::Button::new(Icon::Clock.image(state.palette.text, 18.0))
+                    .fill(state.palette.overlay),
+            )
+            .on_hover_text("Assistir mais tarde neste dispositivo")
+            .clicked()
+        {
+            handled = true;
+            actions.push(Action::ToggleWatchLater(video.clone()));
+        }
+        if ui
+            .put(
+                add,
+                egui::Button::new(Icon::Queue.image(state.palette.text, 18.0))
+                    .fill(state.palette.overlay),
+            )
+            .on_hover_text("Adicionar à fila")
+            .clicked()
+        {
+            handled = true;
+            actions.push(Action::Enqueue {
+                video: video.clone(),
+                next: false,
+            });
+        }
+    }
+    super::results::video_menu(response, state, video, actions);
+    if response.clicked() && !handled {
+        actions.push(Action::Open(video.clone()));
+    }
 }
 
 /// A video as a card in a grid, the way YouTube's home draws it: the
@@ -698,13 +845,27 @@ pub fn video_card(
     row_fill(ui, palette, rect, &response, selected);
     let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), thumb);
     thumbnail(ui, palette, video, thumb_rect, watched);
+    let avatar_rect = Rect::from_min_size(
+        pos2(thumb_rect.left(), thumb_rect.bottom() + 10.0),
+        vec2(36.0, 36.0),
+    );
+    avatar(
+        ui,
+        palette,
+        video.channel_avatar.as_deref(),
+        video.channel.as_deref().unwrap_or(""),
+        avatar_rect,
+    );
+    ui.ctx()
+        .data_mut(|d| d.insert_temp(response.id.with("avatar-rect"), avatar_rect));
     video_text(
         ui,
         palette,
         video,
         None,
-        pos2(thumb_rect.left() + 2.0, thumb_rect.bottom() + 10.0),
-        thumb.x - 4.0,
+        response.id,
+        pos2(thumb_rect.left() + 46.0, thumb_rect.bottom() + 10.0),
+        (thumb.x - 78.0).max(20.0),
     );
     response
 }
@@ -740,7 +901,7 @@ pub fn playlist_row(
             .paint_at(ui, thumb_rect);
     }
     let text_x = thumb_rect.right() + 12.0;
-    let width = (rect.right() - text_x - pad).max(20.0);
+    let width = (rect.right() - text_x - pad - 34.0).max(20.0);
     let painter = ui.painter();
     let mut job = LayoutJob::default();
     job.append(
@@ -1080,6 +1241,180 @@ fn meta(video: &Video) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    fn draw_action_cards(
+        ctx: &egui::Context,
+        state: &State,
+        videos: &[Video],
+        columns: usize,
+        width: f32,
+        events: Vec<egui::Event>,
+    ) -> (Vec<(Id, Rect)>, Vec<Action>) {
+        let mut cards = Vec::new();
+        let mut actions = Vec::new();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(width, 1000.0))),
+                events,
+                ..Default::default()
+            },
+            |ui| {
+                let gap = 16.0;
+                let card_width =
+                    (ui.available_width() - gap * (columns - 1) as f32) / columns as f32;
+                for row in videos.chunks(columns) {
+                    ui.horizontal_top(|ui| {
+                        ui.spacing_mut().item_spacing.x = gap;
+                        for video in row {
+                            let response =
+                                video_card(ui, &state.palette, video, None, false, card_width);
+                            cards.push((response.id, response.rect));
+                            video_interactions(ui, &response, state, video, &mut actions);
+                        }
+                    });
+                    ui.add_space(gap);
+                }
+            },
+        );
+        output.textures_delta.clear();
+        (cards, actions)
+    }
+
+    fn action_videos(count: usize) -> Vec<Video> {
+        (0..count)
+            .map(|index| Video {
+                title: format!("Vídeo de teste {index} com título em duas linhas"),
+                channel: Some(format!("Canal {index}")),
+                channel_id: Some(format!("UCsynthetic{index}")),
+                ..Video::from_id(format!("demo{index:07}"))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn hover_actions_keep_card_positions_and_ids_stable_across_the_grid() {
+        for light in [false, true] {
+            for (width, columns) in [(480.0, 1), (960.0, 3), (1512.0, 4)] {
+                let ctx = egui::Context::default();
+                crate::theme::install_fonts(&ctx);
+                let state = State {
+                    palette: if light {
+                        Palette::light()
+                    } else {
+                        Palette::dark()
+                    },
+                    ..Default::default()
+                };
+                crate::theme::apply(&ctx, &state.palette);
+                let videos = action_videos(columns * 2);
+                let (baseline, _) =
+                    draw_action_cards(&ctx, &state, &videos, columns, width, Vec::new());
+                for &(_, hovered) in &baseline {
+                    for _ in 0..3 {
+                        let (actual, _) = draw_action_cards(
+                            &ctx,
+                            &state,
+                            &videos,
+                            columns,
+                            width,
+                            vec![egui::Event::PointerMoved(hovered.center())],
+                        );
+                        assert_eq!(
+                            actual, baseline,
+                            "hover changed grid geometry or IDs: width={width}, light={light}"
+                        );
+                        for row in actual.chunks(columns) {
+                            for pair in row.windows(2) {
+                                assert!(pair[0].1.right() <= pair[1].1.left());
+                            }
+                        }
+                    }
+                }
+                let (after, _) = draw_action_cards(
+                    &ctx,
+                    &state,
+                    &videos,
+                    columns,
+                    width,
+                    vec![egui::Event::PointerGone],
+                );
+                assert_eq!(after, baseline);
+            }
+        }
+    }
+
+    #[test]
+    fn video_targets_keep_their_own_actions_without_moving_siblings() {
+        for target in ["later", "queue", "channel", "menu", "video"] {
+            let ctx = egui::Context::default();
+            crate::theme::install_fonts(&ctx);
+            let state = State::default();
+            let videos = action_videos(3);
+            let (baseline, _) = draw_action_cards(&ctx, &state, &videos, 3, 960.0, Vec::new());
+            let (id, rect) = baseline[0];
+            let pointer = match target {
+                "later" => rect.min + vec2(26.0, 26.0),
+                "queue" => rect.min + vec2(62.0, 26.0),
+                "channel" => ctx
+                    .data(|data| data.get_temp::<Rect>(id.with("channel-rect")))
+                    .expect("the channel link must have a hit target")
+                    .center(),
+                "menu" => rect.right_bottom() - vec2(16.0, 48.0),
+                _ => rect.center(),
+            };
+            for _ in 0..2 {
+                draw_action_cards(
+                    &ctx,
+                    &state,
+                    &videos,
+                    3,
+                    960.0,
+                    vec![egui::Event::PointerMoved(pointer)],
+                );
+            }
+            let mut actions = Vec::new();
+            for pressed in [true, false] {
+                let (cards, emitted) = draw_action_cards(
+                    &ctx,
+                    &state,
+                    &videos,
+                    3,
+                    960.0,
+                    vec![
+                        egui::Event::PointerMoved(pointer),
+                        egui::Event::PointerButton {
+                            pos: pointer,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                );
+                assert_eq!(cards, baseline);
+                actions.extend(emitted);
+            }
+            let expected = match target {
+                "later" => vec![Action::ToggleWatchLater(videos[0].clone())],
+                "queue" => vec![Action::Enqueue {
+                    video: videos[0].clone(),
+                    next: false,
+                }],
+                "channel" => vec![Action::OpenChannel(Channel {
+                    id: videos[0].channel_id.clone().unwrap(),
+                    name: videos[0].channel.clone().unwrap(),
+                    avatar: None,
+                })],
+                "menu" => {
+                    assert!(egui::Popup::is_any_open(&ctx));
+                    Vec::new()
+                }
+                _ => vec![Action::Open(videos[0].clone())],
+            };
+            assert_eq!(actions, expected, "unexpected action for {target}");
+        }
+    }
+
     #[test]
     fn the_grid_fits_as_many_columns_as_it_can() {
         // 3 × 280 + 2 × 8 = 856 fits in 900; a fourth does not.

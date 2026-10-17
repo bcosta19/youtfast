@@ -8,6 +8,10 @@
 //! toasts at the bottom right, and `?` for the keyboard shortcuts.
 
 mod account;
+mod discovery;
+mod extras;
+mod keys;
+pub use player::release_speed_hold;
 mod channel;
 pub mod images;
 mod library;
@@ -40,14 +44,19 @@ pub fn show(
     surface: Option<&VideoSurface>,
     actions: &mut Vec<Action>,
 ) {
-    keys(ui.ctx(), state, status, actions);
+    keys::handle(ui.ctx(), state, status, actions);
     if state.view == View::Watch && state.fullscreen {
         watch::fullscreen(ui, state, status, surface, actions);
+        if state.keys_open {
+            keys_overlay(ui.ctx(), state);
+        }
         return;
     }
     top_bar(ui, state, actions);
-    sidebar(ui, state, actions);
-    match state.view {
+    if !(state.view == View::Watch && state.settings.theater) {
+        sidebar(ui, state, actions);
+    }
+    ui.push_id(state.navigation_key(), |ui| match state.view {
         View::Home => library::home(ui, state, actions),
         View::Results => results::show(ui, state, actions),
         View::Watch => watch::show(ui, state, status, surface, actions),
@@ -65,7 +74,7 @@ pub fn show(
         }
         View::Account => account::show(ui, state, actions),
         View::Settings => settings::show(ui, state, actions),
-    }
+    });
     // The video goes on in the corner while other pages show.
     if state.view != View::Watch && !state.mini_closed {
         player::mini(ui.ctx(), state, status, surface, actions);
@@ -95,57 +104,119 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
         )
         .show(ui, |ui| {
             let bar = ui.max_rect();
-            let place =
-                |rect: egui::Rect, layout: Layout| UiBuilder::new().max_rect(rect).layout(layout);
-            let back = matches!(
-                state.view,
-                View::Watch | View::Channel | View::Playlist | View::Results
-            );
-            if back {
-                ui.scope_builder(place(bar, Layout::left_to_right(Align::Center)), |ui| {
-                    if widgets::icon_button(ui, Icon::Back, 20.0, "Back").clicked() {
-                        actions.push(Action::Back);
-                    }
-                });
-            }
-            ui.scope_builder(place(bar, Layout::right_to_left(Align::Center)), |ui| {
-                if widgets::icon_button(ui, Icon::Info, 20.0, "Keyboard shortcuts (?)").clicked() {
-                    state.keys_open = !state.keys_open;
-                }
-            });
-            // Centred, clear of the 32 px buttons at both ends.
-            let width = (bar.width() - 2.0 * 48.0).clamp(120.0, 560.0);
-            let field_rect = egui::Rect::from_center_size(bar.center(), vec2(width, 36.0));
+            let wide = bar.width() > 760.0;
             ui.scope_builder(
-                place(field_rect, Layout::left_to_right(Align::Center)),
+                UiBuilder::new()
+                    .max_rect(bar)
+                    .layout(Layout::left_to_right(Align::Center)),
+                |ui| {
+                    if widgets::icon_button(ui, Icon::PanelLeft, 20.0, "Menu lateral (b)").clicked()
+                    {
+                        actions.push(Action::ToggleSidebar);
+                    }
+                    if wide
+                        && ui
+                            .add(
+                                egui::Button::new(
+                                    RichText::new("YouTFast").font(theme::bold(18.0)),
+                                )
+                                .frame(false),
+                            )
+                            .clicked()
+                    {
+                        actions.push(Action::Navigate(View::Home));
+                    }
+                    ui.add_enabled_ui(state.can_go_back, |ui| {
+                        if widgets::icon_button(ui, Icon::Back, 18.0, "Voltar (Alt+←)").clicked()
+                        {
+                            actions.push(Action::Back);
+                        }
+                    });
+                    ui.add_enabled_ui(state.can_go_forward, |ui| {
+                        if widgets::icon_button(ui, Icon::ChevronRight, 18.0, "Avançar (Alt+→)")
+                            .clicked()
+                        {
+                            actions.push(Action::Forward);
+                        }
+                    });
+                },
+            );
+            ui.scope_builder(
+                UiBuilder::new()
+                    .max_rect(bar)
+                    .layout(Layout::right_to_left(Align::Center)),
+                |ui| {
+                    if widgets::icon_button(ui, Icon::User, 20.0, "Conta").clicked() {
+                        actions.push(Action::Navigate(View::Account));
+                    }
+                    let hint = format!("Notificações: {} novas", state.alerts.len());
+                    let bell = widgets::icon_button(ui, Icon::Bell, 20.0, &hint);
+                    if !state.alerts.is_empty() {
+                        ui.painter().circle_filled(
+                            bell.rect.right_top() + vec2(-5.0, 5.0),
+                            4.0,
+                            palette.accent,
+                        );
+                    }
+                    if bell.clicked() {
+                        actions.push(Action::Navigate(View::Notifications));
+                    }
+                    if widgets::icon_button(ui, Icon::Info, 20.0, "Atalhos do teclado (?)")
+                        .clicked()
+                    {
+                        state.keys_open = !state.keys_open;
+                    }
+                },
+            );
+            let left = bar.left() + if wide { 220.0 } else { 106.0 };
+            let right = bar.right() - 116.0;
+            let width = (right - left - 36.0).clamp(80.0, 560.0);
+            let center = egui::pos2((left + right - 36.0) / 2.0, bar.center().y);
+            let field_rect = egui::Rect::from_center_size(center, vec2(width, 36.0));
+            ui.scope_builder(
+                UiBuilder::new()
+                    .max_rect(field_rect)
+                    .layout(Layout::left_to_right(Align::Center)),
                 |ui| {
                     let field = widgets::search_field(
                         ui,
                         &palette,
                         &mut state.query,
-                        "Search, or paste a link",
+                        "Pesquisar ou colar um link",
                         command_line_id(),
                         width,
                     );
-                    if field.has_focus() && ui.input(|input| input.key_pressed(Key::Escape)) {
+                    if field.has_focus() && ui.input(|i| i.key_pressed(Key::Escape)) {
                         field.surrender_focus();
                         state.suggestions.clear();
                     }
                     if field.changed() {
                         state.suggestion_cursor = None;
                     }
-                    let submitted =
-                        field.lost_focus() && ui.input(|input| input.key_pressed(Key::Enter));
-                    if submitted {
-                        let picked = state
+                    if field.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                        if let Some(text) = state
                             .suggestion_cursor
-                            .and_then(|index| state.suggestions.get(index).cloned());
-                        if let Some(picked) = picked {
-                            state.query = picked;
+                            .and_then(|at| state.suggestions.get(at))
+                        {
+                            state.query = text.clone();
                         }
                         actions.push(Action::Search(state.query.clone()));
                     }
                     suggestions(ui, state, &field, field_rect, actions);
+                },
+            );
+            let button = egui::Rect::from_center_size(
+                egui::pos2(field_rect.right() + 20.0, bar.center().y),
+                vec2(36.0, 36.0),
+            );
+            ui.scope_builder(
+                UiBuilder::new()
+                    .max_rect(button)
+                    .layout(Layout::left_to_right(Align::Center)),
+                |ui| {
+                    if widgets::icon_button(ui, Icon::Search, 20.0, "Pesquisar (Enter)").clicked() {
+                        actions.push(Action::Search(state.query.clone()));
+                    }
                 },
             );
         });
@@ -253,7 +324,9 @@ const SIDEBAR_RAIL: f32 = 72.0;
 /// Collapsed (`b`), it is a rail of the views' icons and the channels'
 /// avatars, each named on hover.
 fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
-    let collapsed = state.settings.sidebar_collapsed;
+    let collapsed = state.settings.sidebar_collapsed
+        || state.view == View::Watch
+        || ui.ctx().content_rect().width() < 900.0;
     let palette = &state.palette;
     egui::Panel::left("sidebar")
         .exact_size(if collapsed {
@@ -270,38 +343,6 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
         )
         .show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 2.0;
-            let hint = if collapsed {
-                "Show the sidebar (b)"
-            } else {
-                "Collapse the sidebar (b)"
-            };
-            let toggled = ui
-                .allocate_ui_with_layout(
-                    vec2(ui.available_width(), 40.0),
-                    Layout::left_to_right(Align::Center),
-                    |ui| {
-                        ui.set_min_height(40.0);
-                        if collapsed {
-                            ui.add_space(((ui.available_width() - 32.0) / 2.0).max(0.0));
-                            return widgets::icon_button(ui, Icon::PanelLeft, 20.0, hint).clicked();
-                        }
-                        ui.add_space(12.0);
-                        ui.label(
-                            RichText::new("YouTFast")
-                                .font(theme::bold(18.0))
-                                .color(palette.text),
-                        );
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            widgets::icon_button(ui, Icon::PanelLeft, 20.0, hint).clicked()
-                        })
-                        .inner
-                    },
-                )
-                .inner;
-            if toggled {
-                actions.push(Action::ToggleSidebar);
-            }
-            ui.add_space(8.0);
             for (icon, view, label, count) in sidebar_items(state) {
                 let selected = state.view == view
                     || (view == View::Playlists && state.view == View::Playlist)
@@ -323,23 +364,28 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
 /// a count to show.
 fn sidebar_items(state: &State) -> Vec<(Icon, View, String, Option<usize>)> {
     let mut items = vec![
-        (Icon::Home, View::Home, "Home".to_owned(), None),
+        (Icon::Home, View::Home, "Início".to_owned(), None),
         (
             Icon::Subscriptions,
             View::Subscriptions,
-            "Subscriptions".to_owned(),
+            "Inscrições".to_owned(),
             None,
         ),
-        (Icon::History, View::History, "History".to_owned(), None),
+        (Icon::History, View::History, "Histórico".to_owned(), None),
         (
             Icon::Clock,
             View::WatchLater,
-            "Watch later".to_owned(),
+            "Assistir mais tarde".to_owned(),
             None,
         ),
     ];
     if state.signed_in() {
-        items.push((Icon::ThumbsUp, View::Liked, "Liked".to_owned(), None));
+        items.push((
+            Icon::ThumbsUp,
+            View::Liked,
+            "Marcados com gostei".to_owned(),
+            None,
+        ));
         items.push((
             Icon::Playlists,
             View::Playlists,
@@ -350,18 +396,23 @@ fn sidebar_items(state: &State) -> Vec<(Icon, View, String, Option<usize>)> {
     items.push((
         Icon::Bell,
         View::Notifications,
-        "Notifications".to_owned(),
+        "Notificações".to_owned(),
         Some(state.alerts.len()),
     ));
     let account = state
         .active_account()
         .map(|account| account.name.clone())
         .unwrap_or_else(|| match &state.account {
-            AccountState::SigningIn => "Signing in".to_owned(),
-            _ => "Sign in".to_owned(),
+            AccountState::SigningIn => "Entrando".to_owned(),
+            _ => "Entrar".to_owned(),
         });
     items.push((Icon::User, View::Account, account, None));
-    items.push((Icon::Settings, View::Settings, "Settings".to_owned(), None));
+    items.push((
+        Icon::Settings,
+        View::Settings,
+        "Configurações".to_owned(),
+        None,
+    ));
     items
 }
 
@@ -387,7 +438,7 @@ fn sidebar_channels(ui: &mut egui::Ui, state: &State, collapsed: bool, actions: 
         ui.horizontal(|ui| {
             ui.add_space(12.0);
             ui.label(
-                RichText::new("Subscriptions")
+                RichText::new("Inscrições")
                     .font(theme::semibold(14.0))
                     .color(state.palette.secondary),
             );
@@ -456,7 +507,7 @@ fn notice_toast(ctx: &egui::Context, state: &State, actions: &mut Vec<Action>) {
                                 .wrap(),
                             );
                         });
-                        if widgets::icon_button(ui, Icon::Close, 16.0, "Dismiss").clicked() {
+                        if widgets::icon_button(ui, Icon::Close, 16.0, "Fechar").clicked() {
                             actions.push(Action::DismissNotice);
                         }
                     });
@@ -480,7 +531,11 @@ pub fn cursor_key(state: &State) -> usize {
     match state.view {
         View::Home if state.feed_filter == crate::model::FeedFilter::ForYou => tag(&state.for_you),
         View::Home => tag(&state.feed) + 10 * state.feed_filter as usize,
-        View::Results => tag(&state.results),
+        View::Results => match state.search_options.kind {
+            crate::innertube::SearchKind::Videos => tag(&state.results),
+            crate::innertube::SearchKind::Channels => tag(&state.results_channels),
+            crate::innertube::SearchKind::Playlists => tag(&state.results_playlists),
+        },
         View::Subscriptions => tag(&state.account_subscriptions) + source,
         View::History => tag(&state.account_history) + source,
         View::WatchLater => tag(&state.account_watch_later) + source,
@@ -511,14 +566,20 @@ pub fn cursor_key(state: &State) -> usize {
 fn cursor_count(state: &State) -> usize {
     match state.view {
         View::Home => state.visible_feed().len(),
-        View::Results => state.results.items().len(),
+        View::Results => match state.search_options.kind {
+            crate::innertube::SearchKind::Videos => state.results.items().len(),
+            crate::innertube::SearchKind::Channels => state.results_channels.items().len(),
+            crate::innertube::SearchKind::Playlists => state.results_playlists.items().len(),
+        },
         View::Subscriptions => match state.source() {
             crate::model::Source::Account => state.account_subscriptions.items().len(),
             crate::model::Source::Device => state.library.subscriptions.len(),
         },
         View::History => match state.source() {
             crate::model::Source::Account => state.account_history.items().len(),
-            crate::model::Source::Device => state.library.history.len(),
+            crate::model::Source::Device => {
+                state.library.history_matching(&state.history_query).count()
+            }
         },
         View::WatchLater => match state.source() {
             crate::model::Source::Account => state.account_watch_later.items().len(),
@@ -545,7 +606,23 @@ fn open_at(state: &State, index: usize) -> Option<Action> {
             .visible_feed()
             .get(index)
             .map(|video| Action::Open((*video).clone())),
-        View::Results => video(state.results.items()),
+        View::Results => match state.search_options.kind {
+            crate::innertube::SearchKind::Videos => video(state.results.items()),
+            crate::innertube::SearchKind::Channels => state
+                .results_channels
+                .items()
+                .get(index)
+                .cloned()
+                .map(Action::OpenChannel),
+            crate::innertube::SearchKind::Playlists => state
+                .results_playlists
+                .items()
+                .get(index)
+                .map(|p| Action::OpenPlaylist {
+                    id: p.id.clone(),
+                    name: p.name.clone(),
+                }),
+        },
         View::Subscriptions => match state.source() {
             crate::model::Source::Account => state
                 .account_subscriptions
@@ -568,8 +645,8 @@ fn open_at(state: &State, index: usize) -> Option<Action> {
                 .map(|row| Action::Open(row.video.clone())),
             crate::model::Source::Device => state
                 .library
-                .history
-                .get(index)
+                .history_matching(&state.history_query)
+                .nth(index)
                 .map(|watched| Action::Open(watched.video.clone())),
         },
         View::WatchLater => match state.source() {
@@ -609,89 +686,84 @@ fn open_at(state: &State, index: usize) -> Option<Action> {
 
 /// The `?` modal over a dimmed window: every binding in two columns, the
 /// key in a pill and what it does beside it.
-fn keys_overlay(ctx: &egui::Context, state: &State) {
-    let palette = &state.palette;
-    ctx.layer_painter(egui::LayerId::new(
-        egui::Order::Middle,
-        egui::Id::new("keys-backdrop"),
-    ))
-    .rect_filled(ctx.content_rect(), 0.0, palette.shadow);
-    egui::Area::new(egui::Id::new("keys"))
-        .order(egui::Order::Foreground)
-        .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-        .show(ctx, |ui| {
-            Frame::new()
-                .fill(palette.overlay)
-                .stroke(Stroke::new(1.0, palette.outline))
-                .corner_radius(CornerRadius::same(RADIUS + 4))
-                .inner_margin(Margin::same(24))
-                .shadow(ui.visuals().popup_shadow)
-                .show(ui, |ui| {
-                    ui.label(
-                        RichText::new("Keyboard shortcuts")
-                            .font(theme::bold(18.0))
-                            .color(palette.text),
-                    );
-                    ui.add_space(16.0);
-                    let column = |ui: &mut egui::Ui, id: &str, bindings: &[(&str, &str)]| {
-                        egui::Grid::new(id)
-                            .num_columns(2)
-                            .spacing([12.0, 8.0])
-                            .show(ui, |ui| {
-                                for (key, what) in bindings {
-                                    key_pill(ui, palette, key);
-                                    ui.label(
-                                        RichText::new(*what)
-                                            .font(theme::regular(14.0))
-                                            .color(palette.text),
-                                    );
-                                    ui.end_row();
-                                }
-                            });
-                    };
-                    ui.horizontal_top(|ui| {
-                        column(
-                            ui,
-                            "keys-shell",
-                            &[
-                                ("/", "Focus the search field"),
-                                ("Enter", "Search, or open a link"),
-                                ("1-9", "The views (not while watching)"),
-                                ("?", "This list"),
-                                ("Esc", "Close, or go back"),
-                                ("r", "Load the page again"),
-                                ("j / ↓", "Next row"),
-                                ("k / ↑", "The row before"),
-                                ("g / G", "First / last row"),
-                                ("Enter", "Open the row"),
-                                ("h / l", "A channel's tabs"),
-                                ("a", "The next account"),
-                                ("b", "Collapse the sidebar"),
-                            ],
-                        );
-                        ui.add_space(32.0);
-                        column(
-                            ui,
-                            "keys-player",
-                            &[
-                                ("Space / k", "Play or pause"),
-                                ("← / →", "5 s back or ahead"),
-                                ("j / l", "10 s back or ahead"),
-                                ("0-9", "Seek to 0-90%"),
-                                (", / .", "A frame back or ahead"),
-                                ("< / >", "Slower / faster"),
-                                ("m", "Mute"),
-                                ("c", "Captions"),
-                                ("N / P", "Next / previous video"),
-                                ("↑ / ↓", "A Short's neighbours"),
-                                ("f", "Full screen"),
-                                ("t", "Theater mode"),
-                                ("Esc", "Leave full screen, back"),
-                            ],
-                        );
-                    });
-                });
+fn keys_overlay(ctx: &egui::Context, state: &mut State) {
+    let palette = state.palette.clone();
+    let mut close = false;
+    let response = egui::Modal::new(egui::Id::new("keys")).show(ctx, |ui| {
+        let width = (ctx.content_rect().width() - 64.0).clamp(280.0, 840.0);
+        ui.set_width(width);
+        ui.horizontal(|ui| {
+            ui.heading("Atalhos do teclado");
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                close = widgets::icon_button(ui, Icon::Close, 18.0, "Fechar").clicked();
+            });
         });
+        ui.add_space(12.0);
+        let shell: &[(&str, &str)] = &[
+            ("/", "Focar pesquisa"),
+            ("Enter", "Pesquisar ou abrir link"),
+            ("1–9", "Telas (fora do vídeo)"),
+            ("?", "Mostrar esta lista"),
+            ("Esc", "Fechar ou voltar"),
+            ("Alt+← / →", "Voltar / avançar"),
+            ("Espaço", "Reproduzir/pausar no miniplayer"),
+            ("r", "Atualizar página"),
+            ("j / ↓", "Próximo item"),
+            ("k / ↑", "Item anterior"),
+            ("g / G", "Primeiro / último item"),
+            ("Enter", "Abrir item"),
+            ("h / l", "Abas do canal"),
+            ("a", "Próxima conta"),
+            ("b", "Menu lateral"),
+        ];
+        let player: &[(&str, &str)] = &[
+            ("Espaço / k", "Reproduzir ou pausar"),
+            ("← / →", "Voltar / avançar 5 s"),
+            ("j / l", "Voltar / avançar 10 s"),
+            ("0–9", "Ir para 0–90%"),
+            (", / .", "Quadro anterior / próximo"),
+            ("< / >", "Velocidade"),
+            ("m", "Sem som"),
+            ("c", "Legendas"),
+            ("Shift+N / P", "Próximo / anterior"),
+            ("i", "Miniplayer"),
+            ("Home / End", "Início / fim"),
+            ("Ctrl+← / →", "Capítulos (Option no Mac)"),
+            ("↑ / ↓", "Volume: 5%; troca nos Shorts"),
+            ("f", "Tela cheia"),
+            ("t", "Modo cinema"),
+        ];
+        let column = |ui: &mut egui::Ui, id: &str, bindings: &[(&str, &str)]| {
+            egui::Grid::new(id)
+                .num_columns(2)
+                .spacing([12.0, 8.0])
+                .show(ui, |ui| {
+                    for (key, label) in bindings {
+                        key_pill(ui, &palette, key);
+                        ui.add(egui::Label::new(*label).wrap());
+                        ui.end_row();
+                    }
+                });
+        };
+        egui::ScrollArea::vertical()
+            .max_height((ctx.content_rect().height() - 110.0).max(120.0))
+            .show(ui, |ui| {
+                if width > 740.0 {
+                    ui.horizontal_top(|ui| {
+                        column(ui, "keys-shell", shell);
+                        ui.add_space(24.0);
+                        column(ui, "keys-player", player);
+                    });
+                } else {
+                    column(ui, "keys-shell", shell);
+                    ui.add_space(20.0);
+                    column(ui, "keys-player", player);
+                }
+            });
+    });
+    if close || response.should_close() {
+        state.keys_open = false;
+    }
 }
 
 /// A key's name in a small `surface` pill, for the shortcuts' list.
@@ -709,229 +781,4 @@ fn key_pill(ui: &mut egui::Ui, palette: &theme::Palette, key: &str) {
     );
     ui.painter()
         .galley(rect.center() - galley.size() / 2.0, galley, palette.text);
-}
-
-/// The shell's keys, while nobody is typing.
-fn keys(
-    ctx: &egui::Context,
-    state: &mut State,
-    status: Option<&Status>,
-    actions: &mut Vec<Action>,
-) {
-    state.cursor_moved = false;
-    if ctx.text_edit_focused() {
-        return;
-    }
-    ctx.input(|input| {
-        if input.key_pressed(Key::Questionmark) {
-            state.keys_open = !state.keys_open;
-        }
-        if state.keys_open {
-            if input.key_pressed(Key::Escape) {
-                state.keys_open = false;
-            }
-            return;
-        }
-        if input.key_pressed(Key::Slash) {
-            ctx.memory_mut(|memory| memory.request_focus(command_line_id()));
-        }
-        // On the watch page the number keys seek, as on YouTube: 0 is the
-        // start, 5 the middle.
-        if state.view == View::Watch {
-            let digit = [
-                Key::Num0,
-                Key::Num1,
-                Key::Num2,
-                Key::Num3,
-                Key::Num4,
-                Key::Num5,
-                Key::Num6,
-                Key::Num7,
-                Key::Num8,
-                Key::Num9,
-            ]
-            .into_iter()
-            .position(|key| input.key_pressed(key));
-            if let Some(digit) = digit {
-                actions.push(Action::SeekFraction(digit as f64 / 10.0));
-            }
-        }
-        // Elsewhere they jump to the views.
-        let digit = [
-            Key::Num1,
-            Key::Num2,
-            Key::Num3,
-            Key::Num4,
-            Key::Num5,
-            Key::Num6,
-            Key::Num7,
-            Key::Num8,
-            Key::Num9,
-        ]
-        .into_iter()
-        .position(|key| input.key_pressed(key))
-        .filter(|_| state.view != View::Watch);
-        if let Some(digit) = digit {
-            let views = [
-                View::Home,
-                View::Subscriptions,
-                View::History,
-                View::WatchLater,
-                View::Liked,
-                View::Playlists,
-                View::Notifications,
-                View::Account,
-                View::Settings,
-            ];
-            let view = views[digit];
-            if matches!(view, View::Liked | View::Playlists) && !state.signed_in() {
-                return;
-            }
-            actions.push(Action::Navigate(view));
-        }
-        if input.key_pressed(Key::R) {
-            actions.push(Action::Refresh);
-        }
-        if input.key_pressed(Key::B) {
-            actions.push(Action::ToggleSidebar);
-        }
-        // `a` switches to the next account.
-        if input.key_pressed(Key::A)
-            && state.view != View::Watch
-            && state.library.accounts.len() > 1
-        {
-            let accounts = &state.library.accounts;
-            let index = accounts
-                .iter()
-                .position(|account| Some(account.id) == state.library.active_account)
-                .map(|index| index + 1)
-                .unwrap_or(0)
-                % accounts.len();
-            actions.push(Action::SwitchAccount(accounts[index].id));
-        }
-        // The cursor: j/k or the arrows move it, g/G jump, Enter opens.
-        let count = cursor_count(state);
-        if count > 0 && state.view != View::Watch {
-            if input.key_pressed(Key::J) || input.key_pressed(Key::ArrowDown) {
-                state.cursor = (state.cursor + 1).min(count - 1);
-                state.cursor_moved = true;
-            }
-            if input.key_pressed(Key::K) || input.key_pressed(Key::ArrowUp) {
-                state.cursor = state.cursor.saturating_sub(1);
-                state.cursor_moved = true;
-            }
-            if input.key_pressed(Key::G) && input.modifiers.shift {
-                state.cursor = count - 1;
-                state.cursor_moved = true;
-            } else if input.key_pressed(Key::G) {
-                state.cursor = 0;
-                state.cursor_moved = true;
-            }
-            if input.key_pressed(Key::Enter)
-                && let Some(action) = open_at(state, state.cursor)
-            {
-                actions.push(action);
-            }
-        }
-        if state.view == View::Channel {
-            // h/l walk the channel's tabs.
-            let visible = channel::tabs(state.channel_header.as_ref(), &state.channel_tab);
-            if input.key_pressed(Key::H) {
-                actions.push(Action::SetChannelTab(channel::cycle_tab(
-                    &visible,
-                    &state.channel_tab,
-                    -1,
-                )));
-            }
-            if input.key_pressed(Key::L) {
-                actions.push(Action::SetChannelTab(channel::cycle_tab(
-                    &visible,
-                    &state.channel_tab,
-                    1,
-                )));
-            }
-        }
-        if matches!(state.view, View::Channel | View::Playlist) {
-            if input.key_pressed(Key::Escape) {
-                actions.push(Action::Back);
-            }
-            return;
-        }
-        if state.view != View::Watch {
-            return;
-        }
-        if input.key_pressed(Key::Space) || input.key_pressed(Key::K) {
-            actions.push(Action::TogglePause);
-        }
-        if input.key_pressed(Key::M) {
-            actions.push(Action::ToggleMute);
-        }
-        if input.key_pressed(Key::C) {
-            actions.push(Action::ToggleCaptions);
-        }
-        if input.key_pressed(Key::N) && input.modifiers.shift {
-            actions.push(Action::PlayNext);
-        }
-        if input.key_pressed(Key::P) && input.modifiers.shift {
-            actions.push(Action::PlayPrevious);
-        }
-        // A Short's ↑/↓ go through the shelf, as YouTube's do.
-        if state.watching_short() {
-            if input.key_pressed(Key::ArrowDown) {
-                actions.push(Action::PlayNext);
-            }
-            if input.key_pressed(Key::ArrowUp) {
-                actions.push(Action::PlayPrevious);
-            }
-        }
-        // `<` and `>` step the speed, `,` and `.` a frame: by the text
-        // typed, so any keyboard layout works.
-        let speed = status.map_or(1.0, |status| status.speed);
-        for event in &input.events {
-            if let egui::Event::Text(text) = event {
-                match text.as_str() {
-                    "<" => actions.push(Action::SetSpeed(crate::app::player::step_speed(
-                        speed, false,
-                    ))),
-                    ">" => actions.push(Action::SetSpeed(crate::app::player::step_speed(
-                        speed, true,
-                    ))),
-                    "," => actions.push(Action::FrameStep(false)),
-                    "." => actions.push(Action::FrameStep(true)),
-                    _ => {}
-                }
-            }
-        }
-        if input.key_pressed(Key::ArrowLeft) {
-            actions.push(Action::SeekBy(-5.0));
-        }
-        if input.key_pressed(Key::ArrowRight) {
-            actions.push(Action::SeekBy(5.0));
-        }
-        if input.key_pressed(Key::J) {
-            actions.push(Action::SeekBy(-10.0));
-        }
-        if input.key_pressed(Key::L) {
-            actions.push(Action::SeekBy(10.0));
-        }
-        if input.key_pressed(Key::F) {
-            actions.push(Action::ToggleFullscreen);
-        }
-        if input.key_pressed(Key::T) && !state.fullscreen {
-            actions.push(Action::ToggleTheater);
-        }
-        if input.key_pressed(Key::Escape) {
-            if state.player_menu != crate::app::PlayerMenu::Closed {
-                state.player_menu = crate::app::PlayerMenu::Closed;
-            } else if state.autoplay.is_some() {
-                actions.push(Action::CancelAutoplay);
-            } else {
-                actions.push(if state.fullscreen {
-                    Action::ExitFullscreen
-                } else {
-                    Action::Back
-                });
-            }
-        }
-    });
 }

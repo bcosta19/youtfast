@@ -11,16 +11,16 @@ use crate::util;
 
 pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     results::panel(ui, |ui| {
-        results::title(ui, state, "Notifications", Some(state.alerts_visit.len()));
+        results::title(ui, state, "Notificações", Some(state.alerts_visit.len()));
         if !state.settings.alerts {
             results::centered(ui, |ui| {
                 ui.label(
-                    RichText::new("Alerts are off")
+                    RichText::new("Os alertas estão desativados")
                         .font(theme::semibold(16.0))
                         .color(state.palette.text),
                 );
                 ui.add_space(8.0);
-                if widgets::button(ui, &state.palette, "Turn on", widgets::ButtonStyle::Normal)
+                if widgets::button(ui, &state.palette, "Ativar", widgets::ButtonStyle::Normal)
                     .clicked()
                 {
                     actions.push(Action::SetAlerts(true));
@@ -30,11 +30,11 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         }
         ui.horizontal(|ui| {
             if state.alerts_checking {
-                widgets::loading(ui, &state.palette, "new uploads");
+                widgets::loading(ui, &state.palette, "novos vídeos");
             } else if widgets::button(
                 ui,
                 &state.palette,
-                "Check now",
+                "Verificar agora",
                 widgets::ButtonStyle::Normal,
             )
             .clicked()
@@ -45,7 +45,7 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 && widgets::button(
                     ui,
                     &state.palette,
-                    "Mark all as seen",
+                    "Marcar todos como vistos",
                     widgets::ButtonStyle::Normal,
                 )
                 .clicked()
@@ -64,8 +64,8 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             results::empty(
                 ui,
                 state,
-                "Nothing new",
-                "New uploads from your subscriptions appear here",
+                "Nenhuma novidade",
+                "Os novos vídeos dos canais inscritos aparecem aqui",
             );
             return;
         }
@@ -82,9 +82,9 @@ fn checked_line(state: &State) -> String {
             let clock = jiff::Timestamp::from_second(at)
                 .map(|at| format!("{}", at.to_zoned(jiff::tz::TimeZone::system()).time()))
                 .unwrap_or_else(|_| "?".to_owned());
-            format!("Checked {}", clock.get(..5).unwrap_or(&clock))
+            format!("Verificado às {}", clock.get(..5).unwrap_or(&clock))
         }
-        None => "Not checked yet".to_owned(),
+        None => "Ainda não verificado".to_owned(),
     };
     let next = u64::from(state.settings.alerts_every_minutes).saturating_sub(
         state
@@ -92,7 +92,7 @@ fn checked_line(state: &State) -> String {
             .map(|at| (util::now() - at) as u64 / 60)
             .unwrap_or(0),
     );
-    line.push_str(&format!(", next check in {} min", next.max(1)));
+    line.push_str(&format!(", próxima verificação em {} min", next.max(1)));
     line
 }
 

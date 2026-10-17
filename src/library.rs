@@ -236,6 +236,28 @@ impl Library {
         self.watched_ids.clear();
     }
 
+    /// Removes this video's watch and resume position while keeping the index in sync.
+    pub fn remove_history(&mut self, id: &str) -> bool {
+        let before = self.history.len();
+        self.history.retain(|watched| watched.video.id != id);
+        self.watched_ids.remove(id);
+        before != self.history.len()
+    }
+
+    /// A local search by title or channel; never sends watch history to YouTube.
+    pub fn history_matching<'a>(&'a self, query: &str) -> impl Iterator<Item = &'a Watched> {
+        let query = query.trim().to_lowercase();
+        self.history.iter().filter(move |watched| {
+            query.is_empty()
+                || watched.video.title.to_lowercase().contains(&query)
+                || watched
+                    .video
+                    .channel
+                    .as_ref()
+                    .is_some_and(|name| name.to_lowercase().contains(&query))
+        })
+    }
+
     /// Adds what a Takeout file brought. Returns how many subscriptions and
     /// history entries were new.
     pub fn merge(&mut self, import: Import) -> (usize, usize) {
@@ -290,6 +312,51 @@ fn take_first<T>(list: &mut Vec<T>, matches: impl FnMut(&T) -> bool) -> Option<T
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn removing_one_history_entry_removes_its_resume_without_changing_the_others() {
+        let mut library = Library::default();
+        library.record_watch(Video::from_id("aaaaaaaaaaa".into()), 1);
+        library.set_position("aaaaaaaaaaa", 45.0, 300.0);
+        library.record_watch(Video::from_id("bbbbbbbbbbb".into()), 2);
+        library.set_position("bbbbbbbbbbb", 90.0, 300.0);
+        assert!(library.remove_history("aaaaaaaaaaa"));
+        assert!(!library.watched("aaaaaaaaaaa"));
+        assert_eq!(library.resume_position("aaaaaaaaaaa"), None);
+        assert!(library.watched("bbbbbbbbbbb"));
+        assert_eq!(library.resume_position("bbbbbbbbbbb"), Some(90.0));
+        assert!(!library.remove_history("aaaaaaaaaaa"));
+        assert_eq!(library.history.len(), 1);
+    }
+
+    #[test]
+    fn local_history_search_matches_title_or_channel_without_changing_watch_order() {
+        let mut library = Library::default();
+        let mut first = Video::from_id("aaaaaaaaaaa".into());
+        first.title = "Introdução ao Rust".into();
+        first.channel = Some("Escola de programação".into());
+        let mut second = Video::from_id("bbbbbbbbbbb".into());
+        second.title = "Astronomia".into();
+        second.channel = Some("Ciência".into());
+        library.record_watch(first, 1);
+        library.record_watch(second, 2);
+        assert_eq!(
+            library.history_matching(" RUST ").next().unwrap().video.id,
+            "aaaaaaaaaaa"
+        );
+        assert_eq!(
+            library.history_matching("CIÊNCIA").next().unwrap().video.id,
+            "bbbbbbbbbbb"
+        );
+        assert_eq!(library.history_matching("não existe").count(), 0);
+        assert_eq!(
+            library
+                .history_matching(" ")
+                .map(|row| row.video.id.as_str())
+                .collect::<Vec<_>>(),
+            ["bbbbbbbbbbb", "aaaaaaaaaaa"]
+        );
+    }
 
     #[test]
     fn a_large_import_deduplicates_keeps_recent_history_and_preserves_resume_positions() {

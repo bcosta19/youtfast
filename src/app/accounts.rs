@@ -86,6 +86,17 @@ impl State {
 
 impl App {
     pub(super) fn begin_account_change(&mut self) {
+        self.playing_generation += 1;
+        self.back.clear();
+        self.forward.clear();
+        self.state.extras = Fetch::Idle;
+        self.state.transcript_open = false;
+        self.state.results_channels = Listing::Idle;
+        self.state.results_playlists = Listing::Idle;
+        self.state.playing_playlist = None;
+        self.state.playing_more = None;
+        self.state.playing_more_state = Fetch::Idle;
+        self.state.playing_waiting = None;
         self.set_playback_cookies(None);
         self.state.forget_account_data(self.backend.context());
         self.generations.clear();

@@ -25,7 +25,7 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 // set_max_width also widens: a narrow window would cut
                 // the text off at its edge instead of wrapping it.
                 ui.set_max_width(WIDTH.min(ui.available_width()));
-                results::title(ui, state, "Accounts", Some(state.library.accounts.len()));
+                results::title(ui, state, "Contas", Some(state.library.accounts.len()));
                 accounts(ui, state, actions);
                 ui.add_space(24.0);
                 add_account(ui, state, actions);
@@ -46,7 +46,7 @@ fn accounts(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             ui.horizontal(|ui| {
                 widgets::spinner(ui, 16.0);
                 ui.label(
-                    RichText::new("Signing in…")
+                    RichText::new("Entrando…")
                         .font(theme::regular(13.0))
                         .color(palette.secondary),
                 );
@@ -70,12 +70,12 @@ fn accounts(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             ui.vertical_centered(|ui| {
                 ui.add_space(8.0);
                 ui.label(
-                    RichText::new("No accounts")
+                    RichText::new("Nenhuma conta")
                         .font(theme::semibold(16.0))
                         .color(palette.text),
                 );
                 ui.label(
-                    RichText::new("Add one below")
+                    RichText::new("Adicione uma conta abaixo")
                         .font(theme::regular(14.0))
                         .color(palette.secondary),
                 );
@@ -111,7 +111,7 @@ fn account_row(ui: &mut Ui, state: &State, account: &Account, actions: &mut Vec<
                     ui,
                     palette,
                     &mut name,
-                    "Account name",
+                    "Nome da conta",
                     egui::Id::new("rename account"),
                     180.0,
                 );
@@ -149,36 +149,36 @@ fn account_row(ui: &mut Ui, state: &State, account: &Account, actions: &mut Vec<
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             // The inline confirm: `Remove "name"?  Cancel  Remove`.
             if state.removing == Some(account.id) {
-                if widgets::button(ui, &raised, "Remove", widgets::ButtonStyle::Primary).clicked() {
+                if widgets::button(ui, &raised, "Remover", widgets::ButtonStyle::Primary).clicked()
+                {
                     actions.push(Action::RemoveAccount(account.id));
                 }
-                if widgets::button(ui, &raised, "Cancel", widgets::ButtonStyle::Normal).clicked() {
+                if widgets::button(ui, &raised, "Cancelar", widgets::ButtonStyle::Normal).clicked()
+                {
                     actions.push(Action::CancelRemoving);
                 }
                 ui.label(
-                    RichText::new(format!("Remove \u{201c}{}\u{201d}?", account.name))
+                    RichText::new(format!("Remover \u{201c}{}\u{201d}?", account.name))
                         .font(theme::medium(14.0))
                         .color(palette.red),
                 );
                 return;
             }
             if active {
-                if widgets::button(ui, &raised, "Sign out", widgets::ButtonStyle::Normal)
-                    .on_hover_text(
-                        "Forgets the session on this computer. The account stays listed.",
-                    )
+                if widgets::button(ui, &raised, "Sair", widgets::ButtonStyle::Normal)
+                    .on_hover_text("Esquece a sessão neste computador. A conta continua na lista.")
                     .clicked()
                 {
                     actions.push(Action::SignOut);
                 }
-            } else if widgets::button(ui, &raised, "Switch", widgets::ButtonStyle::Normal).clicked()
+            } else if widgets::button(ui, &raised, "Trocar", widgets::ButtonStyle::Normal).clicked()
             {
                 actions.push(Action::SwitchAccount(account.id));
             }
-            if widgets::button(ui, &raised, "Remove", widgets::ButtonStyle::Normal).clicked() {
+            if widgets::button(ui, &raised, "Remover", widgets::ButtonStyle::Normal).clicked() {
                 actions.push(Action::MarkRemoving(account.id));
             }
-            if widgets::button(ui, &raised, "Rename", widgets::ButtonStyle::Normal).clicked() {
+            if widgets::button(ui, &raised, "Renomear", widgets::ButtonStyle::Normal).clicked() {
                 actions.push(Action::MarkRenaming {
                     id: account.id,
                     name: account.name.clone(),
@@ -190,11 +190,9 @@ fn account_row(ui: &mut Ui, state: &State, account: &Account, actions: &mut Vec<
 
 /// The `accent` pill with a check that marks the account in use.
 fn active_pill(ui: &mut Ui, palette: &Palette) {
-    let galley = ui.painter().layout_no_wrap(
-        "Active".to_owned(),
-        theme::semibold(12.0),
-        palette.on_accent,
-    );
+    let galley =
+        ui.painter()
+            .layout_no_wrap("Ativa".to_owned(), theme::semibold(12.0), palette.on_accent);
     let icon = 12.0;
     let height = 20.0;
     let width = 8.0 + icon + 4.0 + galley.size().x + 10.0;
@@ -223,24 +221,24 @@ fn active_pill(ui: &mut Ui, palette: &Palette) {
 fn add_account(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let palette = &state.palette;
     let raised = widgets::on_card(palette);
-    widgets::section(ui, palette, "Add an account", None, |ui| {
+    widgets::section(ui, palette, "Adicionar uma conta", None, |ui| {
         widgets::card(ui, palette, |ui| {
             risk(ui, palette);
             ui.add_space(16.0);
-            heading(ui, palette, "Sign in with your browser");
+            heading(ui, palette, "Entrar pelo navegador");
             note(
                 ui,
                 palette,
-                "Sign in on youtube.com in the browser first, then pick its profile here. \
-                 YouTFast reads that profile's YouTube login through yt-dlp, and again \
-                 whenever it expires.",
+                "Entre em youtube.com no navegador e selecione o perfil aqui. O YouTFast \
+                 lê a sessão do YouTube desse perfil pelo yt-dlp e a consulta novamente \
+                 quando ela expira.",
             );
             ui.add_space(8.0);
             if state.browser_profiles.is_empty() {
                 note(
                     ui,
                     palette,
-                    "No supported browser was found on this computer.",
+                    "Nenhum navegador compatível foi encontrado neste computador.",
                 );
             }
             let busy = matches!(state.account, AccountState::SigningIn);
@@ -257,7 +255,7 @@ fn add_account(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     ui,
                     palette,
                     &mut name,
-                    "Name (optional)",
+                    "Nome (opcional)",
                     egui::Id::new("account name"),
                     240.0,
                 );
@@ -265,9 +263,9 @@ fn add_account(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     actions.push(Action::SetAccountName(name));
                 }
                 let (text, color) = if taken {
-                    ("That name is already used", palette.red)
+                    ("Este nome já está em uso", palette.red)
                 } else {
-                    ("Left blank, the profile names it", palette.dim)
+                    ("Em branco, usa o nome do perfil", palette.dim)
                 };
                 ui.label(RichText::new(text).font(theme::regular(13.0)).color(color));
             });
@@ -288,7 +286,7 @@ fn add_account(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 ui,
                 &raised,
                 Some(chevron),
-                "Another browser or profile",
+                "Outro navegador ou perfil",
                 widgets::ButtonStyle::Normal,
             )
             .clicked()
@@ -301,18 +299,17 @@ fn add_account(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             }
             ui.add_space(16.0);
 
-            heading(ui, palette, "Or a cookies.txt file");
+            heading(ui, palette, "Ou um arquivo cookies.txt");
             note(
                 ui,
                 palette,
-                "Safer for the browser's own session, which YouTube otherwise keeps \
-                 changing:\n\
-                 1. Open a private window and sign in to youtube.com.\n\
-                 2. Export the cookies with an extension such as \"Get cookies.txt LOCALLY\".\n\
-                 3. Close the private window without signing out.",
+                "Ajuda a preservar a sessão do navegador, que o YouTube pode alterar:\n\
+                 1. Abra uma janela privativa e entre em youtube.com.\n\
+                 2. Exporte os cookies com uma extensão como \"Get cookies.txt LOCALLY\".\n\
+                 3. Feche a janela privativa sem sair da conta.",
             );
             ui.add_space(8.0);
-            if widgets::button(ui, &raised, "Sign in with cookies.txt", style).clicked() {
+            if widgets::button(ui, &raised, "Entrar com cookies.txt", style).clicked() {
                 actions.push(Action::AddAccountFile);
             }
         });
@@ -368,13 +365,13 @@ fn profile_row(
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if added {
                 ui.label(
-                    RichText::new("Added")
+                    RichText::new("Adicionada")
                         .font(theme::medium(13.0))
                         .color(palette.dim),
                 );
             } else if ui
                 .add_enabled_ui(!busy, |ui| {
-                    widgets::button(ui, &raised, "Sign in", widgets::ButtonStyle::Primary)
+                    widgets::button(ui, &raised, "Entrar", widgets::ButtonStyle::Primary)
                 })
                 .inner
                 .clicked()
@@ -414,14 +411,14 @@ fn advanced(ui: &mut Ui, state: &State, style: widgets::ButtonStyle, actions: &m
             ui,
             palette,
             &mut profile,
-            "Profile folder",
+            "Pasta do perfil",
             egui::Id::new("account profile"),
             160.0,
         );
         if field.changed() {
             actions.push(Action::SetAccountProfile(profile));
         }
-        let label = format!("Sign in with {}", browser_label(&state.browser));
+        let label = format!("Entrar com {}", browser_label(&state.browser));
         if widgets::button(ui, &raised, &label, style).clicked() {
             actions.push(Action::AddAccountBrowser);
         }
@@ -430,10 +427,10 @@ fn advanced(ui: &mut Ui, state: &State, style: widgets::ButtonStyle, actions: &m
     note(
         ui,
         palette,
-        "The folder is the profile's own (\"Profile 2\" for Chromium and the like, \
-         \"xxxx.default-release\" for Firefox); blank is the default profile. On Linux, \
-         Chromium, Chrome, Brave and the like keep cookies encrypted with the desktop \
-         keyring, which needs Python's secretstorage module (python-secretstorage on Arch).",
+        "Informe a pasta do perfil (\"Profile 2\" no Chromium e similares, \
+         \"xxxx.default-release\" no Firefox). Em branco, usa o perfil padrão. No Linux, \
+         Chromium, Chrome, Brave e similares criptografam os cookies usando o chaveiro \
+         da área de trabalho, que precisa do módulo Python secretstorage (python-secretstorage no Arch).",
     );
 }
 
@@ -445,17 +442,17 @@ fn risk(ui: &mut Ui, palette: &Palette) {
         Icon::Info.image(palette.secondary, 18.0).paint_at(ui, rect);
         ui.vertical(|ui| {
             ui.label(
-                RichText::new("Before you sign in")
+                RichText::new("Antes de entrar")
                     .font(theme::semibold(14.0))
                     .color(palette.text),
             );
             note(
                 ui,
                 palette,
-                "YouTube offers no sign-in for apps like this one, so YouTFast uses the \
-                 session your browser has, as yt-dlp does. Google may treat that as \
-                 automated access: the account could be asked to verify itself, signed \
-                 out, or in rare cases suspended. A secondary account is the safe choice.",
+                "O YouTube não oferece login para aplicativos como este. Por isso, o YouTFast \
+                 usa a sessão do navegador, como o yt-dlp. O Google pode considerar isso \
+                 um acesso automatizado e pedir uma verificação, encerrar a sessão ou, \
+                 em casos raros, suspender a conta. Uma conta secundária reduz esse risco.",
             );
         });
     });
@@ -464,22 +461,22 @@ fn risk(ui: &mut Ui, palette: &Palette) {
 /// What works on this computer alone, and the Takeout import.
 fn without_account(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let palette = &state.palette;
-    widgets::section(ui, palette, "Without an account", None, |ui| {
+    widgets::section(ui, palette, "Sem uma conta", None, |ui| {
         widgets::card(ui, palette, |ui| {
             note(
                 ui,
                 palette,
-                "Subscriptions, history and Watch later also work on this computer alone, \
-                 with no risk to any account. Bring them over from Google Takeout: choose \
-                 YouTube and YouTube Music, with JSON as the history format, then import \
-                 subscriptions.csv and watch-history.json.",
+                "Inscrições, histórico e Assistir mais tarde também funcionam apenas \
+                 neste computador. Para importá-los do Google Takeout, selecione YouTube \
+                 e YouTube Music, com o histórico em JSON, e importe subscriptions.csv \
+                 e watch-history.json.",
             );
             ui.add_space(8.0);
             let raised = widgets::on_card(palette);
             if widgets::button(
                 ui,
                 &raised,
-                "Import from Google Takeout",
+                "Importar do Google Takeout",
                 widgets::ButtonStyle::Normal,
             )
             .clicked()

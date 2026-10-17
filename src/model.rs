@@ -16,6 +16,8 @@ pub struct Video {
     /// The channel's `UC…` id, which its page and subscribing need.
     #[serde(default)]
     pub channel_id: Option<String>,
+    #[serde(default)]
+    pub channel_avatar: Option<String>,
     /// Seconds; `None` for live streams and when unknown (RSS has none).
     #[serde(default)]
     pub duration: Option<f64>,
@@ -42,6 +44,7 @@ impl Video {
             title: String::new(),
             channel: None,
             channel_id: None,
+            channel_avatar: None,
             duration: None,
             views: None,
             live: false,
@@ -68,6 +71,10 @@ impl Video {
         }
         self.channel = self.channel.take().or_else(|| other.channel.clone());
         self.channel_id = self.channel_id.take().or_else(|| other.channel_id.clone());
+        self.channel_avatar = self
+            .channel_avatar
+            .take()
+            .or_else(|| other.channel_avatar.clone());
         self.duration = self.duration.or(other.duration);
         self.views = self.views.or(other.views);
         self.published_at = self.published_at.or(other.published_at);
@@ -175,15 +182,15 @@ impl Segment {
     /// The category as the skip button names it.
     pub fn label(&self) -> &'static str {
         match self.category.as_str() {
-            "sponsor" => "sponsor",
-            "selfpromo" => "self-promotion",
-            "interaction" => "reminder to subscribe",
-            "intro" => "intro",
-            "outro" => "credits",
-            "preview" => "preview",
-            "music_offtopic" => "non-music part",
-            "filler" => "tangent",
-            _ => "segment",
+            "sponsor" => "patrocínio",
+            "selfpromo" => "autopromoção",
+            "interaction" => "pedido de interação",
+            "intro" => "introdução",
+            "outro" => "encerramento",
+            "preview" => "prévia",
+            "music_offtopic" => "trecho sem música",
+            "filler" => "digressão",
+            _ => "trecho",
         }
     }
 }
@@ -289,6 +296,7 @@ pub struct ChannelHeader {
     /// `@handle`
     pub handle: Option<String>,
     pub avatar: Option<String>,
+    pub banner: Option<String>,
     pub subscribers: Option<u64>,
     pub videos: Option<u64>,
     /// Whether the channel has a Shorts tab.
@@ -436,11 +444,11 @@ impl FeedFilter {
 
     pub fn label(self) -> &'static str {
         match self {
-            FeedFilter::ForYou => "for you",
-            FeedFilter::All => "all",
-            FeedFilter::Today => "today",
-            FeedFilter::Unwatched => "unwatched",
-            FeedFilter::Live => "live",
+            Self::ForYou => "Para você",
+            Self::All => "Todos",
+            Self::Today => "Hoje",
+            Self::Unwatched => "Não assistidos",
+            Self::Live => "Ao vivo",
         }
     }
 
@@ -535,11 +543,17 @@ pub enum View {
 /// applies them after the frame.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action {
+    SetSearchOptions(crate::innertube::SearchOptions),
+    SetChannelOrder(crate::innertube::ChannelOrder),
+    SetHistoryQuery(String),
+    RemoveHistory(String),
+    PlayPlaylist,
     /// A search, or a YouTube link to open.
     Search(String),
     Open(Video),
     /// Goes back to where the current page was opened from.
     Back,
+    Forward,
     Navigate(View),
     OpenChannel(Channel),
     OpenPlaylist {
@@ -564,6 +578,18 @@ pub enum Action {
     ExitFullscreen,
     /// The watch page between its usual layout and theater mode.
     ToggleTheater,
+    ToggleMiniPlayer,
+    SeekChapter(bool),
+    RetryPlayback,
+    ToggleLoop,
+    MoveQueue {
+        from: usize,
+        to: usize,
+    },
+    SetCaptionScale(f64),
+    SetCaptionBackground(bool),
+    LoadExtras,
+    ToggleTranscript,
     SetQuality(Quality),
     SetTheme(crate::settings::ThemeChoice),
     /// Subscribes on this device, or unsubscribes.

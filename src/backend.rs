@@ -51,7 +51,14 @@ pub enum Slot {
 }
 
 pub enum Request {
-    Search(String),
+    Search {
+        query: String,
+        options: innertube::SearchOptions,
+    },
+    MoreSearch {
+        more: innertube::More,
+        kind: innertube::SearchKind,
+    },
     /// The home feed: the account's when signed in, plus these channels'
     /// RSS.
     Feed {
@@ -69,6 +76,7 @@ pub enum Request {
     ChannelTab {
         id: String,
         tab: crate::model::ChannelTab,
+        order: innertube::ChannelOrder,
     },
     /// A channel page's About pane.
     ChannelAbout(String),
@@ -107,6 +115,15 @@ pub enum Request {
 }
 
 pub enum Payload {
+    Search {
+        items: PageItems,
+        more: Option<innertube::More>,
+    },
+    PlaylistPage {
+        details: innertube::PlaylistDetails,
+        items: Vec<Video>,
+        more: Option<innertube::More>,
+    },
     Videos(Vec<Video>),
     /// The feed's first page and its continuation.
     Feed {
@@ -175,6 +192,16 @@ pub enum CommentsKey {
 }
 
 pub enum Command {
+    LoadPlaylistMore {
+        generation: u64,
+        id: String,
+        more: crate::innertube::More,
+    },
+    LoadExtras {
+        generation: u64,
+        id: String,
+        language: String,
+    },
     Load {
         slot: Slot,
         generation: u64,
@@ -255,6 +282,15 @@ pub enum SignInMethod {
 }
 
 pub enum Event {
+    PlayingPlaylist {
+        generation: u64,
+        id: String,
+        result: Result<(Vec<Video>, Option<crate::innertube::More>), String>,
+    },
+    Extras {
+        generation: u64,
+        result: Result<crate::video_extras::Extras, String>,
+    },
     Loaded {
         slot: Slot,
         generation: u64,
@@ -356,6 +392,12 @@ impl Command {
 impl Event {
     fn sanitize(mut self) -> Self {
         match &mut self {
+            Self::PlayingPlaylist {
+                result: Err(error), ..
+            } => *error = crate::safe_error(error),
+            Self::Extras {
+                result: Err(error), ..
+            } => *error = crate::safe_error(error),
             Self::Loaded {
                 result: Err(error), ..
             }
@@ -656,6 +698,18 @@ async fn handle(command: Command, context: Context) {
                 previous.abort();
             }
         }
+        Command::LoadPlaylistMore {
+            generation,
+            id,
+            more,
+        } => {
+            let result = innertube::more_videos(&context.rp, &more).await;
+            context.send(Event::PlayingPlaylist {
+                generation,
+                id,
+                result,
+            });
+        }
         Command::LoadDetails { generation, id } => {
             let result = innertube::details(&context.rp, &id).await;
             if let Err(error) = &result {
@@ -665,6 +719,14 @@ async fn handle(command: Command, context: Context) {
                 generation,
                 result: Box::new(result),
             });
+        }
+        Command::LoadExtras {
+            generation,
+            id,
+            language,
+        } => {
+            let result = crate::video_extras::load(&context.rp, &id, &language).await;
+            context.send(Event::Extras { generation, result });
         }
         Command::LoadComments {
             generation,
@@ -960,9 +1022,26 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
     let rp = &context.rp;
     let text = innertube::text;
     Ok(match request {
-        Request::Search(query) => {
-            let (items, more) = innertube::search(rp, &query).await?;
-            Payload::VideoList { items, more }
+        Request::Search { query, options } => {
+            let (items, more) = innertube::search_filtered(rp, &query, options).await?;
+            Payload::Search { items, more }
+        }
+        Request::MoreSearch { more, kind } => {
+            let (items, more) = match kind {
+                innertube::SearchKind::Videos => {
+                    let (items, more) = innertube::more_videos(rp, &more).await?;
+                    (PageItems::Videos(items), more)
+                }
+                innertube::SearchKind::Channels => {
+                    let (items, more) = innertube::more_channels(rp, &more).await?;
+                    (PageItems::Channels(items), more)
+                }
+                innertube::SearchKind::Playlists => {
+                    let (items, more) = innertube::more_playlists(rp, &more).await?;
+                    (PageItems::Playlists(items), more)
+                }
+            };
+            Payload::More { items, more }
         }
         Request::Feed { channels, account } => {
             let (videos, more) = innertube::feed(rp, channels, account, &context.rss).await?;
@@ -1046,10 +1125,14 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
             Payload::Playlists { items, more }
         }
         Request::Playlist(id) => {
-            let (items, more) = innertube::playlist_videos(rp, &id).await.map_err(text)?;
-            Payload::VideoList { items, more }
+            let (details, items, more) = innertube::playlist_details(rp, &id).await?;
+            Payload::PlaylistPage {
+                details,
+                items,
+                more,
+            }
         }
-        Request::ChannelTab { id, tab } => match tab {
+        Request::ChannelTab { id, tab, order } => match tab {
             crate::model::ChannelTab::Playlists => {
                 let (header, items, more) = innertube::channel_playlists_page(rp, &id).await?;
                 Payload::ChannelPage {
@@ -1059,7 +1142,7 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
                 }
             }
             _ => {
-                let (header, items, more) = innertube::channel_tab(rp, &id, &tab).await?;
+                let (header, items, more) = innertube::channel_tab(rp, &id, &tab, order).await?;
                 Payload::ChannelPage {
                     header,
                     items: PageItems::Videos(items),
@@ -1188,6 +1271,166 @@ fn signed_in(context: &Context, account: &Account) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_requests_keep_filters_kind_generation_and_session_epoch() {
+        let (backend, _outgoing, mut incoming) = scoped_backend(7);
+        for &kind in innertube::SearchKind::ALL {
+            let options = innertube::SearchOptions {
+                kind,
+                order: innertube::SearchOrder::Date,
+                date: innertube::SearchDate::Day,
+                length: innertube::SearchLength::Medium,
+                live: true,
+            };
+            backend.send(Command::Load {
+                slot: Slot::Search,
+                generation: 42,
+                request: Request::Search {
+                    query: "Consulta sintética".into(),
+                    options,
+                },
+            });
+            let Ok((
+                epoch,
+                Command::Load {
+                    slot,
+                    generation,
+                    request:
+                        Request::Search {
+                            query,
+                            options: received,
+                        },
+                },
+            )) = incoming.try_recv()
+            else {
+                panic!("search request lost")
+            };
+            assert_eq!((epoch, slot, generation), (7, Slot::Search, 42));
+            assert_eq!(query, "Consulta sintética");
+            assert_eq!(received, options);
+        }
+    }
+
+    #[test]
+    fn account_changes_drop_search_results_and_playing_playlist_pages_from_old_sessions() {
+        let (backend, outgoing, _incoming) = scoped_backend(2);
+        for epoch in [1, 2] {
+            for &kind in innertube::SearchKind::ALL {
+                let items = match kind {
+                    innertube::SearchKind::Videos => {
+                        PageItems::Videos(vec![Video::from_id("synthetic".into())])
+                    }
+                    innertube::SearchKind::Channels => {
+                        PageItems::Channels(vec![Channel::default()])
+                    }
+                    innertube::SearchKind::Playlists => PageItems::Playlists(vec![]),
+                };
+                outgoing
+                    .send((
+                        epoch,
+                        Event::Loaded {
+                            slot: Slot::Search,
+                            generation: epoch,
+                            result: Ok(Payload::Search { items, more: None }),
+                        },
+                    ))
+                    .unwrap();
+            }
+            outgoing
+                .send((
+                    epoch,
+                    Event::PlayingPlaylist {
+                        generation: 1,
+                        id: "playlist".into(),
+                        result: Ok((vec![Video::from_id("synthetic".into())], None)),
+                    },
+                ))
+                .unwrap();
+        }
+        let events = backend.poll();
+        assert_eq!(events.len(), 4);
+        assert!(
+            events
+                .iter()
+                .filter_map(|event| match event {
+                    Event::Loaded { generation, .. } => Some(*generation),
+                    _ => None,
+                })
+                .all(|generation| generation == 2)
+        );
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event, Event::PlayingPlaylist { .. }))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn authentication_failure_invalidates_the_entire_search_and_playlist_batch() {
+        let (backend, outgoing, mut incoming) = scoped_backend(3);
+        outgoing
+            .send((
+                3,
+                Event::Loaded {
+                    slot: Slot::Search,
+                    generation: 1,
+                    result: Ok(Payload::Search {
+                        items: PageItems::Channels(vec![Channel::default()]),
+                        more: None,
+                    }),
+                },
+            ))
+            .unwrap();
+        outgoing
+            .send((3, Event::SessionExpired("Sessão expirada".into())))
+            .unwrap();
+        outgoing
+            .send((
+                3,
+                Event::PlayingPlaylist {
+                    generation: 1,
+                    id: "playlist".into(),
+                    result: Ok((Vec::new(), None)),
+                },
+            ))
+            .unwrap();
+        let events = backend.poll();
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], Event::SessionExpired(_)));
+        assert!(matches!(incoming.try_recv(), Ok((4, Command::SignOut))));
+    }
+
+    #[test]
+    fn search_and_playing_playlist_failures_are_controlled_before_the_interface() {
+        let error = "Cookie: SAPISID=synthetic-secret https://youtube.com/private";
+        let events = [
+            Event::Loaded {
+                slot: Slot::Search,
+                generation: 1,
+                result: Err(error.into()),
+            },
+            Event::PlayingPlaylist {
+                generation: 1,
+                id: "playlist".into(),
+                result: Err(error.into()),
+            },
+        ];
+        for event in events {
+            let message = match event.sanitize() {
+                Event::Loaded {
+                    result: Err(error), ..
+                }
+                | Event::PlayingPlaylist {
+                    result: Err(error), ..
+                } => error,
+                _ => panic!("expected a controlled failure"),
+            };
+            assert!(!message.contains("synthetic-secret") && !message.contains("https://"));
+        }
+    }
 
     type ScopedBackend = (
         Backend,

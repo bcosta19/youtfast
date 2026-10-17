@@ -5,7 +5,6 @@
 
 use egui::{Align2, CornerRadius, Rect, RichText, Sense, Ui, pos2, vec2};
 
-use super::notifications::capitalized;
 use super::{results, widgets};
 use crate::app::{AccountState, Page, State};
 use crate::model::{Action, Channel, FeedFilter, Fetch, Listing, Source, Video, View};
@@ -23,10 +22,16 @@ fn controls(
     ui.horizontal(|ui| {
         if state.signed_in() {
             let source = state.source();
-            if widgets::chip(ui, &state.palette, "Account", source == Source::Account).clicked() {
+            if widgets::chip(ui, &state.palette, "Conta", source == Source::Account).clicked() {
                 actions.push(Action::SetSource(Source::Account));
             }
-            if widgets::chip(ui, &state.palette, "This device", source == Source::Device).clicked()
+            if widgets::chip(
+                ui,
+                &state.palette,
+                "Este dispositivo",
+                source == Source::Device,
+            )
+            .clicked()
             {
                 actions.push(Action::SetSource(Source::Device));
             }
@@ -47,12 +52,12 @@ pub fn home(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         if follows_nothing {
             results::centered(ui, |ui| {
                 ui.label(
-                    RichText::new("Your feed is empty")
+                    RichText::new("Seu feed está vazio")
                         .font(theme::semibold(16.0))
                         .color(state.palette.text),
                 );
                 ui.label(
-                    RichText::new("Subscribe to channels to fill your feed")
+                    RichText::new("Inscreva-se em canais para acompanhar novos vídeos")
                         .font(theme::regular(14.0))
                         .color(state.palette.secondary),
                 );
@@ -60,7 +65,7 @@ pub fn home(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 if widgets::button(
                     ui,
                     &state.palette,
-                    "Import from Google Takeout",
+                    "Importar do Google Takeout",
                     widgets::ButtonStyle::Normal,
                 )
                 .clicked()
@@ -68,7 +73,7 @@ pub fn home(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     actions.push(Action::ImportTakeout);
                 }
                 ui.add_space(8.0);
-                if widgets::button(ui, &state.palette, "Sign in", widgets::ButtonStyle::Primary)
+                if widgets::button(ui, &state.palette, "Entrar", widgets::ButtonStyle::Primary)
                     .clicked()
                 {
                     actions.push(Action::Navigate(View::Account));
@@ -106,7 +111,7 @@ fn feed_chips(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             if widgets::chip(
                 ui,
                 &state.palette,
-                &capitalized(filter.label()),
+                filter.label(),
                 state.feed_filter == filter,
             )
             .clicked()
@@ -134,7 +139,7 @@ fn feed_grid(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         Listing::Loading => results::loading(ui, state, "feed"),
         Listing::Failed(error) => results::failed(ui, state, error, actions),
         Listing::Ready(videos) if videos.is_empty() => {
-            results::nothing(ui, state, "Nothing from your subscriptions yet")
+            results::nothing(ui, state, "Suas inscrições ainda não têm novos vídeos")
         }
         Listing::Ready(_) => {
             feed_chips(ui, state, actions);
@@ -145,7 +150,7 @@ fn feed_grid(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 .show(ui, |ui| {
                     shorts_shelf(ui, state, actions);
                     if videos.is_empty() {
-                        results::nothing(ui, state, "No video passes this chip");
+                        results::nothing(ui, state, "Nenhum vídeo corresponde a este filtro");
                     }
                     let gap = 16.0;
                     let (columns, width) =
@@ -165,7 +170,14 @@ fn feed_grid(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                         let heading = if day == "undated" {
                             String::new()
                         } else {
-                            capitalized(day)
+                            match day {
+                                "today" => "Hoje",
+                                "yesterday" => "Ontem",
+                                "this week" => "Esta semana",
+                                "this month" => "Este mês",
+                                _ => "Anteriormente",
+                            }
+                            .to_owned()
                         };
                         widgets::section(ui, &state.palette, &heading, None, |ui| {
                             let selected = (state.cursor_moved
@@ -210,18 +222,18 @@ fn for_you(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     feed_chips(ui, state, actions);
     match &state.for_you {
         Listing::Idle => {}
-        Listing::Loading => results::loading(ui, state, "recommendations"),
+        Listing::Loading => results::loading(ui, state, "recomendações"),
         Listing::Failed(error) => results::failed(ui, state, error, actions),
         Listing::Ready(videos) if videos.is_empty() => results::nothing(
             ui,
             state,
-            "Watch a few videos and recommendations show up here",
+            "Assista a alguns vídeos para receber recomendações aqui",
         ),
         Listing::Ready(_) => {
             let source = if state.for_you_from_account {
-                "Recommended by YouTube for your account"
+                "Recomendado pelo YouTube para sua conta"
             } else {
-                "Picked here from the videos related to what you watched"
+                "Recomendado a partir dos vídeos relacionados ao que você assistiu"
             };
             ui.label(
                 RichText::new(source)
@@ -287,10 +299,7 @@ fn feed_card(
     if index == videos.len() - 1 && ui.is_rect_visible(response.rect) {
         actions.push(Action::LoadMore);
     }
-    if response.clicked() {
-        actions.push(Action::Open(video.clone()));
-    }
-    results::video_menu(&response, state, video, actions);
+    widgets::video_interactions(ui, &response, state, video, actions);
 }
 
 /// The Shorts shelf above the feed's grid, when there are shorts.
@@ -358,10 +367,7 @@ fn short_card(ui: &mut Ui, state: &State, video: &Video, actions: &mut Vec<Actio
             palette.secondary,
         );
     }
-    if response.clicked() {
-        actions.push(Action::Open(video.clone()));
-    }
-    results::video_menu(&response, state, video, actions);
+    widgets::video_interactions(ui, &response, state, video, actions);
 }
 
 pub fn subscriptions(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
@@ -370,15 +376,17 @@ pub fn subscriptions(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             Source::Account => state.account_subscriptions.items().len(),
             Source::Device => state.library.subscriptions.len(),
         };
-        results::title(ui, state, "Subscriptions", Some(count));
+        results::title(ui, state, "Inscrições", Some(count));
         controls(ui, state, actions, |ui, actions| {
             if widgets::button(
                 ui,
                 &state.palette,
-                "Import from Takeout",
+                "Importar do Takeout",
                 widgets::ButtonStyle::Normal,
             )
-            .on_hover_text("Adds the channels in a Takeout subscriptions.csv to this device")
+            .on_hover_text(
+                "Adiciona a este dispositivo os canais do arquivo subscriptions.csv do Takeout",
+            )
             .clicked()
             {
                 actions.push(Action::ImportTakeout);
@@ -390,7 +398,7 @@ pub fn subscriptions(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     ui,
                     state,
                     &state.account_subscriptions,
-                    "The account's subscriptions",
+                    "As inscrições da conta",
                     false,
                     actions,
                 );
@@ -405,7 +413,7 @@ pub fn subscriptions(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             Source::Device if state.library.subscriptions.is_empty() => results::nothing(
                 ui,
                 state,
-                "Subscribe from a video's page, or import a Takeout",
+                "Inscreva-se pela página de um vídeo ou importe um arquivo do Takeout",
             ),
             Source::Device => channel_rows(ui, state, &state.library.subscriptions, true, actions),
         }
@@ -423,14 +431,14 @@ fn channel_listing(
 ) {
     match listing {
         Listing::Idle => {}
-        Listing::Loading => results::loading(ui, state, "subscriptions"),
+        Listing::Loading => results::loading(ui, state, "inscrições"),
         Listing::Failed(error) => results::failed(ui, state, error, actions),
         Listing::Ready(channels) if channels.is_empty() => results::nothing(ui, state, empty),
         Listing::Ready(channels) => channel_rows(ui, state, channels, removable, actions),
     }
 }
 
-fn channel_rows(
+pub(super) fn channel_rows(
     ui: &mut Ui,
     state: &State,
     channels: &[Channel],
@@ -440,23 +448,34 @@ fn channel_rows(
     egui::ScrollArea::vertical()
         .auto_shrink(false)
         .show(ui, |ui| {
-            results::virtual_rows(
-                ui,
-                64.0,
-                channels.len(),
-                state.cursor_moved.then_some(state.cursor),
-                |ui, index| {
-                    channel_row(
-                        ui,
-                        state,
-                        &channels[index],
-                        index == state.cursor,
-                        removable,
-                        actions,
-                    );
-                },
-            );
+            channel_rows_content(ui, state, channels, removable, actions);
         });
+}
+
+/// Draw just the rows so a caller can keep its continuation in the same scroll area.
+pub(super) fn channel_rows_content(
+    ui: &mut Ui,
+    state: &State,
+    channels: &[Channel],
+    removable: bool,
+    actions: &mut Vec<Action>,
+) {
+    results::virtual_rows(
+        ui,
+        64.0,
+        channels.len(),
+        state.cursor_moved.then_some(state.cursor),
+        |ui, index| {
+            channel_row(
+                ui,
+                state,
+                &channels[index],
+                index == state.cursor,
+                removable,
+                actions,
+            );
+        },
+    );
 }
 
 /// A channel as a rounded row: its round avatar, its name in semibold,
@@ -524,17 +543,17 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         } else {
             state.account_history.items().len()
         };
-        results::title(ui, state, "History", Some(count));
+        results::title(ui, state, "Histórico", Some(count));
         controls(ui, state, actions, |ui, actions| {
             if device
                 && !state.library.history.is_empty()
                 && widgets::button(
                     ui,
                     &state.palette,
-                    "Clear history",
+                    "Limpar histórico",
                     widgets::ButtonStyle::Normal,
                 )
-                .on_hover_text("Clear this computer's history and resume positions")
+                .on_hover_text("Limpar o histórico e as posições de retomada deste dispositivo")
                 .clicked()
             {
                 actions.push(Action::ClearHistory);
@@ -543,10 +562,10 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         if !device {
             match &state.account_history {
                 Listing::Idle => {}
-                Listing::Loading => results::loading(ui, state, "history"),
+                Listing::Loading => results::loading(ui, state, "histórico"),
                 Listing::Failed(error) => results::failed(ui, state, error, actions),
                 Listing::Ready(rows) if rows.is_empty() => {
-                    results::nothing(ui, state, "The account's watch history")
+                    results::nothing(ui, state, "O histórico de exibição da conta")
                 }
                 Listing::Ready(rows) => {
                     egui::ScrollArea::vertical()
@@ -583,10 +602,7 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                                 if selected && state.cursor_moved {
                                     response.clone().scroll_to_me(None);
                                 }
-                                if response.clicked() {
-                                    actions.push(Action::Open(video.clone()));
-                                }
-                                results::video_menu(&response, state, video, actions);
+                                widgets::video_interactions(ui, &response, state, video, actions);
                             }
                         });
                 }
@@ -601,17 +617,38 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             return;
         }
         if state.library.history.is_empty() {
-            results::nothing(ui, state, "Videos you watch appear here");
+            results::nothing(ui, state, "Os vídeos que você assistir aparecerão aqui");
+            return;
+        }
+        let mut query = state.history_query.clone();
+        widgets::search_field(
+            ui,
+            &state.palette,
+            &mut query,
+            "Pesquisar no histórico deste dispositivo",
+            egui::Id::new("history search"),
+            480.0_f32.min(ui.available_width()),
+        );
+        if query != state.history_query {
+            actions.push(Action::SetHistoryQuery(query));
+        }
+        ui.add_space(12.0);
+        let matching: Vec<_> = state
+            .library
+            .history_matching(&state.history_query)
+            .collect();
+        if matching.is_empty() {
+            results::nothing(ui, state, "Nenhum vídeo encontrado no histórico");
             return;
         }
         let now = util::now();
         egui::ScrollArea::vertical()
             .auto_shrink(false)
             .show(ui, |ui| {
-                for (index, watched) in state.library.history.iter().enumerate() {
-                    let mut note = format!("Watched {}", util::ago(watched.at, now));
+                for (index, watched) in matching.into_iter().enumerate() {
+                    let mut note = format!("Assistido {}", util::ago(watched.at, now));
                     if watched.position > 0.0 {
-                        note.push_str(&format!(" · left at {}", util::duration(watched.position)));
+                        note.push_str(&format!(" · parou em {}", util::duration(watched.position)));
                     }
                     let video = &watched.video;
                     let fraction = video
@@ -619,21 +656,41 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                         .map(|duration| watched.position / duration)
                         .map(|f| f as f32);
                     let selected = index == state.cursor;
-                    let response = widgets::video_row(
-                        ui,
-                        &state.palette,
-                        video,
-                        Some(&note),
-                        fraction,
-                        selected,
-                    );
-                    if selected && state.cursor_moved {
-                        response.clone().scroll_to_me(None);
-                    }
-                    if response.clicked() {
-                        actions.push(Action::Open(video.clone()));
-                    }
-                    results::video_menu(&response, state, video, actions);
+                    ui.push_id(&video.id, |ui| {
+                        ui.horizontal(|ui| {
+                            let width = (ui.available_width() - 44.0).max(0.0);
+                            ui.allocate_ui_with_layout(
+                                egui::vec2(width, 106.0),
+                                egui::Layout::top_down(egui::Align::Min),
+                                |ui| {
+                                    let response = widgets::video_row(
+                                        ui,
+                                        &state.palette,
+                                        video,
+                                        Some(&note),
+                                        fraction,
+                                        selected,
+                                    );
+                                    if selected && state.cursor_moved {
+                                        response.clone().scroll_to_me(None);
+                                    }
+                                    widgets::video_interactions(
+                                        ui, &response, state, video, actions,
+                                    );
+                                },
+                            );
+                            if widgets::icon_button(
+                                ui,
+                                crate::icons::Icon::Close,
+                                32.0,
+                                "Remover do histórico deste dispositivo",
+                            )
+                            .clicked()
+                            {
+                                actions.push(Action::RemoveHistory(video.id.clone()));
+                            }
+                        });
+                    });
                 }
             });
     });
@@ -645,7 +702,7 @@ pub fn watch_later(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             Source::Account => state.account_watch_later.items().len(),
             Source::Device => state.library.watch_later.len(),
         };
-        results::title(ui, state, "Watch later", Some(count));
+        results::title(ui, state, "Assistir mais tarde", Some(count));
         controls(ui, state, actions, |_, _| {});
         match state.source() {
             Source::Account => {
@@ -653,7 +710,7 @@ pub fn watch_later(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     ui,
                     state,
                     &state.account_watch_later,
-                    "The account's Watch later",
+                    "Os vídeos para assistir mais tarde da conta",
                     actions,
                 );
                 widgets::more_row(
@@ -665,7 +722,7 @@ pub fn watch_later(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 );
             }
             Source::Device if state.library.watch_later.is_empty() => {
-                results::nothing(ui, state, "Save videos from their page")
+                results::nothing(ui, state, "Salve vídeos pela página de exibição")
             }
             Source::Device => results::video_rows(ui, state, &state.library.watch_later, actions),
         }
@@ -682,7 +739,7 @@ fn rows_listing(
 ) {
     match listing {
         Listing::Idle => {}
-        Listing::Loading => results::loading(ui, state, "videos"),
+        Listing::Loading => results::loading(ui, state, "vídeos"),
         Listing::Failed(error) => results::failed(ui, state, error, actions),
         Listing::Ready(videos) if videos.is_empty() => results::nothing(ui, state, empty),
         Listing::Ready(videos) => results::video_rows(ui, state, videos, actions),
@@ -694,9 +751,9 @@ pub fn liked(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         results::videos(
             ui,
             state,
-            "Liked videos",
+            "Vídeos marcados como gostei",
             &state.liked,
-            "The account's liked videos",
+            "Os vídeos marcados como gostei da conta",
             actions,
         );
         widgets::more_row(
@@ -717,7 +774,7 @@ pub fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             Listing::Loading => results::loading(ui, state, "playlists"),
             Listing::Failed(error) => results::failed(ui, state, error, actions),
             Listing::Ready(playlists) if playlists.is_empty() => {
-                results::nothing(ui, state, "The account's playlists")
+                results::nothing(ui, state, "As playlists da conta")
             }
             Listing::Ready(playlists) => {
                 egui::ScrollArea::vertical()
@@ -768,15 +825,111 @@ pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         let Some(Page::Playlist { name, .. }) = &state.page else {
             return;
         };
-        results::title(ui, state, name, Some(state.page_videos.items().len()));
-        rows_listing(ui, state, &state.page_videos, "No videos here", actions);
-        widgets::more_row(
-            ui,
-            &state.palette,
-            &state.page_more_state,
-            state.page_more.is_some(),
-            actions,
-        );
+        let details = state.playlist_details.as_ref();
+        let title = details
+            .filter(|details| !details.name.is_empty())
+            .map(|details| details.name.as_str())
+            .unwrap_or(name);
+        ui.horizontal_top(|ui| {
+            if let Some(url) = details.and_then(|details| details.thumbnail.as_deref()) {
+                let width = (ui.available_width() * 0.3).clamp(96.0, 240.0);
+                ui.add(
+                    super::images::remote(ui, url)
+                        .fit_to_exact_size(vec2(width, width * 9.0 / 16.0))
+                        .corner_radius(egui::CornerRadius::same(theme::RADIUS)),
+                );
+                ui.add_space(12.0);
+            }
+            ui.vertical(|ui| {
+                ui.label(
+                    RichText::new(title)
+                        .font(theme::bold(24.0))
+                        .color(state.palette.text),
+                );
+                if let Some(details) = details {
+                    let mut metadata = Vec::new();
+                    if let Some(channel) = &details.channel {
+                        metadata.push(channel.clone());
+                    }
+                    if let Some(count) = details.videos {
+                        metadata.push(format!("{} vídeos", util::thousands(count)));
+                    }
+                    ui.label(RichText::new(metadata.join(" · ")).color(state.palette.secondary));
+                    if !details.description.is_empty() {
+                        egui::CollapsingHeader::new("Descrição").show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new(&details.description)
+                                    .color(state.palette.secondary),
+                            );
+                        });
+                    }
+                }
+                if !state.page_videos.items().is_empty()
+                    && widgets::button(
+                        ui,
+                        &state.palette,
+                        "Reproduzir tudo",
+                        widgets::ButtonStyle::Primary,
+                    )
+                    .clicked()
+                {
+                    actions.push(Action::PlayPlaylist);
+                }
+            });
+        });
+        ui.add_space(16.0);
+        match &state.page_videos {
+            Listing::Ready(videos) => {
+                egui::ScrollArea::vertical()
+                    .auto_shrink(false)
+                    .show(ui, |ui| {
+                        if videos.is_empty() {
+                            results::nothing(ui, state, "Nenhum vídeo nesta playlist");
+                        }
+                        results::virtual_rows(
+                            ui,
+                            106.0,
+                            videos.len(),
+                            state.cursor_moved.then_some(state.cursor),
+                            |ui, index| {
+                                let video = &videos[index];
+                                let playing = state
+                                    .watching
+                                    .as_ref()
+                                    .is_some_and(|playing| playing.id == video.id);
+                                let note = if playing {
+                                    format!("{} · Em reprodução", index + 1)
+                                } else {
+                                    format!("{}", index + 1)
+                                };
+                                let response = widgets::video_row(
+                                    ui,
+                                    &state.palette,
+                                    video,
+                                    Some(&note),
+                                    widgets::watched(&state.library, video),
+                                    index == state.cursor || playing,
+                                );
+                                widgets::video_interactions(ui, &response, state, video, actions);
+                            },
+                        );
+                        widgets::more_row(
+                            ui,
+                            &state.palette,
+                            &state.page_more_state,
+                            state.page_more.is_some(),
+                            actions,
+                        );
+                    });
+            }
+            _ => rows_listing(
+                ui,
+                state,
+                &state.page_videos,
+                "Nenhum vídeo nesta playlist",
+                actions,
+            ),
+        }
     });
 }
 

@@ -16,6 +16,10 @@ fn default_volume() -> f64 {
     100.0
 }
 
+fn default_caption_scale() -> f64 {
+    1.0
+}
+
 /// Which colours the interface draws with.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -79,6 +83,10 @@ pub struct Settings {
     /// off. A video without that language shows none.
     #[serde(default)]
     pub captions: Option<String>,
+    #[serde(default = "default_caption_scale")]
+    pub caption_scale: f64,
+    #[serde(default)]
+    pub caption_background: bool,
     /// Skip sponsored segments through SponsorBlock (sponsor.ajay.app),
     /// asked by a prefix of the id's hash so the video is not named.
     #[serde(default)]
@@ -114,6 +122,8 @@ impl Default for Settings {
             sidebar_collapsed: false,
             autoplay: on(),
             captions: None,
+            caption_scale: 1.0,
+            caption_background: false,
             sponsorblock: false,
         }
     }

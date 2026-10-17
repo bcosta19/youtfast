@@ -100,17 +100,85 @@ pub fn next_video<'a>(
         return Some(first);
     }
     let id = watching.map(|video| video.id.as_str());
+    let shorts = watching.is_some_and(|video| video.short);
+    let suitable = |video: &&Video| !shorts || video.short;
     let after = match up_next
         .iter()
         .position(|video| Some(video.id.as_str()) == id)
     {
-        Some(index) => up_next.get(index + 1),
-        None => up_next.first(),
+        Some(index) => up_next.iter().skip(index + 1).find(suitable),
+        None => up_next.iter().find(suitable),
     };
-    after.or_else(|| related.iter().find(|video| Some(video.id.as_str()) != id))
+    after.or_else(|| {
+        related
+            .iter()
+            .find(|video| Some(video.id.as_str()) != id && (!shorts || video.short))
+    })
+}
+
+/// The item before the current video in its source list. All controls use
+/// this same lookup, including the desktop's media controls.
+pub fn previous_video<'a>(watching: Option<&Video>, up_next: &'a [Video]) -> Option<&'a Video> {
+    let watching = watching?;
+    let id = &watching.id;
+    let index = up_next.iter().position(|video| &video.id == id)?;
+    up_next[..index]
+        .iter()
+        .rev()
+        .find(|video| !watching.short || video.short)
+}
+
+/// Move one queued item without duplicating or dropping any other item.
+fn reorder_queue(queue: &mut Vec<Video>, from: usize, to: usize) {
+    if from < queue.len() && to < queue.len() && from != to {
+        let video = queue.remove(from);
+        queue.insert(to, video);
+    }
 }
 
 impl App {
+    pub(super) fn move_queue(&mut self, from: usize, to: usize) {
+        reorder_queue(&mut self.state.queue, from, to);
+    }
+
+    /// Retry the same video without making a second history entry or
+    /// replacing its queue/source list.
+    pub(super) fn retry_playback(&mut self) {
+        let Some(video) = &self.state.watching else {
+            return;
+        };
+        if let Some(player) = &mut self.player {
+            let position = player.status().position.max(0.0);
+            self.state.player_error = player
+                .reload(&video.url(), position, false)
+                .err()
+                .map(|error| error.to_string());
+        }
+    }
+
+    pub(super) fn toggle_loop(&mut self) {
+        self.state.playback_loop = !self.state.playback_loop;
+        let looping = self.state.playback_loop || self.state.watching_short();
+        self.with_player(|player| player.set_looping(looping));
+    }
+
+    pub(super) fn set_caption_scale(&mut self, scale: f64) {
+        self.state.settings.caption_scale = scale.clamp(0.5, 2.0);
+        self.apply_caption_style();
+    }
+
+    pub(super) fn set_caption_background(&mut self, background: bool) {
+        self.state.settings.caption_background = background;
+        self.apply_caption_style();
+    }
+
+    fn apply_caption_style(&mut self) {
+        let scale = self.state.settings.caption_scale;
+        let background = self.state.settings.caption_background;
+        self.with_player(|player| player.set_caption_style(scale, background));
+        self.save_settings();
+    }
+
     pub(super) fn show_osd(&mut self, text: String) {
         self.state.osd = Some((text, Instant::now() + OSD_FOR));
     }
@@ -125,7 +193,14 @@ impl App {
             return;
         };
         self.with_player(|player| player.set_muted(!muted));
-        self.show_osd(if muted { "Sound on" } else { "Muted" }.to_owned());
+        self.show_osd(
+            if muted {
+                "Som ativado"
+            } else {
+                "Som desativado"
+            }
+            .to_owned(),
+        );
     }
 
     pub(super) fn seek_fraction(&mut self, fraction: f64) {
@@ -163,8 +238,8 @@ impl App {
             })
         });
         self.show_osd(match &lang {
-            Some(_) => "Captions on".to_owned(),
-            None => "Captions off".to_owned(),
+            Some(_) => "Legendas ativadas".to_owned(),
+            None => "Legendas desativadas".to_owned(),
         });
         if lang.is_some() || self.state.settings.captions.is_some() {
             self.state.settings.captions = lang;
@@ -204,7 +279,7 @@ impl App {
         let any = subtitles.first().map(|subtitle| subtitle.id);
         match kept.or(desktop).or(any) {
             Some(id) => self.set_subtitle(Some(id)),
-            None => self.show_osd("No captions".to_owned()),
+            None => self.show_osd("Sem legendas".to_owned()),
         }
     }
 
@@ -218,7 +293,7 @@ impl App {
         if edge > 0.0 {
             self.with_player(|player| player.seek_to((edge - 3.0).max(0.0), false));
             self.with_player(|player| player.set_paused(false));
-            self.show_osd("Live".to_owned());
+            self.show_osd("Ao vivo".to_owned());
         }
     }
 
@@ -239,23 +314,15 @@ impl App {
         )
         .cloned();
         match next {
-            Some(video) => self.open(video),
-            None => self.show_osd("Nothing up next".to_owned()),
+            Some(video) => self.advance(video),
+            None => self.show_osd("Nenhum vídeo a seguir".to_owned()),
         }
     }
 
     pub(super) fn play_previous(&mut self) {
-        let id = self.state.watching.as_ref().map(|video| video.id.clone());
-        let previous = self
-            .state
-            .up_next
-            .iter()
-            .position(|video| Some(&video.id) == id.as_ref())
-            .and_then(|index| index.checked_sub(1))
-            .and_then(|index| self.state.up_next.get(index))
-            .cloned();
+        let previous = previous_video(self.state.watching.as_ref(), &self.state.up_next).cloned();
         if let Some(video) = previous {
-            self.open(video);
+            self.advance(video);
         }
     }
 
@@ -263,7 +330,7 @@ impl App {
     /// autoplay is off or nothing comes next. A queued video plays even
     /// with autoplay off, as YouTube's queue does.
     pub(super) fn start_autoplay(&mut self) {
-        if self.state.watching_live() || self.state.watching_short() {
+        if self.state.watching_live() || self.state.watching_short() || self.state.playback_loop {
             return;
         }
         if !self.state.settings.autoplay && self.state.queue.is_empty() {
@@ -285,10 +352,10 @@ impl App {
         self.state.queue.retain(|queued| queued.id != video.id);
         if next {
             self.state.queue.insert(0, video);
-            self.state.notice = Some("Plays next".to_owned());
+            self.state.notice = Some("Será reproduzido a seguir".to_owned());
         } else {
             self.state.queue.push(video);
-            self.state.notice = Some("Added to queue".to_owned());
+            self.state.notice = Some("Adicionado à fila".to_owned());
         }
     }
 
@@ -328,6 +395,8 @@ impl App {
         self.remember_position();
         self.with_player(|player| player.set_paused(true));
         self.state.mini_closed = true;
+        self.state.playing_waiting = None;
+        self.state.autoplay = None;
     }
 
     /// Each frame: the countdown to the next video, SponsorBlock's skips,
@@ -345,7 +414,7 @@ impl App {
             if *at <= now {
                 let video = video.clone();
                 self.state.autoplay = None;
-                self.open(video);
+                self.advance(video);
             } else {
                 // The countdown's seconds tick down on screen.
                 ctx.request_repaint_after(Duration::from_millis(250));
@@ -375,7 +444,15 @@ impl App {
             let segment = self.state.segments[index].clone();
             self.state.skipped.insert(index);
             self.apply_seek(segment.end);
-            self.show_osd(format!("Skipped {}", segment.label()));
+            self.show_osd(
+                match segment.category.as_str() {
+                    "sponsor" => "Patrocínio ignorado",
+                    "selfpromo" => "Autopromoção ignorada",
+                    "interaction" => "Pedido de interação ignorado",
+                    _ => "Trecho ignorado",
+                }
+                .to_owned(),
+            );
         }
     }
 
@@ -426,6 +503,54 @@ mod tests {
             title: title.to_owned(),
             selected: false,
         }
+    }
+
+    #[test]
+    fn previous_stays_inside_the_source_list() {
+        let source = [video("a"), video("b"), video("c")];
+        assert_eq!(previous_video(Some(&source[1]), &source), Some(&source[0]));
+        assert_eq!(previous_video(Some(&source[0]), &source), None);
+        assert_eq!(previous_video(Some(&video("elsewhere")), &source), None);
+        assert_eq!(previous_video(None, &source), None);
+    }
+
+    #[test]
+    fn short_navigation_keeps_shorts_unless_the_user_explicitly_queued_a_video() {
+        let mut a = video("short-a");
+        a.short = true;
+        let mut b = video("short-b");
+        b.short = true;
+        let long = video("long");
+        let source = [a.clone(), long.clone(), b.clone()];
+        assert_eq!(next_video(Some(&a), &[], &source, &[]), Some(&source[2]));
+        assert_eq!(previous_video(Some(&b), &source), Some(&source[0]));
+        assert_eq!(
+            next_video(Some(&b), &[], &source, std::slice::from_ref(&long)),
+            None
+        );
+        assert_eq!(
+            next_video(Some(&a), std::slice::from_ref(&long), &source, &[]),
+            Some(&long)
+        );
+    }
+
+    #[test]
+    fn queue_reordering_keeps_items_and_ignores_stale_indices() {
+        let mut queue = vec![video("a"), video("b"), video("c")];
+        reorder_queue(&mut queue, 0, 2);
+        assert_eq!(
+            queue
+                .iter()
+                .map(|video| video.id.as_str())
+                .collect::<Vec<_>>(),
+            ["b", "c", "a"]
+        );
+        reorder_queue(&mut queue, 2, 0);
+        let original = vec![video("a"), video("b"), video("c")];
+        assert_eq!(queue, original);
+        reorder_queue(&mut queue, 8, 0);
+        reorder_queue(&mut queue, 0, 8);
+        assert_eq!(queue, original);
     }
 
     #[test]

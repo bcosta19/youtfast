@@ -15,7 +15,7 @@ use egui::{
 };
 
 use super::widgets;
-use crate::app::player::{LIVE_BEHIND, SPEEDS, next_video, speed_label};
+use crate::app::player::{LIVE_BEHIND, SPEEDS, next_video, previous_video, speed_label};
 use crate::app::{PlayerMenu, State};
 use crate::icons::Icon;
 use crate::model::{Action, Fetch, Quality, Resolution, Segment, Video};
@@ -35,6 +35,117 @@ const MENU_ROW: f32 = 36.0;
 /// The mini player's widest, and the most of the window it takes.
 const MINI_WIDTH: f32 = 360.0;
 const MINI_SHARE: f32 = 0.4;
+const HOLD_AFTER: f64 = 0.4;
+
+#[derive(Clone)]
+struct SpeedHold {
+    video: String,
+    started: f64,
+    original: f64,
+    active: bool,
+}
+
+fn hold_id() -> egui::Id {
+    egui::Id::new("player-speed-hold")
+}
+
+fn remember_control_focus(response: &egui::Response) {
+    response.ctx.data_mut(|data| {
+        let controls =
+            data.get_temp_mut_or_default::<Vec<egui::Id>>(egui::Id::new("player-control-focus"));
+        if !controls.contains(&response.id) {
+            controls.push(response.id);
+        }
+    });
+}
+
+fn controls_have_focus(ctx: &egui::Context) -> bool {
+    let focused = ctx.memory(|memory| memory.focused());
+    focused.is_some_and(|focused| {
+        ctx.data(|data| data.get_temp::<Vec<egui::Id>>(egui::Id::new("player-control-focus")))
+            .is_some_and(|controls| controls.contains(&focused))
+    })
+}
+
+fn control_button(ui: &mut Ui, icon: Icon, size: f32, hint: &str) -> egui::Response {
+    let response = widgets::icon_button(ui, icon, size, hint);
+    remember_control_focus(&response);
+    response
+}
+
+/// Called after drawing the interface, including frames where the full
+/// player is no longer drawn. A release, lost window focus or navigation
+/// always restores the speed that was active before the long press.
+pub fn release_speed_hold(ctx: &egui::Context, state: &State, actions: &mut Vec<Action>) {
+    let held = ctx.input(|input| input.focused && input.pointer.primary_down());
+    let watching = state.watching.as_ref().map(|video| video.id.as_str());
+    let stop = ctx
+        .data(|data| data.get_temp::<SpeedHold>(hold_id()))
+        .filter(|hold| {
+            !held
+                || watching != Some(hold.video.as_str())
+                || state.view != crate::model::View::Watch
+        });
+    if let Some(hold) = stop {
+        ctx.data_mut(|data| data.remove::<SpeedHold>(hold_id()));
+        if hold.active {
+            actions.push(Action::SetSpeed(hold.original));
+        }
+    }
+}
+
+fn speed_hold(
+    ui: &Ui,
+    response: &egui::Response,
+    state: &State,
+    status: &Status,
+    actions: &mut Vec<Action>,
+) -> bool {
+    let id = hold_id();
+    let now = ui.input(|input| input.time);
+    let held = ui.input(|input| input.pointer.primary_down());
+    let hold = ui.ctx().data(|data| data.get_temp::<SpeedHold>(id));
+    let mut consumed = hold.as_ref().is_some_and(|hold| hold.active);
+    if let Some(mut hold) = hold {
+        if held && !hold.active && now - hold.started >= HOLD_AFTER {
+            hold.active = true;
+            actions.push(Action::SetSpeed(2.0));
+            consumed = true;
+            ui.ctx().data_mut(|data| data.insert_temp(id, hold));
+        }
+        if held {
+            ui.ctx().request_repaint_after(Duration::from_millis(30));
+        }
+    } else if response.is_pointer_button_down_on()
+        && held
+        && !status.idle
+        && !status.paused
+        && state.player_error.is_none()
+        && !state.watching_live()
+        && let Some(video) = &state.watching
+    {
+        ui.ctx().data_mut(|data| {
+            data.insert_temp(
+                id,
+                SpeedHold {
+                    video: video.id.clone(),
+                    started: now,
+                    original: status.speed,
+                    active: false,
+                },
+            );
+        });
+        ui.ctx().request_repaint_after(Duration::from_millis(30));
+    }
+    if consumed && held {
+        bubble(
+            ui,
+            pos2(response.rect.center().x, response.rect.top() + 58.0),
+            "Velocidade 2×",
+        );
+    }
+    consumed
+}
 
 /// Where the player is drawn.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -42,6 +153,7 @@ pub enum Mode {
     /// On the watch page, theater mode included.
     Page,
     Fullscreen,
+    Short,
 }
 
 /// The video in `rect`, with everything that goes over it.
@@ -54,11 +166,15 @@ pub fn player(
     mode: Mode,
     actions: &mut Vec<Action>,
 ) {
-    let response = ui.interact(rect, ui.id().with("video"), Sense::click());
+    let response = ui.interact(rect, ui.id().with("video"), Sense::click_and_drag());
+    ui.ctx()
+        .data_mut(|d| d.insert_temp(egui::Id::new("video-keyboard-focus"), response.id));
     picture(ui, rect, state, status, surface);
     let Some(status) = status else {
         return;
     };
+    let held_speed = speed_hold(ui, &response, state, status, actions);
+    video_context_menu(&response, state, status, actions);
     let now = Instant::now();
     let hovered = ui.rect_contains_pointer(rect);
     let moved =
@@ -69,6 +185,7 @@ pub fn player(
     let recent = state.controls_until.filter(|until| *until > now);
     let menu_open = state.player_menu != PlayerMenu::Closed;
     let shown = menu_open
+        || controls_have_focus(ui.ctx())
         || state.seek_preview.is_some()
         || status.paused
         || state.autoplay.is_some()
@@ -79,14 +196,26 @@ pub fn player(
     if hovered && !shown {
         ui.ctx().set_cursor_icon(CursorIcon::None);
     }
-    if response.double_clicked() {
+    if response.double_clicked() && !held_speed {
         actions.push(Action::ToggleFullscreen);
-    } else if response.clicked() {
+    } else if response.clicked() && !held_speed {
         if menu_open {
             state.player_menu = PlayerMenu::Closed;
         } else {
             actions.push(Action::TogglePause);
         }
+    }
+
+    if state.player_error.is_some() {
+        let button = Rect::from_center_size(rect.center() + vec2(0.0, 52.0), vec2(180.0, 36.0));
+        ui.scope_builder(UiBuilder::new().max_rect(button), |ui| {
+            if ui
+                .add(egui::Button::new("Tentar novamente").min_size(button.size()))
+                .clicked()
+            {
+                actions.push(Action::RetryPlayback);
+            }
+        });
     }
 
     osd(ui, rect, state);
@@ -95,6 +224,14 @@ pub fn player(
         return;
     }
     let live = state.watching_live();
+    if shown {
+        ui.ctx().data_mut(|data| {
+            data.insert_temp(
+                egui::Id::new("player-control-focus"),
+                Vec::<egui::Id>::new(),
+            )
+        });
+    }
     let strip = Rect::from_min_max(pos2(rect.left(), rect.bottom() - STRIP), rect.max);
     skip_button(ui, rect, strip, state, status, shown, actions);
     if !shown {
@@ -124,6 +261,44 @@ pub fn player(
     }
 }
 
+fn video_context_menu(
+    response: &egui::Response,
+    state: &State,
+    status: &Status,
+    actions: &mut Vec<Action>,
+) {
+    let Some(video) = &state.watching else {
+        return;
+    };
+    response.context_menu(|ui| {
+        if ui.button("Copiar link do vídeo").clicked() {
+            actions.push(Action::CopyLink(video.url()));
+            ui.close();
+        }
+        if ui.button("Copiar link neste instante").clicked() {
+            actions.push(Action::CopyLink(util::video_link(
+                &video.id,
+                Some(status.position.max(0.0) as u64),
+            )));
+            ui.close();
+        }
+        let mut looping = state.playback_loop || video.short;
+        if ui
+            .add_enabled(
+                !video.short,
+                egui::Checkbox::new(&mut looping, "Repetir vídeo"),
+            )
+            .changed()
+        {
+            actions.push(Action::ToggleLoop);
+        }
+        if ui.button("Abrir no navegador").clicked() {
+            actions.push(Action::OpenUrl(video.url()));
+            ui.close();
+        }
+    });
+}
+
 /// The picture, or the error over black, and the spinner while it opens or
 /// waits for the network.
 fn picture(
@@ -137,6 +312,17 @@ fn picture(
         .rect_filled(rect, CornerRadius::ZERO, Color32::BLACK);
     if let Some(surface) = surface {
         surface.paint(ui, rect);
+    }
+    #[cfg(feature = "demo")]
+    if surface.is_none()
+        && ui
+            .ctx()
+            .data(|d| d.get_temp::<bool>(egui::Id::new("synthetic-images")))
+            .unwrap_or(false)
+    {
+        super::images::remote(ui, "demo")
+            .fit_to_exact_size(rect.size())
+            .paint_at(ui, rect);
     }
     if let Some(error) = &state.player_error {
         let galley = ui.painter().layout(
@@ -196,13 +382,59 @@ fn buttons(
     mode: Mode,
     live: bool,
     actions: &mut Vec<Action>,
-) {
+) -> (Rect, Rect) {
+    // Reserve the entire right-hand group before laying out optional
+    // volume/time/chapter content. A long title must never push a control
+    // beyond the edge of the video.
+    let row = ui.available_rect_before_wrap();
+    let spacing = 4.0;
+    let page_controls = mode == Mode::Page && !state.watching_short();
+    let fullscreen_button = mode != Mode::Short || row.width() >= 152.0;
+    let captions_button =
+        !status.subtitles.is_empty() && (mode != Mode::Short || row.width() >= 188.0);
+    let mute_button = mode != Mode::Short || row.width() >= 112.0;
+    let right_count = 1
+        + usize::from(fullscreen_button)
+        + usize::from(page_controls) * 2
+        + usize::from(captions_button);
+    let speed =
+        (!live && status.speed != 1.0 && row.width() >= 900.0).then(|| speed_label(status.speed));
+    let speed_width = speed.as_ref().map_or(0.0, |label| {
+        ui.painter()
+            .layout_no_wrap(label.clone(), theme::medium(13.0), Color32::WHITE)
+            .size()
+            .x
+            + spacing
+    });
+    let right_width = right_count as f32 * 32.0 + (right_count - 1) as f32 * spacing + speed_width;
+    let right_rect = Rect::from_min_max(
+        pos2((row.right() - right_width).max(row.left()), row.top()),
+        row.max,
+    );
+    let left_rect = Rect::from_min_max(
+        row.min,
+        pos2((right_rect.left() - 8.0).max(row.left()), row.bottom()),
+    );
+    let mut right = ui.new_child(
+        UiBuilder::new()
+            .id_salt("right-controls")
+            .max_rect(right_rect),
+    );
+    right.spacing_mut().item_spacing.x = spacing;
+    let mut left = ui.new_child(
+        UiBuilder::new()
+            .id_salt("left-controls")
+            .max_rect(left_rect)
+            .layout(Layout::left_to_right(Align::Center)),
+    );
+    left.spacing_mut().item_spacing.x = spacing;
+    let ui = &mut left;
     let (icon, hint) = if status.paused {
-        (Icon::Play, "Play (k)")
+        (Icon::Play, "Reproduzir (k)")
     } else {
-        (Icon::Pause, "Pause (k)")
+        (Icon::Pause, "Pausar (k)")
     };
-    if widgets::icon_button(ui, icon, 20.0, hint).clicked() {
+    if control_button(ui, icon, 20.0, hint).clicked() {
         actions.push(Action::TogglePause);
     }
     let related = state
@@ -215,65 +447,77 @@ fn buttons(
         &state.up_next,
         related,
     );
-    if !live
-        && let Some(next) = next
-        && widgets::icon_button(ui, Icon::SkipForward, 18.0, &next_hint(next)).clicked()
-    {
-        actions.push(Action::PlayNext);
+    if !live && mode != Mode::Short && (next.is_some() || state.playing_more.is_some()) {
+        let hint = next
+            .map(next_hint)
+            .unwrap_or_else(|| "Carregar próximos vídeos / tentar novamente (Shift+N)".into());
+        if control_button(ui, Icon::SkipForward, 18.0, &hint).clicked() {
+            actions.push(Action::PlayNext);
+        }
     }
     let (icon, hint) = if status.muted || status.volume <= 0.0 {
-        (Icon::VolumeMuted, "Unmute (m)")
+        (Icon::VolumeMuted, "Ativar som (m)")
     } else {
-        (Icon::Volume, "Mute (m)")
+        (Icon::Volume, "Silenciar (m)")
     };
-    if widgets::icon_button(ui, icon, 18.0, hint).clicked() {
+    if mute_button && control_button(ui, icon, 18.0, hint).clicked() {
         actions.push(Action::ToggleMute);
     }
-    ui.spacing_mut().slider_width = 80.0;
-    let mut volume = if status.muted { 0.0 } else { status.volume };
-    if ui
-        .add(Slider::new(&mut volume, 0.0..=100.0).show_value(false))
-        .changed()
-    {
-        actions.push(Action::SetVolume(volume));
+    if mode != Mode::Short && left_rect.width() >= 300.0 {
+        ui.spacing_mut().slider_width = 80.0;
+        let mut volume = if status.muted { 0.0 } else { status.volume };
+        let response = ui.add(Slider::new(&mut volume, 0.0..=100.0).show_value(false));
+        remember_control_focus(&response);
+        if response.changed() {
+            actions.push(Action::SetVolume(volume));
+        }
     }
-    ui.add_space(8.0);
-    if live {
+    ui.add_space(4.0);
+    if live && ui.available_width() >= 24.0 {
         live_badge(ui, state, status, actions);
     } else {
-        time_label(ui, state, status);
+        time_label(
+            ui,
+            state,
+            status,
+            mode != Mode::Short && row.width() >= 720.0,
+            actions,
+        );
     }
 
-    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+    right.with_layout(Layout::right_to_left(Align::Center), |ui| {
         let (icon, hint) = if mode == Mode::Fullscreen {
-            (Icon::ExitFullscreen, "Exit full screen (f)")
+            (Icon::ExitFullscreen, "Sair da tela cheia (f)")
         } else {
-            (Icon::Fullscreen, "Full screen (f)")
+            (Icon::Fullscreen, "Tela cheia (f)")
         };
-        if widgets::icon_button(ui, icon, 18.0, hint).clicked() {
+        if fullscreen_button && control_button(ui, icon, 18.0, hint).clicked() {
             actions.push(Action::ToggleFullscreen);
         }
         // Full screen has no page layout to change.
-        if mode == Mode::Page && !state.watching_short() {
+        if page_controls {
             let hint = if state.settings.theater {
-                "Default view (t)"
+                "Visualização padrão (t)"
             } else {
-                "Theater mode (t)"
+                "Modo cinema (t)"
             };
-            if widgets::icon_button(ui, Icon::Theater, 18.0, hint).clicked() {
+            if control_button(ui, Icon::Theater, 18.0, hint).clicked() {
                 actions.push(Action::ToggleTheater);
             }
+            if control_button(ui, Icon::MiniPlayer, 18.0, "Miniplayer (i)").clicked() {
+                actions.push(Action::ToggleMiniPlayer);
+            }
         }
-        if widgets::icon_button(ui, Icon::Settings, 18.0, "Settings").clicked() {
+        if control_button(ui, Icon::Settings, 18.0, "Configurações").clicked() {
             state.player_menu = if state.player_menu == PlayerMenu::Closed {
                 PlayerMenu::Main
             } else {
                 PlayerMenu::Closed
             };
         }
-        if !status.subtitles.is_empty() {
+        if captions_button {
             let on = status.subtitles.iter().any(|subtitle| subtitle.selected);
-            let response = widgets::icon_button(ui, Icon::Captions, 18.0, "Captions (c)");
+            let response = control_button(ui, Icon::Captions, 18.0, "Legendas (c)");
             if on {
                 // YouTube's red line under the button while they show.
                 let line = Rect::from_center_size(
@@ -287,27 +531,34 @@ fn buttons(
                 actions.push(Action::ToggleCaptions);
             }
         }
-        if !live && status.speed != 1.0 {
+        if let Some(speed) = speed {
             ui.label(
-                RichText::new(speed_label(status.speed))
+                RichText::new(speed)
                     .font(theme::medium(13.0))
                     .color(Color32::WHITE),
             );
         }
     });
+    (left.min_rect(), right.min_rect())
 }
 
 /// `Next: <title> (N)` for the next button's hover.
 fn next_hint(video: &Video) -> String {
     if video.title.is_empty() {
-        "Next (N)".to_owned()
+        "Próximo (Shift+N)".to_owned()
     } else {
-        format!("Next: {} (N)", video.title)
+        format!("Próximo: {} (Shift+N)", video.title)
     }
 }
 
 /// `1:23 / 12:04 • Chapter`, the chapter when the video has them.
-fn time_label(ui: &mut Ui, state: &State, status: &Status) {
+fn time_label(
+    ui: &mut Ui,
+    state: &State,
+    status: &Status,
+    show_chapter: bool,
+    actions: &mut Vec<Action>,
+) {
     let position = state.seek_preview.unwrap_or(status.position);
     let time = if status.duration > 0.0 {
         format!(
@@ -318,17 +569,62 @@ fn time_label(ui: &mut Ui, state: &State, status: &Status) {
     } else {
         util::duration(position)
     };
-    ui.label(
-        RichText::new(time)
-            .font(theme::regular(13.0))
-            .color(Color32::WHITE),
-    );
-    if let Some(chapter) = chapter_at(state, position) {
-        ui.label(
-            RichText::new(format!("• {chapter}"))
-                .font(theme::regular(13.0))
-                .color(Color32::from_white_alpha(200)),
-        );
+    let available = ui.available_width().max(0.0);
+    if available < 28.0 {
+        return;
+    }
+    let font = theme::regular(13.0);
+    let full_width = ui
+        .painter()
+        .layout_no_wrap(time.clone(), font.clone(), Color32::WHITE)
+        .size()
+        .x
+        + 4.0;
+    let text = if full_width <= available {
+        time.clone()
+    } else {
+        util::duration(position)
+    };
+    ui.add_sized(
+        vec2(full_width.min(available), 32.0),
+        egui::Label::new(RichText::new(text).font(font).color(Color32::WHITE)).truncate(),
+    )
+    .on_hover_text(time);
+    if show_chapter
+        && ui.available_width() >= 80.0
+        && let Some(chapter) = chapter_at(state, position)
+    {
+        let response = ui
+            .add_sized(
+                vec2(ui.available_width(), 32.0),
+                egui::Label::new(
+                    RichText::new(format!("• {chapter}"))
+                        .font(theme::regular(13.0))
+                        .color(Color32::from_white_alpha(200)),
+                )
+                .sense(Sense::click())
+                .truncate(),
+            )
+            .on_hover_text("Abrir capítulos");
+        remember_control_focus(&response);
+        egui::Popup::menu(&response).show(|ui| {
+            if let Some(details) = state.details.ready() {
+                for chapter in &details.chapters {
+                    let label = format!(
+                        "{}  {}",
+                        util::duration(f64::from(chapter.seconds)),
+                        chapter.name
+                    );
+                    if ui.button(label).clicked() {
+                        actions.push(Action::SeekTo {
+                            seconds: f64::from(chapter.seconds),
+                            exact: true,
+                        });
+                        ui.close();
+                    }
+                }
+            }
+        });
     }
 }
 
@@ -348,7 +644,9 @@ fn chapter_at(state: &State, seconds: f64) -> Option<&str> {
 fn live_badge(ui: &mut Ui, state: &State, status: &Status, actions: &mut Vec<Action>) {
     let edge = status.duration.max(status.cached_until);
     let behind = edge > 0.0 && edge - status.position > LIVE_BEHIND;
-    let (rect, response) = ui.allocate_exact_size(vec2(64.0, 24.0), Sense::click());
+    let width = ui.available_width().clamp(24.0, 86.0);
+    let (rect, response) = ui.allocate_exact_size(vec2(width, 24.0), Sense::click());
+    remember_control_focus(&response);
     let dot = if behind {
         Color32::from_gray(170)
     } else {
@@ -361,17 +659,19 @@ fn live_badge(ui: &mut Ui, state: &State, status: &Status, actions: &mut Vec<Act
     }
     let painter = ui.painter();
     painter.circle_filled(pos2(rect.left() + 10.0, rect.center().y), 4.0, dot);
-    painter.text(
-        pos2(rect.left() + 20.0, rect.center().y),
-        Align2::LEFT_CENTER,
-        "LIVE",
-        theme::semibold(13.0),
-        Color32::WHITE,
-    );
+    if width >= 76.0 {
+        painter.text(
+            pos2(rect.left() + 20.0, rect.center().y),
+            Align2::LEFT_CENTER,
+            "AO VIVO",
+            theme::semibold(13.0),
+            Color32::WHITE,
+        );
+    }
     let response = response.on_hover_text(if behind {
-        "Back to live"
+        "Voltar ao vivo"
     } else {
-        "Watching live"
+        "Assistindo ao vivo"
     });
     if behind && response.clicked() {
         actions.push(Action::GoLive);
@@ -390,6 +690,9 @@ fn seek_bar(
     actions: &mut Vec<Action>,
 ) {
     let response = ui.interact(rect, ui.id().with("seek-bar"), Sense::click_and_drag());
+    remember_control_focus(&response);
+    ui.ctx()
+        .data_mut(|d| d.insert_temp(egui::Id::new("timeline-keyboard-focus"), response.id));
     let duration = status.duration;
     let at_pointer = |pointer: egui::Pos2| {
         f64::from(((pointer.x - rect.left()) / rect.width()).clamp(0.0, 1.0)) * duration
@@ -483,6 +786,7 @@ fn seek_bar(
             if let Some(chapter) = chapter_at(state, seconds) {
                 text = format!("{chapter}\n{text}");
             }
+            super::extras::seek_preview(ui, rect, state, seconds, actions);
             bubble(ui, pos2(pointer.x, rect.top() - 6.0), &text);
         }
     }
@@ -554,7 +858,8 @@ fn skip_button(
     else {
         return;
     };
-    let text = format!("Skip {}", segment.label());
+    let label = segment.label();
+    let text = format!("Pular {label}");
     let galley = ui
         .painter()
         .layout_no_wrap(text, theme::semibold(14.0), Color32::WHITE);
@@ -566,6 +871,7 @@ fn skip_button(
     };
     let button = Rect::from_min_size(pos2(rect.right() - 16.0 - size.x, bottom - size.y), size);
     let response = ui.interact(button, ui.id().with("skip-segment"), Sense::click());
+    remember_control_focus(&response);
     let fill = if response.hovered() {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
         Color32::from_black_alpha(220)
@@ -602,13 +908,13 @@ fn countdown(ui: &mut Ui, rect: Rect, state: &State, actions: &mut Vec<Action>) 
     );
     on_video_style(&mut ui);
     ui.label(
-        RichText::new(format!("Up next in {seconds}"))
+        RichText::new(format!("Próximo vídeo em {seconds}"))
             .font(theme::regular(14.0))
             .color(Color32::from_white_alpha(200)),
     );
     ui.add_space(6.0);
     let title = if video.title.is_empty() {
-        "Next video"
+        "Próximo vídeo"
     } else {
         &video.title
     };
@@ -631,7 +937,7 @@ fn countdown(ui: &mut Ui, rect: Rect, state: &State, actions: &mut Vec<Action>) 
     ui.horizontal(|ui| {
         let width = 2.0 * 110.0 + 12.0;
         ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
-        let cancel = egui::Button::new(RichText::new("Cancel").font(theme::medium(14.0)))
+        let cancel = egui::Button::new(RichText::new("Cancelar").font(theme::medium(14.0)))
             .fill(Color32::from_white_alpha(40))
             .min_size(vec2(110.0, 36.0))
             .corner_radius(CornerRadius::same(18));
@@ -640,7 +946,7 @@ fn countdown(ui: &mut Ui, rect: Rect, state: &State, actions: &mut Vec<Action>) 
         }
         ui.add_space(12.0);
         let play = egui::Button::new(
-            RichText::new("Play now")
+            RichText::new("Reproduzir agora")
                 .font(theme::medium(14.0))
                 .color(Color32::BLACK),
         )
@@ -666,81 +972,123 @@ fn menu(
     let rows = menu_rows(state, status, live);
     let room = (video.height() - STRIP - 24.0).max(MENU_ROW * 2.0);
     let height = (rows as f32 * MENU_ROW + 16.0).min(room);
-    let width = MENU_WIDTH.min(video.width() - 24.0);
+    // A portrait video can be narrower than a usable settings menu. Let
+    // the foreground menu use the surrounding page while staying inside
+    // the window; otherwise hidden Short controls would be inaccessible.
+    let bounds = ui.clip_rect().intersect(ui.ctx().content_rect());
+    let width = MENU_WIDTH.min(bounds.width().max(1.0));
     let rect = Rect::from_min_size(
         pos2(
-            video.right() - 12.0 - width,
-            video.bottom() - STRIP - 8.0 - height,
+            (video.right() - 12.0 - width)
+                .clamp(bounds.left(), (bounds.right() - width).max(bounds.left())),
+            (video.bottom() - STRIP - 8.0 - height)
+                .clamp(bounds.top(), (bounds.bottom() - height).max(bounds.top())),
         ),
         vec2(width, height),
     );
-    ui.painter()
-        .rect_filled(rect, CornerRadius::same(12), Color32::from_black_alpha(225));
-    // The menu takes its clicks before the video under it.
-    ui.interact(rect, ui.id().with("player-menu-back"), Sense::click());
-    let mut ui = ui.new_child(
-        UiBuilder::new()
-            .max_rect(rect.shrink2(vec2(0.0, 8.0)))
-            .layout(Layout::top_down(Align::Min)),
-    );
-    on_video_style(&mut ui);
-    egui::ScrollArea::vertical()
-        .auto_shrink([false, true])
-        .show(&mut ui, |ui| {
-            ui.spacing_mut().item_spacing.y = 0.0;
-            match state.player_menu {
-                PlayerMenu::Closed => {}
-                PlayerMenu::Main => main_menu(ui, state, status, live, actions),
-                PlayerMenu::Speed => {
-                    if back_row(ui, "Playback speed") {
-                        state.player_menu = PlayerMenu::Main;
-                    }
-                    for speed in SPEEDS {
-                        let label = if speed == 1.0 {
-                            "Normal".to_owned()
-                        } else {
-                            speed_label(speed)
-                        };
-                        if pick_row(ui, &label, (status.speed - speed).abs() < 0.01) {
-                            actions.push(Action::SetSpeed(speed));
-                            state.player_menu = PlayerMenu::Closed;
+    egui::Area::new(ui.id().with("player-settings-menu"))
+        .fixed_pos(rect.min)
+        .order(egui::Order::Foreground)
+        .movable(false)
+        .constrain_to(bounds)
+        .show(ui.ctx(), |ui| {
+            ui.set_width(width);
+            ui.set_height(height);
+            let rect = ui.max_rect();
+            ui.painter()
+                .rect_filled(rect, CornerRadius::same(12), Color32::from_black_alpha(225));
+            // The menu takes its clicks before the video under it.
+            ui.interact(rect, ui.id().with("player-menu-back"), Sense::click());
+            let mut ui = ui.new_child(
+                UiBuilder::new()
+                    .max_rect(rect.shrink2(vec2(0.0, 8.0)))
+                    .layout(Layout::top_down(Align::Min)),
+            );
+            on_video_style(&mut ui);
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, true])
+                .show(&mut ui, |ui| {
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    match state.player_menu {
+                        PlayerMenu::Closed => {}
+                        PlayerMenu::Main => main_menu(ui, state, status, live, actions),
+                        PlayerMenu::Speed => {
+                            if back_row(ui, "Velocidade de reprodução") {
+                                state.player_menu = PlayerMenu::Main;
+                            }
+                            for speed in SPEEDS {
+                                let label = if speed == 1.0 {
+                                    "Normal".to_owned()
+                                } else {
+                                    speed_label(speed)
+                                };
+                                if pick_row(ui, &label, (status.speed - speed).abs() < 0.01) {
+                                    actions.push(Action::SetSpeed(speed));
+                                    state.player_menu = PlayerMenu::Closed;
+                                }
+                            }
+                        }
+                        PlayerMenu::Quality => {
+                            if back_row(ui, "Qualidade") {
+                                state.player_menu = PlayerMenu::Main;
+                            }
+                            let auto = format!("Automática (até {}p)", Quality::AUTO);
+                            if pick_row(ui, &auto, state.settings.quality == Quality::Auto) {
+                                actions.push(Action::SetQuality(Quality::Auto));
+                                state.player_menu = PlayerMenu::Closed;
+                            }
+                            for resolution in offered(state) {
+                                let quality = Quality::Max(resolution.lines);
+                                if pick_row(
+                                    ui,
+                                    &resolution.label(),
+                                    state.settings.quality == quality,
+                                ) {
+                                    actions.push(Action::SetQuality(quality));
+                                    state.player_menu = PlayerMenu::Closed;
+                                }
+                            }
+                        }
+                        PlayerMenu::Captions => {
+                            if back_row(ui, "Legendas") {
+                                state.player_menu = PlayerMenu::Main;
+                            }
+                            let none = !status.subtitles.iter().any(|subtitle| subtitle.selected);
+                            if pick_row(ui, "Desativadas", none) {
+                                actions.push(Action::SetSubtitle(None));
+                                state.player_menu = PlayerMenu::Closed;
+                            }
+                            for subtitle in &status.subtitles {
+                                if pick_row(ui, &subtitle.title, subtitle.selected) {
+                                    actions.push(Action::SetSubtitle(Some(subtitle.id)));
+                                    state.player_menu = PlayerMenu::Closed;
+                                }
+                            }
+                            if value_row(ui, "Aparência das legendas", "").clicked() {
+                                state.player_menu = PlayerMenu::CaptionStyle;
+                            }
+                        }
+                        PlayerMenu::CaptionStyle => {
+                            if back_row(ui, "Aparência das legendas") {
+                                state.player_menu = PlayerMenu::Captions;
+                            }
+                            ui.horizontal(|ui| {
+                                ui.label("Tamanho");
+                                let mut scale = state.settings.caption_scale;
+                                if ui
+                                    .add(Slider::new(&mut scale, 0.5..=2.0).suffix("×"))
+                                    .changed()
+                                {
+                                    actions.push(Action::SetCaptionScale(scale));
+                                }
+                            });
+                            let mut background = state.settings.caption_background;
+                            if ui.checkbox(&mut background, "Fundo escuro").changed() {
+                                actions.push(Action::SetCaptionBackground(background));
+                            }
                         }
                     }
-                }
-                PlayerMenu::Quality => {
-                    if back_row(ui, "Quality") {
-                        state.player_menu = PlayerMenu::Main;
-                    }
-                    let auto = format!("Auto (up to {}p)", Quality::AUTO);
-                    if pick_row(ui, &auto, state.settings.quality == Quality::Auto) {
-                        actions.push(Action::SetQuality(Quality::Auto));
-                        state.player_menu = PlayerMenu::Closed;
-                    }
-                    for resolution in offered(state) {
-                        let quality = Quality::Max(resolution.lines);
-                        if pick_row(ui, &resolution.label(), state.settings.quality == quality) {
-                            actions.push(Action::SetQuality(quality));
-                            state.player_menu = PlayerMenu::Closed;
-                        }
-                    }
-                }
-                PlayerMenu::Captions => {
-                    if back_row(ui, "Captions") {
-                        state.player_menu = PlayerMenu::Main;
-                    }
-                    let none = !status.subtitles.iter().any(|subtitle| subtitle.selected);
-                    if pick_row(ui, "Off", none) {
-                        actions.push(Action::SetSubtitle(None));
-                        state.player_menu = PlayerMenu::Closed;
-                    }
-                    for subtitle in &status.subtitles {
-                        if pick_row(ui, &subtitle.title, subtitle.selected) {
-                            actions.push(Action::SetSubtitle(Some(subtitle.id)));
-                            state.player_menu = PlayerMenu::Closed;
-                        }
-                    }
-                }
-            }
+                });
         });
 }
 
@@ -748,10 +1096,11 @@ fn menu(
 fn menu_rows(state: &State, status: &Status, live: bool) -> usize {
     match state.player_menu {
         PlayerMenu::Closed => 0,
-        PlayerMenu::Main => 2 + usize::from(!live) + usize::from(!status.subtitles.is_empty()),
+        PlayerMenu::Main => 4 + usize::from(!live) + usize::from(!status.subtitles.is_empty()),
         PlayerMenu::Speed => 1 + SPEEDS.len(),
         PlayerMenu::Quality => 2 + offered(state).len(),
-        PlayerMenu::Captions => 2 + status.subtitles.len(),
+        PlayerMenu::Captions => 3 + status.subtitles.len(),
+        PlayerMenu::CaptionStyle => 4,
     }
 }
 
@@ -774,8 +1123,31 @@ fn main_menu(
     live: bool,
     actions: &mut Vec<Action>,
 ) {
+    if value_row(
+        ui,
+        if state.fullscreen {
+            "Sair da tela cheia"
+        } else {
+            "Tela cheia"
+        },
+        "F",
+    )
+    .clicked()
+    {
+        actions.push(Action::ToggleFullscreen);
+        state.player_menu = PlayerMenu::Closed;
+    }
+    if value_row(ui, "Som", if status.muted { "Ativar" } else { "Silenciar" }).clicked() {
+        actions.push(Action::ToggleMute);
+    }
     let on = state.settings.autoplay;
-    if value_row(ui, "Autoplay", if on { "On" } else { "Off" }).clicked() {
+    if value_row(
+        ui,
+        "Reprodução automática",
+        if on { "Ativada" } else { "Desativada" },
+    )
+    .clicked()
+    {
         actions.push(Action::SetAutoplay(!on));
     }
     if !status.subtitles.is_empty() {
@@ -783,8 +1155,8 @@ fn main_menu(
             .subtitles
             .iter()
             .find(|subtitle| subtitle.selected)
-            .map_or("Off", |subtitle| subtitle.title.as_str());
-        if value_row(ui, "Captions", current).clicked() {
+            .map_or("Desativadas", |subtitle| subtitle.title.as_str());
+        if value_row(ui, "Legendas", current).clicked() {
             state.player_menu = PlayerMenu::Captions;
         }
     }
@@ -794,7 +1166,7 @@ fn main_menu(
         } else {
             speed_label(status.speed)
         };
-        if value_row(ui, "Playback speed", &speed).clicked() {
+        if value_row(ui, "Velocidade de reprodução", &speed).clicked() {
             state.player_menu = PlayerMenu::Speed;
         }
     }
@@ -806,12 +1178,12 @@ fn main_menu(
         )
     });
     let quality = match (state.settings.quality, playing) {
-        (Quality::Auto, Some(playing)) => format!("Auto · {}", playing.label()),
-        (Quality::Auto, None) => "Auto".to_owned(),
+        (Quality::Auto, Some(playing)) => format!("Automática · {}", playing.label()),
+        (Quality::Auto, None) => "Automática".to_owned(),
         (_, Some(playing)) => playing.label(),
         (Quality::Max(lines), None) => format!("{lines}p"),
     };
-    if value_row(ui, "Quality", &quality)
+    if value_row(ui, "Qualidade", &quality)
         .on_hover_text(playback_details(status))
         .clicked()
     {
@@ -912,7 +1284,7 @@ fn pick_row(ui: &mut Ui, label: &str, picked: bool) -> bool {
 /// "1920×1080 · 60 fps · vp9 · hardware decoding (vaapi)".
 fn playback_details(status: &Status) -> String {
     if status.video_width <= 0 || status.video_height <= 0 {
-        return "Quality".to_owned();
+        return "Qualidade".to_owned();
     }
     let mut parts = vec![format!("{}×{}", status.video_width, status.video_height)];
     if status.fps > 0.0 {
@@ -922,8 +1294,8 @@ fn playback_details(status: &Status) -> String {
         parts.push(codec.clone());
     }
     parts.push(match &status.hwdec {
-        Some(decoder) => format!("hardware decoding ({decoder})"),
-        None => "software decoding".to_owned(),
+        Some(decoder) => format!("decodificação por hardware ({decoder})"),
+        None => "decodificação por software".to_owned(),
     });
     parts.join(" · ")
 }
@@ -947,9 +1319,16 @@ pub fn mini(
     }
     let palette = &state.palette;
     let width = (ctx.content_rect().width() * MINI_SHARE).clamp(220.0, MINI_WIDTH);
-    egui::Area::new(egui::Id::new("mini-player"))
-        .anchor(Align2::RIGHT_BOTTOM, vec2(-16.0, -16.0))
-        .order(egui::Order::Foreground)
+    let position =
+        ctx.content_rect().right_bottom() - vec2(width + 16.0, width * 9.0 / 16.0 + 104.0);
+    egui::Window::new("Miniplayer")
+        .id(egui::Id::new("mini-player"))
+        .default_pos(position)
+        .default_width(width)
+        .min_width(200.0)
+        .max_width((ctx.content_rect().width() - 32.0).max(200.0))
+        .resizable([true, false])
+        .collapsible(false)
         .show(ctx, |ui| {
             egui::Frame::new()
                 .fill(palette.panel)
@@ -961,12 +1340,13 @@ pub fn mini(
                     color: Color32::from_black_alpha(120),
                 })
                 .show(ui, |ui| {
-                    ui.set_width(width);
+                    let width = ui.available_width().max(180.0);
                     ui.spacing_mut().item_spacing.y = 0.0;
                     let height = width * 9.0 / 16.0;
                     let (rect, response) =
                         ui.allocate_exact_size(vec2(width, height), Sense::click());
                     picture(ui, rect, state, Some(status), surface);
+                    video_context_menu(&response, state, status, actions);
                     // The part played, along the picture's bottom edge.
                     if status.duration > 0.0 && !state.watching_live() {
                         let fraction = (status.position / status.duration).clamp(0.0, 1.0) as f32;
@@ -977,7 +1357,7 @@ pub fn mini(
                         ui.painter()
                             .rect_filled(line, CornerRadius::ZERO, palette.accent);
                     }
-                    if ui.rect_contains_pointer(rect) {
+                    if ui.rect_contains_pointer(rect) || status.paused {
                         ui.painter().rect_filled(
                             rect,
                             CornerRadius::ZERO,
@@ -992,9 +1372,9 @@ pub fn mini(
                             ))
                         };
                         let (icon, hint) = if status.paused {
-                            (Icon::Play, "Play")
+                            (Icon::Play, "Reproduzir")
                         } else {
-                            (Icon::Pause, "Pause")
+                            (Icon::Pause, "Pausar")
                         };
                         if over
                             .scope_builder(place(32.0, rect.center()), |ui| {
@@ -1004,10 +1384,48 @@ pub fn mini(
                         {
                             actions.push(Action::TogglePause);
                         }
+                        let previous = previous_video(state.watching.as_ref(), &state.up_next);
+                        let related = state
+                            .details
+                            .ready()
+                            .map_or(&[][..], |details| details.related.as_slice());
+                        let next = next_video(
+                            state.watching.as_ref(),
+                            &state.queue,
+                            &state.up_next,
+                            related,
+                        );
+                        for (offset, available, icon, hint, action) in [
+                            (
+                                -64.0,
+                                previous.is_some(),
+                                Icon::ChevronLeft,
+                                "Vídeo anterior",
+                                Action::PlayPrevious,
+                            ),
+                            (
+                                64.0,
+                                next.is_some() || state.playing_more.is_some(),
+                                Icon::SkipForward,
+                                "Próximo vídeo",
+                                Action::PlayNext,
+                            ),
+                        ] {
+                            if available
+                                && over
+                                    .scope_builder(
+                                        place(22.0, rect.center() + vec2(offset, 0.0)),
+                                        |ui| widgets::icon_button(ui, icon, 22.0, hint).clicked(),
+                                    )
+                                    .inner
+                            {
+                                actions.push(action);
+                            }
+                        }
                         let corner = rect.right_top() + vec2(-20.0, 20.0);
                         if over
                             .scope_builder(place(18.0, corner), |ui| {
-                                widgets::icon_button(ui, Icon::Close, 18.0, "Close the player")
+                                widgets::icon_button(ui, Icon::Close, 18.0, "Fechar e pausar")
                                     .clicked()
                             })
                             .inner
@@ -1021,7 +1439,7 @@ pub fn mini(
                                     ui,
                                     Icon::MiniPlayer,
                                     18.0,
-                                    "Back to the video",
+                                    "Abrir página do vídeo",
                                 )
                                 .clicked()
                             })
@@ -1039,7 +1457,7 @@ pub fn mini(
                             ui.set_width(width - 24.0);
                             ui.spacing_mut().item_spacing.y = 2.0;
                             let title = if watching.title.is_empty() {
-                                status.title.as_deref().unwrap_or("Loading…")
+                                status.title.as_deref().unwrap_or("Carregando…")
                             } else {
                                 &watching.title
                             };
@@ -1073,6 +1491,256 @@ mod tests {
     use crate::model::{Chapter, Details};
     use crate::mpv::Subtitle;
 
+    #[test]
+    fn a_real_volume_slider_keeps_keyboard_focus_after_controls_timeout() {
+        fn draw(
+            ctx: &egui::Context,
+            state: &mut State,
+            status: &Status,
+            events: Vec<egui::Event>,
+        ) -> Vec<Action> {
+            let mut actions = Vec::new();
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(900.0, 400.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    player(
+                        ui,
+                        ui.max_rect(),
+                        state,
+                        Some(status),
+                        None,
+                        Mode::Page,
+                        &mut actions,
+                    );
+                },
+            );
+            output.textures_delta.clear();
+            actions
+        }
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let mut state = State {
+            watching: Some(Video::from_id("aaaaaaaaaaa".into())),
+            queue: vec![Video::from_id("bbbbbbbbbbb".into())],
+            ..Default::default()
+        };
+        let mut status = Status {
+            paused: true,
+            speed: 1.0,
+            volume: 65.0,
+            ..Default::default()
+        };
+        draw(&ctx, &mut state, &status, Vec::new());
+        let controls = ctx
+            .data(|data| data.get_temp::<Vec<egui::Id>>(egui::Id::new("player-control-focus")))
+            .unwrap();
+        let slider = controls
+            .into_iter()
+            .find(|id| {
+                ctx.read_response(*id).is_some_and(|response| {
+                    response.sense.senses_drag() && (response.rect.width() - 80.0).abs() < 1.0
+                })
+            })
+            .expect("a real volume Slider was drawn");
+        ctx.memory_mut(|memory| memory.request_focus(slider));
+        draw(&ctx, &mut state, &status, Vec::new());
+        status.paused = false;
+        state.controls_until = Some(Instant::now() - CONTROLS_FOR - Duration::from_secs(1));
+        for _ in 0..2 {
+            draw(&ctx, &mut state, &status, Vec::new());
+            assert_eq!(ctx.memory(|memory| memory.focused()), Some(slider));
+        }
+        let actions = draw(
+            &ctx,
+            &mut state,
+            &status,
+            vec![egui::Event::Key {
+                key: egui::Key::ArrowRight,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        assert!(
+            actions
+                .iter()
+                .any(|action| matches!(action, Action::SetVolume(value) if *value > 65.0)),
+            "focused Slider stopped receiving arrows: {actions:?}"
+        );
+        let outside = egui::Id::new("an-unrelated-field");
+        ctx.memory_mut(|memory| memory.request_focus(outside));
+        assert!(
+            !controls_have_focus(&ctx),
+            "focus from another area must not keep player controls visible"
+        );
+    }
+
+    #[test]
+    fn narrow_controls_stay_inside_the_video_and_keep_the_groups_apart() {
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let mut state = State {
+            watching: Some(Video::from_id("aaaaaaaaaaa".into())),
+            queue: vec![Video::from_id("bbbbbbbbbbb".into())],
+            details: Fetch::Ready(Details {
+                chapters: vec![Chapter {
+                    name: "Um capítulo com um nome muito longo ".repeat(20),
+                    seconds: 0,
+                }],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let status = Status {
+            duration: 100_000.0,
+            position: 40_000.0,
+            speed: 1.5,
+            subtitles: vec![Subtitle {
+                id: 1,
+                lang: "pt".into(),
+                title: "Português".into(),
+                selected: true,
+            }],
+            ..Default::default()
+        };
+        for (mode, widths) in [
+            (Mode::Page, &[296.0, 336.0, 420.0, 720.0, 1280.0][..]),
+            (
+                Mode::Short,
+                &[76.0, 100.0, 115.0, 140.0, 164.0, 200.0, 296.0][..],
+            ),
+        ] {
+            for &width in widths {
+                for captions in [false, true] {
+                    let mut status = status.clone();
+                    if !captions {
+                        status.subtitles.clear();
+                    }
+                    for live in [false, true] {
+                        let mut output = ctx.run_ui(
+                            egui::RawInput {
+                                screen_rect: Some(Rect::from_min_size(
+                                    pos2(0.0, 0.0),
+                                    vec2(width, 48.0),
+                                )),
+                                ..Default::default()
+                            },
+                            |ui| {
+                                let row = ui.max_rect();
+                                let (left, right) =
+                                    buttons(ui, &mut state, &status, mode, live, &mut Vec::new());
+                                assert!(
+                                    left.right() <= right.left(),
+                                    "control groups overlap at {width}: {left:?}, {right:?}"
+                                );
+                                assert!(
+                                    right.right() <= row.right() + 0.1,
+                                    "controls escape at {width}: {right:?} vs {row:?}"
+                                );
+                                assert!(left.left() >= row.left() - 0.1);
+                            },
+                        );
+                        output.textures_delta.clear();
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_long_press_restores_the_original_speed_without_pausing_on_release() {
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let mut state = State {
+            view: crate::model::View::Watch,
+            watching: Some(Video::from_id("aaaaaaaaaaa".into())),
+            ..State::default()
+        };
+        let status = Status {
+            speed: 1.25,
+            ..Status::default()
+        };
+        let pointer = pos2(240.0, 120.0);
+        let button = |pressed| egui::Event::PointerButton {
+            pos: pointer,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        let mut actions = Vec::new();
+        for (time, events) in [
+            (0.0, vec![]),
+            (0.1, vec![egui::Event::PointerMoved(pointer), button(true)]),
+            (0.6, vec![]),
+            (0.7, vec![button(false)]),
+        ] {
+            let input = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(640.0, 360.0))),
+                time: Some(time),
+                events,
+                ..Default::default()
+            };
+            let mut output = ctx.run_ui(input, |ui| {
+                player(
+                    ui,
+                    ui.max_rect(),
+                    &mut state,
+                    Some(&status),
+                    None,
+                    Mode::Page,
+                    &mut actions,
+                );
+                release_speed_hold(ui.ctx(), &state, &mut actions);
+            });
+            output.textures_delta.clear();
+        }
+        assert_eq!(actions, [Action::SetSpeed(2.0), Action::SetSpeed(1.25)]);
+    }
+
+    #[test]
+    fn leaving_the_watch_page_releases_a_speed_hold_even_with_mouse_down() {
+        let ctx = egui::Context::default();
+        let mut state = State {
+            view: crate::model::View::Home,
+            watching: Some(Video::from_id("aaaaaaaaaaa".into())),
+            ..State::default()
+        };
+        ctx.data_mut(|data| {
+            data.insert_temp(
+                hold_id(),
+                SpeedHold {
+                    video: "aaaaaaaaaaa".into(),
+                    started: 0.0,
+                    original: 0.75,
+                    active: true,
+                },
+            )
+        });
+        let mut actions = Vec::new();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                events: vec![egui::Event::PointerButton {
+                    pos: pos2(100.0, 100.0),
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+                ..Default::default()
+            },
+            |ui| release_speed_hold(ui.ctx(), &state, &mut actions),
+        );
+        output.textures_delta.clear();
+        assert_eq!(actions, [Action::SetSpeed(0.75)]);
+        state.view = crate::model::View::Watch;
+        release_speed_hold(&ctx, &state, &mut actions);
+        assert_eq!(actions.len(), 1);
+    }
+
     /// Every state the player draws over the video lays out without a NaN
     /// or a negative rect (egui's debug assertions panic on either), in a
     /// roomy window and a cramped one.
@@ -1105,6 +1773,7 @@ mod tests {
             PlayerMenu::Speed,
             PlayerMenu::Quality,
             PlayerMenu::Captions,
+            PlayerMenu::CaptionStyle,
         ];
         let ctx = egui::Context::default();
         crate::theme::install_fonts(&ctx);
@@ -1146,7 +1815,7 @@ mod tests {
                         screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), size)),
                         ..Default::default()
                     };
-                    for mode in [Mode::Page, Mode::Fullscreen] {
+                    for mode in [Mode::Page, Mode::Fullscreen, Mode::Short] {
                         let mut output = ctx.run_ui(input.clone(), |ui| {
                             let mut actions = Vec::new();
                             let rect = ui.max_rect();

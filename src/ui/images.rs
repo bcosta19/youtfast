@@ -142,6 +142,17 @@ fn memory_uri(dir: &std::path::Path, url: &str) -> String {
 }
 /// Only the backend accesses files or the network, including a disk cache hit.
 pub fn remote<'a>(ui: &Ui, url: &'a str) -> Image<'a> {
+    #[cfg(feature = "demo")]
+    if ui
+        .ctx()
+        .data(|d| d.get_temp::<bool>(egui::Id::new("synthetic-images")))
+        .unwrap_or(false)
+    {
+        return Image::from_bytes(
+            "bytes://youtfast-demo.svg",
+            include_bytes!("../../assets/demo-thumbnail.svg"),
+        );
+    }
     let ctx = ui.ctx();
     let now = ctx.input(|input| input.time);
     ctx.data_mut(|data| {

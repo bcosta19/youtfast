@@ -7,18 +7,25 @@ use std::time::Duration;
 use fastframe_now_playing as np;
 
 use crate::app::State;
-use crate::model::{Action, Video};
+use crate::app::player::{next_video, previous_video};
+use crate::model::Action;
 use crate::mpv::Status;
 use crate::youtube;
 
 /// A desktop command mapped onto what the app does with it.
 #[derive(Debug, PartialEq)]
 pub enum Effect {
-    Action(Action),
+    Action(Box<Action>),
     /// Brings the window forward.
     Raise,
     /// Closes the app.
     Quit,
+}
+
+impl Effect {
+    fn action(action: Action) -> Self {
+        Self::Action(Box::new(action))
+    }
 }
 
 /// The controls' handle; the controls run on a thread of their own.
@@ -59,38 +66,14 @@ impl MediaControls {
     }
 }
 
-/// The video after the one being watched in Up next, or the first related
-/// video when the list ran out.
-fn next_video(state: &State) -> Option<Video> {
-    let watching = state.watching.as_ref()?;
-    if let Some(index) = state
-        .up_next
-        .iter()
-        .position(|video| video.id == watching.id)
-        && let Some(next) = state.up_next.get(index + 1)
-    {
-        return Some(next.clone());
-    }
-    state
-        .details
-        .ready()
-        .and_then(|details| details.related.iter().find(|video| video.id != watching.id))
-        .cloned()
-}
-
 /// What a desktop command becomes, or `None` when it does not apply now.
 fn effect(command: &np::Command, state: &State) -> Option<Effect> {
     let action = match command {
         np::Command::Play => Action::SetPaused(false),
         np::Command::Pause | np::Command::Stop => Action::SetPaused(true),
         np::Command::PlayPause => Action::TogglePause,
-        np::Command::Next => {
-            return next_video(state).map(|video| Effect::Action(Action::Open(video)));
-        }
-        np::Command::Previous => Action::SeekTo {
-            seconds: 0.0,
-            exact: true,
-        },
+        np::Command::Next => Action::PlayNext,
+        np::Command::Previous => Action::PlayPrevious,
         np::Command::SeekBy(ms) => Action::SeekBy(*ms as f64 / 1000.0),
         np::Command::SetPosition { track_id, position } => {
             // Only the video on screen can be sought.
@@ -110,7 +93,7 @@ fn effect(command: &np::Command, state: &State) -> Option<Effect> {
         np::Command::Quit => return Some(Effect::Quit),
         _ => return None,
     };
-    Some(Effect::Action(action))
+    Some(Effect::action(action))
 }
 
 /// What the controls show, from the video being watched and mpv's status.
@@ -144,7 +127,18 @@ fn media_state(state: &State, status: Option<&Status>) -> np::State {
         position: Duration::from_secs_f64(status.position.max(0.0)),
         volume: Some(status.volume.clamp(0.0, 100.0) / 100.0),
         controls: np::Controls {
-            next: next_video(state).is_some(),
+            next: next_video(
+                state.watching.as_ref(),
+                &state.queue,
+                &state.up_next,
+                state
+                    .details
+                    .ready()
+                    .map_or(&[], |details| details.related.as_slice()),
+            )
+            .is_some()
+                || state.playing_more.is_some(),
+            previous: previous_video(state.watching.as_ref(), &state.up_next).is_some(),
             seek: status.duration > 0.0,
             ..np::Controls::default()
         },
@@ -155,6 +149,7 @@ fn media_state(state: &State, status: Option<&Status>) -> np::State {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::Video;
 
     fn watching() -> State {
         State {
@@ -235,30 +230,30 @@ mod tests {
         let action = |command: &np::Command| effect(command, &state);
         assert_eq!(
             action(&np::Command::Play),
-            Some(Effect::Action(Action::SetPaused(false)))
+            Some(Effect::action(Action::SetPaused(false)))
         );
         assert_eq!(
             action(&np::Command::Pause),
-            Some(Effect::Action(Action::SetPaused(true)))
+            Some(Effect::action(Action::SetPaused(true)))
         );
         assert_eq!(
             action(&np::Command::Stop),
-            Some(Effect::Action(Action::SetPaused(true)))
+            Some(Effect::action(Action::SetPaused(true)))
         );
         assert_eq!(
             action(&np::Command::PlayPause),
-            Some(Effect::Action(Action::TogglePause))
+            Some(Effect::action(Action::TogglePause))
         );
         assert_eq!(
             action(&np::Command::SeekBy(-10_000)),
-            Some(Effect::Action(Action::SeekBy(-10.0)))
+            Some(Effect::action(Action::SeekBy(-10.0)))
         );
         assert_eq!(
             action(&np::Command::SetPosition {
                 track_id: "aaaaaaaaaaa".into(),
                 position: Duration::from_secs(60),
             }),
-            Some(Effect::Action(Action::SeekTo {
+            Some(Effect::action(Action::SeekTo {
                 seconds: 60.0,
                 exact: true,
             }))
@@ -273,19 +268,16 @@ mod tests {
         );
         assert_eq!(
             action(&np::Command::SetVolume(0.5)),
-            Some(Effect::Action(Action::SetVolume(50.0)))
+            Some(Effect::action(Action::SetVolume(50.0)))
         );
         assert_eq!(
             action(&np::Command::Previous),
-            Some(Effect::Action(Action::SeekTo {
-                seconds: 0.0,
-                exact: true
-            }))
+            Some(Effect::action(Action::PlayPrevious))
         );
         // A YouTube link opens; another URI does not.
         assert_eq!(
             action(&np::Command::OpenUri("https://youtu.be/ccccccccccc".into())),
-            Some(Effect::Action(Action::Search(
+            Some(Effect::action(Action::Search(
                 "https://youtu.be/ccccccccccc".into()
             )))
         );
@@ -299,17 +291,46 @@ mod tests {
     }
 
     #[test]
-    fn next_needs_a_next_video() {
+    fn next_and_previous_are_dispatched_to_the_shared_player_logic() {
         let mut state = watching();
         assert_eq!(
             effect(&np::Command::Next, &state),
-            Some(Effect::Action(Action::Open(Video::from_id(
-                "bbbbbbbbbbb".into()
-            ))))
+            Some(Effect::action(Action::PlayNext))
         );
         state.up_next.pop();
-        assert_eq!(effect(&np::Command::Next, &state), None);
+        assert_eq!(
+            effect(&np::Command::Next, &state),
+            Some(Effect::action(Action::PlayNext))
+        );
         state.watching = None;
-        assert_eq!(effect(&np::Command::Next, &state), None);
+        assert_eq!(
+            effect(&np::Command::Next, &state),
+            Some(Effect::action(Action::PlayNext))
+        );
+    }
+
+    #[test]
+    fn desktop_next_includes_the_queue_and_previous_matches_the_source() {
+        let mut state = watching();
+        state.up_next = vec![
+            Video::from_id("before".into()),
+            state.watching.clone().unwrap(),
+        ];
+        state.queue = vec![Video::from_id("queued".into())];
+        let media = media_state(&state, Some(&playing()));
+        assert!(media.controls.next);
+        assert!(media.controls.previous);
+        state.queue.clear();
+        assert!(!media_state(&state, Some(&playing())).controls.next);
+        state.up_next.remove(0);
+        assert!(!media_state(&state, Some(&playing())).controls.previous);
+        state.playing_more = Some(crate::innertube::More {
+            ctoken: "next".into(),
+            endpoint: rustypipe::model::paginator::ContinuationEndpoint::Browse,
+            visitor_data: None,
+            authenticated: false,
+            ours: true,
+        });
+        assert!(media_state(&state, Some(&playing())).controls.next);
     }
 }

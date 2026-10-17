@@ -4,6 +4,8 @@ mod account;
 mod alerts;
 mod app;
 mod backend;
+#[cfg(feature = "demo")]
+mod demo;
 mod diagnostics;
 mod icons;
 mod innertube;
@@ -21,6 +23,7 @@ mod theme;
 mod thumbs;
 mod ui;
 mod util;
+mod video_extras;
 mod youtube;
 
 use std::sync::Arc;
@@ -30,6 +33,22 @@ use clap::Parser;
 #[derive(Parser)]
 #[command(version, about, args_conflicts_with_subcommands = true)]
 struct Cli {
+    /// Synthetic, offline UI; never opens account stores or the running instance.
+    #[cfg(feature = "demo")]
+    #[arg(long)]
+    demo: bool,
+    #[cfg(feature = "demo")]
+    #[arg(long, default_value = "home")]
+    demo_view: String,
+    #[cfg(feature = "demo")]
+    #[arg(long)]
+    demo_light: bool,
+    #[cfg(feature = "demo")]
+    #[arg(long, default_value = "1280x800")]
+    demo_size: String,
+    #[cfg(feature = "demo")]
+    #[arg(long)]
+    demo_capture: Option<std::path::PathBuf>,
     /// A YouTube link to open, or something to search for.
     open: Option<String>,
     /// Log debug categories (private data stays redacted).
@@ -165,6 +184,10 @@ pub(crate) fn safe_error(error: &str) -> String {
 
 fn main() -> eframe::Result {
     let cli = Cli::parse();
+    #[cfg(feature = "demo")]
+    if cli.demo {
+        return demo::run(&cli);
+    }
     // A command-line action for the running copy never opens a window.
     if matches!(cli.command, Some(Command::ReloadThemes)) {
         instance::send("reload-themes");

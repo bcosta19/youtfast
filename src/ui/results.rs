@@ -46,14 +46,25 @@ pub fn title(ui: &mut Ui, state: &State, title: &str, count: Option<usize>) {
 
 pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     panel(ui, |ui| {
+        super::discovery::filters(ui, state, actions);
+        if state.search_options.kind != crate::innertube::SearchKind::Videos {
+            title(ui, state, "Resultados da pesquisa", None);
+            super::discovery::other_results(ui, state, actions);
+            return;
+        }
         let listing = &state.results;
-        title(ui, state, "Search results", Some(listing.items().len()));
+        title(
+            ui,
+            state,
+            "Resultados da pesquisa",
+            Some(listing.items().len()),
+        );
         match listing {
             Listing::Idle => {}
-            Listing::Loading => loading(ui, state, "results"),
+            Listing::Loading => loading(ui, state, "resultados"),
             Listing::Failed(error) => failed(ui, state, error, actions),
             Listing::Ready(videos) if videos.is_empty() => {
-                nothing(ui, state, "Search for something")
+                nothing(ui, state, "Pesquise um vídeo, canal ou playlist")
             }
             Listing::Ready(videos) => rows(ui, state, videos, true, true, actions),
         }
@@ -73,7 +84,7 @@ pub fn videos(
     self::title(ui, state, title, Some(listing.items().len()));
     match listing {
         Listing::Idle => {}
-        Listing::Loading => loading(ui, state, "videos"),
+        Listing::Loading => loading(ui, state, "vídeos"),
         Listing::Failed(error) => failed(ui, state, error, actions),
         Listing::Ready(videos) if videos.is_empty() => nothing(ui, state, empty),
         Listing::Ready(videos) => video_rows(ui, state, videos, actions),
@@ -126,10 +137,7 @@ fn rows<'a>(
                     if selected && state.cursor_moved {
                         response.clone().scroll_to_me(None);
                     }
-                    if response.clicked() {
-                        actions.push(Action::Open(video.clone()));
-                    }
-                    video_menu(&response, state, video, actions);
+                    widgets::video_interactions(ui, &response, state, video, actions);
                 },
             );
             if more {
@@ -209,14 +217,14 @@ pub fn video_menu(
     actions: &mut Vec<Action>,
 ) {
     response.context_menu(|ui| {
-        if ui.button("Play next").clicked() {
+        if ui.button("Reproduzir a seguir").clicked() {
             actions.push(Action::Enqueue {
                 video: video.clone(),
                 next: true,
             });
             ui.close();
         }
-        if ui.button("Add to queue").clicked() {
+        if ui.button("Adicionar à fila").clicked() {
             actions.push(Action::Enqueue {
                 video: video.clone(),
                 next: false,
@@ -225,9 +233,9 @@ pub fn video_menu(
         }
         let later = state.library.in_watch_later(&video.id);
         let label = if later {
-            "Remove from Watch later"
+            "Remover de assistir mais tarde"
         } else {
-            "Save to Watch later"
+            "Assistir mais tarde neste dispositivo"
         };
         if ui.button(label).clicked() {
             actions.push(Action::ToggleWatchLater(video.clone()));
@@ -236,21 +244,127 @@ pub fn video_menu(
     });
 }
 
-/// The spinner and `Loading <what>…`, centred.
+/// Keep the list's proportions in place while its first page is loading.
 pub fn loading(ui: &mut Ui, state: &State, what: &str) {
-    centered(ui, |ui| {
-        ui.horizontal(|ui| {
-            // Centre the spinner line: egui's horizontal layout starts left.
-            let width = 200.0_f32.min(ui.available_width());
-            ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
-            widgets::loading(ui, &state.palette, what);
+    ui.label(RichText::new(format!("Carregando {what}…")).color(state.palette.secondary));
+    ui.add_space(12.0);
+    egui::ScrollArea::vertical()
+        .auto_shrink(false)
+        .show(ui, |ui| {
+            loading_placeholders(ui, state);
         });
-    });
+}
+
+fn loading_placeholders(ui: &mut Ui, state: &State) -> Vec<egui::Rect> {
+    use crate::model::{ChannelTab, View};
+    let cards = state.view == View::Home
+        || (state.view == View::Channel
+            && matches!(
+                state.channel_tab,
+                ChannelTab::Videos | ChannelTab::Shorts | ChannelTab::Live | ChannelTab::Search(_)
+            ));
+    let mut rects = Vec::new();
+    if cards {
+        let gap = 16.0;
+        let (columns, width) = widgets::grid_columns(ui.available_width(), 280.0, gap, 5);
+        for _ in 0..3 {
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = gap;
+                for _ in 0..columns {
+                    let height = widgets::video_card_height(ui, width);
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+                    let thumb =
+                        egui::Rect::from_min_size(rect.min, egui::vec2(width, width * 9.0 / 16.0));
+                    placeholder(ui, state, thumb);
+                    placeholder(
+                        ui,
+                        state,
+                        egui::Rect::from_min_size(
+                            thumb.left_bottom() + egui::vec2(0.0, 12.0),
+                            egui::vec2(width * 0.9, 14.0),
+                        ),
+                    );
+                    placeholder(
+                        ui,
+                        state,
+                        egui::Rect::from_min_size(
+                            thumb.left_bottom() + egui::vec2(0.0, 36.0),
+                            egui::vec2(width * 0.6, 12.0),
+                        ),
+                    );
+                    rects.push(rect);
+                }
+            });
+            ui.add_space(gap);
+        }
+    } else {
+        let channels = state.view == View::Subscriptions
+            || (state.view == View::Results
+                && state.search_options.kind == crate::innertube::SearchKind::Channels);
+        let large = state.view == View::Results
+            && state.search_options.kind == crate::innertube::SearchKind::Videos;
+        let width = ui.available_width();
+        let thumbnail_width = if channels {
+            48.0
+        } else if large {
+            (width / 2.0).clamp(168.0, 360.0)
+        } else {
+            168.0
+        };
+        let height = if channels {
+            64.0
+        } else if large {
+            thumbnail_width * 9.0 / 16.0 + 12.0
+        } else {
+            106.0
+        };
+        for _ in 0..6 {
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+            let thumb = egui::Rect::from_min_size(
+                rect.min + egui::vec2(0.0, 8.0),
+                egui::vec2(thumbnail_width, if channels { 48.0 } else { height - 12.0 }),
+            );
+            if channels {
+                ui.painter()
+                    .circle_filled(thumb.center(), 24.0, state.palette.surface);
+            } else {
+                placeholder(ui, state, thumb);
+            }
+            let text_left = thumb.right() + 16.0;
+            let available = (rect.right() - text_left).max(0.0);
+            placeholder(
+                ui,
+                state,
+                egui::Rect::from_min_size(
+                    egui::pos2(text_left, rect.top() + 16.0),
+                    egui::vec2(available * 0.85, 14.0),
+                ),
+            );
+            placeholder(
+                ui,
+                state,
+                egui::Rect::from_min_size(
+                    egui::pos2(text_left, rect.top() + 40.0),
+                    egui::vec2(available * 0.55, 12.0),
+                ),
+            );
+            rects.push(rect);
+        }
+    }
+    rects
+}
+
+fn placeholder(ui: &Ui, state: &State, rect: egui::Rect) {
+    if ui.is_rect_visible(rect) {
+        ui.painter()
+            .rect_filled(rect, theme::RADIUS, state.palette.surface);
+    }
 }
 
 /// The empty state: a centred title, then what would fill the list.
 pub fn nothing(ui: &mut Ui, state: &State, hint: &str) {
-    empty(ui, state, "Nothing here", hint);
+    empty(ui, state, "Nada por aqui", hint);
 }
 
 /// An empty state with its own title.
@@ -278,7 +392,14 @@ pub fn failed(ui: &mut Ui, state: &State, error: &str, actions: &mut Vec<Action>
                 .color(state.palette.red),
         );
         ui.add_space(8.0);
-        if widgets::button(ui, &state.palette, "Retry", widgets::ButtonStyle::Normal).clicked() {
+        if widgets::button(
+            ui,
+            &state.palette,
+            "Tentar novamente",
+            widgets::ButtonStyle::Normal,
+        )
+        .clicked()
+        {
             actions.push(Action::Refresh);
         }
     });
@@ -294,6 +415,277 @@ pub fn centered(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn loading_placeholders_keep_stable_geometry_at_phone_and_desktop_widths() {
+        for width in [480.0, 1280.0] {
+            for view in [
+                crate::model::View::Home,
+                crate::model::View::Results,
+                crate::model::View::Channel,
+                crate::model::View::Subscriptions,
+                crate::model::View::Playlist,
+            ] {
+                let ctx = egui::Context::default();
+                crate::theme::install_fonts(&ctx);
+                let state = State {
+                    view,
+                    ..Default::default()
+                };
+                let mut previous = Vec::new();
+                for frame in 0..3 {
+                    let mut rects = Vec::new();
+                    let mut output = ctx.run_ui(
+                        egui::RawInput {
+                            screen_rect: Some(egui::Rect::from_min_size(
+                                egui::Pos2::ZERO,
+                                egui::vec2(width, 720.0),
+                            )),
+                            ..Default::default()
+                        },
+                        |ui| {
+                            egui::CentralPanel::default().show(ui, |ui| {
+                                rects = loading_placeholders(ui, &state);
+                            });
+                        },
+                    );
+                    output.textures_delta.clear();
+                    assert!(!rects.is_empty());
+                    assert!(rects.iter().all(|rect| rect.is_finite()
+                        && rect.width() > 0.0
+                        && rect.height() > 0.0
+                        && rect.left() >= 0.0
+                        && rect.right() <= width));
+                    if frame == 2 {
+                        assert_eq!(
+                            rects, previous,
+                            "loading geometry moved for {view:?} at {width}"
+                        );
+                    }
+                    previous = rects;
+                }
+                assert_eq!(
+                    super::super::images::drawn_count(&ctx),
+                    0,
+                    "placeholders must not request real thumbnails"
+                );
+            }
+        }
+    }
+
+    fn click_label(
+        state: &State,
+        label: &str,
+        render: fn(&mut Ui, &State, &mut Vec<Action>),
+    ) -> Vec<Action> {
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 720.0));
+        let mut first = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(screen),
+                ..Default::default()
+            },
+            |ui| render(ui, state, &mut Vec::new()),
+        );
+        let position = first
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::epaint::Shape::Text(text) if text.galley.text().contains(label) => {
+                    Some(text.pos + text.galley.size() / 2.0)
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("button {label} missing"));
+        first.textures_delta.clear();
+        let mut actions = Vec::new();
+        for pressed in [true, false] {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    events: vec![
+                        egui::Event::PointerMoved(position),
+                        egui::Event::PointerButton {
+                            pos: position,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| render(ui, state, &mut actions),
+            );
+            output.textures_delta.clear();
+        }
+        actions
+    }
+
+    #[test]
+    fn retry_on_failed_typed_search_requests_a_refresh() {
+        let mut state = State {
+            view: crate::model::View::Results,
+            search_query: "Rust".into(),
+            ..Default::default()
+        };
+        state.search_options.kind = crate::innertube::SearchKind::Channels;
+        state.results_channels = Listing::Failed("Falha temporária".into());
+        assert_eq!(
+            click_label(&state, "Tentar novamente", show),
+            [Action::Refresh]
+        );
+    }
+
+    #[test]
+    fn playlist_with_metadata_exposes_play_all_as_an_action() {
+        let state = State {
+            view: crate::model::View::Playlist,
+            page: Some(crate::app::Page::Playlist {
+                id: "synthetic-playlist".into(),
+                name: "Título anterior".into(),
+            }),
+            playlist_details: Some(crate::innertube::PlaylistDetails {
+                name: "Aulas de Rust".into(),
+                channel: Some("Canal".into()),
+                description: "Aprenda Rust".into(),
+                videos: Some(30),
+                ..Default::default()
+            }),
+            page_videos: Listing::Ready(vec![Video::from_id("aaaaaaaaaaa".into())]),
+            ..Default::default()
+        };
+        assert_eq!(
+            click_label(&state, "Reproduzir tudo", super::super::library::page),
+            [Action::PlayPlaylist]
+        );
+    }
+
+    fn scroll_to_footer_and_click(
+        state: &State,
+        width: f32,
+        render: fn(&mut Ui, &State, &mut Vec<Action>),
+    ) {
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 720.0));
+        let mut button = None;
+        for frame in 0..40 {
+            let mut events = vec![egui::Event::PointerMoved(egui::pos2(width / 2.0, 560.0))];
+            if frame > 0 {
+                events.push(egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    phase: egui::TouchPhase::Move,
+                    delta: egui::vec2(0.0, -1000.0),
+                    modifiers: egui::Modifiers::NONE,
+                });
+            }
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    time: Some(frame as f64 / 10.0),
+                    screen_rect: Some(screen),
+                    events,
+                    ..Default::default()
+                },
+                |ui| render(ui, state, &mut Vec::new()),
+            );
+            button = output.shapes.iter().find_map(|shape| match &shape.shape {
+                egui::epaint::Shape::Text(text)
+                    if matches!(text.galley.text(), "Load more" | "Carregar mais") =>
+                {
+                    let rect = egui::Rect::from_min_size(text.pos, text.galley.size());
+                    (shape.clip_rect.contains_rect(rect) && screen.contains_rect(rect))
+                        .then_some(rect)
+                }
+                _ => None,
+            });
+            output.textures_delta.clear();
+            if button.is_some() {
+                break;
+            }
+        }
+        let rect =
+            button.unwrap_or_else(|| panic!("continuation footer is unreachable at width {width}"));
+        assert!(rect.bottom() <= screen.bottom() && rect.right() <= screen.right());
+        let mut actions = Vec::new();
+        for (frame, pressed) in [true, false].into_iter().enumerate() {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    time: Some(5.0 + frame as f64 / 10.0),
+                    screen_rect: Some(screen),
+                    events: vec![
+                        egui::Event::PointerMoved(rect.center()),
+                        egui::Event::PointerButton {
+                            pos: rect.center(),
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| render(ui, state, &mut actions),
+            );
+            output.textures_delta.clear();
+        }
+        assert_eq!(
+            actions,
+            [Action::LoadMore],
+            "footer did not receive the click at width {width}"
+        );
+    }
+
+    #[test]
+    fn channel_search_and_playlist_footers_are_reachable_and_clickable_after_long_lists() {
+        let more = crate::innertube::More {
+            ctoken: "synthetic-next-page".into(),
+            endpoint: rustypipe::model::paginator::ContinuationEndpoint::Browse,
+            visitor_data: None,
+            authenticated: false,
+            ours: false,
+        };
+        let mut channels = State {
+            view: crate::model::View::Results,
+            results_more: Some(more.clone()),
+            ..Default::default()
+        };
+        channels.search_options.kind = crate::innertube::SearchKind::Channels;
+        channels.results_channels = Listing::Ready(
+            (0..60)
+                .map(|index| crate::model::Channel {
+                    id: format!("UC{index:022}"),
+                    name: format!("Canal {index}"),
+                    avatar: None,
+                })
+                .collect(),
+        );
+        let playlist = State {
+            view: crate::model::View::Playlist,
+            page: Some(crate::app::Page::Playlist {
+                id: "synthetic-playlist".into(),
+                name: "Playlist sintética".into(),
+            }),
+            page_more: Some(more),
+            page_videos: Listing::Ready(
+                (0..60)
+                    .map(|index| Video::from_id(format!("{index:011}")))
+                    .collect(),
+            ),
+            ..Default::default()
+        };
+        for width in [480.0, 1280.0] {
+            scroll_to_footer_and_click(&channels, width, show);
+            scroll_to_footer_and_click(&playlist, width, super::super::library::page);
+            let mut empty = State {
+                view: crate::model::View::Playlist,
+                page: playlist.page.clone(),
+                page_videos: Listing::Ready(Vec::new()),
+                ..State::default()
+            };
+            empty.page_more = playlist.page_more.clone();
+            scroll_to_footer_and_click(&empty, width, super::super::library::page);
+        }
+    }
 
     #[test]
     fn rows_with_nested_controls_keep_their_identity_when_scrolled() {

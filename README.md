@@ -34,7 +34,7 @@ and desktop metadata and pass all checks before assets are published.
 | What | Why | Arch | Debian/Ubuntu |
 |---|---|---|---|
 | libmpv | Playback, linked at build time | `mpv` | `libmpv-dev` |
-| yt-dlp | Search, and the streams mpv plays | `yt-dlp` | `yt-dlp` (keep it current) |
+| yt-dlp | The streams mpv plays and playback retries | `yt-dlp` | `yt-dlp` (keep it current) |
 | Rust 1.98 | Pinned in `rust-toolchain.toml` | `rustup` | `rustup` |
 | python-secretstorage | Optional: signing in with a Chromium-based browser's login | `python-secretstorage` | `python3-secretstorage` |
 
@@ -55,8 +55,30 @@ cargo run --release -- "rust egui"                      # or search
 | Space, K | Play or pause |
 | ←, → | Back or forward 5 s |
 | J, L | Back or forward 10 s |
+| Ctrl+← / → (Option on macOS) | Previous / next chapter |
+| Home, End; 0–9 | Beginning / end; position in tens of percent |
+| ↑, ↓; M | Volume ±5%; mute (Shorts use ↑/↓ for videos) |
+| C; <, >; comma, period | Captions; speed; previous / next paused frame |
+| Shift+N, Shift+P | Next / previous in the playback source |
+| I; T | Mini player; theater mode |
 | F, double click | Full screen |
-| Esc | Leave full screen, then go back to the results |
+| /; ? | Focus search; open shortcut help |
+| Alt+← / →; mouse back / forward | Browse back / forward (Alt keys on Linux/Windows) |
+| Esc | Dismiss a menu/help/countdown, leave full screen, or go back |
+
+Text inputs and menus keep their own keys. Focused buttons own Space, and a
+focused volume slider keeps its arrow keys. In lists, J/K move selection rather
+than seek. Hold the video to temporarily play at 2×; releasing restores the
+previous speed. The player menu also offers repeat, caption size/background,
+copying a timestamped link, and opening the video in a browser.
+
+Search uses RustyPipe directly, with separate video, channel and playlist
+results. Video filters include date, duration, live status and ordering.
+Back/forward restores the page, query, filters, selection and scroll position.
+Cards have channel links, a menu and quick Watch later/queue actions. The queue
+can be reordered or trimmed; the mini player can be moved and resized inside
+the application. Playlist playback continues beyond the initially loaded page.
+Device history supports filtering and removing individual entries.
 
 The watch page also shows the description (timestamps seek), chapters
 and comments, loaded through rustypipe. Comments and replies also display
@@ -65,6 +87,31 @@ cache, decode in the background and animate only while visible.
 Channel pages have tabs — videos,
 shorts, live, playlists and about — and a search of the channel's own
 videos.
+
+Channel pages include a banner and video ordering. Playlists show their cover,
+metadata and the currently playing item. Shorts use a portrait stage with
+next/previous controls and wheel navigation. Interface controls are in Brazilian
+Portuguese; this is not yet a language-selection system.
+
+The watch page can show a searchable, synchronized transcript and timeline
+thumbnail previews when YouTube supplies the required public metadata. These
+optional requests start on demand, run without an account, and use bounded
+downloads. Missing captions/storyboards or an upstream restriction may leave
+the feature unavailable; playback remains through libmpv.
+
+For synthetic UI previews, build with `--features demo` and run:
+
+```sh
+cargo run --locked --features demo -- --demo --demo-view watch --demo-size 1280x800
+cargo run --locked --features demo -- --demo --demo-view home --demo-light
+```
+
+Demo mode opens an isolated window without accounts, user files, network,
+playback or desktop media registration. It renders fixture states, not every
+backend interaction. `--demo-capture target/example.png` captures that window
+and closes it. The playback bindings follow
+[YouTube's published shortcuts](https://support.google.com/youtube/answer/7631406),
+with the list and Shorts adaptations described above.
 
 The desktop's media keys and panels (MPRIS, so `playerctl` works too)
 control playback, and a second launch hands a link or search to the

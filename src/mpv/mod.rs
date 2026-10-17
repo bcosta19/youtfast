@@ -484,6 +484,29 @@ impl Mpv {
         }
     }
 
+    /// Caption appearance stays within mpv's subtitle renderer: no extra
+    /// image downloads or text rendering on the interface thread.
+    pub fn set_caption_style(&self, scale: f64, background: bool) -> Result<(), Error> {
+        let scale = if scale.is_finite() {
+            scale.clamp(0.5, 2.0)
+        } else {
+            1.0
+        };
+        self.set_property("sub-scale", &format!("{scale:.2}"))?;
+        self.set_property(
+            "sub-back-color",
+            if background { "#C0000000" } else { "#00000000" },
+        )?;
+        self.set_property(
+            "sub-border-style",
+            if background {
+                "background-box"
+            } else {
+                "outline-and-shadow"
+            },
+        )
+    }
+
     /// 0.25 to 2, as YouTube offers.
     pub fn set_speed(&self, speed: f64) -> Result<(), Error> {
         self.set_property("speed", &format!("{:.2}", speed.clamp(0.25, 2.0)))

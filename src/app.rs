@@ -49,6 +49,15 @@ pub struct State {
     /// The search field's text.
     pub query: String,
     pub results: Results,
+    pub search_options: innertube::SearchOptions,
+    pub search_query: String,
+    pub results_channels: Listing<Channel>,
+    pub results_playlists: Listing<PlaylistSummary>,
+    pub history_query: String,
+    pub channel_order: innertube::ChannelOrder,
+    pub playlist_details: Option<innertube::PlaylistDetails>,
+    pub can_go_back: bool,
+    pub can_go_forward: bool,
     /// The results' next page, and a page on its way (or its error).
     pub results_more: Option<innertube::More>,
     pub results_more_state: Fetch<()>,
@@ -219,6 +228,21 @@ pub struct State {
     pub suggestion_cursor: Option<usize>,
     /// The mini player was closed: the video stays paused until reopened.
     pub mini_closed: bool,
+    pub playback_loop: bool,
+    pub extras: Fetch<crate::video_extras::Extras>,
+    pub transcript_open: bool,
+    pub transcript_query: String,
+    pub transcript_follow: bool,
+    pub playing_playlist: Option<String>,
+    pub playing_more: Option<innertube::More>,
+    pub playing_more_state: Fetch<()>,
+    pub playing_waiting: Option<PlaylistAdvance>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlaylistAdvance {
+    Manual,
+    Autoplay,
 }
 
 /// Which page of the player's menu is open.
@@ -230,6 +254,7 @@ pub enum PlayerMenu {
     Speed,
     Quality,
     Captions,
+    CaptionStyle,
 }
 
 impl State {
@@ -334,6 +359,7 @@ pub struct App {
     /// The generation the details/comments requests of the video being
     /// watched were sent with; a later `open` drops their answers.
     details_generation: u64,
+    playing_generation: u64,
     /// The watch pages seen lately, so going back to one asks YouTube
     /// again only for its comments.
     details_cache: util::Recent<Details>,
@@ -350,7 +376,8 @@ pub struct App {
     shelf_asked: bool,
     /// Where Back goes: the pages a video, channel or playlist was opened
     /// from.
-    back: Vec<View>,
+    back: Vec<navigation::Location>,
+    forward: Vec<navigation::Location>,
     /// The palettes the settings page offers, scanned off the interface
     /// thread.
     custom_themes: theme::Catalog,
@@ -466,6 +493,7 @@ impl App {
             generation: 0,
             generations: HashMap::new(),
             details_generation: 0,
+            playing_generation: 0,
             details_cache: util::Recent::new(DETAILS_KEPT),
             ratings: util::Recent::new(RATINGS_KEPT),
             more_comments_token: None,
@@ -473,6 +501,7 @@ impl App {
             open_channel: None,
             shelf_asked: false,
             back: Vec::new(),
+            forward: Vec::new(),
             custom_themes,
             theme_waker,
             theme_transition: fastframe_theme::Transition::default(),
@@ -518,6 +547,34 @@ impl App {
 
     fn handle(&mut self, event: Event) {
         match event {
+            Event::PlayingPlaylist {
+                generation,
+                id,
+                result,
+            } => {
+                match self.state.finish_playlist_page(
+                    self.playing_generation,
+                    generation,
+                    &id,
+                    result,
+                ) {
+                    Some(reason) if !self.await_playlist_page(reason) => match reason {
+                        PlaylistAdvance::Manual => self.play_next(),
+                        PlaylistAdvance::Autoplay if self.state.settings.autoplay => {
+                            self.start_autoplay()
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                }
+            }
+            Event::Extras { generation, result } if generation == self.details_generation => {
+                self.state.extras = match result {
+                    Ok(extras) => Fetch::Ready(extras),
+                    Err(error) => Fetch::Failed(error),
+                };
+            }
+            Event::Extras { .. } => {}
             Event::Loaded {
                 slot,
                 generation,
@@ -611,22 +668,61 @@ impl App {
                     self.open(Video::from_id(id));
                     return;
                 }
+                self.push_location();
                 self.leave_video(ctx);
-                self.back.clear();
                 self.state.suggestions.clear();
                 self.suggested = text.to_owned();
+                self.state.query = text.to_owned();
+                self.state.search_query = text.to_owned();
                 self.state.view = View::Results;
-                self.request(Slot::Search, Request::Search(text.to_owned()));
+                self.load(View::Results, true);
             }
             Action::Open(video) => self.open(video),
-            Action::Back => {
-                self.leave_video(ctx);
-                self.state.view = self.back.pop().unwrap_or(View::Home);
-                self.load(self.state.view, false);
+            Action::LoadExtras => self.load_extras(),
+            Action::ToggleTranscript => {
+                self.state.transcript_open = !self.state.transcript_open;
+                self.state.transcript_follow = true;
+                if self.state.transcript_open {
+                    self.load_extras();
+                }
             }
+            Action::SeekChapter(forward) => {
+                if let (Some(status), Some(details)) = (
+                    self.player.as_ref().map(Mpv::status),
+                    self.state.details.ready(),
+                ) && let Some(seconds) =
+                    navigation::chapter_target(&details.chapters, status.position, forward)
+                {
+                    self.apply(
+                        ctx,
+                        Action::SeekTo {
+                            seconds,
+                            exact: true,
+                        },
+                    );
+                }
+            }
+            Action::RetryPlayback => self.retry_playback(),
+            Action::ToggleLoop => self.toggle_loop(),
+            Action::MoveQueue { from, to } => self.move_queue(from, to),
+            Action::SetCaptionScale(scale) => self.set_caption_scale(scale),
+            Action::SetCaptionBackground(on) => self.set_caption_background(on),
+            Action::ToggleMiniPlayer => {
+                if self.state.view == View::Watch && self.back.is_empty() {
+                    self.apply(ctx, Action::Navigate(View::Home));
+                } else if self.state.view == View::Watch {
+                    self.apply(ctx, Action::Back);
+                } else {
+                    self.return_to_watch();
+                }
+            }
+            Action::Back => self.travel(ctx, false),
+            Action::Forward => self.travel(ctx, true),
             Action::Navigate(view) => {
+                if self.state.view != view {
+                    self.push_location();
+                }
                 self.leave_video(ctx);
-                self.back.clear();
                 self.state.view = view;
                 if view == View::Notifications {
                     self.mark_notifications_visited();
@@ -650,6 +746,27 @@ impl App {
                     && let Some(video) = self.state.watching.clone()
                 {
                     self.refresh_details(video);
+                }
+            }
+            Action::SetSearchOptions(options) => {
+                self.state.search_options = options;
+                self.load(View::Results, true);
+            }
+            Action::SetChannelOrder(order) => {
+                self.state.channel_order = order;
+                self.load(View::Channel, true);
+            }
+            Action::SetHistoryQuery(query) => {
+                self.state.history_query = query;
+                self.state.cursor = 0;
+            }
+            Action::RemoveHistory(id) => {
+                self.state.library.remove_history(&id);
+                self.save_library();
+            }
+            Action::PlayPlaylist => {
+                if let Some(video) = self.state.page_videos.items().first().cloned() {
+                    self.open(video);
                 }
             }
             Action::SetSource(source) => {
@@ -738,7 +855,7 @@ impl App {
             }
             Action::ImportTakeout => {
                 let picked = rfd::AsyncFileDialog::new()
-                    .set_title("Import from Google Takeout")
+                    .set_title("Importar do Google Takeout")
                     .add_filter("Takeout subscriptions or history", &["csv", "json"])
                     .pick_file();
                 self.backend.send(Command::ImportTakeout(Box::pin(picked)));
@@ -777,7 +894,7 @@ impl App {
             Action::SetFeedFilter(filter) => self.state.feed_filter = filter,
             Action::CopyLink(url) => {
                 ctx.copy_text(url);
-                self.state.notice = Some("Link copied".to_owned());
+                self.state.notice = Some("Link copiado".to_owned());
             }
             Action::OpenUrl(url) => {
                 // Web pages, and the share menu's e-mail.
@@ -806,14 +923,18 @@ impl App {
             Action::SetSubtitle(id) => self.set_subtitle(id),
             Action::ToggleCaptions => self.toggle_captions(),
             Action::GoLive => self.go_live(),
-            Action::PlayNext => self.play_next(),
-            Action::PlayPrevious => self.play_previous(),
-            Action::CancelAutoplay => self.state.autoplay = None,
-            Action::SetAutoplay(on) => {
-                self.state.settings.autoplay = on;
-                if !on {
-                    self.state.autoplay = None;
+            Action::PlayNext => {
+                if !self.await_playlist_page(PlaylistAdvance::Manual) {
+                    self.play_next();
                 }
+            }
+            Action::PlayPrevious => self.play_previous(),
+            Action::CancelAutoplay => {
+                self.state.autoplay = None;
+                self.state.playing_waiting = None;
+            }
+            Action::SetAutoplay(on) => {
+                self.state.set_autoplay_choice(on);
                 self.save_settings();
             }
             Action::Enqueue { video, next } => self.enqueue(video, next),
@@ -870,7 +991,7 @@ impl eframe::App for App {
         // What the desktop's media controls asked for, and what they show.
         for effect in self.media.commands(&self.state) {
             match effect {
-                crate::now_playing::Effect::Action(action) => self.apply(ctx, action),
+                crate::now_playing::Effect::Action(action) => self.apply(ctx, *action),
                 crate::now_playing::Effect::Raise => focus(ctx),
                 crate::now_playing::Effect::Quit => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close)
@@ -886,6 +1007,7 @@ impl eframe::App for App {
             self.cursor_key = key;
         }
         self.playback_tick(ctx);
+        self.prefetch_playlist();
         self.suggest_tick(ctx);
         // The volume, once it has stayed still for a moment.
         if self
@@ -900,6 +1022,8 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.update_theme(ui.ctx());
         let mut actions = Vec::new();
+        self.state.can_go_back = !self.back.is_empty();
+        self.state.can_go_forward = !self.forward.is_empty();
         let status = self.player.as_ref().map(Mpv::status);
         ui::show(
             ui,
@@ -908,6 +1032,7 @@ impl eframe::App for App {
             self.surface.as_ref(),
             &mut actions,
         );
+        ui::release_speed_hold(ui.ctx(), &self.state, &mut actions);
         self.theme_transition.paint(ui.ctx());
         let ctx = ui.ctx().clone();
         for action in actions {
@@ -960,6 +1085,7 @@ fn native_display(cc: &eframe::CreationContext<'_>) -> NativeDisplay {
 
 mod accounts;
 mod loading;
+mod navigation;
 mod notifications;
 pub mod player;
 mod themes;

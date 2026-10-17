@@ -109,7 +109,11 @@ impl App {
                         self.state.library.mark_finished(&video.id);
                         self.save_library();
                     }
-                    self.start_autoplay();
+                    if (self.state.settings.autoplay || !self.state.queue.is_empty())
+                        && !self.await_playlist_page(PlaylistAdvance::Autoplay)
+                    {
+                        self.start_autoplay();
+                    }
                 }
             }
         }
@@ -135,17 +139,34 @@ impl App {
         log::debug!("opening video");
         self.remember_position();
         if self.state.view != View::Watch {
+            self.playing_generation += 1;
+            self.state.playing_playlist = match &self.state.page {
+                Some(Page::Playlist { id, .. }) if self.state.view == View::Playlist => {
+                    Some(id.clone())
+                }
+                _ => None,
+            };
+            self.state.playing_more = if self.state.playing_playlist.is_some() {
+                self.state.page_more.clone()
+            } else {
+                None
+            };
+            self.state.playing_more_state = Fetch::Idle;
+        }
+        self.state.playing_waiting = None;
+        if self.state.view != View::Watch {
             // A Short from Home's shelf goes on to the shelf's next ones.
             self.state.up_next = if video.short && self.state.view == View::Home {
                 self.state.shorts.items().to_vec()
             } else {
                 self.visible_videos()
             };
-            self.back.push(self.state.view);
+            self.push_location();
         }
         // What plays now leaves the queue.
         self.state.queue.retain(|queued| queued.id != video.id);
         self.state.autoplay = None;
+        self.state.playback_loop = false;
         self.state.mini_closed = false;
         self.state.player_menu = crate::app::PlayerMenu::Closed;
         self.state.segments.clear();
@@ -185,6 +206,11 @@ impl App {
             if let Err(error) = player.set_looping(video.short) {
                 log::warn!("mpv: {error}");
             }
+            let _ = player.set_looping(video.short || self.state.playback_loop);
+            let _ = player.set_caption_style(
+                self.state.settings.caption_scale,
+                self.state.settings.caption_background,
+            );
             self.state.player_error = player
                 .load(&video.url(), start)
                 .err()
@@ -194,6 +220,9 @@ impl App {
         self.state.watching = Some(video);
         self.state.save_targets = Fetch::Idle;
         self.state.share_at_time = false;
+        self.state.extras = Fetch::Idle;
+        self.state.transcript_open = false;
+        self.state.transcript_query.clear();
         self.load_rating();
         match self.details_cache.get(&id, util::now(), DETAILS_FRESH) {
             Some(details) => self.show_details(details.clone()),
@@ -207,12 +236,8 @@ impl App {
     /// Empties the details and comments panes, and drops the answers to
     /// their requests in flight.
     fn reset_watch_panes(&mut self) {
-        self.state.details = Fetch::Loading;
-        self.state.comments = Fetch::Idle;
-        self.state.comments_next = None;
-        self.state.comments_more = Fetch::Idle;
+        self.state.reset_watch_fetches();
         self.more_comments_token = None;
-        self.state.replies.clear();
         self.generation += 1;
         self.details_generation = self.generation;
     }
@@ -363,6 +388,7 @@ impl App {
                 title: details.title.clone(),
                 channel: Some(details.channel.name.clone()),
                 channel_id: Some(details.channel.id.clone()),
+                channel_avatar: details.channel.avatar.clone(),
                 duration: None,
                 views: Some(details.views),
                 live: details.live,
@@ -477,7 +503,7 @@ impl App {
     /// or the desktop's media controls.
     pub(super) fn return_to_watch(&mut self) {
         if self.state.watching.is_some() && self.state.view != View::Watch {
-            self.back.push(self.state.view);
+            self.push_location();
             self.state.view = View::Watch;
         }
         self.state.mini_closed = false;

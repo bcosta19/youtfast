@@ -25,7 +25,7 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 // set_max_width also widens: a narrow window would cut
                 // the text off at its edge instead of wrapping it.
                 ui.set_max_width(WIDTH.min(ui.available_width()));
-                results::title(ui, state, "Settings", None);
+                results::title(ui, state, "Configurações", None);
                 appearance(ui, state, actions);
                 ui.add_space(24.0);
                 playback(ui, state, actions);
@@ -39,14 +39,14 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 /// The Appearance group: the theme, its status, where palettes live.
 fn appearance(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let palette = &state.palette;
-    widgets::section(ui, palette, "Appearance", None, |ui| {
+    widgets::section(ui, palette, "Aparência", None, |ui| {
         widgets::card(ui, palette, |ui| {
             let description = if state.follows_omarchy {
-                "Automatic follows your Omarchy theme."
+                "O modo automático acompanha o tema do Omarchy."
             } else {
-                "Automatic is YouTFast's dark."
+                "O modo automático usa o tema escuro do YouTFast."
             };
-            setting_row(ui, palette, "Theme", description, CONTROL_WIDTH, |ui| {
+            setting_row(ui, palette, "Tema", description, CONTROL_WIDTH, |ui| {
                 theme_picker(ui, state, actions);
             });
             if !state.theme_status.is_empty() {
@@ -59,9 +59,12 @@ fn appearance(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             }
             ui.add_space(8.0);
             ui.label(
-                RichText::new(format!("Palettes are JSON files in {}", state.themes_dir))
-                    .font(theme::regular(13.0))
-                    .color(palette.secondary),
+                RichText::new(format!(
+                    "As paletas são arquivos JSON em {}",
+                    state.themes_dir
+                ))
+                .font(theme::regular(13.0))
+                .color(palette.secondary),
             );
         });
     });
@@ -71,9 +74,9 @@ fn appearance(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 fn theme_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     // The desktop's own palette: "Automatic" covers it.
     let mut choices = vec![
-        (ThemeChoice::Auto, "Automatic".to_owned()),
-        (ThemeChoice::Dark, "Dark".to_owned()),
-        (ThemeChoice::Light, "Light".to_owned()),
+        (ThemeChoice::Auto, "Automático".to_owned()),
+        (ThemeChoice::Dark, "Escuro".to_owned()),
+        (ThemeChoice::Light, "Claro".to_owned()),
     ];
     choices.extend(
         state
@@ -109,18 +112,18 @@ fn theme_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 /// The Playback group: autoplay, SponsorBlock.
 fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let palette = &state.palette;
-    widgets::section(ui, palette, "Playback", None, |ui| {
+    widgets::section(ui, palette, "Reprodução", None, |ui| {
         widgets::card(ui, palette, |ui| {
             let autoplay = state.settings.autoplay;
             setting_row(
                 ui,
                 palette,
-                "Autoplay",
-                "At a video's end the next one plays after a countdown: the queue's, then \
-                 Up next's, then the first related video.",
+                "Reprodução automática",
+                "Ao terminar um vídeo, o próximo começa após uma contagem: primeiro a fila, \
+                 depois a lista de origem e, por fim, os vídeos relacionados.",
                 CONTROL_WIDTH,
                 |ui| {
-                    if switch(ui, palette, autoplay, "Autoplay").clicked() {
+                    if switch(ui, palette, autoplay, "Reprodução automática").clicked() {
                         actions.push(Action::SetAutoplay(!autoplay));
                     }
                 },
@@ -130,10 +133,10 @@ fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             setting_row(
                 ui,
                 palette,
-                "Skip sponsors (SponsorBlock)",
-                "Skips sponsored segments and offers to skip intros, credits and the like, \
-                 as SponsorBlock's users marked them. It asks sponsor.ajay.app by a prefix \
-                 of the video's hash, which names thousands of videos, not this one.",
+                "Pular patrocínios (SponsorBlock)",
+                "Pula patrocínios e permite pular introduções, créditos e outros trechos \
+                 marcados pela comunidade do SponsorBlock. A consulta a sponsor.ajay.app \
+                 usa um prefixo do hash que corresponde a milhares de vídeos.",
                 CONTROL_WIDTH,
                 |ui| {
                     if switch(ui, palette, sponsorblock, "SponsorBlock").clicked() {
@@ -148,18 +151,18 @@ fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 /// The Notifications group: the check, desktop popups, the interval.
 fn notifications(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let palette = &state.palette;
-    widgets::section(ui, palette, "Notifications", None, |ui| {
+    widgets::section(ui, palette, "Notificações", None, |ui| {
         widgets::card(ui, palette, |ui| {
             let on = state.settings.alerts;
             setting_row(
                 ui,
                 palette,
-                "Check for new uploads",
-                "Checks the same sources as Home. YouTube's own notifications have no \
-                 API, so this watches subscriptions instead.",
+                "Verificar novos vídeos",
+                "Verifica as mesmas fontes do Início. Como as notificações do YouTube \
+                 não têm API, o aplicativo acompanha os canais inscritos.",
                 CONTROL_WIDTH,
                 |ui| {
-                    if switch(ui, palette, on, "Check for new uploads").clicked() {
+                    if switch(ui, palette, on, "Verificar novos vídeos").clicked() {
                         actions.push(Action::SetAlerts(!on));
                     }
                 },
@@ -169,14 +172,14 @@ fn notifications(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             setting_row(
                 ui,
                 palette,
-                "Desktop notifications",
-                "A popup on the desktop for each new upload, while the checks run.",
+                "Notificações na área de trabalho",
+                "Mostra uma notificação na área de trabalho para cada novo vídeo encontrado.",
                 CONTROL_WIDTH,
                 |ui| {
                     // Greyed: it only matters while the checks run.
                     let response = ui
                         .add_enabled_ui(on, |ui| {
-                            switch(ui, palette, desktop, "Desktop notifications")
+                            switch(ui, palette, desktop, "Notificações na área de trabalho")
                         })
                         .inner;
                     if on && response.clicked() {
@@ -189,8 +192,8 @@ fn notifications(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             setting_row(
                 ui,
                 palette,
-                "Check every",
-                "How long between two checks.",
+                "Verificar a cada",
+                "Intervalo entre as verificações.",
                 chips,
                 |ui| {
                     let raised = widgets::on_card(palette);

@@ -36,6 +36,7 @@ impl Entry {
             id,
             title: self.title.unwrap_or_default(),
             channel: self.channel.or(self.uploader),
+            channel_avatar: None,
             channel_id: self.channel_id.filter(|id| id.starts_with("UC")),
             duration: self.duration,
             views: self.view_count,

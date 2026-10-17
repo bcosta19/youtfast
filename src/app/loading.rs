@@ -3,6 +3,87 @@
 use super::*;
 
 impl State {
+    fn search_request(&self) -> Option<Request> {
+        (!self.search_query.trim().is_empty()).then(|| Request::Search {
+            query: self.search_query.clone(),
+            options: self.search_options,
+        })
+    }
+
+    fn start_search(&mut self) {
+        self.results = Listing::Idle;
+        self.results_channels = Listing::Idle;
+        self.results_playlists = Listing::Idle;
+        match self.search_options.kind {
+            innertube::SearchKind::Videos => self.results = Listing::Loading,
+            innertube::SearchKind::Channels => self.results_channels = Listing::Loading,
+            innertube::SearchKind::Playlists => self.results_playlists = Listing::Loading,
+        }
+        self.results_more = None;
+        self.results_more_state = Fetch::Idle;
+    }
+
+    fn search_continuation(&self) -> Option<(Slot, Request)> {
+        self.results_more
+            .clone()
+            .filter(|_| !matches!(self.results_more_state, Fetch::Loading))
+            .map(|more| {
+                (
+                    Slot::Search,
+                    Request::MoreSearch {
+                        more,
+                        kind: self.search_options.kind,
+                    },
+                )
+            })
+    }
+
+    fn fill_search(&mut self, result: Result<Payload, String>) {
+        match result {
+            Ok(Payload::Search { items, more }) => {
+                self.results_more = more;
+                self.results_more_state = Fetch::Idle;
+                match items {
+                    PageItems::Videos(items) => self.results = Listing::Ready(items),
+                    PageItems::Channels(items) => self.results_channels = Listing::Ready(items),
+                    PageItems::Playlists(items) => self.results_playlists = Listing::Ready(items),
+                    _ => {}
+                }
+            }
+            Ok(Payload::More { items, more }) => {
+                self.results_more = more;
+                self.results_more_state = Fetch::Idle;
+                match items {
+                    PageItems::Videos(items) => self.results.items_mut().extend(items),
+                    PageItems::Channels(items) => self.results_channels.items_mut().extend(items),
+                    PageItems::Playlists(items) => self.results_playlists.items_mut().extend(items),
+                    _ => {}
+                }
+            }
+            Err(error) if matches!(self.results_more_state, Fetch::Loading) => {
+                self.results_more_state = Fetch::Failed(error)
+            }
+            Err(error) => match self.search_options.kind {
+                innertube::SearchKind::Videos => self.results = Listing::Failed(error),
+                innertube::SearchKind::Channels => self.results_channels = Listing::Failed(error),
+                innertube::SearchKind::Playlists => self.results_playlists = Listing::Failed(error),
+            },
+            _ => {}
+        }
+    }
+
+    fn fill_playlist(
+        &mut self,
+        details: innertube::PlaylistDetails,
+        items: Vec<Video>,
+        more: Option<innertube::More>,
+    ) {
+        self.playlist_details = Some(details);
+        self.page_more = more;
+        self.page_more_state = Fetch::Idle;
+        self.page_videos = Listing::Ready(items);
+    }
+
     fn accept_import(
         &mut self,
         library: Library,
@@ -35,6 +116,18 @@ impl App {
         let account = self.state.source() == Source::Account;
         let state = &self.state;
         match view {
+            View::Results
+                if force
+                    || match state.search_options.kind {
+                        innertube::SearchKind::Videos => stale(&state.results),
+                        innertube::SearchKind::Channels => stale(&state.results_channels),
+                        innertube::SearchKind::Playlists => stale(&state.results_playlists),
+                    } =>
+            {
+                if let Some(request) = state.search_request() {
+                    self.request(Slot::Search, request);
+                }
+            }
             View::Home if force || stale(&state.feed) || stale(&state.for_you) => {
                 if force || stale(&state.for_you) {
                     self.load_for_you();
@@ -104,6 +197,7 @@ impl App {
                                 Request::ChannelTab {
                                     id,
                                     tab: ChannelTab::Playlists,
+                                    order: self.state.channel_order,
                                 },
                             );
                         }
@@ -114,6 +208,7 @@ impl App {
                             Request::ChannelTab {
                                 id,
                                 tab: tab.clone(),
+                                order: self.state.channel_order,
                             },
                         );
                     }
@@ -153,9 +248,7 @@ impl App {
         // A fresh first page drops the list's continuation too.
         match slot {
             Slot::Search => {
-                state.results = Listing::Loading;
-                state.results_more = None;
-                state.results_more_state = Fetch::Idle;
+                state.start_search();
             }
             Slot::Feed => {
                 state.feed = Listing::Loading;
@@ -293,11 +386,7 @@ impl App {
                 .map(|more| (Slot::Page, Request::More { more, playlists }));
         }
         match state.view {
-            View::Results => state
-                .results_more
-                .clone()
-                .filter(|_| in_flight(&state.results_more_state))
-                .map(|more| (Slot::Search, Request::MoreVideos(more))),
+            View::Results => state.search_continuation(),
             View::Subscriptions => state
                 .subscriptions_more
                 .clone()
@@ -365,17 +454,16 @@ impl App {
         let state = &mut self.state;
         let mut feed_page = None;
         match (slot, result) {
-            (Slot::Search, Ok(Payload::VideoList { items, more })) => {
-                state.results_more = more;
-                state.results_more_state = Fetch::Idle;
-                put(&mut state.results, Ok(items));
-            }
-            (Slot::Search, Ok(Payload::More { items, more })) => {
-                state.results_more = more;
-                state.results_more_state = Fetch::Idle;
-                if let PageItems::Videos(videos) = items {
-                    state.results.items_mut().extend(videos);
-                }
+            (Slot::Search, result) => state.fill_search(result),
+            (
+                Slot::Page,
+                Ok(Payload::PlaylistPage {
+                    details,
+                    items,
+                    more,
+                }),
+            ) => {
+                state.fill_playlist(details, items, more);
             }
             (Slot::Feed, Ok(Payload::Feed { videos, more })) => {
                 feed_page = Some(videos.clone());
@@ -525,13 +613,6 @@ impl App {
                     state.playlists.items_mut().extend(lists);
                 }
             }
-            (Slot::Search, Err(error)) => {
-                if matches!(state.results_more_state, Fetch::Loading) {
-                    state.results_more_state = Fetch::Failed(error);
-                } else {
-                    put(&mut state.results, Err(error));
-                }
-            }
             (Slot::Feed, Err(error)) => {
                 // A continuation failing keeps the feed already shown.
                 if matches!(state.feed_more_state, Fetch::Loading) {
@@ -675,7 +756,11 @@ impl App {
     }
 
     pub(super) fn open_page(&mut self, ctx: &egui::Context, view: View, page: Page) {
+        if self.state.view != view || self.state.page.as_ref() != Some(&page) {
+            self.push_location();
+        }
         if self.state.page.as_ref() != Some(&page) {
+            self.state.playlist_details = None;
             self.state.page_videos = Listing::Idle;
             self.state.page_more = None;
             self.state.page_more_state = Fetch::Idle;
@@ -694,9 +779,6 @@ impl App {
         }
         self.open_channel = channel_id;
         self.leave_video(ctx);
-        if self.state.view != view {
-            self.back.push(self.state.view);
-        }
         self.state.page = Some(page);
         self.state.view = view;
         self.load(view, false);
@@ -723,6 +805,7 @@ impl App {
                 tab => Request::ChannelTab {
                     id: channel.id.clone(),
                     tab: tab.clone(),
+                    order: self.state.channel_order,
                 },
             };
             self.send_request(Slot::Page, request);
@@ -753,6 +836,231 @@ fn merge_feed_page(feed: &mut Vec<Video>, shorts: &mut Vec<Video>, page: Vec<Vid
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn more(token: &str) -> innertube::More {
+        innertube::More {
+            ctoken: token.into(),
+            endpoint: rustypipe::model::paginator::ContinuationEndpoint::Search,
+            visitor_data: None,
+            authenticated: false,
+            ours: false,
+        }
+    }
+
+    fn search_items(kind: innertube::SearchKind, id: &str) -> PageItems {
+        match kind {
+            innertube::SearchKind::Videos => PageItems::Videos(vec![Video::from_id(id.into())]),
+            innertube::SearchKind::Channels => PageItems::Channels(vec![Channel {
+                id: id.into(),
+                name: format!("Canal {id}"),
+                avatar: None,
+            }]),
+            innertube::SearchKind::Playlists => PageItems::Playlists(vec![PlaylistSummary {
+                id: id.into(),
+                name: format!("Playlist {id}"),
+                thumbnail: None,
+                channel: None,
+                videos: Some(2),
+            }]),
+        }
+    }
+
+    fn search_ids(state: &State) -> Vec<&str> {
+        match state.search_options.kind {
+            innertube::SearchKind::Videos => state
+                .results
+                .items()
+                .iter()
+                .map(|row| row.id.as_str())
+                .collect(),
+            innertube::SearchKind::Channels => state
+                .results_channels
+                .items()
+                .iter()
+                .map(|row| row.id.as_str())
+                .collect(),
+            innertube::SearchKind::Playlists => state
+                .results_playlists
+                .items()
+                .iter()
+                .map(|row| row.id.as_str())
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn retry_search_keeps_the_submitted_query_and_all_filter_choices() {
+        let options = innertube::SearchOptions {
+            kind: innertube::SearchKind::Videos,
+            order: innertube::SearchOrder::Views,
+            date: innertube::SearchDate::Week,
+            length: innertube::SearchLength::Long,
+            live: true,
+        };
+        let mut state = State {
+            query: "Texto ainda não enviado".into(),
+            search_query: "Rust".into(),
+            search_options: options,
+            ..Default::default()
+        };
+        state.start_search();
+        state.fill_search(Err("Falha temporária".into()));
+        assert!(matches!(state.results, Listing::Failed(_)));
+        let Some(Request::Search {
+            query,
+            options: sent,
+        }) = state.search_request()
+        else {
+            panic!("retry must search again")
+        };
+        assert_eq!(query, "Rust");
+        assert_eq!(sent, options);
+        state.start_search();
+        assert!(matches!(state.results, Listing::Loading));
+        state.search_query.clear();
+        assert!(state.search_request().is_none());
+    }
+
+    #[test]
+    fn changing_search_kind_discards_old_rows_and_continuations_before_loading() {
+        for &kind in innertube::SearchKind::ALL {
+            let mut state = State {
+                results: Listing::Ready(vec![Video::from_id("old".into())]),
+                results_channels: Listing::Ready(vec![Channel::default()]),
+                results_playlists: Listing::Ready(vec![PlaylistSummary {
+                    id: "old".into(),
+                    name: "Old".into(),
+                    thumbnail: None,
+                    channel: None,
+                    videos: None,
+                }]),
+                results_more: Some(more("old-page")),
+                results_more_state: Fetch::Failed("old error".into()),
+                ..Default::default()
+            };
+            state.search_options.kind = kind;
+            state.start_search();
+            assert!(
+                state.results.items().is_empty()
+                    && state.results_channels.items().is_empty()
+                    && state.results_playlists.items().is_empty()
+            );
+            assert!(state.results_more.is_none());
+            assert!(matches!(state.results_more_state, Fetch::Idle));
+            match kind {
+                innertube::SearchKind::Videos => assert!(matches!(state.results, Listing::Loading)),
+                innertube::SearchKind::Channels => {
+                    assert!(matches!(state.results_channels, Listing::Loading))
+                }
+                innertube::SearchKind::Playlists => {
+                    assert!(matches!(state.results_playlists, Listing::Loading))
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_search_kind_keeps_loaded_rows_when_paging_fails_and_can_retry() {
+        for &kind in innertube::SearchKind::ALL {
+            let mut state = State::default();
+            state.search_options.kind = kind;
+            state.start_search();
+            state.fill_search(Ok(Payload::Search {
+                items: search_items(kind, "first"),
+                more: Some(more("page-2")),
+            }));
+            assert_eq!(search_ids(&state), ["first"]);
+            let Some((
+                Slot::Search,
+                Request::MoreSearch {
+                    more: next,
+                    kind: sent,
+                },
+            )) = state.search_continuation()
+            else {
+                panic!("missing typed continuation")
+            };
+            assert_eq!(sent, kind);
+            assert_eq!(next.ctoken, "page-2");
+            state.results_more_state = Fetch::Loading;
+            assert!(state.search_continuation().is_none());
+            state.fill_search(Err("Falha na próxima página".into()));
+            assert!(matches!(state.results_more_state, Fetch::Failed(_)));
+            assert_eq!(search_ids(&state), ["first"]);
+            assert!(state.search_continuation().is_some());
+            state.results_more_state = Fetch::Loading;
+            state.fill_search(Ok(Payload::More {
+                items: search_items(kind, "second"),
+                more: None,
+            }));
+            assert_eq!(search_ids(&state), ["first", "second"]);
+            assert!(state.search_continuation().is_none());
+            assert!(matches!(state.results_more_state, Fetch::Idle));
+        }
+    }
+
+    #[test]
+    fn first_page_failure_targets_the_selected_search_kind() {
+        for &kind in innertube::SearchKind::ALL {
+            let mut state = State::default();
+            state.search_options.kind = kind;
+            state.start_search();
+            state.fill_search(Err("Serviço indisponível".into()));
+            match kind {
+                innertube::SearchKind::Videos => {
+                    assert!(matches!(state.results, Listing::Failed(_)))
+                }
+                innertube::SearchKind::Channels => {
+                    assert!(matches!(state.results_channels, Listing::Failed(_)))
+                }
+                innertube::SearchKind::Playlists => {
+                    assert!(matches!(state.results_playlists, Listing::Failed(_)))
+                }
+            }
+            assert!(matches!(state.results_more_state, Fetch::Idle));
+        }
+    }
+
+    #[test]
+    fn playlist_metadata_and_video_order_land_together_without_replacing_the_page_identity() {
+        let page = Page::Playlist {
+            id: "playlist-id".into(),
+            name: "Nome conhecido".into(),
+        };
+        let mut state = State {
+            view: View::Playlist,
+            page: Some(page.clone()),
+            ..Default::default()
+        };
+        let details = innertube::PlaylistDetails {
+            name: "Nome atualizado".into(),
+            description: "Descrição".into(),
+            channel: Some("Canal".into()),
+            videos: Some(30),
+            ..Default::default()
+        };
+        state.fill_playlist(
+            details.clone(),
+            vec![
+                Video::from_id("first".into()),
+                Video::from_id("second".into()),
+            ],
+            Some(more("next")),
+        );
+        assert_eq!(state.page, Some(page));
+        assert_eq!(state.playlist_details.as_ref(), Some(&details));
+        assert_eq!(
+            state
+                .page_videos
+                .items()
+                .iter()
+                .map(|video| video.id.as_str())
+                .collect::<Vec<_>>(),
+            ["first", "second"]
+        );
+        assert_eq!(state.page_more.as_ref().unwrap().ctoken, "next");
+        assert!(matches!(state.page_more_state, Fetch::Idle));
+    }
 
     #[test]
     fn an_import_cannot_restore_history_cleared_while_it_was_merging() {

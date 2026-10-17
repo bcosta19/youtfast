@@ -19,7 +19,7 @@ use crate::util;
 /// The "Up next" pane's width beside the video in a wide window.
 const SIDEBAR_WIDTH: f32 = 380.0;
 /// Narrower than this, the pane moves under the video.
-const WIDE: f32 = 1000.0;
+const WIDE: f32 = 860.0;
 
 pub fn show(
     ui: &mut Ui,
@@ -31,6 +31,10 @@ pub fn show(
     egui::CentralPanel::default()
         .frame(Frame::central_panel(ui.style()).inner_margin(Margin::same(24)))
         .show(ui, |ui| {
+            if state.watching_short() {
+                shorts(ui, state, status, surface, actions);
+                return;
+            }
             // The video never takes more than most of the window's height, so
             // its controls stay in view.
             let max_video_height = ui.available_height() * 0.75;
@@ -39,6 +43,7 @@ pub fn show(
             };
             let theater = state.settings.theater;
             egui::ScrollArea::vertical()
+                .id_salt("watch-page")
                 .auto_shrink(false)
                 .show(ui, |ui| {
                     // Theater mode: the video across the window, the columns
@@ -86,6 +91,227 @@ pub fn show(
                     }
                 });
         });
+}
+
+/// Shorts have their own upright stage and action rail. Details and
+/// comments remain available in a separate scrolling panel rather than
+/// making the video scroll away when the wheel switches Shorts.
+fn shorts(
+    ui: &mut Ui,
+    state: &mut State,
+    status: Option<&Status>,
+    surface: Option<&VideoSurface>,
+    actions: &mut Vec<Action>,
+) {
+    let Some(watching) = state.watching.clone() else {
+        return;
+    };
+    let panel_id = ui.id().with("short-details");
+    let mut details_open = ui
+        .ctx()
+        .data(|data| data.get_temp::<bool>(panel_id))
+        .unwrap_or(false);
+    let has_panel = details_open && ui.available_width() > 900.0;
+    // The widest action includes an icon, its gap and the pill's padding.
+    // Reserve room for the scrollbar too, so its labels remain readable.
+    let share_width = ui
+        .painter()
+        .layout_no_wrap(
+            "Compartilhar".into(),
+            theme::medium(14.0),
+            state.palette.text,
+        )
+        .size()
+        .x
+        + 18.0
+        + 6.0
+        + 28.0;
+    let rail_width = share_width + ui.spacing().scroll.bar_width + 12.0;
+    let gap = 16.0;
+    let panel_width = if has_panel { 340.0 } else { 0.0 };
+    let available = (ui.available_width() - panel_width - rail_width - gap).max(100.0);
+    let height = (ui.available_height() - 8.0)
+        .clamp(180.0, 900.0)
+        .min(available * 16.0 / 9.0);
+    let width = height * 9.0 / 16.0;
+    let total = width + rail_width + gap + panel_width;
+    let left = ui.max_rect().left() + ((ui.available_width() - total) / 2.0).max(0.0);
+    let video = Rect::from_min_size(pos2(left, ui.cursor().top()), vec2(width, height));
+    player::player(ui, video, state, status, surface, Mode::Short, actions);
+    let meta = Rect::from_min_size(
+        video.min + vec2(12.0, 12.0),
+        vec2((width - 24.0).max(1.0), 64.0),
+    );
+    let mut metadata = ui.new_child(egui::UiBuilder::new().max_rect(meta));
+    Frame::new()
+        .fill(Color32::from_black_alpha(120))
+        .corner_radius(8)
+        .inner_margin(8)
+        .show(&mut metadata, |ui| {
+            ui.add(
+                egui::Label::new(
+                    RichText::new(watching.title.replace(['\r', '\n'], " "))
+                        .font(theme::semibold(15.0))
+                        .color(Color32::WHITE),
+                )
+                .truncate(),
+            )
+            .on_hover_text(&watching.title);
+            if let Some(channel) = &watching.channel {
+                let response = ui
+                    .add(
+                        egui::Label::new(
+                            RichText::new(channel.replace(['\r', '\n'], " ")).color(Color32::WHITE),
+                        )
+                        .truncate()
+                        .sense(Sense::click()),
+                    )
+                    .on_hover_text(channel);
+                if response.clicked()
+                    && let Some(id) = &watching.channel_id
+                {
+                    actions.push(Action::OpenChannel(Channel {
+                        id: id.clone(),
+                        name: channel.clone(),
+                        avatar: None,
+                    }));
+                }
+            }
+        });
+    let rail_rect = Rect::from_min_size(
+        pos2(video.right() + gap, video.top()),
+        vec2(rail_width, height),
+    );
+    let mut rail = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(rail_rect)
+            .layout(Layout::top_down(Align::Center)),
+    );
+    rail.set_clip_rect(rail_rect.intersect(ui.clip_rect()));
+    let previous =
+        crate::app::player::previous_video(state.watching.as_ref(), &state.up_next).is_some();
+    let related = state
+        .details
+        .ready()
+        .map_or(&[][..], |details| details.related.as_slice());
+    let next = crate::app::player::next_video(
+        state.watching.as_ref(),
+        &state.queue,
+        &state.up_next,
+        related,
+    )
+    .is_some()
+        || state.playing_more.is_some();
+    egui::ScrollArea::vertical()
+        .id_salt("short-actions")
+        .max_height(height)
+        .auto_shrink(false)
+        .show(&mut rail, |rail| {
+            rail.spacing_mut().item_spacing.y = 12.0;
+            rail.add_space(((height - 420.0) / 2.0).max(0.0));
+            rail.add_enabled_ui(previous, |ui| {
+                if widgets::icon_button(ui, Icon::ChevronUp, 24.0, "Short anterior (↑)").clicked()
+                {
+                    actions.push(Action::PlayPrevious);
+                }
+            });
+            rail.add_enabled_ui(next, |ui| {
+                if widgets::icon_button(ui, Icon::ChevronDown, 24.0, "Próximo Short (↓)").clicked()
+                {
+                    actions.push(Action::PlayNext);
+                }
+            });
+            let rating = state.rating.ready().copied();
+            for (icon, wanted, hint) in [
+                (Icon::ThumbsUp, Rating::Like, "Gostei"),
+                (Icon::ThumbsDown, Rating::Dislike, "Não gostei"),
+            ] {
+                rail.add_enabled_ui(state.signed_in() && rating.is_some(), |ui| {
+                    if widgets::icon_button(ui, icon, 24.0, hint).clicked() {
+                        actions.push(Action::Rate(if rating == Some(wanted) {
+                            Rating::None
+                        } else {
+                            wanted
+                        }));
+                    }
+                })
+                .response
+                .on_disabled_hover_text("Entre em uma conta para avaliar");
+            }
+            if widgets::button(
+                rail,
+                &state.palette,
+                "Comentários",
+                widgets::ButtonStyle::Normal,
+            )
+            .clicked()
+            {
+                details_open = !details_open;
+            }
+            share_menu(rail, state, &watching, status, actions);
+            save_menu(rail, state, &watching, actions);
+            if widgets::button(
+                rail,
+                &state.palette,
+                "Detalhes",
+                widgets::ButtonStyle::Normal,
+            )
+            .clicked()
+            {
+                details_open = !details_open;
+            }
+        });
+    // Throttle wheel navigation: one gesture must not consume an entire
+    // source list, and scrolling the details panel never changes video.
+    if ui.rect_contains_pointer(video) {
+        let delta = ui.input(|input| input.smooth_scroll_delta.y);
+        let now = ui.input(|input| input.time);
+        let wheel_id = ui.id().with("short-wheel-at");
+        let previous = ui
+            .ctx()
+            .data(|data| data.get_temp::<f64>(wheel_id))
+            .unwrap_or(-1.0);
+        if delta.abs() > 2.0 && now - previous > 0.65 {
+            actions.push(if delta < 0.0 {
+                Action::PlayNext
+            } else {
+                Action::PlayPrevious
+            });
+            ui.ctx().data_mut(|data| data.insert_temp(wheel_id, now));
+        }
+    }
+    ui.ctx()
+        .data_mut(|data| data.insert_temp(panel_id, details_open));
+    if details_open {
+        if has_panel {
+            let rect = Rect::from_min_size(
+                pos2(rail_rect.right() + 8.0, video.top()),
+                vec2(panel_width - 8.0, height),
+            );
+            let mut panel = ui.new_child(egui::UiBuilder::new().max_rect(rect));
+            egui::ScrollArea::vertical()
+                .id_salt("short-comments")
+                .show(&mut panel, |ui| {
+                    if ui.button("Fechar detalhes").clicked() {
+                        ui.ctx().data_mut(|data| data.insert_temp(panel_id, false));
+                    }
+                    about_video(ui, state, &watching, status, actions);
+                });
+        } else {
+            egui::Window::new("Descrição e comentários")
+                .id(ui.id().with("short-details-window"))
+                .open(&mut details_open)
+                .default_width(360.0)
+                .resizable(true)
+                .show(ui.ctx(), |ui| {
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        about_video(ui, state, &watching, status, actions);
+                    });
+                });
+            ui.ctx()
+                .data_mut(|data| data.insert_temp(panel_id, details_open));
+        }
+    }
 }
 
 /// The video over the whole window, with the controls over its bottom edge.
@@ -146,7 +372,7 @@ fn about_video(
     let title = Some(watching.title.as_str())
         .filter(|title| !title.is_empty())
         .or_else(|| status.and_then(|status| status.title.as_deref()))
-        .unwrap_or("Loading…")
+        .unwrap_or("Carregando…")
         .to_owned();
     ui.label(
         RichText::new(title)
@@ -157,6 +383,7 @@ fn about_video(
     channel_line(ui, state, watching, status, actions);
     ui.add_space(16.0);
     description(ui, state, watching, actions);
+    super::extras::transcript(ui, state, status, actions);
     chapters(ui, state, status, actions);
     comments(ui, state, actions);
 }
@@ -223,7 +450,7 @@ fn channel_line(
                 Fetch::Ready(details) => {
                     if let Some(count) = details.subscribers {
                         ui.label(
-                            RichText::new(format!("{} subscribers", util::compact(count)))
+                            RichText::new(format!("{} inscritos", util::compact(count)))
                                 .font(theme::regular(13.0))
                                 .color(palette.secondary),
                         );
@@ -257,7 +484,14 @@ fn channel_line(
                     .font(theme::regular(14.0))
                     .color(palette.red),
             );
-            if widgets::button(ui, palette, "Retry", widgets::ButtonStyle::Normal).clicked() {
+            if widgets::button(
+                ui,
+                palette,
+                "Tentar novamente",
+                widgets::ButtonStyle::Normal,
+            )
+            .clicked()
+            {
                 actions.push(Action::Refresh);
             }
         });
@@ -303,9 +537,9 @@ fn rating_buttons(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         });
     let enabled = state.signed_in() && rating.is_some();
     let hint = if !state.signed_in() {
-        "Sign in to rate videos"
+        "Entre em uma conta para avaliar vídeos"
     } else if matches!(state.rating, Fetch::Failed(_)) {
-        "Your rating could not be read"
+        "Não foi possível consultar sua avaliação"
     } else {
         ""
     };
@@ -329,14 +563,14 @@ fn rating_buttons(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             response.on_hover_text(hint)
         }
     };
-    if hover(like, "Liked", "I like this", liked).clicked() {
+    if hover(like, "Gostei", "Marcar como gostei", liked).clicked() {
         actions.push(Action::Rate(if liked {
             Rating::None
         } else {
             Rating::Like
         }));
     }
-    if hover(dislike, "Disliked", "I dislike this", disliked).clicked() {
+    if hover(dislike, "Não gostei", "Marcar como não gostei", disliked).clicked() {
         actions.push(Action::Rate(if disliked {
             Rating::None
         } else {
@@ -479,7 +713,7 @@ fn share_menu(
         ui,
         palette,
         Some(Icon::Share),
-        "Share",
+        "Compartilhar",
         widgets::ButtonStyle::Normal,
     );
     egui::Popup::menu(&response)
@@ -498,14 +732,15 @@ fn share_menu(
             if ui
                 .checkbox(
                     &mut start_at,
-                    RichText::new(format!("Start at {}", util::duration(position)))
+                    RichText::new(format!("Começar em {}", util::duration(position)))
                         .font(theme::regular(14.0)),
                 )
                 .changed()
             {
                 actions.push(Action::SetShareAtTime(start_at));
             }
-            if widgets::button(ui, palette, "Copy link", widgets::ButtonStyle::Primary).clicked() {
+            if widgets::button(ui, palette, "Copiar link", widgets::ButtonStyle::Primary).clicked()
+            {
                 actions.push(Action::CopyLink(link.clone()));
                 ui.close();
             }
@@ -541,9 +776,9 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
         widgets::ButtonStyle::Normal
     };
     let (icon, label) = if local || account {
-        (Icon::BookmarkFilled, "Saved")
+        (Icon::BookmarkFilled, "Salvo")
     } else {
-        (Icon::Bookmark, "Save")
+        (Icon::Bookmark, "Salvar")
     };
     let response = widgets::icon_text_button(ui, palette, Some(icon), label, style);
     egui::Popup::menu(&response)
@@ -554,7 +789,8 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
             if ui
                 .checkbox(
                     &mut on_device,
-                    RichText::new("Watch later on this computer").font(theme::regular(14.0)),
+                    RichText::new("Assistir mais tarde neste computador")
+                        .font(theme::regular(14.0)),
                 )
                 .changed()
             {
@@ -563,7 +799,7 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
             ui.separator();
             if !state.signed_in() {
                 ui.label(
-                    RichText::new("Sign in to save to the account's playlists")
+                    RichText::new("Entre em uma conta para salvar nas playlists dela")
                         .font(theme::regular(13.0))
                         .color(palette.secondary),
                 );
@@ -611,9 +847,9 @@ fn description(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<A
     let live = watching.live;
     let views = views.map(|views| {
         if live {
-            format!("{} watching now", util::thousands(views))
+            format!("{} assistindo agora", util::thousands(views))
         } else if open {
-            format!("{} views", util::thousands(views))
+            format!("{} visualizações", util::thousands(views))
         } else {
             util::views(views)
         }
@@ -653,7 +889,11 @@ fn description(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<A
             actions.push(action);
         }
         if collapsed || open {
-            let label = if collapsed { "...more" } else { "Show less" };
+            let label = if collapsed {
+                "...mais"
+            } else {
+                "Mostrar menos"
+            };
             if text_link(ui, label, theme::semibold(14.0), state.palette.text).clicked() {
                 actions.push(Action::ToggleDescription);
             }
@@ -679,7 +919,7 @@ fn chapters(ui: &mut Ui, state: &State, status: Option<&Status>, actions: &mut V
     widgets::section(
         ui,
         &state.palette,
-        "Chapters",
+        "Capítulos",
         Some(details.chapters.len()),
         |ui| {
             for (index, chapter) in details.chapters.iter().enumerate() {
@@ -716,26 +956,26 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         .map(|count| count as usize)
         .or_else(|| state.comments.ready().map(|rows| rows.len()));
     let title = match count {
-        Some(1) => "1 comment".to_owned(),
-        Some(count) => format!("{} comments", util::thousands(count as u64)),
-        None => "Comments".to_owned(),
+        Some(1) => "1 comentário".to_owned(),
+        Some(count) => format!("{} comentários", util::thousands(count as u64)),
+        None => "Comentários".to_owned(),
     };
     widgets::section(ui, &state.palette, &title, None, |ui| {
         match &state.comments {
             Fetch::Idle => {}
-            Fetch::Loading => widgets::loading(ui, &state.palette, "comments"),
+            Fetch::Loading => widgets::loading(ui, &state.palette, "comentários"),
             Fetch::Failed(error) => results::failed(ui, state, error, actions),
             Fetch::Ready(rows) => {
                 if rows.is_empty() {
                     ui.vertical_centered(|ui| {
                         ui.add_space(16.0);
                         ui.label(
-                            RichText::new("No comments yet")
+                            RichText::new("Nenhum comentário ainda")
                                 .font(theme::semibold(16.0))
                                 .color(state.palette.text),
                         );
                         ui.label(
-                            RichText::new("Nobody has commented on this video.")
+                            RichText::new("Ninguém comentou neste vídeo ainda.")
                                 .font(theme::regular(14.0))
                                 .color(state.palette.secondary),
                         );
@@ -749,7 +989,7 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 // The tail row: the page on its way, a failed page's
                 // retry, or the button.
                 match &state.comments_more {
-                    Fetch::Loading => widgets::loading(ui, &state.palette, "comments"),
+                    Fetch::Loading => widgets::loading(ui, &state.palette, "comentários"),
                     Fetch::Failed(error) => {
                         ui.label(
                             RichText::new(error.as_str())
@@ -759,7 +999,7 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                         if widgets::button(
                             ui,
                             &state.palette,
-                            "Retry",
+                            "Tentar novamente",
                             widgets::ButtonStyle::Normal,
                         )
                         .clicked()
@@ -772,7 +1012,7 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                             && widgets::button(
                                 ui,
                                 &state.palette,
-                                "Load more",
+                                "Carregar mais",
                                 widgets::ButtonStyle::Normal,
                             )
                             .clicked()
@@ -840,7 +1080,7 @@ fn comment_row(
     let author = comment
         .author
         .as_deref()
-        .unwrap_or("someone")
+        .unwrap_or("alguém")
         .trim_start_matches('@');
     let channel = comment.author_id.as_ref().map(|id| Channel {
         id: id.clone(),
@@ -878,7 +1118,11 @@ fn comment_row(
             if (collapsed || open)
                 && text_link(
                     ui,
-                    if collapsed { "Read more" } else { "Show less" },
+                    if collapsed {
+                        "Ler mais"
+                    } else {
+                        "Mostrar menos"
+                    },
                     theme::semibold(13.0),
                     palette.text,
                 )
@@ -943,10 +1187,10 @@ fn comment_header(
     });
     let mut badges = Vec::new();
     if comment.pinned {
-        badges.push("Pinned");
+        badges.push("Fixado");
     }
     if comment.by_owner {
-        badges.push("By the creator");
+        badges.push("Pelo criador");
     }
     if !badges.is_empty() {
         ui.label(
@@ -979,16 +1223,16 @@ fn comment_footer(ui: &mut Ui, state: &State, comment: &CommentRow, actions: &mu
                     .font(theme::regular(13.0))
                     .color(state.palette.red),
             )
-            .on_hover_text("Hearted by the creator");
+            .on_hover_text("Recebeu um coração do criador");
         }
         if comment.replies > 0 {
             let open = state.replies.contains_key(&comment.id);
             let label = if open {
-                "Hide replies".to_owned()
+                "Ocultar respostas".to_owned()
             } else if comment.replies == 1 {
-                "1 reply".to_owned()
+                "1 resposta".to_owned()
             } else {
-                format!("{} replies", comment.replies)
+                format!("{} respostas", comment.replies)
             };
             ui.add_space(8.0);
             let icon = if open {
@@ -1034,7 +1278,7 @@ fn reply_column(
     ui.horizontal_top(|ui| {
         ui.add_space(4.0);
         ui.vertical(|ui| match replies {
-            Fetch::Idle | Fetch::Loading => widgets::loading(ui, &state.palette, "replies"),
+            Fetch::Idle | Fetch::Loading => widgets::loading(ui, &state.palette, "respostas"),
             Fetch::Failed(error) => results::failed(ui, state, error, actions),
             Fetch::Ready(rows) => {
                 for reply in rows {
@@ -1045,24 +1289,99 @@ fn reply_column(
     });
 }
 
-/// The videos queued to play next, in order, with Clear; a right click
-/// takes one out.
+#[derive(Clone)]
+struct QueueDrag(String);
+
+/// The videos queued to play next. A handle, up/down buttons and an
+/// inline remove control keep every action visible and keyboard reachable.
 fn queue(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     if state.queue.is_empty() {
         return;
     }
-    widgets::section(ui, &state.palette, "Queue", Some(state.queue.len()), |ui| {
-        if widgets::button(ui, &state.palette, "Clear", widgets::ButtonStyle::Normal).clicked() {
+    widgets::section(ui, &state.palette, "Fila", Some(state.queue.len()), |ui| {
+        if widgets::button(ui, &state.palette, "Limpar", widgets::ButtonStyle::Normal).clicked() {
             actions.push(Action::ClearQueue);
         }
-        for video in &state.queue {
-            let watched = widgets::watched(&state.library, video);
-            let response = widgets::video_row(ui, &state.palette, video, None, watched, false);
+        for (index, video) in state.queue.iter().enumerate() {
+            let row = ui
+                .push_id(&video.id, |ui| {
+                    ui.horizontal_top(|ui| {
+                        let width = (ui.available_width() - 36.0).max(120.0);
+                        let response = ui
+                            .vertical(|ui| {
+                                ui.set_width(width);
+                                let watched = widgets::watched(&state.library, video);
+                                widgets::video_row(ui, &state.palette, video, None, watched, false)
+                            })
+                            .inner;
+                        ui.vertical(|ui| {
+                            ui.spacing_mut().item_spacing.y = 0.0;
+                            let handle = ui
+                                .add(
+                                    Icon::More
+                                        .image(state.palette.secondary, 16.0)
+                                        .sense(Sense::drag()),
+                                )
+                                .on_hover_text("Arrastar para reordenar");
+                            handle.dnd_set_drag_payload(QueueDrag(video.id.clone()));
+                            ui.add_enabled_ui(index > 0, |ui| {
+                                if widgets::icon_button(
+                                    ui,
+                                    Icon::ChevronUp,
+                                    14.0,
+                                    "Mover para cima",
+                                )
+                                .clicked()
+                                {
+                                    actions.push(Action::MoveQueue {
+                                        from: index,
+                                        to: index - 1,
+                                    });
+                                }
+                            });
+                            ui.add_enabled_ui(index + 1 < state.queue.len(), |ui| {
+                                if widgets::icon_button(
+                                    ui,
+                                    Icon::ChevronDown,
+                                    14.0,
+                                    "Mover para baixo",
+                                )
+                                .clicked()
+                                {
+                                    actions.push(Action::MoveQueue {
+                                        from: index,
+                                        to: index + 1,
+                                    });
+                                }
+                            });
+                            if widgets::icon_button(ui, Icon::Close, 14.0, "Remover da fila")
+                                .clicked()
+                            {
+                                actions.push(Action::Dequeue(video.id.clone()));
+                            }
+                        });
+                        response
+                    })
+                })
+                .inner;
+            let response = row.inner;
             if response.clicked() {
                 actions.push(Action::Open(video.clone()));
             }
+            if row.response.dnd_hover_payload::<QueueDrag>().is_some() {
+                ui.painter().hline(
+                    row.response.rect.x_range(),
+                    row.response.rect.top(),
+                    Stroke::new(2.0, state.palette.accent),
+                );
+            }
+            if let Some(payload) = row.response.dnd_release_payload::<QueueDrag>()
+                && let Some(from) = state.queue.iter().position(|video| video.id == payload.0)
+            {
+                actions.push(Action::MoveQueue { from, to: index });
+            }
             response.context_menu(|ui| {
-                if ui.button("Remove from queue").clicked() {
+                if ui.button("Remover da fila").clicked() {
                     actions.push(Action::Dequeue(video.id.clone()));
                     ui.close();
                 }
@@ -1082,8 +1401,10 @@ fn up_next(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     if next.is_empty() {
         return;
     }
-    widgets::section(ui, &state.palette, "Up next", Some(next.len()), |ui| {
-        results::video_rows(ui, state, next, actions);
+    widgets::section(ui, &state.palette, "A seguir", Some(next.len()), |ui| {
+        ui.push_id("watch-up-next", |ui| {
+            results::video_rows(ui, state, next, actions);
+        });
     });
 }
 
@@ -1101,15 +1422,187 @@ fn related(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     if related.is_empty() {
         return;
     }
-    widgets::section(ui, &state.palette, "Related", Some(related.len()), |ui| {
-        results::video_rows(ui, state, related, actions);
-    });
+    widgets::section(
+        ui,
+        &state.palette,
+        "Relacionados",
+        Some(related.len()),
+        |ui| {
+            ui.push_id("watch-related", |ui| {
+                results::video_rows(ui, state, related, actions);
+            });
+        },
+    );
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::model::Span;
+
+    #[test]
+    fn short_actions_scroll_to_details_without_switching_video_in_a_small_window() {
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let mut video = Video::from_id("aaaaaaaaaaa".into());
+        video.short = true;
+        video.title = "Um título longo que precisa deixar o vídeo visível ".repeat(8);
+        video.channel = Some("Um canal com um nome muito longo para esta janela".into());
+        let mut state = State {
+            view: crate::model::View::Watch,
+            watching: Some(video.clone()),
+            up_next: vec![video.clone(), video.clone()],
+            ..State::default()
+        };
+        state.settings.sidebar_collapsed = true;
+        let screen = Rect::from_min_size(egui::Pos2::ZERO, vec2(480.0, 360.0));
+        let mut pointer = None;
+        let mut details = None;
+        let mut actions = Vec::new();
+        for frame in 0..12 {
+            let mut events = Vec::new();
+            if let Some(position) = pointer {
+                events.push(egui::Event::PointerMoved(position));
+                events.push(egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    phase: egui::TouchPhase::Move,
+                    delta: vec2(0.0, -1000.0),
+                    modifiers: egui::Modifiers::NONE,
+                });
+            }
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    time: Some(frame as f64 / 10.0),
+                    events,
+                    ..Default::default()
+                },
+                |ui| super::super::show(ui, &mut state, None, None, &mut actions),
+            );
+            for shape in &output.shapes {
+                let egui::Shape::Text(text) = &shape.shape else {
+                    continue;
+                };
+                let label = text.galley.text();
+                let rect = Rect::from_min_size(text.pos, text.galley.size());
+                if label == video.title || Some(label) == video.channel.as_deref() {
+                    assert_eq!(
+                        text.galley.rows.len(),
+                        1,
+                        "Short metadata must stay compact"
+                    );
+                }
+                if matches!(label, "Comentários" | "Compartilhar")
+                    && shape.clip_rect.intersects(rect)
+                {
+                    pointer = Some(shape.clip_rect.intersect(screen).center());
+                }
+                if label == "Detalhes"
+                    && shape.clip_rect.contains_rect(rect)
+                    && screen.contains_rect(rect)
+                {
+                    details = Some(rect.center());
+                }
+            }
+            output.textures_delta.clear();
+        }
+        let button = details.expect("scrolling the Short rail must reveal Detalhes");
+        for (frame, pressed) in [true, false].into_iter().enumerate() {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    time: Some(2.0 + frame as f64 / 10.0),
+                    events: vec![
+                        egui::Event::PointerMoved(button),
+                        egui::Event::PointerButton {
+                            pos: button,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| super::super::show(ui, &mut state, None, None, &mut actions),
+            );
+            output.textures_delta.clear();
+        }
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(screen),
+                time: Some(2.2),
+                ..Default::default()
+            },
+            |ui| super::super::show(ui, &mut state, None, None, &mut actions),
+        );
+        assert!(
+            output.shapes.iter().any(|shape| matches!(
+                &shape.shape,
+                egui::Shape::Text(text) if text.galley.text() == "Descrição e comentários"
+            )),
+            "clicking Detalhes must open the details window"
+        );
+        assert!(
+            !actions
+                .iter()
+                .any(|action| matches!(action, Action::PlayNext | Action::PlayPrevious)),
+            "scrolling the action rail must not navigate between Shorts",
+        );
+        output.textures_delta.clear();
+    }
+
+    #[test]
+    fn watch_scroll_areas_do_not_share_ids_with_queue_and_recommendations_visible() {
+        fn has_scroll_id_clash(shape: &egui::Shape) -> bool {
+            match shape {
+                egui::Shape::Text(text) => text.galley.text().contains("ScrollArea ID"),
+                egui::Shape::Vec(shapes) => shapes.iter().any(has_scroll_id_clash),
+                _ => false,
+            }
+        }
+
+        for (width, theater) in [(1280.0, false), (800.0, false), (1280.0, true)] {
+            let videos: Vec<_> = (0..4)
+                .map(|index| Video::from_id(format!("synthetic-{index}")))
+                .collect();
+            let mut state = State {
+                view: crate::model::View::Watch,
+                watching: Some(videos[0].clone()),
+                queue: videos[1..].to_vec(),
+                up_next: videos.clone(),
+                details: Fetch::Ready(crate::model::Details {
+                    related: videos[1..].to_vec(),
+                    ..Default::default()
+                }),
+                comments: Fetch::Ready(Vec::new()),
+                ..State::default()
+            };
+            state.settings.theater = theater;
+            let ctx = egui::Context::default();
+            crate::theme::install_fonts(&ctx);
+            ctx.options_mut(|options| options.warn_on_id_clash = true);
+            for _ in 0..3 {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            vec2(width, 800.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| show(ui, &mut state, None, None, &mut Vec::new()),
+                );
+                assert!(
+                    !output
+                        .shapes
+                        .iter()
+                        .any(|shape| has_scroll_id_clash(&shape.shape)),
+                    "watch scroll areas reused an ID at width={width}, theater={theater}",
+                );
+                output.textures_delta.clear();
+            }
+        }
+    }
 
     fn row(id: &str, replies: u32) -> CommentRow {
         CommentRow {

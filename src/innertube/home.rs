@@ -81,6 +81,7 @@ pub(super) fn from_renderer(renderer: &Value) -> Option<Video> {
     Some(Video {
         id,
         title: text(renderer.get("title")).unwrap_or_default(),
+        channel_avatar: None,
         channel: text(owner),
         channel_id: owner.and_then(|owner| {
             owner
@@ -147,6 +148,7 @@ pub(super) fn from_lockup(lockup: &Value) -> Option<Video> {
     Some(Video {
         id,
         title,
+        channel_avatar: None,
         channel: part(0, 0),
         channel_id,
         duration: badge.and_then(parse_length),

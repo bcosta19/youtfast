@@ -25,9 +25,14 @@ use crate::model::{
 use crate::paths::Dirs;
 use crate::util;
 
+mod discovery;
 mod edit;
 mod home;
 mod playlist;
+pub use discovery::{
+    ChannelOrder, PlaylistDetails, SearchDate, SearchKind, SearchLength, SearchOptions,
+    SearchOrder, playlist_details, search_filtered,
+};
 pub use edit::{rate, rating, save_targets, set_saved};
 pub use home::recommended;
 
@@ -330,18 +335,6 @@ pub async fn more_channels(
     Ok((page.items.into_iter().map(channel).collect(), more))
 }
 
-/// The first page of videos matching `query`, and how to ask for the
-/// next: the same continuation every other list uses.
-pub async fn search(rp: &RustyPipe, query: &str) -> Result<(Vec<Video>, Option<More>), String> {
-    let result = rp
-        .query()
-        .search::<VideoItem, _>(query)
-        .await
-        .map_err(text)?;
-    let more = More::of(&result.items);
-    Ok((result.items.items.into_iter().map(video).collect(), more))
-}
-
 /// The next page of the account's history.
 pub async fn more_history(
     rp: &RustyPipe,
@@ -362,6 +355,7 @@ pub async fn channel_tab(
     rp: &RustyPipe,
     id: &str,
     tab: &ChannelTab,
+    order: ChannelOrder,
 ) -> Result<(ChannelHeader, Vec<Video>, Option<More>), String> {
     let query = rp.query();
     let result = match tab {
@@ -373,10 +367,23 @@ pub async fn channel_tab(
     }
     .map_err(text)?;
     let header = channel_header(&result);
-    let more = More::of(&result.content);
+    let ordered = if order != ChannelOrder::Latest && !matches!(tab, ChannelTab::Search(_)) {
+        let video_tab = match tab {
+            ChannelTab::Videos => ChannelVideoTab::Videos,
+            ChannelTab::Shorts => ChannelVideoTab::Shorts,
+            ChannelTab::Live => ChannelVideoTab::Live,
+            _ => unreachable!(),
+        };
+        query
+            .channel_videos_tab_order(id, video_tab, order.into())
+            .await
+            .map_err(text)?
+    } else {
+        result.content
+    };
+    let more = More::of(&ordered);
     let shorts = *tab == ChannelTab::Shorts;
-    let videos = result
-        .content
+    let videos = ordered
         .items
         .into_iter()
         .map(|item| {
@@ -428,6 +435,7 @@ fn channel_header<T>(channel: &RpChannel<T>) -> ChannelHeader {
         name: channel.name.clone(),
         handle: channel.handle.clone(),
         avatar: largest(&channel.avatar),
+        banner: largest(&channel.banner),
         subscribers: channel.subscriber_count,
         videos: channel.video_count,
         has_shorts: channel.has_shorts,
@@ -503,13 +511,6 @@ pub async fn playlists(rp: &RustyPipe) -> Result<(Vec<PlaylistSummary>, Option<M
 
 /// A playlist's first page of videos. Private playlists need the session,
 /// which rustypipe adds by itself when one is set.
-pub async fn playlist_videos(
-    rp: &RustyPipe,
-    id: &str,
-) -> Result<(Vec<Video>, Option<More>), Error> {
-    or_ours(rp, id, rp.query().playlist(id).await).await
-}
-
 /// A playlist's first page of videos and its continuation.
 fn playlist_page(playlist: Playlist) -> (Vec<Video>, Option<More>) {
     let more = More::of(&playlist.videos);
@@ -646,10 +647,15 @@ fn span(component: &TextComponent, watching_id: &str) -> Span {
 
 fn video(item: VideoItem) -> Video {
     let channel = item.channel.as_ref().map(|channel| channel.name.clone());
+    let channel_avatar = item
+        .channel
+        .as_ref()
+        .and_then(|channel| largest(&channel.avatar));
     Video {
         id: item.id,
         title: item.name,
         channel,
+        channel_avatar,
         channel_id: item.channel.map(|channel| channel.id),
         duration: item.duration.map(f64::from),
         views: item.view_count,
@@ -669,6 +675,7 @@ fn rss_videos(feed: ChannelRss, now: i64) -> Vec<Video> {
                 id: entry.id,
                 title: entry.name,
                 channel: Some(feed.name.clone()),
+                channel_avatar: None,
                 channel_id: Some(feed.id.clone()),
                 duration: None,
                 // Zero while a premiere has not started.

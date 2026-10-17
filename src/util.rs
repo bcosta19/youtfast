@@ -32,9 +32,9 @@ pub fn views(count: u64) -> String {
         _ => short(count as f64 / 1e9, "B"),
     };
     if count == 1 {
-        "1 view".to_owned()
+        "1 visualização".to_owned()
     } else {
-        format!("{number} views")
+        format!("{number} visualizações")
     }
 }
 
@@ -107,20 +107,16 @@ pub fn now() -> i64 {
 /// `now` the Unix time `then` was, the way YouTube says it.
 pub fn ago(then: i64, now: i64) -> String {
     let seconds = (now - then).max(0);
-    let (count, unit) = match seconds {
-        0..60 => return "just now".to_owned(),
-        60..3_600 => (seconds / 60, "minute"),
-        3_600..86_400 => (seconds / 3_600, "hour"),
-        86_400..604_800 => (seconds / 86_400, "day"),
-        604_800..2_629_800 => (seconds / 604_800, "week"),
-        2_629_800..31_557_600 => (seconds / 2_629_800, "month"),
-        _ => (seconds / 31_557_600, "year"),
+    let (count, singular, plural) = match seconds {
+        0..60 => return "agora mesmo".to_owned(),
+        60..3_600 => (seconds / 60, "minuto", "minutos"),
+        3_600..86_400 => (seconds / 3_600, "hora", "horas"),
+        86_400..604_800 => (seconds / 86_400, "dia", "dias"),
+        604_800..2_629_800 => (seconds / 604_800, "semana", "semanas"),
+        2_629_800..31_557_600 => (seconds / 2_629_800, "mês", "meses"),
+        _ => (seconds / 31_557_600, "ano", "anos"),
     };
-    if count == 1 {
-        format!("1 {unit} ago")
-    } else {
-        format!("{count} {unit}s ago")
-    }
+    format!("há {count} {}", if count == 1 { singular } else { plural })
 }
 
 /// The last few values put, by key, each with when it was put: a bounded
@@ -249,15 +245,15 @@ mod tests {
     #[test]
     fn time_ago() {
         let now = 1_000_000_000;
-        assert_eq!(ago(now, now), "just now");
-        assert_eq!(ago(now - 59, now), "just now");
-        assert_eq!(ago(now - 60, now), "1 minute ago");
-        assert_eq!(ago(now - 7_200, now), "2 hours ago");
-        assert_eq!(ago(now - 86_400 * 3, now), "3 days ago");
-        assert_eq!(ago(now - 86_400 * 14, now), "2 weeks ago");
-        assert_eq!(ago(now - 86_400 * 400, now), "1 year ago");
+        assert_eq!(ago(now, now), "agora mesmo");
+        assert_eq!(ago(now - 59, now), "agora mesmo");
+        assert_eq!(ago(now - 60, now), "há 1 minuto");
+        assert_eq!(ago(now - 7_200, now), "há 2 horas");
+        assert_eq!(ago(now - 86_400 * 3, now), "há 3 dias");
+        assert_eq!(ago(now - 86_400 * 14, now), "há 2 semanas");
+        assert_eq!(ago(now - 86_400 * 400, now), "há 1 ano");
         // A clock behind the source's never says "in the future".
-        assert_eq!(ago(now + 30, now), "just now");
+        assert_eq!(ago(now + 30, now), "agora mesmo");
     }
 
     #[test]
@@ -271,13 +267,13 @@ mod tests {
 
     #[test]
     fn view_counts() {
-        assert_eq!(views(1), "1 view");
-        assert_eq!(views(950), "950 views");
-        assert_eq!(views(1_000), "1K views");
-        assert_eq!(views(1_250), "1.2K views");
-        assert_eq!(views(12_400), "12K views");
-        assert_eq!(views(1_200_000), "1.2M views");
-        assert_eq!(views(3_000_000_000), "3B views");
+        assert_eq!(views(1), "1 visualização");
+        assert_eq!(views(950), "950 visualizações");
+        assert_eq!(views(1_000), "1K visualizações");
+        assert_eq!(views(1_250), "1.2K visualizações");
+        assert_eq!(views(12_400), "12K visualizações");
+        assert_eq!(views(1_200_000), "1.2M visualizações");
+        assert_eq!(views(3_000_000_000), "3B visualizações");
     }
 
     #[test]
