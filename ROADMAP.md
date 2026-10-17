@@ -6,9 +6,8 @@ describe exactly what each version includes and excludes.
 
 ## Required before publishing 0.1.0
 
-- Complete the [public-release checklist](docs/public-release-checklist.md):
-  privacy/history review, Actions logs/artifacts, repository settings and source
-  redistribution review. A raw report in old Git history is a known blocker.
+- Complete the binary gates of the [public-release checklist](docs/public-release-checklist.md).
+  The source repository is already public with a cleaned history.
 - Run the hosted Release dry run on the intended commit and inspect every
   platform artifact. Local preparation is not a successful hosted build.
 - Qualify Linux native, Flatpak, Windows x86_64 and macOS Apple Silicon using

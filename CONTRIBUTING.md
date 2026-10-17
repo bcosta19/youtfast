@@ -6,9 +6,8 @@ browser engine, telemetry, a hosted backend or alternate video sources.
 
 ## Getting started
 
-The public 0.1.0 launch is being prepared. Until the visibility review is
-complete, only invited collaborators have access. AUR and Flathub submissions
-are separate work; neither listing is claimed here.
+The source repository is public; the 0.1.0 binaries are still being qualified.
+AUR and Flathub submissions are separate work; neither listing is claimed here.
 
 Use Rust from `rust-toolchain.toml`; rustup selects it automatically. On Ubuntu
 24.04, install the build dependencies:
@@ -41,7 +40,7 @@ user-visible behaviour. Record implemented changes in CHANGELOG.md under
 `Unreleased`; future work goes in ROADMAP.md. Interface changes need matching
 before/after captures in light/dark themes and representative sizes, without private data.
 
-Fork the project once public, or use an authorized topic branch while private.
+Fork the project, or use a topic branch if you have write access.
 Open a PR against `main`; maintainer release changes should also be reviewable
 through a topic branch/PR. External PRs are squash-merged with credit. Keep
 history linear and do not rewrite published commits or release tags.
@@ -63,9 +62,8 @@ cargo test --locked --all-targets --all-features
 RUSTDOCFLAGS='-D warnings' cargo doc --locked --no-deps --all-features
 ```
 
-Automatic CI/tag jobs are enabled for public repositories and remain paused
-while private unless `YOUTFAST_AUTOMATIC_CI=true`. Manual CI/Release runs are
-explicit opt-ins and may consume private runner minutes. See [Actions policy](docs/actions.md).
+CI runs automatically on pull requests and pushes to `main`; Release runs on
+`v*` tags and manual dry runs. See [Actions policy](docs/actions.md).
 0.1.0 targets Linux x86_64, Windows x86_64 and macOS Apple Silicon; hosted
 packaging/headless tests do not certify interactive playback, optional accounts
 or clean-machine installation. Complete [platform QA](docs/distribution.md).
@@ -84,11 +82,10 @@ See [RELEASING.md](RELEASING.md). A release must name a commit reachable from
 finish all required checks and packaging before publication.
 
 Branch protection is a GitHub repository setting, not something a workflow can
-create by itself. It is available for public repositories on GitHub Free;
-private availability depends on the plan. Require `release-gate` when enabled,
-review where another reviewer is available, dismiss stale approvals, prohibit
-force pushes/deletions and preserve linear history. Keep any maintainer bypass
-explicit and do not use it to merge failing changes.
+create by itself. `main` requires `release-gate`, resolved conversations and
+linear history, and blocks force pushes and deletion. Require review where
+another reviewer is available. The maintainer can still push directly; do not
+use that bypass to land failing changes.
 
 ## License
 

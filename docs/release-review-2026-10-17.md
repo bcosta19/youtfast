@@ -1,8 +1,8 @@
 # Release preparation evidence — 2026-10-17
 
-This records verified local/read-only work and remaining gates. It is not a
-published release, remote cleanup, legal certification or interactive platform
-qualification. Private evidence is kept in the ignored `target/` review folder;
+This records the preparation evidence, the public opening and the remaining
+gates. It is not a published release, legal certification or interactive
+platform qualification. Private evidence is kept in the ignored `target/` review folder;
 no raw report, logs, credential values or user-owned app data are included here.
 
 ## History and GitHub
@@ -28,9 +28,30 @@ no raw report, logs, credential values or user-owned app data are included here.
   Branch protection returned a plan-related 403; vulnerability-reporting status
   returned 404. No settings were changed or claimed enabled.
 
-Remote force-push and cached/PR-reference cleanup still need an authorized next
-step. GitHub explains why a force-push alone may leave old objects accessible:
-[sensitive-data removal](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository).
+## Public opening
+
+The items above describe the state before opening. With maintainer approval:
+
+- All six GitHub PR refs reached the commit that added the report. Those refs
+  are read-only, so a force-push would not have made the report inaccessible
+  ([sensitive-data removal](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository)).
+  The original repository was renamed `bcosta19/youtfast-private-archive`,
+  archived and kept private, with its PRs, Actions logs and caches. Its 8 old
+  workflow artifacts were deleted.
+- The cleaned mirror was reduced to `main` and extended with the release
+  preparation commit. Its personal author e-mail was replaced by the GitHub
+  noreply address while keeping names, dates, messages and trees byte-identical;
+  no signatures were present to drop. The redacted scan of the published
+  history read 667 blobs with no findings; the report blob is absent.
+- A new public `bcosta19/youtfast` received only that `main` (77 commits,
+  `848916b`). Settings: description/topics, read-only token, Actions limited to
+  GitHub-owned, `msys2/setup-msys2` and `Swatinem/rust-cache` with SHA pinning
+  required, private vulnerability reporting, Dependabot alerts/security
+  updates, secret scanning with push protection, and `main` protection
+  (`release-gate`, conversations, linear history, no force push/deletion).
+- Anonymous checks: repository, README and screenshot return 200; the old
+  report commit and the archive return 404; only `main` and Dependabot refs
+  are advertised.
 
 ## Code and packaging validation
 
@@ -71,8 +92,7 @@ step. GitHub explains why a force-push alone may leave old objects accessible:
 - Arch job prepares a native pacman package and an AUR recipe with `.SRCINFO`,
   building as a non-root user in an official digest-pinned container. Hosted
   execution, installed GUI playback and AUR publication are still pending.
-- No hosted workflow was triggered, heavy release build run locally, project
-  commit created, remote push performed, visibility changed or release published.
+- No heavy release build was run locally and no release was published.
 
 Follow the [current checklist](public-release-checklist.md) for the remaining
 public-opening, hosted-validation and binary-release gates.

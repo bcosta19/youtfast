@@ -17,14 +17,13 @@ The account's current balance/plan has not been verified by this repository.
 ## Execution policy
 
 CI handles pull requests to `main`, pushes to `main`, merge queues and manual
-runs. Automatic jobs run only when the repository is public or the repository
-variable `YOUTFAST_AUTOMATIC_CI` is explicitly `true`. Manual CI and Release
-requests are deliberate opt-ins and may consume private-repository minutes.
+runs. The repository is public, so these run automatically on standard runners.
+The `YOUTFAST_AUTOMATIC_CI` variable only matters for private copies, where it
+opts in to automatic jobs that consume the owner's allowance.
 Hosted jobs also have a six-hour GitHub execution limit; our build/test
 timeouts are shorter (60/90 minutes). There is no monthly compute-minute quota
 for public standard runners. See [Actions limits](https://docs.github.com/en/actions/reference/limits).
-There are no scheduled builds. Do not enable the private opt-in just to prepare
-documentation or publish it before the privacy review.
+There are no scheduled builds.
 
 The Release workflow handles `v*` tags and manual dry runs. The same visibility
 guard applies to automatic tag builds. Its reusable CI validates all platforms;
@@ -36,21 +35,23 @@ successful CI or draft is not a published release.
 Superseded PR runs are cancelled. Release runs are not cancelled midway, and
 intermediate artifacts expire after seven days. Release assets are the durable
 downloads. Keep caches bounded; do not increase paid storage limits without
-review. While private, avoid repeated full dry runs with no code changes.
+review. Avoid repeated full dry runs with no code changes.
 
-## Public repository settings
+## Repository settings
 
-- Allow only needed Actions; keep third-party Actions pinned to reviewed SHAs.
+Configured on 2026-10-17; verify them in the repository settings rather than
+inferring them from files in Git.
+
+- Allowed Actions: GitHub-owned, `msys2/setup-msys2` and `Swatinem/rust-cache`,
+  with SHA pinning required. Adding an Action means updating that list.
 - Keep the default token read-only. Only draft creation gets `contents: write`.
 - Require approval for workflows from outside contributors as appropriate;
   never run their code through `pull_request_target` with secrets.
 - Use GitHub-hosted ephemeral runners for untrusted contributions.
-- Set `release-gate` as a required check on `main`, require review where another
-  reviewer is available, block force pushes/deletions and keep linear history.
-  Maintainer bypasses must be explicit. Workflows alone do not enforce this.
-- Keep spending limits/alerts configured for other private projects and review
-  artifact/cache usage. Do not use larger runners as an implicit upgrade.
-
-Branch protection is available for public repositories on GitHub Free; private
-repositories depend on the plan. These settings must actually be configured,
-not inferred from files in Git. See [protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches).
+- `main` requires the `release-gate` check, resolved conversations and linear
+  history, and blocks force pushes/deletion. Admins are not enforced, so the
+  maintainer can push directly; require review where another reviewer exists.
+  See [protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches).
+- Private vulnerability reporting, Dependabot alerts/security updates, secret
+  scanning and push protection are enabled.
+- Review artifact/cache usage. Do not use larger runners as an implicit upgrade.

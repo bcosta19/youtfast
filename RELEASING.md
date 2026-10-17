@@ -3,9 +3,8 @@
 ## Current state and release policy
 
 0.1.0 is in preparation; no release was published at this review (2026-10-17).
-The repository is private. Public visibility is blocked by the known raw report
-in old Git history and the remaining [public-release gates](docs/public-release-checklist.md).
-Preparing packages does not authorize visibility changes or history rewriting.
+The source repository is public since 2026-10-17, created from a cleaned history.
+Binary publication still follows the remaining [release gates](docs/public-release-checklist.md).
 
 Use stable SemVer tags `vMAJOR.MINOR.PATCH`. During 0.x, use patches for
 compatible fixes and minor versions for features or incompatible changes;
@@ -23,8 +22,8 @@ a patch release instead of replacing downloads.
 
 ## Prepare and validate
 
-1. Finish the privacy/repository gates before opening the repository. Review
-   historical Actions logs/artifacts separately from Git history.
+1. Never commit raw API reports, logs, cookies or personal data; the public
+   history was cleaned once and must stay clean.
 2. Prepare a reviewed candidate branch; the final tag must be reachable from `main`. Align `Cargo.toml`,
    the YouTFast entry in `Cargo.lock`, AppStream version/date, changelog
    version/date and `packaging/release-notes/vX.Y.Z.md`. A manual dry run may keep
@@ -40,7 +39,7 @@ a patch release instead of replacing downloads.
    **Release**, selecting the intended ref and entering `vX.Y.Z`. The dry run
    reuses full CI and builds every candidate on hosted runners without creating
    a release. Download artifacts before their seven-day retention expires.
-   Private runs consume the owner's allowance; see [Actions policy](docs/actions.md).
+   See [Actions policy](docs/actions.md).
 5. Inspect all packages and complete [platform QA](docs/distribution.md).
    Windows/macOS also need matching native dependency sources, patches, build
    instructions and notices; inventories are not sufficient. If a required
@@ -80,7 +79,7 @@ gh release edit v0.1.0 --draft=false --latest
 ```
 
 Verify notes, release date and downloads as an anonymous reader after
-publication. `gh release download v0.1.0` retrieves assets while private for
+publication. `gh release download v0.1.0` retrieves a draft's assets for
 review. Run `sha256sum --check checksums.txt` in the download directory.
 Checksums detect corruption; they are not publisher signatures. Never claim
 code signing/notarization or interactive coverage that has not been performed.

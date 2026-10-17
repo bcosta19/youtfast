@@ -31,8 +31,7 @@ managed by Flatpak and their own source distribution.
 
 Recipients can obtain corresponding source alongside the binaries in the same
 GitHub release, without relying only on Cargo registries or moving branches.
-While the repository is private, only invited collaborators can access that
-release. Do not redistribute binary-only copies without also meeting the
+Do not redistribute binary-only copies without also meeting the
 applicable source and notice obligations.
 
 Windows/macOS candidate bundles include libmpv and linked native libraries.

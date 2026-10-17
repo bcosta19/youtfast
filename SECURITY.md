@@ -9,11 +9,10 @@ interactive/account support on every platform; see [platform coverage](docs/dist
 ## Reporting a vulnerability
 
 Do not post exploit details or private user data in an issue or pull request.
-Use GitHub's **Security > Report a vulnerability** when private reporting is
-available. If that option is unavailable, ask the maintainer `@bcosta19` for a
-private reporting channel without including vulnerability details. This
-repository is preparing for public opening; configure and verify private
-vulnerability reporting as part of that transition.
+Use GitHub's **Security > Report a vulnerability**; private vulnerability
+reporting is enabled for this repository. If that option is unavailable, ask
+the maintainer `@bcosta19` for a private reporting channel without including
+vulnerability details.
 
 Include the affected version, impact and minimal reproduction with synthetic
 credentials/data. Never send a Google session, cookies.txt, browser profile,
