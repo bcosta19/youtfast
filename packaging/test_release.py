@@ -11,6 +11,23 @@ spec.loader.exec_module(release)
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_draft_changelog_requires_a_date_only_when_freezing_a_tag(self):
+        draft = "## [Unreleased]\n\n## [0.1.0] - Unreleased\n"
+        release.validate_changelog(draft, "0.1.0", "2026-10-17")
+        with self.assertRaisesRegex(ValueError, "Freeze"):
+            release.validate_changelog(draft, "0.1.0", "2026-10-17", require_date=True)
+        frozen = draft.replace("- Unreleased", "- 2026-10-17")
+        release.validate_changelog(frozen, "0.1.0", "2026-10-17", require_date=True)
+        with self.assertRaisesRegex(ValueError, "dates must agree"):
+            release.validate_changelog(frozen, "0.1.0", "2026-10-11", require_date=True)
+
+    def test_changelog_rejects_missing_duplicate_and_invalid_version_dates(self):
+        for text in ["", "## [Unreleased]\n", "## [Unreleased]\n## [0.1.0] - invalid",
+                     "## [Unreleased]\n## [0.1.0] - 2026-02-30",
+                     "## [Unreleased]\n## [0.1.0] - Unreleased\n## [0.1.0] - Unreleased"]:
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                release.validate_changelog(text, "0.1.0", "2026-10-17")
+
     def test_release_tag_requires_exact_stable_version(self):
         release.validate_tag("v0.1.0", "0.1.0")
         for tag in ["0.1.0", "v0.2.0", "v0.1.0/other", "v0.1.0; echo bad", "v0.1.0-rc.1", "v00.1.0"]:

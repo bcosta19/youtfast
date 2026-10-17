@@ -1,7 +1,11 @@
 name: CI
 
 on:
-  # Automatic triggers are temporarily paused to conserve Actions minutes.
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
   workflow_dispatch:
   workflow_call:
 
@@ -18,6 +22,8 @@ env:
 
 jobs:
   linux:
+    # Preserve the private-repository pause unless explicitly opted in.
+    if: github.event_name == 'workflow_dispatch' || github.event.repository.private == false || vars.YOUTFAST_AUTOMATIC_CI == 'true'
     name: linux-quality
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -48,15 +54,16 @@ jobs:
       - name: Documentation
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc --locked --no-deps
+        run: cargo doc --locked --no-deps --all-features
       - name: Clippy
-        run: cargo clippy --locked --profile ci --all-targets -- -D warnings
+        run: cargo clippy --locked --profile ci --all-targets --all-features -- -D warnings
       - name: Tests
-        run: cargo test --locked --profile ci --all-targets
+        run: cargo test --locked --profile ci --all-targets --all-features
 
   macos:
+    if: github.event_name == 'workflow_dispatch' || github.event.repository.private == false || vars.YOUTFAST_AUTOMATIC_CI == 'true'
     name: macos-native-tests
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -70,15 +77,16 @@ jobs:
           echo "LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
-          shared-key: macos-tests
+          shared-key: macos15-tests
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-      - run: cargo test --locked --profile ci --all-targets
+      - run: cargo test --locked --profile ci --all-targets --all-features
       - name: Build and version smoke test
         run: |
           cargo build --locked --profile ci
           test "$(target/ci/youtfast --version)" = "youtfast $(python3 packaging/release.py check)"
 
   windows:
+    if: github.event_name == 'workflow_dispatch' || github.event.repository.private == false || vars.YOUTFAST_AUTOMATIC_CI == 'true'
     name: windows-native-tests
     runs-on: windows-2022
     timeout-minutes: 60
@@ -108,13 +116,13 @@ jobs:
         shell: msys2 {0}
         run: |
           export LIBRARY_PATH=/ucrt64/lib
-          cargo test --locked --profile ci --all-targets --target x86_64-pc-windows-gnu
+          cargo test --locked --profile ci --all-targets --all-features --target x86_64-pc-windows-gnu
           cargo build --locked --profile ci --target x86_64-pc-windows-gnu
           target/x86_64-pc-windows-gnu/ci/youtfast.exe --version
 
   release-gate:
     name: release-gate
-    if: always()
+    if: always() && (github.event_name == 'workflow_dispatch' || github.event.repository.private == false || vars.YOUTFAST_AUTOMATIC_CI == 'true')
     needs: [linux, macos, windows]
     runs-on: ubuntu-24.04
     timeout-minutes: 5

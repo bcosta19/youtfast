@@ -13,8 +13,8 @@ this guide and the repository's own contribution policy take precedence.
 - Video goes through libmpv. Do not decode video in-process the way ZapFast's
   `src/video.rs` does: that path is CPU-only and tops out far below what
   YouTube serves (VP9/AV1, 4K, 60 fps, HDR).
-- YouTube data goes through yt-dlp for now (see `src/youtube.rs`). Do not
-  scrape YouTube's HTML or reimplement signature or n-parameter
+- YouTube data/search goes through RustyPipe; playback extraction uses yt-dlp.
+  Do not scrape YouTube's HTML or reimplement signature or n-parameter
   deobfuscation here; that belongs to an extractor library.
 - The signed-in session (YouTube cookies) is the user's Google session.
   It lives only in the platform credential store (`src/account.rs`): never
@@ -99,9 +99,8 @@ this guide and the repository's own contribution policy take precedence.
   requests, one current request per `backend::Slot`; an answer to an older
   one is dropped (`App::generations`). Account-or-device pages switch with
   `model::Source`.
-- `src/youtube.rs` runs yt-dlp (`--flat-playlist --dump-single-json`) for
-  search and parses its JSON into `model::Video`. Playback hands the watch
-  link to mpv, whose ytdl hook asks yt-dlp for the streams
+- `src/youtube.rs` parses extraction JSON; search goes through RustyPipe.
+  Playback hands the watch link to mpv, whose ytdl hook asks yt-dlp for the streams
   (`mpv::FORMAT`, bounded by the quality chosen, 1080p on Auto). Updating yt-dlp fixes YouTube
   breakage without a release. Videos play signed out: with a session,
   yt-dlp only has YouTube's web clients, which without a PO token offer
@@ -172,20 +171,10 @@ this guide and the repository's own contribution policy take precedence.
 
 ## Roadmap
 
-1. **Prototype (now):** search, watch page, in-window playback, full screen,
-   keyboard shortcuts.
-2. **Make it an app:** fastframe-i18n, window persistence, the `demo`
-   feature with sample data and screenshots.
-3. **Library and account (done, first version):** local subscriptions,
-   history with resume, Watch later, Takeout import, RSS feed, channel
-   pages; the account's feed, subscriptions, history, Watch later, liked
-   videos and playlists through rustypipe.
-4. **Search through rustypipe** (already in the tree) to drop the
-   per-search yt-dlp start-up (about a second), keeping yt-dlp for streams.
-   A cookies.txt account needs its session handed to yt-dlp without
-   writing it to a file for the signed-in retry.
-5. **More:** live chat, downloads. (Captions, chapters, SponsorBlock and
-   the mini player are in.)
+See `ROADMAP.md` for pending work and `CHANGELOG.md` for implemented features.
+RustyPipe search, i18n, persistence and the offline demo are in the tree.
+0.1.0 targets Linux x86_64, Windows x86_64 and macOS Apple Silicon; candidate
+packaging is not completed interactive platform qualification.
 
 ## Definition of done
 
@@ -200,8 +189,8 @@ this guide and the repository's own contribution policy take precedence.
   ```
 
 - Report platform coverage honestly: say what was run and what was only
-  compiled. Only Linux has been considered so far; Windows and macOS need
-  libmpv bundled with the app, and Windows' Credential Manager caps a
+  compiled. Windows/macOS candidates bundle libmpv but still need interactive
+  QA and matching native-source review. Windows' Credential Manager caps a
   secret at 2560 bytes, which a YouTube session can exceed.
 
 ## Disk use
@@ -247,17 +236,19 @@ large scratch files in `/tmp`.
   Cargo.lock, AppStream metadata and committed written release notes.
 - CI builds Linux, macOS and Windows on hosted GitHub runners. Do not perform
   heavy local release builds when the maintainer asks to use those runners.
-  The release workflow publishes only after its reusable CI gate and every
-  required artifact job passes. Native platform tests are not interactive QA.
+  The release workflow creates a draft only after reusable CI and all required
+  artifact jobs pass. Final publication requires privacy/source/platform review.
+  Native platform tests are not interactive QA.
 - Keep Actions pinned to reviewed SHAs and contributor permissions read-only.
   Never execute contributor code through `pull_request_target` with secrets.
-- The repository remains private. A raw RustyPipe report remains in old git
+- The repository is preparing for public opening but remains private until the
+  privacy/history gates pass. A raw RustyPipe report remains in old git
   history but is no longer tracked or included in release source packages.
   Never open that report or expose its contents to debug. Public visibility
   requires a separate privacy/history review and explicit maintainer approval.
-- The current private repository plan does not support branch protection.
-  Document this limitation rather than claiming the CI gate blocks merges.
+- Branch protection depends on visibility/plan; public GitHub Free repositories
+  support it. Verify settings separately; workflows alone do not block merges.
 - GPL-3.0-only is the release license, with original dependency notices retained.
   Ship corresponding source, including locked Rust dependencies and native
   Flatpak sources, alongside binary assets. A Flatpak bundle is not a Flathub
-  listing; public submission and Windows/macOS installers remain separate work.
+  listing; public store submission and native installers remain separate work.

@@ -1,0 +1,46 @@
+# Maintainer: bcosta19 (https://github.com/bcosta19)
+# Generated from the exact release source asset; review before AUR submission.
+pkgname=youtfast
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='A native YouTube client built with Rust, egui and libmpv'
+arch=('x86_64')
+url='https://github.com/bcosta19/youtfast'
+license=('GPL-3.0-only')
+depends=('mpv' 'yt-dlp' 'deno' 'libxkbcommon' 'libxkbcommon-x11' 'wayland'
+         'libglvnd' 'fontconfig' 'gcc-libs' 'glibc' 'openssl')
+makedepends=('cargo' 'rust>=@RUST_VERSION@' 'pkgconf')
+optdepends=('python-secretstorage: Chromium browser session import'
+            'org.freedesktop.secrets: system credential store for optional accounts')
+source=("https://github.com/bcosta19/youtfast/releases/download/v${pkgver}/youtfast-v${pkgver}-source-with-dependencies.tar.gz")
+sha256sums=('@SHA256@')
+
+build() {
+    cd "${srcdir}/youtfast-v${pkgver}-source-with-dependencies"
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR=target
+    cargo build --frozen --release
+}
+
+check() {
+    cd "${srcdir}/youtfast-v${pkgver}-source-with-dependencies"
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR=target
+    cargo test --frozen --profile ci --all-targets --all-features
+}
+
+package() {
+    cd "${srcdir}/youtfast-v${pkgver}-source-with-dependencies"
+    install -Dm755 target/release/youtfast "${pkgdir}/usr/bin/youtfast"
+    install -Dm644 packaging/applications/youtfast.desktop "${pkgdir}/usr/share/applications/youtfast.desktop"
+    install -Dm644 packaging/icons/youtfast.svg "${pkgdir}/usr/share/icons/hicolor/scalable/apps/youtfast.svg"
+    install -Dm644 packaging/flatpak/io.github.bcosta19.YouTFast.metainfo.xml "${pkgdir}/usr/share/metainfo/io.github.bcosta19.YouTFast.metainfo.xml"
+    sed -i 's/io.github.bcosta19.YouTFast.desktop/youtfast.desktop/' "${pkgdir}/usr/share/metainfo/io.github.bcosta19.YouTFast.metainfo.xml"
+    install -Dm755 contrib/omarchy/youtfast-theme "${pkgdir}/usr/share/youtfast/omarchy/youtfast-theme"
+    install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/youtfast/LICENSE"
+    install -Dm644 THIRD_PARTY_NOTICES.md "${pkgdir}/usr/share/licenses/youtfast/THIRD_PARTY_NOTICES.md"
+    install -Dm644 assets/icons/LICENSE.txt "${pkgdir}/usr/share/licenses/youtfast/icons/LICENSE.txt"
+    install -Dm644 vendor/rustypipe/LICENSE "${pkgdir}/usr/share/licenses/youtfast/rustypipe/LICENSE"
+    install -Dm644 README.md "${pkgdir}/usr/share/doc/youtfast/README.md"
+    install -Dm644 CHANGELOG.md "${pkgdir}/usr/share/doc/youtfast/CHANGELOG.md"
+}

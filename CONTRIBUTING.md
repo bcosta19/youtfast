@@ -6,8 +6,9 @@ browser engine, telemetry, a hosted backend or alternate video sources.
 
 ## Getting started
 
-The repository is currently private. Only invited collaborators can open issues,
-submit pull requests or download releases. Nothing is published on Flathub yet.
+The public 0.1.0 launch is being prepared. Until the visibility review is
+complete, only invited collaborators have access. AUR and Flathub submissions
+are separate work; neither listing is claimed here.
 
 Use Rust from `rust-toolchain.toml`; rustup selects it automatically. On Ubuntu
 24.04, install the build dependencies:
@@ -36,12 +37,13 @@ for vulnerabilities and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for conduct.
 Discuss substantial features or interface redesigns before implementing them.
 Keep pull requests focused, explain why the change is useful, and include
 regression tests. Document changes to settings, files, network access and
-user-visible behaviour. Interface changes need matching before/after captures,
-in light and dark themes and at representative window sizes, without private data.
+user-visible behaviour. Record implemented changes in CHANGELOG.md under
+`Unreleased`; future work goes in ROADMAP.md. Interface changes need matching
+before/after captures in light/dark themes and representative sizes, without private data.
 
-Fork the project if access permits, or use a topic branch as an invited outside
-contributor. Open a pull request against `main`. Maintainer work stays directly on
-`main`; external pull requests are squash-merged with contributor credit. Keep
+Fork the project once public, or use an authorized topic branch while private.
+Open a PR against `main`; maintainer release changes should also be reviewable
+through a topic branch/PR. External PRs are squash-merged with credit. Keep
 history linear and do not rewrite published commits or release tags.
 
 AI-assisted contributions follow the same rules: the contributor must understand
@@ -56,18 +58,17 @@ Run these before submitting:
 python3 -m unittest discover -s packaging -p 'test_*.py'
 python3 packaging/release.py check
 cargo fmt --all --check
-cargo clippy --locked --all-targets -- -D warnings
-cargo test --locked --all-targets
-RUSTDOCFLAGS='-D warnings' cargo doc --locked --no-deps
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-targets --all-features
+RUSTDOCFLAGS='-D warnings' cargo doc --locked --no-deps --all-features
 ```
 
-Automatic GitHub Actions triggers are temporarily paused to conserve runner
-minutes, including tag releases. Checks and release validation remain available
-through manual requests. Restore the `push`, `pull_request` and `merge_group`
-triggers in CI and the `push` tag trigger in Release to resume automation.
-Linux is the release target for 0.1.0. Windows and macOS jobs
-exercise native compilation and headless tests; green jobs do not certify
-interactive playback, account login or portable installers on those platforms.
+Automatic CI/tag jobs are enabled for public repositories and remain paused
+while private unless `YOUTFAST_AUTOMATIC_CI=true`. Manual CI/Release runs are
+explicit opt-ins and may consume private runner minutes. See [Actions policy](docs/actions.md).
+0.1.0 targets Linux x86_64, Windows x86_64 and macOS Apple Silicon; hosted
+packaging/headless tests do not certify interactive playback, optional accounts
+or clean-machine installation. Complete [platform QA](docs/distribution.md).
 Do not run ignored network tests as part of default CI. Tests must not access
 real credentials, browser data or user-owned library/settings files.
 
@@ -83,9 +84,9 @@ See [RELEASING.md](RELEASING.md). A release must name a commit reachable from
 finish all required checks and packaging before publication.
 
 Branch protection is a GitHub repository setting, not something a workflow can
-create by itself. The current private repository plan does not support it.
-When available, require the `release-gate` check for outside pull requests,
-require one review, dismiss stale approvals, require CODEOWNERS review, prohibit
+create by itself. It is available for public repositories on GitHub Free;
+private availability depends on the plan. Require `release-gate` when enabled,
+review where another reviewer is available, dismiss stale approvals, prohibit
 force pushes/deletions and preserve linear history. Keep any maintainer bypass
 explicit and do not use it to merge failing changes.
 

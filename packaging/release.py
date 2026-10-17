@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import re
 import shutil
 import subprocess
@@ -9,6 +10,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 APP_ID = "io.github.bcosta19.YouTFast"
+PUBLIC_FILES = [
+    "README.md", "CHANGELOG.md", "ROADMAP.md", "CONTRIBUTING.md", "RELEASING.md",
+    "SECURITY.md", "CODE_OF_CONDUCT.md", "AGENTS.md", "LICENSE", "THIRD_PARTY_NOTICES.md",
+    "docs/actions.md", "docs/distribution.md", "docs/public-release-checklist.md", "docs/user-guide.md",
+    "docs/release-review-2026-10-17.md",
+    "packaging/arch/README.md", "assets/icons/LICENSE.txt", "vendor/rustypipe/LICENSE",
+    "packaging/icons/youtfast.svg", "assets/screenshots/watch-dark.png",
+]
 
 
 def version(root=ROOT):
@@ -27,7 +36,24 @@ def forbidden_path(name):
     return any(part in {"rustypipe_reports", "target", ".env", "cookies.txt"} or part.startswith(".env.") for part in parts)
 
 
-def check(root=ROOT, tag=None):
+def validate_changelog(text, current, metadata_date, require_date=False):
+    if text.count("## [Unreleased]") != 1:
+        raise ValueError("Changelog requires one Unreleased section")
+    entries = re.findall(rf"^## \[{re.escape(current)}\] - (.+)$", text, re.MULTILINE)
+    if len(entries) != 1:
+        raise ValueError("Changelog requires one entry for the release version")
+    date = entries[0]
+    if date == "Unreleased" and not require_date:
+        return
+    try:
+        parsed = datetime.date.fromisoformat(date)
+    except ValueError as error:
+        raise ValueError("Freeze the changelog publication date before a tagged release or dry run") from error
+    if parsed.isoformat() != date or date != metadata_date:
+        raise ValueError("Changelog and AppStream release dates must agree")
+
+
+def check(root=ROOT, tag=None, candidate=False):
     current = version(root)
     validate_tag(tag or f"v{current}", current)
     lock = tomllib.loads((root / "Cargo.lock").read_text())
@@ -37,10 +63,18 @@ def check(root=ROOT, tag=None):
     metadata = ET.parse(root / f"packaging/flatpak/{APP_ID}.metainfo.xml").getroot()
     if metadata.findtext("id") != APP_ID:
         raise ValueError("Desktop application ID mismatch")
-    if metadata.find("releases/release").get("version") != current:
+    desktop_release = metadata.find("releases/release")
+    if desktop_release.get("version") != current:
         raise ValueError("Desktop release version does not match Cargo.toml")
-    if not (root / f"packaging/release-notes/v{current}.md").is_file():
+    validate_changelog((root / "CHANGELOG.md").read_text(), current,
+                       desktop_release.get("date"), require_date=tag is not None and not candidate)
+    notes_path = root / f"packaging/release-notes/v{current}.md"
+    if not notes_path.is_file():
         raise ValueError("Committed release notes are required")
+    notes = notes_path.read_text()
+    for section in ["## Included", "## Not included", "## Known limitations"]:
+        if section not in notes:
+            raise ValueError("Release notes must describe included features, exclusions and limitations")
     if tomllib.loads((root / "Cargo.toml").read_text())["package"]["license"] != "GPL-3.0-only":
         raise ValueError("Project license must match release documentation")
     if not (root / "LICENSE").is_file():
@@ -51,6 +85,13 @@ def check(root=ROOT, tag=None):
     return current
 
 
+def copy_public_files(directory):
+    for item in PUBLIC_FILES:
+        output = directory / item
+        output.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / item, output)
+
+
 def linux():
     current = check()
     name = f"youtfast-v{current}-x86_64-unknown-linux-gnu"
@@ -58,7 +99,8 @@ def linux():
     directory = dist / name
     directory.mkdir(parents=True, exist_ok=False)
     shutil.copy2(ROOT / "target/release/youtfast", directory / "youtfast")
-    for item in ["README.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "packaging/portable.txt", "packaging/applications/youtfast.desktop", "packaging/icons/youtfast.svg", "assets/icons/LICENSE.txt", "vendor/rustypipe/LICENSE"]:
+    copy_public_files(directory)
+    for item in ["packaging/portable.txt", "packaging/applications/youtfast.desktop", "packaging/icons/youtfast.svg", "contrib/omarchy/youtfast-theme"]:
         output = directory / item
         output.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / item, output)
@@ -92,9 +134,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=["check", "linux", "source"])
     parser.add_argument("--tag")
+    parser.add_argument("--candidate", action="store_true", help="Allow a pending publication date for non-publishing dry runs")
     args = parser.parse_args()
+    if args.candidate and args.command != "check":
+        parser.error("--candidate is only supported by check")
     if args.command == "check":
-        print(check(tag=args.tag))
+        print(check(tag=args.tag, candidate=args.candidate))
     elif args.command == "linux":
         linux()
     else:

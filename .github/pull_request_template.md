@@ -11,6 +11,7 @@ Describe behavioural changes and any compatibility, privacy or performance impac
 - [ ] Added or updated regression tests.
 - [ ] Packaging checks, rustfmt, Clippy and tests pass.
 - [ ] Updated documentation for user-visible or network/file changes.
+- [ ] Recorded implemented user-facing changes in CHANGELOG.md under Unreleased.
 - [ ] No credentials, browser data, private content or raw API reports included.
 - [ ] Retained dependency licenses and used locked dependencies.
 

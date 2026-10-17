@@ -15,8 +15,8 @@ body:
   - type: input
     id: platform
     attributes:
-      label: Distribution and desktop
-      description: Include OS version, CPU architecture and Wayland/X11.
+      label: Operating system and desktop
+      description: Include OS version, CPU architecture, GPU/driver and package type. On Linux, include Wayland/X11 and desktop.
     validations:
       required: true
   - type: textarea

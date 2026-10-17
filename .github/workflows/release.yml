@@ -1,7 +1,8 @@
 name: Release
 
 on:
-  # Automatic tag releases are temporarily paused to conserve Actions minutes.
+  push:
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:
@@ -24,6 +25,7 @@ env:
 
 jobs:
   validate:
+    if: github.event_name == 'workflow_dispatch' || github.event.repository.private == false || vars.YOUTFAST_AUTOMATIC_CI == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -32,9 +34,18 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Validate version and main ancestry
+        env:
+          RELEASE_EVENT: ${{ github.event_name }}
         run: |
-          python3 packaging/release.py check --tag "$RELEASE_TAG"
-          git merge-base --is-ancestor HEAD origin/main
+          if [ "$RELEASE_EVENT" = workflow_dispatch ]; then
+            python3 packaging/release.py check --tag "$RELEASE_TAG" --candidate
+          else
+            python3 packaging/release.py check --tag "$RELEASE_TAG"
+          fi
+          if [ "$RELEASE_EVENT" = push ]; then
+            git merge-base --is-ancestor HEAD origin/main
+            test "$(git cat-file -t "$RELEASE_TAG")" = tag
+          fi
 
   checks:
     needs: validate
@@ -112,6 +123,49 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  arch:
+    needs: [validate, checks, source]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    container:
+      # Official Arch image, digest verified 2026-10-17; review updates.
+      image: archlinux:base@sha256:3c64b538588416593f69a1aebd2f2ec0f2541b29159f32556fa7def2167147a0
+    steps:
+      - name: Install signed distribution build/runtime dependencies
+        run: |
+          pacman -Syu --noconfirm --needed base-devel git python rust namcap mpv yt-dlp deno libxkbcommon libxkbcommon-x11 wayland libglvnd fontconfig openssl pkgconf
+          useradd --create-home builder
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: source
+          path: dist
+      - name: Generate exact source recipe and build as an unprivileged user
+        run: |
+          python3 packaging/arch.py "dist/youtfast-$RELEASE_TAG-source-with-dependencies.tar.gz"
+          cp -a dist/aur/youtfast /home/builder/youtfast
+          cp "dist/youtfast-$RELEASE_TAG-source-with-dependencies.tar.gz" /home/builder/youtfast/
+          chown -R builder:builder /home/builder/youtfast
+          runuser -u builder -- bash -e -c 'cd /home/builder/youtfast && makepkg --verifysource && makepkg --cleanbuild --noconfirm && makepkg --printsrcinfo > .SRCINFO'
+      - name: Install candidate and validate package metadata
+        run: |
+          cp /home/builder/youtfast/*.pkg.tar.zst dist/
+          cp /home/builder/youtfast/.SRCINFO dist/aur/youtfast/.SRCINFO
+          namcap dist/aur/youtfast/PKGBUILD dist/*.pkg.tar.zst
+          pacman -U --noconfirm dist/*.pkg.tar.zst
+          test "$(youtfast --version)" = "youtfast ${RELEASE_TAG#v}"
+          tar -czf "dist/youtfast-$RELEASE_TAG-aur.tar.gz" -C dist/aur youtfast
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: arch
+          path: |
+            dist/*.pkg.tar.zst
+            dist/*-aur.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
   flatpak:
     needs: linux
     runs-on: ubuntu-24.04
@@ -145,9 +199,122 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  publish:
+  windows:
+    needs: [validate, checks]
+    runs-on: windows-2022
+    timeout-minutes: 90
+    env:
+      CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: gcc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned compiler
+        shell: pwsh
+        run: |
+          $toolchain = (Select-String -Path rust-toolchain.toml -Pattern '^channel = "([^"]+)"').Matches[0].Groups[1].Value
+          rustup toolchain install $toolchain --profile minimal --target x86_64-pc-windows-gnu
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e
+        with:
+          msystem: UCRT64
+          path-type: inherit
+          update: true
+          install: mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-mpv mingw-w64-ucrt-x86_64-python
+      - name: Build, bundle imported DLLs and record native dependencies
+        shell: msys2 {0}
+        run: |
+          export LIBRARY_PATH=/ucrt64/lib
+          cargo build --release --locked --target x86_64-pc-windows-gnu
+          python packaging/bundle.py windows --binary target/x86_64-pc-windows-gnu/release/youtfast.exe --prefix "$(cygpath -m /ucrt64)"
+          python packaging/native_sources.py windows "dist/youtfast-$RELEASE_TAG-x86_64-pc-windows-gnu"
+      - name: Extract and smoke test outside the build toolchain PATH
+        shell: pwsh
+        run: |
+          $archive = Get-Item "dist/youtfast-$env:RELEASE_TAG-x86_64-pc-windows-gnu.zip"
+          $unpacked = Join-Path $env:RUNNER_TEMP 'youtfast-windows-smoke'
+          Expand-Archive $archive.FullName $unpacked
+          $exe = Get-ChildItem $unpacked -Filter youtfast.exe -Recurse | Select-Object -First 1
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          $actual = & $exe.FullName --version
+          if ($LASTEXITCODE -ne 0 -or $actual -ne "youtfast $($env:RELEASE_TAG.Substring(1))") { throw 'Packaged Windows startup failed' }
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: windows
+          path: |
+            dist/*-x86_64-pc-windows-gnu.zip
+            dist/*-windows-native-sources.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  macos:
+    needs: [validate, checks]
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned compiler and native packaging tools
+        run: |
+          toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$toolchain" --profile minimal
+          brew install mpv dylibbundler
+          echo "LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
+      - name: Build and bundle application with libmpv
+        run: |
+          cargo build --release --locked
+          python3 packaging/bundle.py macos --binary target/release/youtfast
+          python3 packaging/native_sources.py macos "dist/youtfast-$RELEASE_TAG-aarch64-apple-darwin"
+      - name: Extract and smoke test packaged application
+        run: |
+          mkdir -p "$RUNNER_TEMP/youtfast-macos-smoke"
+          ditto -x -k "dist/youtfast-$RELEASE_TAG-aarch64-apple-darwin.zip" "$RUNNER_TEMP/youtfast-macos-smoke"
+          app="$RUNNER_TEMP/youtfast-macos-smoke/youtfast-$RELEASE_TAG-aarch64-apple-darwin/YouTFast.app"
+          codesign --verify --deep --strict "$app"
+          test "$("$app/Contents/MacOS/youtfast" --version)" = "youtfast ${RELEASE_TAG#v}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: macos
+          path: |
+            dist/*-aarch64-apple-darwin.zip
+            dist/*-macos-native-sources.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  assemble:
+    needs: [checks, linux, source, arch, flatpak, windows, macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Require every platform and checksum candidates, including dry runs
+        run: |
+          test -s "dist/youtfast-$RELEASE_TAG-x86_64-unknown-linux-gnu.tar.gz"
+          test -s "dist/youtfast-$RELEASE_TAG-source-with-dependencies.tar.gz"
+          test -s "dist/youtfast-$RELEASE_TAG-x86_64.flatpak"
+          test -s "dist/youtfast-$RELEASE_TAG-flatpak-sources.flatpak"
+          test -s "dist/youtfast-$RELEASE_TAG-linux.png"
+          test -s "dist/youtfast-$RELEASE_TAG-aur.tar.gz"
+          test -s "dist/youtfast-${RELEASE_TAG#v}-1-x86_64.pkg.tar.zst"
+          test -s "dist/youtfast-$RELEASE_TAG-x86_64-pc-windows-gnu.zip"
+          test -s "dist/youtfast-$RELEASE_TAG-aarch64-apple-darwin.zip"
+          test -s "dist/youtfast-$RELEASE_TAG-windows-native-sources.tar.gz"
+          test -s "dist/youtfast-$RELEASE_TAG-macos-native-sources.tar.gz"
+          (cd dist && sha256sum *.tar.gz *.flatpak *.png *.zip *.pkg.tar.zst > checksums.txt && sha256sum --check checksums.txt)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: checksums
+          path: dist/checksums.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  draft:
     if: github.event_name == 'push'
-    needs: [checks, linux, source, flatpak]
+    needs: assemble
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -160,15 +327,9 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: Require artifacts, checksum and publish committed notes
+      - name: Verify candidates and create a draft for review
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          test -s "dist/youtfast-$RELEASE_TAG-x86_64-unknown-linux-gnu.tar.gz"
-          test -s "dist/youtfast-$RELEASE_TAG-source-with-dependencies.tar.gz"
-          test -s "dist/youtfast-$RELEASE_TAG-x86_64.flatpak"
-          test -s "dist/youtfast-$RELEASE_TAG-flatpak-sources.flatpak"
-          test -s "dist/youtfast-$RELEASE_TAG-linux.png"
-          (cd dist && sha256sum *.tar.gz *.flatpak *.png > checksums.txt && sha256sum --check checksums.txt)
+          (cd dist && sha256sum --check checksums.txt)
           gh release create "$RELEASE_TAG" dist/* --verify-tag --draft --title "YouTFast ${RELEASE_TAG#v}" --notes-file "packaging/release-notes/$RELEASE_TAG.md"
-          gh release edit "$RELEASE_TAG" --draft=false --latest

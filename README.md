@@ -1,254 +1,112 @@
-# YouTFast
+<p align="center">
+  <img src="packaging/icons/youtfast.svg" width="96" height="96" alt="YouTFast icon">
+</p>
+<h1 align="center">YouTFast</h1>
+<p align="center"><strong>YouTube, native and fast.</strong></p>
+<p align="center">
+  <a href="https://github.com/bcosta19/youtfast/releases">Releases</a> ·
+  <a href="docs/user-guide.md">User guide</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="CONTRIBUTING.md">Contribute</a>
+</p>
 
-**YouTube, native and fast.** A YouTube client written in Rust with
-[egui](https://github.com/emilk/egui), playing video through
-[libmpv](https://mpv.io) with hardware decoding. No browser engine.
+A small native YouTube desktop client built with **Rust, egui and libmpv**.
+Search, watch and keep your library in a desktop interface, with hardware video
+decoding where supported. No browser engine, telemetry or YouTFast-operated
+backend. Start signed out; accounts are optional.
 
-A sibling of [Spotifast](../spotifast) and [ZapFast](../zapfast), and built the
-same way: same egui and winit forks, same `ui → Action → app` architecture,
-and the [fastframe](https://github.com/crmne/fastframe) crates as they are
-needed.
+![YouTFast watch page in the dark theme](assets/screenshots/watch-dark.png)
 
-> Version 0.1.0 is the first early-stage release. Linux is the initial release
-> target; Windows and macOS build/test jobs do not yet imply portable installers
-> or validated interactive playback. The repository and releases currently remain
-> private to invited collaborators.
+*Native demo capture using synthetic data. The preview does not connect to
+YouTube, access accounts or play a real video.*
 
-## Installation and releases
+## What you can do
 
-Release assets include a Linux x86_64 archive, a Flatpak bundle, corresponding
-source with locked Rust dependencies, and SHA-256 checksums. The native archive
-requires glibc 2.39 or newer (Ubuntu 24.04 baseline), system libmpv and
-libxkbcommon-x11 on X11; it is not
-an AppImage. The Flatpak uses the Freedesktop 25.08 runtime and does not need
-host libmpv or yt-dlp. It is a release bundle, not a Flathub listing or update
-remote. See [RELEASING.md](RELEASING.md) for installation and verification.
-
-To contribute, start with [CONTRIBUTING.md](CONTRIBUTING.md). Read
-[SECURITY.md](SECURITY.md) before reporting account or data-handling issues.
-CI runs on pull requests and pushes to `main`; release tags must match package
-and desktop metadata and pass all checks before assets are published.
-
-## Requirements
-
-| What | Why | Arch | Debian/Ubuntu |
-|---|---|---|---|
-| libmpv | Playback, linked at build time | `mpv` | `libmpv-dev` |
-| yt-dlp | The streams mpv plays and playback retries | `yt-dlp` | `yt-dlp` (keep it current) |
-| Rust 1.98 | Pinned in `rust-toolchain.toml` | `rustup` | `rustup` |
-| python-secretstorage | Optional: signing in with a Chromium-based browser's login | `python-secretstorage` | `python3-secretstorage` |
-
-mpv must be built with Lua (the usual packages are): it resolves YouTube
-links through its `ytdl_hook` script. Set `YOUTFAST_YTDLP` to use a yt-dlp
-that is not on `PATH`.
-
-## Running
-
-```sh
-cargo run --release
-cargo run --release -- "https://youtu.be/dQw4w9WgXcQ"   # open a link
-cargo run --release -- "rust egui"                      # or search
-```
-
-| Key | Action |
+| Feature | In YouTFast |
 |---|---|
-| Space, K | Play or pause |
-| ←, → | Back or forward 5 s |
-| J, L | Back or forward 10 s |
-| Ctrl+← / → (Option on macOS) | Previous / next chapter |
-| Home, End; 0–9 | Beginning / end; position in tens of percent |
-| ↑, ↓; M | Volume ±5%; mute (Shorts use ↑/↓ for videos) |
-| C; <, >; comma, period | Captions; speed; previous / next paused frame |
-| Shift+N, Shift+P | Next / previous in the playback source |
-| I; T | Mini player; theater mode |
-| F, double click | Full screen |
-| /; ? | Focus search; open shortcut help |
-| Alt+← / →; mouse back / forward | Browse back / forward (Alt keys on Linux/Windows) |
-| Esc | Dismiss a menu/help/countdown, leave full screen, or go back |
+| Watch | In-window video, full screen, theater mode and a movable mini player |
+| Discover | Search filters, channel tabs, playlists, Shorts and paginated feeds |
+| Stay in control | Captions, chapters, queue editing, keyboard shortcuts and desktop media controls |
+| Keep a library | Device subscriptions, Watch later, history/resume and Google Takeout import |
+| Read and explore | Descriptions, comments and attachments; optional transcripts and timeline previews |
+| Make it yours | English or Português (Brasil), light/dark themes, palettes and native Linux Omarchy integration |
 
-Text inputs and menus keep their own keys. Focused buttons own Space, and a
-focused volume slider keeps its arrow keys. In lists, J/K move selection rather
-than seek. Hold the video to temporarily play at 2×; releasing restores the
-previous speed. The player menu also offers repeat, caption size/background,
-copying a timestamped link, and opening the video in a browser.
+Optional accounts use the system credential store. Account ratings and playlist
+edits affect the selected account; device subscriptions and device Watch later
+stay local. [Read about accounts and stored data](docs/user-guide.md#your-library-with-or-without-an-account).
 
-Search uses RustyPipe directly, with separate video, channel and playlist
-results. Video filters include date, duration, live status and ordering.
-Back/forward restores the page, query, filters, selection and scroll position.
-Cards have channel links, a menu and quick Watch later/queue actions. The queue
-can be reordered or trimmed; the mini player can be moved and resized inside
-the application. Playlist playback continues beyond the initially loaded page.
-Device history supports filtering and removing individual entries.
+## Installation
 
-The watch page also shows the description (timestamps seek), chapters
-and comments, loaded through rustypipe. Comments and replies also display
-image and animated GIF/WebP attachments. Attachments use the bounded thumbnail
-cache, decode in the background and animate only while visible.
-Channel pages have tabs — videos,
-shorts, live, playlists and about — and a search of the channel's own
-videos.
+**0.1.0 is being prepared.** The table describes candidate packages; check
+[GitHub Releases](https://github.com/bcosta19/youtfast/releases) for actual
+availability. Interactive platform qualification is still required.
 
-Channel pages include a banner and video ordering. Playlists show their cover,
-metadata and the currently playing item. Shorts use a portrait stage with
-next/previous controls and wheel navigation. The interface starts in English.
-Choose English or Português (Brasil) under Settings → Appearance → Language;
-the change applies immediately and is kept between runs, including for desktop
-notifications. Older settings also default to English. Video titles, comments,
-and caption preferences keep their own languages.
+| Platform | Package | Requirements |
+|---|---|---|
+| Linux x86_64 | Flatpak bundle | Flatpak, Freedesktop 25.08 runtime and desktop drivers/portals |
+| Linux x86_64 | Native archive | glibc 2.39+, system libmpv and current yt-dlp/Deno |
+| Windows x86_64 | ZIP with libmpv and DLLs | Current yt-dlp/Deno on PATH; no installer or publisher signature |
+| macOS 15+ Apple Silicon | ZIP with app and dylibs | Current yt-dlp/Deno; ad-hoc signed, not notarized |
+| Arch Linux x86_64 | Pacman package and source PKGBUILD | Hosted package validation and separate AUR submission pending |
 
-The watch page can show a searchable, synchronized transcript and timeline
-thumbnail previews when YouTube supplies the required public metadata. These
-optional requests start on demand, run without an account, and use bounded
-downloads. Missing captions/storyboards or an upstream restriction may leave
-the feature unavailable; playback remains through libmpv.
+The Flatpak bundles its playback/extraction tools and targets compatible Linux
+distributions at x86_64. It is not yet a Flathub listing or an app update remote.
+The Arch recipe is not yet an AUR entry or an official pacman package.
 
-For synthetic UI previews, build with `--features demo` and run:
+[Installation, checksums and platform limits](docs/distribution.md) ·
+[Arch package maintenance](packaging/arch/README.md)
+
+## Build from source
+
+Install the compiler and system dependencies in
+[CONTRIBUTING.md](CONTRIBUTING.md#getting-started), then run from the checkout:
 
 ```sh
-cargo run --locked --features demo -- --demo --demo-view watch --demo-size 1280x800
-cargo run --locked --features demo -- --demo --demo-view home --demo-light
-cargo run --locked --features demo -- --demo --demo-view settings --demo-language pt-BR
+cargo run --locked --release
+cargo run --locked --release -- "https://youtu.be/dQw4w9WgXcQ"
+cargo run --locked --release -- "rust egui"
 ```
 
-Demo mode opens an isolated window without accounts, user files, network,
-playback or desktop media registration. It renders fixture states, not every
-backend interaction. `--demo-capture target/example.png` captures that window
-and closes it. The playback bindings follow
-[YouTube's published shortcuts](https://support.google.com/youtube/answer/7631406),
-with the list and Shorts adaptations described above.
+Playback needs libmpv with Lua support, current yt-dlp and its matching EJS/JS
+runtime. Optional browser-session import also needs `python3` with the `yt_dlp`
+module. See the [requirements](docs/user-guide.md#requirements).
 
-The desktop's media keys and panels (MPRIS, so `playerctl` works too)
-control playback, and a second launch hands a link or search to the
-window already open instead of opening another.
+## Guides and project status
 
-## Your library, with or without an account
+| You want to… | Read |
+|---|---|
+| Learn controls, library, accounts and themes | [User guide](docs/user-guide.md) |
+| Choose a package or check platform coverage | [Distribution](docs/distribution.md) |
+| See release contents and exclusions | [Changelog](CHANGELOG.md) |
+| See work that is not implemented yet | [Roadmap](ROADMAP.md) |
+| Report a bug or contribute | [Contributing](CONTRIBUTING.md) |
+| Report a security issue privately | [Security policy](SECURITY.md) |
+| Prepare a release or public opening | [Release process](RELEASING.md) and [checklist](docs/public-release-checklist.md) |
 
-**Home** is the newest of your subscriptions — the account's feed or the
-device's RSS channels — day-grouped and paged: scroll to the end and more
-arrives. Shorts sit on a shelf above the list: the account's are marked
-by YouTube, the device channels' come from their Shorts tabs.
+Library/settings stay on this device. Account cookies belong in the native
+credential store, and local diagnostics redact private details. Account access
+is unofficial and can trigger Google verification, sign-out or suspension.
+Use the app signed out unless you deliberately choose that integration.
+[Storage, privacy and account details](docs/user-guide.md#your-library-with-or-without-an-account).
 
-**Without an account**, YouTFast keeps subscriptions, watch history (with
-where each video was left, to resume it) and Watch later on this computer,
-in `~/.local/share/youtfast/library.json`, and its settings (video quality,
-volume) in `~/.config/youtfast/settings.json`. The home feed comes from each
-subscribed channel's RSS. Bring an existing library over from
-[Google Takeout](https://takeout.google.com): choose YouTube and YouTube
-Music, with JSON as the history format, and import `subscriptions.csv` and
-`watch-history.json`. Nothing here touches a Google account. Imports accept
-files up to 64 MiB and 20,000 unique subscriptions, and retain the 1,000 most
-recent unique history entries. Parsing and merging run in the background.
-If the library changes during the merge, retry the import; those newer
-changes are never replaced by an older import snapshot.
+## Related projects and acknowledgements
 
-An unreadable library or settings file is backed up before defaults can be
-saved. A read or backup failure stops startup rather than overwriting the
-original. Saves at exit wait for in-progress saves and prevent older queued
-snapshots from replacing the final state.
+- [Spotifast](https://github.com/crmne/spotifast) — native Spotify client.
+- [ZapFast](https://github.com/crmne/zapfast) — native WhatsApp client.
+- [fastframe](https://github.com/crmne/fastframe) — shared foundations for native
+  egui desktop applications.
 
-**With your YouTube accounts**, each account is named and kept in the
-keyring under its own entry: add several, switch from the account page
-or with `a`, and point a browser sign-in at a profile (`Profile 1`,
-`Default`, …). The feed, subscriptions, history, Watch later,
-liked videos and playlists come from the account. YouTube has no sign-in for
-apps like this one, so YouTFast uses the session a browser already has:
+YouTFast follows native desktop conventions from these projects and uses shared
+egui/winit forks. Thanks also to [mpv](https://mpv.io),
+[yt-dlp](https://github.com/yt-dlp/yt-dlp),
+[RustyPipe](https://codeberg.org/ThetaDev/rustypipe),
+[egui](https://github.com/emilk/egui) and [Lucide](https://lucide.dev).
 
-- **Your browser's login**: YouTFast reads the browser's YouTube cookies
-  through yt-dlp, and reads them again whenever they expire.
-- **A cookies.txt file**: exported from a private window, which keeps the
-  browser's own session out of it.
+## License and disclaimer
 
-The session lives only in the system keyring (Secret Service, Keychain,
-Credential Manager), never in a file or the log. **Using an account this way
-may be treated by Google as automated access**: the account could be asked to
-verify itself, signed out, or suspended. A secondary account is the safe
-choice. Subscribing and saving to Watch later from YouTFast act on this
-computer; changing the account itself needs youtube.com.
+[GPL-3.0-only](LICENSE). Dependencies retain their own licenses and notices;
+see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Account changes clear private lists and caches immediately and dismiss open
-menus. Pending writes finish on their originating session before switching,
-and late responses cannot update the new account's interface. A session
-expiration or sign-in failure also discards private responses from the same
-pending batch. Credentials found in an older rustypipe cache are ignored;
-only the selected account's keyring entry can restore its session.
-
-Logs use fixed diagnostic categories rather than account names, video IDs,
-browser profiles, URLs or external error text. This redaction also applies
-to dependencies and to `--verbose` / `RUST_LOG`; more verbose logging does
-not opt out of privacy protection. Thumbnail downloads are shared between
-display and the disk cache, capped at 4 MiB and four million pixels each,
-with at most three automatic attempts for transient failures. HTTP 429 honors
-`Retry-After` (seconds or HTTP-date); access failures renew the original comment
-page once per comment without attaching account cookies to image downloads. Removed images,
-unchanged/expired links, unsupported data and exhausted limits show a retry
-control. A corrupt cache item can be replaced independently of other images.
-The disk cache is pruned during use to 2,000 files and 128 MiB; `no-store`
-responses are only kept for the current display.
-
-Application-wide diagnostics persist locally under
-`$XDG_STATE_HOME/youtfast/logs` (normally `~/.local/state/youtfast/logs` on Linux).
-`youtfast.log` rotates into `youtfast.log.1`; each is limited to 2 MiB. These
-files cover the whole application, including image download and decoder failure
-categories. They are not uploaded. On Unix the directory is owner-only (0700)
-and log files are 0600. The same privacy redactor runs before stderr and files,
-including for dependency diagnostics. `--verbose` adds cached/streaming animation
-mode categories; there are no per-frame log records. Logging starts when this
-binary next owns a running instance; rebuilding does not update an existing
-process. To follow the current log on Linux (including rotation):
-
-```sh
-tail -F "${XDG_STATE_HOME:-$HOME/.local/state}/youtfast/logs/youtfast.log"
-```
-
-On platforms without an XDG state directory, logs use the `logs` subdirectory
-of the platform's local application data directory for YouTFast. If opening or writing the
-file fails, diagnostics continue on stderr.
-
-Comment GIF/WebP playback uses one decoder worker and one reused texture per
-visible attachment, with at most two active attachments. Frames are reduced to
-fit 320×200 while preserving aspect ratio. Small animations cache up to about
-8 MiB; longer ones continue sequentially instead of retaining every source-size
-frame or rejecting the whole clip at a frame-count threshold. Controlled frame,
-canvas and texture reservations share a 64 MiB budget; decoder/library/driver
-bookkeeping and the ordinary thumbnail cache are additional process memory.
-A frame which takes over 200 ms to decode stops further automatic decoding
-and retains a preview; this is an observed work limit, not preemption of a
-native decoder in the middle of a frame. Offscreen animations are reclaimed,
-pause controls stop frame requests, and
-finite source loop counts are respected. Decode failures after a successful
-frame retain that frame as a preview. External blocks, removed media or an
-unusable source may still prevent a preview or playback.
-
-## New-upload alerts
-
-YouTube's own notifications have no API, so YouTFast checks your
-subscriptions on a timer instead (every 15 minutes by default; 5, 15, 30
-or 60 in Settings) and lists what's new under `[7] Notifications`. New
-uploads also come to the desktop as notifications. Both can be turned
-off there; the first run only starts the clock, so a fresh install
-doesn't flood you.
-
-## Themes
-
-Settings → Appearance. **Automatic** follows the Omarchy desktop's theme
-live on Linux, and is dark elsewhere. **Dark** and **Light** are YouTFast's
-own colours. The eight shared palettes (Catppuccin, Nord, Rosé Pine, Tokyo
-Night, and more) are installed into `~/.config/youtfast/themes` on the
-first run as plain JSON files you can edit, copy or delete; add your own
-there in the same format (a `base` plus named colours, see
-[fastframe-theme](https://github.com/crmne/fastframe)). A source build does
-not install the Omarchy hook (`contrib/omarchy/youtfast-theme`); packaged
-builds do, and following the desktop works either way.
-
-## Disclaimer
-
-YouTFast is an unofficial client and is not affiliated with YouTube or
-Google. Using an unofficial client may be against YouTube's terms of service.
-Use it at your own risk.
-
-## License
-
-GPL-3.0-only. See [LICENSE](LICENSE) and
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Dependencies retain their own
-licenses and notices. The icons are [Lucide](https://lucide.dev) (ISC, with
-MIT notices for Feather-derived icons).
+YouTFast is an unofficial client, unaffiliated with YouTube or Google. Using an
+unofficial client may conflict with YouTube's terms of service. Use it at your
+own risk.
