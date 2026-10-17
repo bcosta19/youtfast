@@ -159,18 +159,20 @@ class NativeSourcesTests(unittest.TestCase):
         with patch.object(native_sources, "run", side_effect=run):
             result = native_sources.collect_macos(candidate, output)
         self.assertEqual(result[0]["version"], "1.0_2")
-        self.assertEqual(result[0]["source_identity"], checksum)
+        self.assertTrue(result[0]["installed_recipe_declares_current_source"])
         self.assertEqual(result[0]["recipe_sha256"], hashlib.sha256(recipe).hexdigest())
         self.assertEqual((output / "recipes/example.rb").read_bytes(), recipe)
         self.assertTrue((output / "notices/LICENSE").is_file())
 
+        # A newer homebrew-core entry is recorded, not mistaken for the keg's.
         formula["urls"]["stable"]["checksum"] = "b" * 64
         (candidate / "native-dependencies.json").write_text(json.dumps({"formulae": [formula]}))
         shutil.rmtree(output)
         output.mkdir()
-        with patch.object(native_sources, "run", side_effect=run), \
-                self.assertRaisesRegex(ValueError, "example recipe does not declare"):
-            native_sources.collect_macos(candidate, output)
+        with patch.object(native_sources, "run", side_effect=run):
+            result = native_sources.collect_macos(candidate, output)
+        self.assertFalse(result[0]["installed_recipe_declares_current_source"])
+        self.assertEqual((output / "recipes/example.rb").read_bytes(), recipe)
 
 
 if __name__ == "__main__":

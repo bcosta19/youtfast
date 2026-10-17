@@ -108,12 +108,14 @@ def validate_msys_source(text, base, installed_version):
     if epoch and epoch != "0":
         version = epoch + ":" + version
     if metadata.get("pkgbase") != [base] or version != installed_version:
-        raise ValueError("MSYS2 source identity does not match the bundled binary package")
+        found = ",".join(metadata.get("pkgbase", ["?"]))
+        raise ValueError(f"{base} {installed_version} installed, source has {found} {version}")
 
 
 def collect_windows(candidate, output):
     packages = json.loads((candidate / "native-dependencies.json").read_text())["packages"]
     sources = {}
+    mismatches = []
     for package in packages:
         base, version = package["base"], package["version"]
         if not re.fullmatch(r"[A-Za-z0-9+_.-]+", base) or not re.fullmatch(r"[A-Za-z0-9:+_.~-]+", version):
@@ -128,9 +130,17 @@ def collect_windows(candidate, output):
         count, srcinfo = msys_source_metadata(archive, base)
         if srcinfo is None or count < 4:
             raise ValueError("MSYS2 full source package or metadata is missing")
-        validate_msys_source(srcinfo, base, version)
+        try:
+            validate_msys_source(srcinfo, base, version)
+        except ValueError as error:
+            # Report every mismatch at once instead of one per hosted run.
+            mismatches.append(str(error))
+            continue
         sources[key] = {"base": base, "version": version, "url": url,
                         "archive": filename, "sha256": digest}
+    if mismatches:
+        raise ValueError("MSYS2 source identity does not match the bundled binary package: "
+                         + "; ".join(mismatches))
     if not sources:
         raise ValueError("No bundled Windows dependencies were identified")
     shutil.copy2(candidate / "native-dependencies.json", output / "native-dependencies.json")
@@ -162,19 +172,19 @@ def collect_macos(candidate, output):
             raise ValueError("Homebrew installed keg does not match candidate metadata")
         recipe = prefix / f".brew/{name}.rb"
         text = recipe.read_bytes()
-        # The keg keeps the recipe it was installed with; homebrew-core may have
-        # edited that file since without changing the version, so the identity
-        # is the upstream source it declares, not the current recipe digest.
+        # The keg keeps the recipe its bottle was built from, and `brew fetch`
+        # below collects exactly the sources that recipe declares. The current
+        # homebrew-core entry may differ at the same version, so agreement is
+        # recorded for review rather than required.
         stable = formula["urls"]["stable"]
         identity = stable.get("checksum") or stable.get("revision")
-        if not identity or identity.encode() not in text:
-            raise ValueError(f"Installed {name} recipe does not declare the recorded upstream source")
         copied = recipes / f"{name}.rb"
         shutil.copy2(recipe, copied)
         shutil.copy2(prefix / "INSTALL_RECEIPT.json", recipes / f"{name}-receipt.json")
         formula_paths.append(copied)
-        sources.append({"formula": name, "version": version, "source_url": stable["url"],
-                        "source_identity": identity, "recipe_sha256": hashlib.sha256(text).hexdigest()})
+        sources.append({"formula": name, "version": version, "recipe_sha256": hashlib.sha256(text).hexdigest(),
+                        "current_source_url": stable.get("url"), "current_source_identity": identity,
+                        "installed_recipe_declares_current_source": bool(identity) and identity.encode() in text})
     if not sources:
         raise ValueError("No bundled macOS dependencies were identified")
     # A dedicated cache includes all downloaded resources/patches without

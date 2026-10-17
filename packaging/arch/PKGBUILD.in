@@ -7,6 +7,8 @@ pkgdesc='A native YouTube client built with Rust, egui and libmpv'
 arch=('x86_64')
 url='https://github.com/bcosta19/youtfast'
 license=('GPL-3.0-only')
+# makepkg's GCC LTO turns ring's C objects into bytecode Rust's linker cannot use.
+options=('!lto')
 depends=('mpv' 'yt-dlp' 'deno' 'libxkbcommon' 'libxkbcommon-x11' 'wayland'
          'libglvnd' 'fontconfig' 'gcc-libs' 'glibc' 'openssl')
 makedepends=('cargo' 'rust>=@RUST_VERSION@' 'pkgconf')

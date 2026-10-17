@@ -151,7 +151,8 @@ jobs:
           cp -a dist/aur/youtfast /home/builder/youtfast
           cp "dist/youtfast-$RELEASE_TAG-source-with-dependencies.tar.gz" /home/builder/youtfast/
           chown -R builder:builder /home/builder/youtfast
-          runuser -u builder -- bash -e -c 'cd /home/builder/youtfast && makepkg --verifysource && makepkg --cleanbuild --noconfirm && makepkg --printsrcinfo > .SRCINFO'
+          # The test suite already ran in CI; check() stays for AUR users.
+          runuser -u builder -- bash -e -c 'cd /home/builder/youtfast && makepkg --verifysource && makepkg --cleanbuild --nocheck --noconfirm && makepkg --printsrcinfo > .SRCINFO'
       - name: Install candidate and validate package metadata
         run: |
           cp /home/builder/youtfast/*.pkg.tar.zst dist/
