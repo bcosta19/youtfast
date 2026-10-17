@@ -113,9 +113,7 @@ pub async fn load(
     let language = subtitle.lang_name.clone();
     let transcript = tokio::task::spawn_blocking(move || download(&url))
         .await
-        .unwrap_or_else(
-            |_| Err("Não foi possível carregar a transcrição. Tente novamente.".into()),
-        );
+        .unwrap_or_else(|_| Err("Could not load the transcript. Try again.".into()));
     Ok(Extras {
         preview,
         language,
@@ -126,7 +124,7 @@ pub async fn load(
 fn download(url: &str) -> Result<Vec<Cue>, String> {
     const MAX: u64 = 2 * 1024 * 1024;
     if !url.starts_with("https://www.youtube.com/api/timedtext?") {
-        return Err("Fonte da transcrição indisponível.".into());
+        return Err("Transcript source unavailable.".into());
     }
     let url = url
         .split('&')
@@ -137,9 +135,9 @@ fn download(url: &str) -> Result<Vec<Cue>, String> {
     let mut response = ehttp::Request::get(url)
         .with_timeout(Some(std::time::Duration::from_secs(20)))
         .fetch_raw_native(true)
-        .map_err(|_| "Não foi possível carregar a transcrição. Tente novamente.")?;
+        .map_err(|_| "Could not load the transcript. Try again.")?;
     if !response.status().is_success() {
-        return Err("A transcrição está indisponível. Tente novamente.".into());
+        return Err("The transcript is unavailable. Try again.".into());
     }
     let mut data = Vec::new();
     response
@@ -147,19 +145,19 @@ fn download(url: &str) -> Result<Vec<Cue>, String> {
         .as_reader()
         .take(MAX + 1)
         .read_to_end(&mut data)
-        .map_err(|_| "Não foi possível ler a transcrição.")?;
+        .map_err(|_| "Could not read the transcript.")?;
     if data.len() as u64 > MAX {
-        return Err("A transcrição excede o limite permitido.".into());
+        return Err("The transcript exceeds the allowed size.".into());
     }
     parse(&data)
 }
 
 fn parse(data: &[u8]) -> Result<Vec<Cue>, String> {
     let doc: serde_json::Value =
-        serde_json::from_slice(data).map_err(|_| "A transcrição recebida é inválida.")?;
+        serde_json::from_slice(data).map_err(|_| "The received transcript is invalid.")?;
     let events = doc["events"]
         .as_array()
-        .ok_or("A transcrição recebida é inválida.")?;
+        .ok_or("The received transcript is invalid.")?;
     let mut cues: Vec<Cue> = Vec::new();
     for event in events.iter().take(20_000) {
         let Some(ms) = event["tStartMs"]

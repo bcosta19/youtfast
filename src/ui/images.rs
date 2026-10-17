@@ -4,6 +4,7 @@
 mod animation;
 pub use animation::install as install_animation_loader;
 
+use crate::i18n::{Locale, gettext as tr};
 use crate::thumbs::Failure;
 use egui::{Context, Id, Image, Ui};
 use std::collections::{HashMap, HashSet};
@@ -177,7 +178,7 @@ pub fn remote<'a>(ui: &Ui, url: &'a str) -> Image<'a> {
     )
 }
 
-pub fn attachment(ui: &mut Ui, url: &str, rect: egui::Rect) {
+pub fn attachment(ui: &mut Ui, url: &str, rect: egui::Rect, locale: Locale) {
     let image = remote(ui, url);
     let status = CACHE.lock().unwrap().as_ref().and_then(|c| {
         if c.loaded.contains(url) {
@@ -196,7 +197,7 @@ pub fn attachment(ui: &mut Ui, url: &str, rect: egui::Rect) {
                     egui::load::Bytes::Shared(bytes) => bytes,
                     egui::load::Bytes::Static(bytes) => Arc::from(bytes),
                 };
-                if let Some(repair) = animation::show(ui, &uri, bytes, rect) {
+                if let Some(repair) = animation::show(ui, &uri, bytes, rect, locale) {
                     retry(ui.ctx(), url, repair);
                 }
             }
@@ -207,7 +208,10 @@ pub fn attachment(ui: &mut Ui, url: &str, rect: egui::Rect) {
                     .is_err()
                 {
                     let manual = ui
-                        .put(rect, egui::Button::new("Image data invalid · Retry"))
+                        .put(
+                            rect,
+                            egui::Button::new(tr(locale, "Image data invalid · Retry")),
+                        )
                         .clicked();
                     retry(ui.ctx(), url, !manual);
                 } else {
@@ -216,7 +220,7 @@ pub fn attachment(ui: &mut Ui, url: &str, rect: egui::Rect) {
                         image
                             .fit_to_exact_size(rect.size())
                             .corner_radius(8)
-                            .alt_text("Comment image"),
+                            .alt_text(tr(locale, "Comment image")),
                     );
                 }
             }
@@ -230,12 +234,12 @@ pub fn attachment(ui: &mut Ui, url: &str, rect: egui::Rect) {
                 Failure::Invalid => "Image data invalid · Retry",
                 _ => "Could not load image · Retry",
             };
-            if ui.put(rect, egui::Button::new(label)).clicked() {
+            if ui.put(rect, egui::Button::new(tr(locale, label))).clicked() {
                 retry(ui.ctx(), url, false);
             }
         }
         None => {
-            ui.put(rect, egui::Label::new("Loading image…"));
+            ui.put(rect, egui::Label::new(tr(locale, "Loading image…")));
         }
     }
 }

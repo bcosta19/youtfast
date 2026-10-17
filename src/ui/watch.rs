@@ -10,6 +10,7 @@ use egui::{
 use super::player::{self, Mode};
 use super::{results, widgets};
 use crate::app::State;
+use crate::i18n::{Locale, format as trf, gettext as tr};
 use crate::icons::Icon;
 use crate::model::{Action, Channel, CommentRow, Fetch, Rating, Video};
 use crate::mpv::{Status, VideoSurface};
@@ -103,6 +104,7 @@ fn shorts(
     surface: Option<&VideoSurface>,
     actions: &mut Vec<Action>,
 ) {
+    let locale: Locale = state.settings.language;
     let Some(watching) = state.watching.clone() else {
         return;
     };
@@ -117,7 +119,7 @@ fn shorts(
     let share_width = ui
         .painter()
         .layout_no_wrap(
-            "Compartilhar".into(),
+            tr(locale, "Share").into(),
             theme::medium(14.0),
             state.palette.text,
         )
@@ -210,24 +212,31 @@ fn shorts(
             rail.spacing_mut().item_spacing.y = 12.0;
             rail.add_space(((height - 420.0) / 2.0).max(0.0));
             rail.add_enabled_ui(previous, |ui| {
-                if widgets::icon_button(ui, Icon::ChevronUp, 24.0, "Short anterior (↑)").clicked()
+                if widgets::icon_button(
+                    ui,
+                    Icon::ChevronUp,
+                    24.0,
+                    &tr(locale, "Previous Short (↑)"),
+                )
+                .clicked()
                 {
                     actions.push(Action::PlayPrevious);
                 }
             });
             rail.add_enabled_ui(next, |ui| {
-                if widgets::icon_button(ui, Icon::ChevronDown, 24.0, "Próximo Short (↓)").clicked()
+                if widgets::icon_button(ui, Icon::ChevronDown, 24.0, &tr(locale, "Next Short (↓)"))
+                    .clicked()
                 {
                     actions.push(Action::PlayNext);
                 }
             });
             let rating = state.rating.ready().copied();
             for (icon, wanted, hint) in [
-                (Icon::ThumbsUp, Rating::Like, "Gostei"),
-                (Icon::ThumbsDown, Rating::Dislike, "Não gostei"),
+                (Icon::ThumbsUp, Rating::Like, tr(locale, "Liked")),
+                (Icon::ThumbsDown, Rating::Dislike, tr(locale, "Disliked")),
             ] {
                 rail.add_enabled_ui(state.signed_in() && rating.is_some(), |ui| {
-                    if widgets::icon_button(ui, icon, 24.0, hint).clicked() {
+                    if widgets::icon_button(ui, icon, 24.0, &hint).clicked() {
                         actions.push(Action::Rate(if rating == Some(wanted) {
                             Rating::None
                         } else {
@@ -236,12 +245,12 @@ fn shorts(
                     }
                 })
                 .response
-                .on_disabled_hover_text("Entre em uma conta para avaliar");
+                .on_disabled_hover_text(tr(locale, "Sign in to rate"));
             }
             if widgets::button(
                 rail,
                 &state.palette,
-                "Comentários",
+                &tr(locale, "Comments"),
                 widgets::ButtonStyle::Normal,
             )
             .clicked()
@@ -253,7 +262,7 @@ fn shorts(
             if widgets::button(
                 rail,
                 &state.palette,
-                "Detalhes",
+                &tr(locale, "Details"),
                 widgets::ButtonStyle::Normal,
             )
             .clicked()
@@ -292,13 +301,13 @@ fn shorts(
             egui::ScrollArea::vertical()
                 .id_salt("short-comments")
                 .show(&mut panel, |ui| {
-                    if ui.button("Fechar detalhes").clicked() {
+                    if ui.button(tr(locale, "Close details")).clicked() {
                         ui.ctx().data_mut(|data| data.insert_temp(panel_id, false));
                     }
                     about_video(ui, state, &watching, status, actions);
                 });
         } else {
-            egui::Window::new("Descrição e comentários")
+            egui::Window::new(tr(locale, "Description and comments"))
                 .id(ui.id().with("short-details-window"))
                 .open(&mut details_open)
                 .default_width(360.0)
@@ -367,12 +376,13 @@ fn about_video(
     status: Option<&Status>,
     actions: &mut Vec<Action>,
 ) {
+    let locale: Locale = state.settings.language;
     let palette = state.palette.clone();
     // A video opened from a link has no title until mpv reads it.
     let title = Some(watching.title.as_str())
         .filter(|title| !title.is_empty())
         .or_else(|| status.and_then(|status| status.title.as_deref()))
-        .unwrap_or("Carregando…")
+        .unwrap_or(&tr(locale, "Loading…"))
         .to_owned();
     ui.label(
         RichText::new(title)
@@ -399,6 +409,7 @@ fn channel_line(
     status: Option<&Status>,
     actions: &mut Vec<Action>,
 ) {
+    let locale: Locale = state.settings.language;
     let palette = &state.palette;
     let details = state.details.ready();
     let channel = match details {
@@ -450,9 +461,13 @@ fn channel_line(
                 Fetch::Ready(details) => {
                     if let Some(count) = details.subscribers {
                         ui.label(
-                            RichText::new(format!("{} inscritos", util::compact(count)))
-                                .font(theme::regular(13.0))
-                                .color(palette.secondary),
+                            RichText::new(trf(
+                                locale,
+                                "{count} subscribers",
+                                &[("count", util::compact(count))],
+                            ))
+                            .font(theme::regular(13.0))
+                            .color(palette.secondary),
                         );
                     }
                 }
@@ -480,14 +495,14 @@ fn channel_line(
     if let Fetch::Failed(error) = &state.details {
         ui.horizontal(|ui| {
             ui.label(
-                RichText::new(error.as_str())
+                RichText::new(crate::i18n::message(locale, error))
                     .font(theme::regular(14.0))
                     .color(palette.red),
             );
             if widgets::button(
                 ui,
                 palette,
-                "Tentar novamente",
+                &tr(locale, "Retry"),
                 widgets::ButtonStyle::Normal,
             )
             .clicked()
@@ -524,6 +539,7 @@ fn video_actions(
 /// it back. The count moves with the rating given here. Without an
 /// account the pill only shows the count.
 fn rating_buttons(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale: Locale = state.settings.language;
     let palette = &state.palette;
     let rating = state.rating.ready().copied();
     let likes = state
@@ -537,11 +553,11 @@ fn rating_buttons(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         });
     let enabled = state.signed_in() && rating.is_some();
     let hint = if !state.signed_in() {
-        "Entre em uma conta para avaliar vídeos"
+        tr(locale, "Sign in to rate videos")
     } else if matches!(state.rating, Fetch::Failed(_)) {
-        "Não foi possível consultar sua avaliação"
+        tr(locale, "Your rating could not be read")
     } else {
-        ""
+        std::borrow::Cow::Borrowed("")
     };
     let liked = rating == Some(Rating::Like);
     let disliked = rating == Some(Rating::Dislike);
@@ -560,17 +576,31 @@ fn rating_buttons(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         } else if hint.is_empty() {
             response
         } else {
-            response.on_hover_text(hint)
+            response.on_hover_text(&*hint)
         }
     };
-    if hover(like, "Gostei", "Marcar como gostei", liked).clicked() {
+    if hover(
+        like,
+        &tr(locale, "Liked"),
+        &tr(locale, "I like this"),
+        liked,
+    )
+    .clicked()
+    {
         actions.push(Action::Rate(if liked {
             Rating::None
         } else {
             Rating::Like
         }));
     }
-    if hover(dislike, "Não gostei", "Marcar como não gostei", disliked).clicked() {
+    if hover(
+        dislike,
+        &tr(locale, "Disliked"),
+        &tr(locale, "I dislike this"),
+        disliked,
+    )
+    .clicked()
+    {
         actions.push(Action::Rate(if disliked {
             Rating::None
         } else {
@@ -708,12 +738,13 @@ fn share_menu(
     status: Option<&Status>,
     actions: &mut Vec<Action>,
 ) {
+    let locale: Locale = state.settings.language;
     let palette = &state.palette;
     let response = widgets::icon_text_button(
         ui,
         palette,
         Some(Icon::Share),
-        "Compartilhar",
+        &tr(locale, "Share"),
         widgets::ButtonStyle::Normal,
     );
     egui::Popup::menu(&response)
@@ -732,14 +763,24 @@ fn share_menu(
             if ui
                 .checkbox(
                     &mut start_at,
-                    RichText::new(format!("Começar em {}", util::duration(position)))
-                        .font(theme::regular(14.0)),
+                    RichText::new(trf(
+                        locale,
+                        "Start at {time}",
+                        &[("time", util::duration(position))],
+                    ))
+                    .font(theme::regular(14.0)),
                 )
                 .changed()
             {
                 actions.push(Action::SetShareAtTime(start_at));
             }
-            if widgets::button(ui, palette, "Copiar link", widgets::ButtonStyle::Primary).clicked()
+            if widgets::button(
+                ui,
+                palette,
+                &tr(locale, "Copy link"),
+                widgets::ButtonStyle::Primary,
+            )
+            .clicked()
             {
                 actions.push(Action::CopyLink(link.clone()));
                 ui.close();
@@ -764,6 +805,7 @@ fn share_menu(
 /// playlists, each a box to tick. The account's list is asked for when
 /// the menu first opens.
 fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Action>) {
+    let locale: Locale = state.settings.language;
     let palette = &state.palette;
     let local = state.library.in_watch_later(&watching.id);
     let account = state
@@ -776,11 +818,11 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
         widgets::ButtonStyle::Normal
     };
     let (icon, label) = if local || account {
-        (Icon::BookmarkFilled, "Salvo")
+        (Icon::BookmarkFilled, tr(locale, "Saved"))
     } else {
-        (Icon::Bookmark, "Salvar")
+        (Icon::Bookmark, tr(locale, "Save"))
     };
-    let response = widgets::icon_text_button(ui, palette, Some(icon), label, style);
+    let response = widgets::icon_text_button(ui, palette, Some(icon), &label, style);
     egui::Popup::menu(&response)
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .show(|ui| {
@@ -789,7 +831,7 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
             if ui
                 .checkbox(
                     &mut on_device,
-                    RichText::new("Assistir mais tarde neste computador")
+                    RichText::new(tr(locale, "Watch later on this computer"))
                         .font(theme::regular(14.0)),
                 )
                 .changed()
@@ -799,7 +841,7 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
             ui.separator();
             if !state.signed_in() {
                 ui.label(
-                    RichText::new("Entre em uma conta para salvar nas playlists dela")
+                    RichText::new(tr(locale, "Sign in to save to the account's playlists"))
                         .font(theme::regular(13.0))
                         .color(palette.secondary),
                 );
@@ -807,10 +849,10 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
             }
             match &state.save_targets {
                 Fetch::Idle => actions.push(Action::LoadSaveTargets),
-                Fetch::Loading => widgets::loading(ui, palette, "playlists"),
+                Fetch::Loading => widgets::loading(ui, palette, "playlists", locale),
                 Fetch::Failed(error) => {
                     ui.label(
-                        RichText::new(error.as_str())
+                        RichText::new(crate::i18n::message(locale, error))
                             .font(theme::regular(14.0))
                             .color(palette.red),
                     );
@@ -840,6 +882,7 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
 /// first line, then the text collapsed to three rows with "more".
 /// Expanded, the counts are exact and the date is added.
 fn description(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Action>) {
+    let locale: Locale = state.settings.language;
     let details = state.details.ready();
     let open = state.description_open;
     let views = details.map(|details| details.views).or(watching.views);
@@ -847,11 +890,19 @@ fn description(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<A
     let live = watching.live;
     let views = views.map(|views| {
         if live {
-            format!("{} assistindo agora", util::thousands(views))
+            trf(
+                locale,
+                "{count} watching now",
+                &[("count", util::thousands(views))],
+            )
         } else if open {
-            format!("{} visualizações", util::thousands(views))
+            trf(
+                locale,
+                "{count} views",
+                &[("count", util::thousands(views))],
+            )
         } else {
-            util::views(views)
+            util::views(views, locale)
         }
     });
     let published = match details {
@@ -885,16 +936,16 @@ fn description(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<A
         let collapsed =
             !open && widgets::spans_truncated(ui, ui.id().with("description"), spans, 3);
         let max_rows = if collapsed { Some(3) } else { None };
-        if let Some(action) = widgets::rich_text(ui, &state.palette, spans, max_rows) {
+        if let Some(action) = widgets::rich_text(ui, &state.palette, spans, max_rows, locale) {
             actions.push(action);
         }
         if collapsed || open {
             let label = if collapsed {
-                "...mais"
+                tr(locale, "...more")
             } else {
-                "Mostrar menos"
+                tr(locale, "Show less")
             };
-            if text_link(ui, label, theme::semibold(14.0), state.palette.text).clicked() {
+            if text_link(ui, &label, theme::semibold(14.0), state.palette.text).clicked() {
                 actions.push(Action::ToggleDescription);
             }
         }
@@ -903,6 +954,7 @@ fn description(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<A
 
 /// The chapters section: `00:00  Intro` rows, the current one selected.
 fn chapters(ui: &mut Ui, state: &State, status: Option<&Status>, actions: &mut Vec<Action>) {
+    let locale: Locale = state.settings.language;
     let Fetch::Ready(details) = &state.details else {
         return;
     };
@@ -919,7 +971,7 @@ fn chapters(ui: &mut Ui, state: &State, status: Option<&Status>, actions: &mut V
     widgets::section(
         ui,
         &state.palette,
-        "Capítulos",
+        &tr(locale, "Chapters"),
         Some(details.chapters.len()),
         |ui| {
             for (index, chapter) in details.chapters.iter().enumerate() {
@@ -944,6 +996,7 @@ fn chapters(ui: &mut Ui, state: &State, status: Option<&Status>, actions: &mut V
 /// The comments section: one [`comment_row`] each, then the next page's
 /// "Load more".
 fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale: Locale = state.settings.language;
     let Fetch::Ready(details) = &state.details else {
         return;
     };
@@ -956,26 +1009,30 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         .map(|count| count as usize)
         .or_else(|| state.comments.ready().map(|rows| rows.len()));
     let title = match count {
-        Some(1) => "1 comentário".to_owned(),
-        Some(count) => format!("{} comentários", util::thousands(count as u64)),
-        None => "Comentários".to_owned(),
+        Some(1) => tr(locale, "1 comment").into_owned(),
+        Some(count) => trf(
+            locale,
+            "{count} comments",
+            &[("count", util::thousands(count as u64))],
+        ),
+        None => tr(locale, "Comments").into_owned(),
     };
     widgets::section(ui, &state.palette, &title, None, |ui| {
         match &state.comments {
             Fetch::Idle => {}
-            Fetch::Loading => widgets::loading(ui, &state.palette, "comentários"),
+            Fetch::Loading => widgets::loading(ui, &state.palette, "comments", locale),
             Fetch::Failed(error) => results::failed(ui, state, error, actions),
             Fetch::Ready(rows) => {
                 if rows.is_empty() {
                     ui.vertical_centered(|ui| {
                         ui.add_space(16.0);
                         ui.label(
-                            RichText::new("Nenhum comentário ainda")
+                            RichText::new(tr(locale, "No comments yet"))
                                 .font(theme::semibold(16.0))
                                 .color(state.palette.text),
                         );
                         ui.label(
-                            RichText::new("Ninguém comentou neste vídeo ainda.")
+                            RichText::new(tr(locale, "Nobody has commented on this video."))
                                 .font(theme::regular(14.0))
                                 .color(state.palette.secondary),
                         );
@@ -989,17 +1046,17 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 // The tail row: the page on its way, a failed page's
                 // retry, or the button.
                 match &state.comments_more {
-                    Fetch::Loading => widgets::loading(ui, &state.palette, "comentários"),
+                    Fetch::Loading => widgets::loading(ui, &state.palette, "comments", locale),
                     Fetch::Failed(error) => {
                         ui.label(
-                            RichText::new(error.as_str())
+                            RichText::new(crate::i18n::message(locale, error))
                                 .font(theme::regular(14.0))
                                 .color(state.palette.red),
                         );
                         if widgets::button(
                             ui,
                             &state.palette,
-                            "Tentar novamente",
+                            &tr(locale, "Retry"),
                             widgets::ButtonStyle::Normal,
                         )
                         .clicked()
@@ -1012,7 +1069,7 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                             && widgets::button(
                                 ui,
                                 &state.palette,
-                                "Carregar mais",
+                                &tr(locale, "Load more"),
                                 widgets::ButtonStyle::Normal,
                             )
                             .clicked()
@@ -1040,6 +1097,7 @@ fn comment_row(
     avatar: f32,
     actions: &mut Vec<Action>,
 ) {
+    let locale: Locale = state.settings.language;
     let top = ui.next_widget_position();
     let width = ui.available_width();
     let text: Vec<_> = comment
@@ -1049,6 +1107,7 @@ fn comment_row(
         .collect();
     let key = egui::Id::new((
         "comment-layout",
+        state.settings.language.native_name(),
         &comment.id,
         (
             width.to_bits(),
@@ -1077,10 +1136,11 @@ fn comment_row(
         return;
     }
     // YouTube's handles already start with `@`.
+    let unknown_author = tr(locale, "someone");
     let author = comment
         .author
         .as_deref()
-        .unwrap_or("alguém")
+        .unwrap_or(&unknown_author)
         .trim_start_matches('@');
     let channel = comment.author_id.as_ref().map(|id| Channel {
         id: id.clone(),
@@ -1112,16 +1172,16 @@ fn comment_row(
                     COMMENT_ROWS,
                 );
             let max_rows = collapsed.then_some(COMMENT_ROWS);
-            if let Some(action) = widgets::rich_text(ui, palette, &comment.text, max_rows) {
+            if let Some(action) = widgets::rich_text(ui, palette, &comment.text, max_rows, locale) {
                 actions.push(action);
             }
             if (collapsed || open)
                 && text_link(
                     ui,
-                    if collapsed {
-                        "Ler mais"
+                    &if collapsed {
+                        tr(locale, "Read more")
                     } else {
-                        "Mostrar menos"
+                        tr(locale, "Show less")
                     },
                     theme::semibold(13.0),
                     palette.text,
@@ -1131,7 +1191,7 @@ fn comment_row(
                 actions.push(Action::ToggleCommentText(comment.id.clone()));
             }
             if let Some(url) = &comment.image {
-                comment_image(ui, url);
+                comment_image(ui, url, locale);
             }
             comment_footer(ui, state, comment, actions);
             if let Some(replies) = state.replies.get(&comment.id) {
@@ -1149,11 +1209,11 @@ fn comment_row(
 
 /// Reserve a stable box so loading an attachment does not move the comments.
 /// Only visible attachments fetch, decode or schedule animation frames.
-fn comment_image(ui: &mut Ui, url: &str) {
+fn comment_image(ui: &mut Ui, url: &str, locale: Locale) {
     let size = vec2(ui.available_width().min(320.0), 200.0);
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
     if ui.is_rect_visible(rect) {
-        super::images::attachment(ui, url, rect);
+        super::images::attachment(ui, url, rect, locale);
     }
 }
 
@@ -1167,6 +1227,7 @@ fn comment_header(
     channel: Option<&Channel>,
     actions: &mut Vec<Action>,
 ) {
+    let locale: Locale = state.settings.language;
     ui.horizontal(|ui| {
         let response = text_link(
             ui,
@@ -1187,10 +1248,10 @@ fn comment_header(
     });
     let mut badges = Vec::new();
     if comment.pinned {
-        badges.push("Fixado");
+        badges.push(tr(locale, "Pinned"));
     }
     if comment.by_owner {
-        badges.push("Pelo criador");
+        badges.push(tr(locale, "By the creator"));
     }
     if !badges.is_empty() {
         ui.label(
@@ -1204,6 +1265,7 @@ fn comment_header(
 /// Under the text: the likes, the creator's heart and the replies'
 /// toggle.
 fn comment_footer(ui: &mut Ui, state: &State, comment: &CommentRow, actions: &mut Vec<Action>) {
+    let locale: Locale = state.settings.language;
     let likes = comment.likes.filter(|likes| *likes > 0);
     if likes.is_none() && !comment.hearted && comment.replies == 0 {
         return;
@@ -1223,16 +1285,20 @@ fn comment_footer(ui: &mut Ui, state: &State, comment: &CommentRow, actions: &mu
                     .font(theme::regular(13.0))
                     .color(state.palette.red),
             )
-            .on_hover_text("Recebeu um coração do criador");
+            .on_hover_text(tr(locale, "Hearted by the creator"));
         }
         if comment.replies > 0 {
             let open = state.replies.contains_key(&comment.id);
             let label = if open {
-                "Ocultar respostas".to_owned()
+                tr(locale, "Hide replies").into_owned()
             } else if comment.replies == 1 {
-                "1 resposta".to_owned()
+                tr(locale, "1 reply").into_owned()
             } else {
-                format!("{} respostas", comment.replies)
+                trf(
+                    locale,
+                    "{count} replies",
+                    &[("count", comment.replies.to_string())],
+                )
             };
             ui.add_space(8.0);
             let icon = if open {
@@ -1275,10 +1341,11 @@ fn reply_column(
     replies: &Fetch<Vec<CommentRow>>,
     actions: &mut Vec<Action>,
 ) {
+    let locale: Locale = state.settings.language;
     ui.horizontal_top(|ui| {
         ui.add_space(4.0);
         ui.vertical(|ui| match replies {
-            Fetch::Idle | Fetch::Loading => widgets::loading(ui, &state.palette, "respostas"),
+            Fetch::Idle | Fetch::Loading => widgets::loading(ui, &state.palette, "replies", locale),
             Fetch::Failed(error) => results::failed(ui, state, error, actions),
             Fetch::Ready(rows) => {
                 for reply in rows {
@@ -1295,103 +1362,131 @@ struct QueueDrag(String);
 /// The videos queued to play next. A handle, up/down buttons and an
 /// inline remove control keep every action visible and keyboard reachable.
 fn queue(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale: Locale = state.settings.language;
     if state.queue.is_empty() {
         return;
     }
-    widgets::section(ui, &state.palette, "Fila", Some(state.queue.len()), |ui| {
-        if widgets::button(ui, &state.palette, "Limpar", widgets::ButtonStyle::Normal).clicked() {
-            actions.push(Action::ClearQueue);
-        }
-        for (index, video) in state.queue.iter().enumerate() {
-            let row = ui
-                .push_id(&video.id, |ui| {
-                    ui.horizontal_top(|ui| {
-                        let width = (ui.available_width() - 36.0).max(120.0);
-                        let response = ui
-                            .vertical(|ui| {
-                                ui.set_width(width);
-                                let watched = widgets::watched(&state.library, video);
-                                widgets::video_row(ui, &state.palette, video, None, watched, false)
-                            })
-                            .inner;
-                        ui.vertical(|ui| {
-                            ui.spacing_mut().item_spacing.y = 0.0;
-                            let handle = ui
-                                .add(
-                                    Icon::More
-                                        .image(state.palette.secondary, 16.0)
-                                        .sense(Sense::drag()),
-                                )
-                                .on_hover_text("Arrastar para reordenar");
-                            handle.dnd_set_drag_payload(QueueDrag(video.id.clone()));
-                            ui.add_enabled_ui(index > 0, |ui| {
-                                if widgets::icon_button(
-                                    ui,
-                                    Icon::ChevronUp,
-                                    14.0,
-                                    "Mover para cima",
-                                )
-                                .clicked()
-                                {
-                                    actions.push(Action::MoveQueue {
-                                        from: index,
-                                        to: index - 1,
-                                    });
-                                }
-                            });
-                            ui.add_enabled_ui(index + 1 < state.queue.len(), |ui| {
-                                if widgets::icon_button(
-                                    ui,
-                                    Icon::ChevronDown,
-                                    14.0,
-                                    "Mover para baixo",
-                                )
-                                .clicked()
-                                {
-                                    actions.push(Action::MoveQueue {
-                                        from: index,
-                                        to: index + 1,
-                                    });
-                                }
-                            });
-                            if widgets::icon_button(ui, Icon::Close, 14.0, "Remover da fila")
-                                .clicked()
-                            {
-                                actions.push(Action::Dequeue(video.id.clone()));
-                            }
-                        });
-                        response
-                    })
-                })
-                .inner;
-            let response = row.inner;
-            if response.clicked() {
-                actions.push(Action::Open(video.clone()));
-            }
-            if row.response.dnd_hover_payload::<QueueDrag>().is_some() {
-                ui.painter().hline(
-                    row.response.rect.x_range(),
-                    row.response.rect.top(),
-                    Stroke::new(2.0, state.palette.accent),
-                );
-            }
-            if let Some(payload) = row.response.dnd_release_payload::<QueueDrag>()
-                && let Some(from) = state.queue.iter().position(|video| video.id == payload.0)
+    widgets::section(
+        ui,
+        &state.palette,
+        &tr(locale, "Queue"),
+        Some(state.queue.len()),
+        |ui| {
+            if widgets::button(
+                ui,
+                &state.palette,
+                &tr(locale, "Clear"),
+                widgets::ButtonStyle::Normal,
+            )
+            .clicked()
             {
-                actions.push(Action::MoveQueue { from, to: index });
+                actions.push(Action::ClearQueue);
             }
-            response.context_menu(|ui| {
-                if ui.button("Remover da fila").clicked() {
-                    actions.push(Action::Dequeue(video.id.clone()));
-                    ui.close();
+            for (index, video) in state.queue.iter().enumerate() {
+                let row = ui
+                    .push_id(&video.id, |ui| {
+                        ui.horizontal_top(|ui| {
+                            let width = (ui.available_width() - 36.0).max(120.0);
+                            let response = ui
+                                .vertical(|ui| {
+                                    ui.set_width(width);
+                                    let watched = widgets::watched(&state.library, video);
+                                    widgets::video_row(
+                                        ui,
+                                        &state.palette,
+                                        video,
+                                        None,
+                                        watched,
+                                        false,
+                                        locale,
+                                    )
+                                })
+                                .inner;
+                            ui.vertical(|ui| {
+                                ui.spacing_mut().item_spacing.y = 0.0;
+                                let handle = ui
+                                    .add(
+                                        Icon::More
+                                            .image(state.palette.secondary, 16.0)
+                                            .sense(Sense::drag()),
+                                    )
+                                    .on_hover_text(tr(locale, "Drag to reorder"));
+                                handle.dnd_set_drag_payload(QueueDrag(video.id.clone()));
+                                ui.add_enabled_ui(index > 0, |ui| {
+                                    if widgets::icon_button(
+                                        ui,
+                                        Icon::ChevronUp,
+                                        14.0,
+                                        &tr(locale, "Move up"),
+                                    )
+                                    .clicked()
+                                    {
+                                        actions.push(Action::MoveQueue {
+                                            from: index,
+                                            to: index - 1,
+                                        });
+                                    }
+                                });
+                                ui.add_enabled_ui(index + 1 < state.queue.len(), |ui| {
+                                    if widgets::icon_button(
+                                        ui,
+                                        Icon::ChevronDown,
+                                        14.0,
+                                        &tr(locale, "Move down"),
+                                    )
+                                    .clicked()
+                                    {
+                                        actions.push(Action::MoveQueue {
+                                            from: index,
+                                            to: index + 1,
+                                        });
+                                    }
+                                });
+                                if widgets::icon_button(
+                                    ui,
+                                    Icon::Close,
+                                    14.0,
+                                    &tr(locale, "Remove from queue"),
+                                )
+                                .clicked()
+                                {
+                                    actions.push(Action::Dequeue(video.id.clone()));
+                                }
+                            });
+                            response
+                        })
+                    })
+                    .inner;
+                let response = row.inner;
+                if response.clicked() {
+                    actions.push(Action::Open(video.clone()));
                 }
-            });
-        }
-    });
+                if row.response.dnd_hover_payload::<QueueDrag>().is_some() {
+                    ui.painter().hline(
+                        row.response.rect.x_range(),
+                        row.response.rect.top(),
+                        Stroke::new(2.0, state.palette.accent),
+                    );
+                }
+                if let Some(payload) = row.response.dnd_release_payload::<QueueDrag>()
+                    && let Some(from) = state.queue.iter().position(|video| video.id == payload.0)
+                {
+                    actions.push(Action::MoveQueue { from, to: index });
+                }
+                response.context_menu(|ui| {
+                    if ui.button(tr(locale, "Remove from queue")).clicked() {
+                        actions.push(Action::Dequeue(video.id.clone()));
+                        ui.close();
+                    }
+                });
+            }
+        },
+    );
     ui.add_space(24.0);
 }
 
 fn up_next(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale: Locale = state.settings.language;
     let watching = state.watching.as_ref().map(|video| video.id.as_str());
     let next: Vec<&Video> = state
         .up_next
@@ -1401,15 +1496,22 @@ fn up_next(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     if next.is_empty() {
         return;
     }
-    widgets::section(ui, &state.palette, "A seguir", Some(next.len()), |ui| {
-        ui.push_id("watch-up-next", |ui| {
-            results::video_rows(ui, state, next, actions);
-        });
-    });
+    widgets::section(
+        ui,
+        &state.palette,
+        &tr(locale, "Up next"),
+        Some(next.len()),
+        |ui| {
+            ui.push_id("watch-up-next", |ui| {
+                results::video_rows(ui, state, next, actions);
+            });
+        },
+    );
 }
 
 /// The recommended videos rustypipe sent with the details.
 fn related(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale: Locale = state.settings.language;
     let Fetch::Ready(details) = &state.details else {
         return;
     };
@@ -1425,7 +1527,7 @@ fn related(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     widgets::section(
         ui,
         &state.palette,
-        "Relacionados",
+        &tr(locale, "Related"),
         Some(related.len()),
         |ui| {
             ui.push_id("watch-related", |ui| {
@@ -1455,6 +1557,7 @@ mod tests {
             ..State::default()
         };
         state.settings.sidebar_collapsed = true;
+        state.settings.language = Locale::PortugueseBrazil;
         let screen = Rect::from_min_size(egui::Pos2::ZERO, vec2(480.0, 360.0));
         let mut pointer = None;
         let mut details = None;

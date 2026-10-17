@@ -7,6 +7,7 @@
 //! search field, a sidebar of views and subscribed channels, notices as
 //! toasts at the bottom right, and `?` for the keyboard shortcuts.
 
+use crate::i18n::{format as trf, gettext as tr};
 mod account;
 mod discovery;
 mod extras;
@@ -92,6 +93,8 @@ const TOP_BAR: f32 = 56.0;
 /// search field centred (Enter searches or opens a link, Esc leaves it),
 /// and the keyboard shortcuts' button at the right.
 fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+
     let palette = state.palette.clone();
     egui::Panel::top("top-bar")
         .exact_size(TOP_BAR)
@@ -110,7 +113,13 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                     .max_rect(bar)
                     .layout(Layout::left_to_right(Align::Center)),
                 |ui| {
-                    if widgets::icon_button(ui, Icon::PanelLeft, 20.0, "Menu lateral (b)").clicked()
+                    if widgets::icon_button(
+                        ui,
+                        Icon::PanelLeft,
+                        20.0,
+                        tr(locale, "Sidebar (b)").as_ref(),
+                    )
+                    .clicked()
                     {
                         actions.push(Action::ToggleSidebar);
                     }
@@ -127,14 +136,25 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                         actions.push(Action::Navigate(View::Home));
                     }
                     ui.add_enabled_ui(state.can_go_back, |ui| {
-                        if widgets::icon_button(ui, Icon::Back, 18.0, "Voltar (Alt+←)").clicked()
+                        if widgets::icon_button(
+                            ui,
+                            Icon::Back,
+                            18.0,
+                            tr(locale, "Back (Alt+←)").as_ref(),
+                        )
+                        .clicked()
                         {
                             actions.push(Action::Back);
                         }
                     });
                     ui.add_enabled_ui(state.can_go_forward, |ui| {
-                        if widgets::icon_button(ui, Icon::ChevronRight, 18.0, "Avançar (Alt+→)")
-                            .clicked()
+                        if widgets::icon_button(
+                            ui,
+                            Icon::ChevronRight,
+                            18.0,
+                            tr(locale, "Forward (Alt+→)").as_ref(),
+                        )
+                        .clicked()
                         {
                             actions.push(Action::Forward);
                         }
@@ -146,10 +166,16 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                     .max_rect(bar)
                     .layout(Layout::right_to_left(Align::Center)),
                 |ui| {
-                    if widgets::icon_button(ui, Icon::User, 20.0, "Conta").clicked() {
+                    if widgets::icon_button(ui, Icon::User, 20.0, tr(locale, "Account").as_ref())
+                        .clicked()
+                    {
                         actions.push(Action::Navigate(View::Account));
                     }
-                    let hint = format!("Notificações: {} novas", state.alerts.len());
+                    let hint = trf(
+                        locale,
+                        "Notifications: {count} new",
+                        &[("count", state.alerts.len().to_string())],
+                    );
                     let bell = widgets::icon_button(ui, Icon::Bell, 20.0, &hint);
                     if !state.alerts.is_empty() {
                         ui.painter().circle_filled(
@@ -161,8 +187,13 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                     if bell.clicked() {
                         actions.push(Action::Navigate(View::Notifications));
                     }
-                    if widgets::icon_button(ui, Icon::Info, 20.0, "Atalhos do teclado (?)")
-                        .clicked()
+                    if widgets::icon_button(
+                        ui,
+                        Icon::Info,
+                        20.0,
+                        tr(locale, "Keyboard shortcuts (?)").as_ref(),
+                    )
+                    .clicked()
                     {
                         state.keys_open = !state.keys_open;
                     }
@@ -182,7 +213,7 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                         ui,
                         &palette,
                         &mut state.query,
-                        "Pesquisar ou colar um link",
+                        tr(locale, "Search or paste a link").as_ref(),
                         command_line_id(),
                         width,
                     );
@@ -214,7 +245,14 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                     .max_rect(button)
                     .layout(Layout::left_to_right(Align::Center)),
                 |ui| {
-                    if widgets::icon_button(ui, Icon::Search, 20.0, "Pesquisar (Enter)").clicked() {
+                    if widgets::icon_button(
+                        ui,
+                        Icon::Search,
+                        20.0,
+                        tr(locale, "Search (Enter)").as_ref(),
+                    )
+                    .clicked()
+                    {
                         actions.push(Action::Search(state.query.clone()));
                     }
                 },
@@ -363,19 +401,31 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
 /// The sidebar's views, in the number keys' order: icon, view, label and
 /// a count to show.
 fn sidebar_items(state: &State) -> Vec<(Icon, View, String, Option<usize>)> {
+    let locale = state.settings.language;
+
     let mut items = vec![
-        (Icon::Home, View::Home, "Início".to_owned(), None),
+        (
+            Icon::Home,
+            View::Home,
+            tr(locale, "Home").into_owned(),
+            None,
+        ),
         (
             Icon::Subscriptions,
             View::Subscriptions,
-            "Inscrições".to_owned(),
+            tr(locale, "Subscriptions").into_owned(),
             None,
         ),
-        (Icon::History, View::History, "Histórico".to_owned(), None),
+        (
+            Icon::History,
+            View::History,
+            tr(locale, "History").into_owned(),
+            None,
+        ),
         (
             Icon::Clock,
             View::WatchLater,
-            "Assistir mais tarde".to_owned(),
+            tr(locale, "Watch later").into_owned(),
             None,
         ),
     ];
@@ -383,34 +433,34 @@ fn sidebar_items(state: &State) -> Vec<(Icon, View, String, Option<usize>)> {
         items.push((
             Icon::ThumbsUp,
             View::Liked,
-            "Marcados com gostei".to_owned(),
+            tr(locale, "Liked videos").into_owned(),
             None,
         ));
         items.push((
             Icon::Playlists,
             View::Playlists,
-            "Playlists".to_owned(),
+            tr(locale, "Playlists").into_owned(),
             None,
         ));
     }
     items.push((
         Icon::Bell,
         View::Notifications,
-        "Notificações".to_owned(),
+        tr(locale, "Notifications").into_owned(),
         Some(state.alerts.len()),
     ));
     let account = state
         .active_account()
         .map(|account| account.name.clone())
         .unwrap_or_else(|| match &state.account {
-            AccountState::SigningIn => "Entrando".to_owned(),
-            _ => "Entrar".to_owned(),
+            AccountState::SigningIn => tr(locale, "Signing in").into_owned(),
+            _ => tr(locale, "Sign in").into_owned(),
         });
     items.push((Icon::User, View::Account, account, None));
     items.push((
         Icon::Settings,
         View::Settings,
-        "Configurações".to_owned(),
+        tr(locale, "Settings").into_owned(),
         None,
     ));
     items
@@ -420,6 +470,8 @@ fn sidebar_items(state: &State) -> Vec<(Icon, View, String, Option<usize>)> {
 /// the account's when signed in and loaded, this device's otherwise.
 /// `collapsed` draws only their avatars, without the heading.
 fn sidebar_channels(ui: &mut egui::Ui, state: &State, collapsed: bool, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+
     let channels = match state.account_subscriptions.items() {
         channels if state.signed_in() && !channels.is_empty() => channels,
         _ => state.library.subscriptions.as_slice(),
@@ -438,7 +490,7 @@ fn sidebar_channels(ui: &mut egui::Ui, state: &State, collapsed: bool, actions: 
         ui.horizontal(|ui| {
             ui.add_space(12.0);
             ui.label(
-                RichText::new("Inscrições")
+                RichText::new(tr(locale, "Subscriptions").as_ref())
                     .font(theme::semibold(14.0))
                     .color(state.palette.secondary),
             );
@@ -473,6 +525,8 @@ fn sidebar_channels(ui: &mut egui::Ui, state: &State, collapsed: bool, actions: 
 /// The last notice as a toast at the bottom right: an icon (the alert one
 /// for a failure), the text, and a button that dismisses it.
 fn notice_toast(ctx: &egui::Context, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+
     let Some(notice) = &state.notice else {
         return;
     };
@@ -500,14 +554,16 @@ fn notice_toast(ctx: &egui::Context, state: &State, actions: &mut Vec<Action>) {
                             ui.set_max_width(320.0);
                             ui.add(
                                 egui::Label::new(
-                                    RichText::new(notice)
+                                    RichText::new(crate::i18n::message(locale, notice).as_ref())
                                         .font(theme::medium(13.5))
                                         .color(palette.text),
                                 )
                                 .wrap(),
                             );
                         });
-                        if widgets::icon_button(ui, Icon::Close, 16.0, "Fechar").clicked() {
+                        if widgets::icon_button(ui, Icon::Close, 16.0, tr(locale, "Close").as_ref())
+                            .clicked()
+                        {
                             actions.push(Action::DismissNotice);
                         }
                     });
@@ -687,60 +743,63 @@ fn open_at(state: &State, index: usize) -> Option<Action> {
 /// The `?` modal over a dimmed window: every binding in two columns, the
 /// key in a pill and what it does beside it.
 fn keys_overlay(ctx: &egui::Context, state: &mut State) {
+    let locale = state.settings.language;
+
     let palette = state.palette.clone();
     let mut close = false;
     let response = egui::Modal::new(egui::Id::new("keys")).show(ctx, |ui| {
         let width = (ctx.content_rect().width() - 64.0).clamp(280.0, 840.0);
         ui.set_width(width);
         ui.horizontal(|ui| {
-            ui.heading("Atalhos do teclado");
+            ui.heading(tr(locale, "Keyboard shortcuts").as_ref());
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                close = widgets::icon_button(ui, Icon::Close, 18.0, "Fechar").clicked();
+                close = widgets::icon_button(ui, Icon::Close, 18.0, tr(locale, "Close").as_ref())
+                    .clicked();
             });
         });
         ui.add_space(12.0);
-        let shell: &[(&str, &str)] = &[
-            ("/", "Focar pesquisa"),
-            ("Enter", "Pesquisar ou abrir link"),
-            ("1–9", "Telas (fora do vídeo)"),
-            ("?", "Mostrar esta lista"),
-            ("Esc", "Fechar ou voltar"),
-            ("Alt+← / →", "Voltar / avançar"),
-            ("Espaço", "Reproduzir/pausar no miniplayer"),
-            ("r", "Atualizar página"),
-            ("j / ↓", "Próximo item"),
-            ("k / ↑", "Item anterior"),
-            ("g / G", "Primeiro / último item"),
-            ("Enter", "Abrir item"),
-            ("h / l", "Abas do canal"),
-            ("a", "Próxima conta"),
-            ("b", "Menu lateral"),
+        let shell: &[(&'static str, &'static str)] = &[
+            ("/", "Focus search"),
+            ("Enter", "Search or open link"),
+            ("1–9", "Views (outside the video)"),
+            ("?", "Show this list"),
+            ("Esc", "Close or go back"),
+            ("Alt+← / →", "Back / forward"),
+            ("Space", "Play/pause in miniplayer"),
+            ("r", "Refresh page"),
+            ("j / ↓", "Next item"),
+            ("k / ↑", "Previous item"),
+            ("g / G", "First / last item"),
+            ("Enter", "Open item"),
+            ("h / l", "Channel tabs"),
+            ("a", "Next account"),
+            ("b", "Sidebar"),
         ];
-        let player: &[(&str, &str)] = &[
-            ("Espaço / k", "Reproduzir ou pausar"),
-            ("← / →", "Voltar / avançar 5 s"),
-            ("j / l", "Voltar / avançar 10 s"),
-            ("0–9", "Ir para 0–90%"),
-            (", / .", "Quadro anterior / próximo"),
-            ("< / >", "Velocidade"),
-            ("m", "Sem som"),
-            ("c", "Legendas"),
-            ("Shift+N / P", "Próximo / anterior"),
+        let player: &[(&'static str, &'static str)] = &[
+            ("Space / k", "Play or pause"),
+            ("← / →", "Back / forward 5 s"),
+            ("j / l", "Back / forward 10 s"),
+            ("0–9", "Seek to 0–90%"),
+            (", / .", "Previous / next frame"),
+            ("< / >", "Playback speed"),
+            ("m", "Mute"),
+            ("c", "Captions"),
+            ("Shift+N / P", "Next / previous"),
             ("i", "Miniplayer"),
-            ("Home / End", "Início / fim"),
-            ("Ctrl+← / →", "Capítulos (Option no Mac)"),
-            ("↑ / ↓", "Volume: 5%; troca nos Shorts"),
-            ("f", "Tela cheia"),
-            ("t", "Modo cinema"),
+            ("Home / End", "Start / end"),
+            ("Ctrl+← / →", "Chapters (Option on Mac)"),
+            ("↑ / ↓", "Volume: 5%; switch Shorts"),
+            ("f", "Full screen"),
+            ("t", "Theater mode"),
         ];
-        let column = |ui: &mut egui::Ui, id: &str, bindings: &[(&str, &str)]| {
+        let column = |ui: &mut egui::Ui, id: &str, bindings: &[(&'static str, &'static str)]| {
             egui::Grid::new(id)
                 .num_columns(2)
                 .spacing([12.0, 8.0])
                 .show(ui, |ui| {
                     for (key, label) in bindings {
-                        key_pill(ui, &palette, key);
-                        ui.add(egui::Label::new(*label).wrap());
+                        key_pill(ui, &palette, tr(locale, key).as_ref());
+                        ui.add(egui::Label::new(tr(locale, label).as_ref()).wrap());
                         ui.end_row();
                     }
                 });

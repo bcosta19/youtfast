@@ -140,7 +140,7 @@ pub async fn feed(
     while let Some(joined) = tasks.join_next().await {
         match joined {
             Ok((channel, Ok(feed))) => {
-                let videos_of_channel: Vec<Video> = rss_videos(feed, now);
+                let videos_of_channel: Vec<Video> = rss_videos(feed);
                 cache
                     .lock()
                     .unwrap()
@@ -666,7 +666,7 @@ fn video(item: VideoItem) -> Video {
     }
 }
 
-fn rss_videos(feed: ChannelRss, now: i64) -> Vec<Video> {
+fn rss_videos(feed: ChannelRss) -> Vec<Video> {
     feed.videos
         .into_iter()
         .map(|entry| {
@@ -682,7 +682,7 @@ fn rss_videos(feed: ChannelRss, now: i64) -> Vec<Video> {
                 views: (entry.view_count > 0).then_some(entry.view_count),
                 live: false,
                 published_at: Some(at),
-                published: Some(util::ago(at, now)),
+                published: None,
                 short: false,
             }
         })

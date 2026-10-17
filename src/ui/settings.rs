@@ -6,6 +6,7 @@ use egui::{Align, Color32, CornerRadius, Layout, Response, RichText, Sense, Ui, 
 
 use super::{results, widgets};
 use crate::app::State;
+use crate::i18n::{Locale, format as trf, gettext as tr};
 use crate::model::Action;
 use crate::settings::ThemeChoice;
 use crate::theme::{self, Palette};
@@ -18,6 +19,7 @@ const CONTROL_WIDTH: f32 = 260.0;
 const INTERVALS: [u32; 4] = [5, 15, 30, 60];
 
 pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
     results::panel(ui, |ui| {
         egui::ScrollArea::vertical()
             .auto_shrink(false)
@@ -25,7 +27,7 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 // set_max_width also widens: a narrow window would cut
                 // the text off at its edge instead of wrapping it.
                 ui.set_max_width(WIDTH.min(ui.available_width()));
-                results::title(ui, state, "Configurações", None);
+                results::title(ui, state, &tr(locale, "Settings"), None);
                 appearance(ui, state, actions);
                 ui.add_space(24.0);
                 playback(ui, state, actions);
@@ -38,30 +40,50 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 
 /// The Appearance group: the theme, its status, where palettes live.
 fn appearance(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
     let palette = &state.palette;
-    widgets::section(ui, palette, "Aparência", None, |ui| {
+    widgets::section(ui, palette, &tr(locale, "Appearance"), None, |ui| {
         widgets::card(ui, palette, |ui| {
             let description = if state.follows_omarchy {
-                "O modo automático acompanha o tema do Omarchy."
+                tr(locale, "Automatic follows your Omarchy theme.")
             } else {
-                "O modo automático usa o tema escuro do YouTFast."
+                tr(locale, "Automatic uses YouTFast's dark theme.")
             };
-            setting_row(ui, palette, "Tema", description, CONTROL_WIDTH, |ui| {
-                theme_picker(ui, state, actions);
-            });
+            setting_row(
+                ui,
+                palette,
+                &tr(locale, "Language"),
+                &tr(locale, "Choose the language used by the interface."),
+                CONTROL_WIDTH,
+                |ui| {
+                    language_picker(ui, state, actions);
+                },
+            );
+            ui.add_space(12.0);
+            setting_row(
+                ui,
+                palette,
+                &tr(locale, "Theme"),
+                &description,
+                CONTROL_WIDTH,
+                |ui| {
+                    theme_picker(ui, state, actions);
+                },
+            );
             if !state.theme_status.is_empty() {
                 ui.add_space(8.0);
                 ui.label(
-                    RichText::new(&state.theme_status)
+                    RichText::new(crate::i18n::message(locale, &state.theme_status))
                         .font(theme::regular(13.0))
                         .color(palette.secondary),
                 );
             }
             ui.add_space(8.0);
             ui.label(
-                RichText::new(format!(
-                    "As paletas são arquivos JSON em {}",
-                    state.themes_dir
+                RichText::new(trf(
+                    locale,
+                    "Palettes are JSON files in {path}",
+                    &[("path", state.themes_dir.clone())],
                 ))
                 .font(theme::regular(13.0))
                 .color(palette.secondary),
@@ -70,13 +92,31 @@ fn appearance(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     });
 }
 
+fn language_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    egui::ComboBox::from_id_salt("interface-language")
+        .width(200.0)
+        .selected_text(state.settings.language.native_name())
+        .show_ui(ui, |ui| {
+            for &locale in Locale::ALL {
+                if ui
+                    .selectable_label(state.settings.language == locale, locale.native_name())
+                    .clicked()
+                {
+                    actions.push(Action::SetLanguage(locale));
+                    ui.close();
+                }
+            }
+        });
+}
+
 /// The theme's menu: Automatic, Dark, Light, then the palette files.
 fn theme_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
     // The desktop's own palette: "Automatic" covers it.
     let mut choices = vec![
-        (ThemeChoice::Auto, "Automático".to_owned()),
-        (ThemeChoice::Dark, "Escuro".to_owned()),
-        (ThemeChoice::Light, "Claro".to_owned()),
+        (ThemeChoice::Auto, tr(locale, "Automatic").into_owned()),
+        (ThemeChoice::Dark, tr(locale, "Dark").into_owned()),
+        (ThemeChoice::Light, tr(locale, "Light").into_owned()),
     ];
     choices.extend(
         state
@@ -111,19 +151,22 @@ fn theme_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 
 /// The Playback group: autoplay, SponsorBlock.
 fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
     let palette = &state.palette;
-    widgets::section(ui, palette, "Reprodução", None, |ui| {
+    widgets::section(ui, palette, &tr(locale, "Playback"), None, |ui| {
         widgets::card(ui, palette, |ui| {
             let autoplay = state.settings.autoplay;
             setting_row(
                 ui,
                 palette,
-                "Reprodução automática",
-                "Ao terminar um vídeo, o próximo começa após uma contagem: primeiro a fila, \
-                 depois a lista de origem e, por fim, os vídeos relacionados.",
+                &tr(locale, "Autoplay"),
+                &tr(
+                    locale,
+                    "At the end of a video, the next one starts after a countdown: first the queue, then the source list, then related videos.",
+                ),
                 CONTROL_WIDTH,
                 |ui| {
-                    if switch(ui, palette, autoplay, "Reprodução automática").clicked() {
+                    if switch(ui, palette, autoplay, &tr(locale, "Autoplay")).clicked() {
                         actions.push(Action::SetAutoplay(!autoplay));
                     }
                 },
@@ -133,10 +176,11 @@ fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             setting_row(
                 ui,
                 palette,
-                "Pular patrocínios (SponsorBlock)",
-                "Pula patrocínios e permite pular introduções, créditos e outros trechos \
-                 marcados pela comunidade do SponsorBlock. A consulta a sponsor.ajay.app \
-                 usa um prefixo do hash que corresponde a milhares de vídeos.",
+                &tr(locale, "Skip sponsors (SponsorBlock)"),
+                &tr(
+                    locale,
+                    "Skips sponsors and offers to skip intros, credits and other segments marked by the SponsorBlock community. Requests to sponsor.ajay.app use a hash prefix matching thousands of videos.",
+                ),
                 CONTROL_WIDTH,
                 |ui| {
                     if switch(ui, palette, sponsorblock, "SponsorBlock").clicked() {
@@ -150,19 +194,22 @@ fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 
 /// The Notifications group: the check, desktop popups, the interval.
 fn notifications(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
     let palette = &state.palette;
-    widgets::section(ui, palette, "Notificações", None, |ui| {
+    widgets::section(ui, palette, &tr(locale, "Notifications"), None, |ui| {
         widgets::card(ui, palette, |ui| {
             let on = state.settings.alerts;
             setting_row(
                 ui,
                 palette,
-                "Verificar novos vídeos",
-                "Verifica as mesmas fontes do Início. Como as notificações do YouTube \
-                 não têm API, o aplicativo acompanha os canais inscritos.",
+                &tr(locale, "Check for new uploads"),
+                &tr(
+                    locale,
+                    "Checks the same sources as Home. YouTube's notifications have no API, so the app watches subscribed channels instead.",
+                ),
                 CONTROL_WIDTH,
                 |ui| {
-                    if switch(ui, palette, on, "Verificar novos vídeos").clicked() {
+                    if switch(ui, palette, on, &tr(locale, "Check for new uploads")).clicked() {
                         actions.push(Action::SetAlerts(!on));
                     }
                 },
@@ -172,14 +219,17 @@ fn notifications(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             setting_row(
                 ui,
                 palette,
-                "Notificações na área de trabalho",
-                "Mostra uma notificação na área de trabalho para cada novo vídeo encontrado.",
+                &tr(locale, "Desktop notifications"),
+                &tr(
+                    locale,
+                    "Shows a desktop notification for each new video found.",
+                ),
                 CONTROL_WIDTH,
                 |ui| {
                     // Greyed: it only matters while the checks run.
                     let response = ui
                         .add_enabled_ui(on, |ui| {
-                            switch(ui, palette, desktop, "Notificações na área de trabalho")
+                            switch(ui, palette, desktop, &tr(locale, "Desktop notifications"))
                         })
                         .inner;
                     if on && response.clicked() {
@@ -192,15 +242,22 @@ fn notifications(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             setting_row(
                 ui,
                 palette,
-                "Verificar a cada",
-                "Intervalo entre as verificações.",
+                &tr(locale, "Check every"),
+                &tr(locale, "Time between checks."),
                 chips,
                 |ui| {
                     let raised = widgets::on_card(palette);
                     // Right to left: the longest interval goes in first.
                     for minutes in INTERVALS.into_iter().rev() {
                         let picked = state.settings.alerts_every_minutes == minutes;
-                        if widgets::chip(ui, &raised, &format!("{minutes} min"), picked).clicked() {
+                        if widgets::chip(
+                            ui,
+                            &raised,
+                            &trf(locale, "{minutes} min", &[("minutes", minutes.to_string())]),
+                            picked,
+                        )
+                        .clicked()
+                        {
                             actions.push(Action::SetAlertsEvery(minutes));
                         }
                     }
@@ -290,4 +347,90 @@ fn switch(ui: &mut Ui, palette: &Palette, on: bool, label: &str) -> Response {
             .circle_filled(pos2(x, rect.center().y), 8.0, knob);
     }
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn selecting_a_language_emits_an_action_and_redraws_the_same_settings_page() {
+        fn render(
+            ctx: &egui::Context,
+            state: &State,
+            events: Vec<egui::Event>,
+            actions: &mut Vec<Action>,
+        ) -> Vec<(String, egui::Pos2)> {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        vec2(900.0, 800.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| show(ui, state, actions),
+            );
+            let labels = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) => Some((
+                        text.galley.text().to_owned(),
+                        text.pos + text.galley.size() / 2.0,
+                    )),
+                    _ => None,
+                })
+                .collect();
+            output.textures_delta.clear();
+            labels
+        }
+        fn click(ctx: &egui::Context, state: &State, pos: egui::Pos2, actions: &mut Vec<Action>) {
+            for pressed in [true, false] {
+                render(
+                    ctx,
+                    state,
+                    vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    actions,
+                );
+            }
+        }
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let mut state = State::default();
+        let mut actions = Vec::new();
+        for (locale, expected_title) in [
+            (Locale::PortugueseBrazil, "Configurações"),
+            (Locale::English, "Settings"),
+        ] {
+            let labels = render(&ctx, &state, Vec::new(), &mut actions);
+            let picker = labels
+                .iter()
+                .find(|(label, _)| label == state.settings.language.native_name())
+                .unwrap()
+                .1;
+            click(&ctx, &state, picker, &mut actions);
+            let labels = render(&ctx, &state, Vec::new(), &mut actions);
+            let option = labels
+                .iter()
+                .find(|(label, _)| label == locale.native_name())
+                .unwrap()
+                .1;
+            click(&ctx, &state, option, &mut actions);
+            assert_eq!(actions, [Action::SetLanguage(locale)]);
+            actions.clear();
+            state.settings.language = locale;
+            let labels = render(&ctx, &state, Vec::new(), &mut actions);
+            assert!(labels.iter().any(|(label, _)| label == expected_title));
+        }
+    }
 }

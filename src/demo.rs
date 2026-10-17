@@ -2,6 +2,7 @@
 //! media controls or single-instance channel are created here.
 use crate::{
     app::{Page, State},
+    i18n::{Locale, gettext as tr},
     model::*,
     mpv::Status,
     theme, ui,
@@ -19,11 +20,16 @@ pub fn run(cli: &crate::Cli) -> eframe::Result {
         })
         .unwrap_or([1280.0, 800.0]);
     let page = cli.demo_view.clone();
+    let locale = if cli.demo_language == "pt-BR" {
+        Locale::PortugueseBrazil
+    } else {
+        Locale::English
+    };
     let light = cli.demo_light;
     let capture = cli.demo_capture.clone();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("YouTFast — demonstração")
+            .with_title(tr(locale, "YouTFast — demo").into_owned())
             .with_app_id("youtfast-demo")
             .with_inner_size(size),
         renderer: eframe::Renderer::Glow,
@@ -44,6 +50,7 @@ pub fn run(cli: &crate::Cli) -> eframe::Result {
             cc.egui_ctx
                 .data_mut(|d| d.insert_temp(egui::Id::new("synthetic-images"), true));
             let mut state = fixture(&page);
+            state.settings.language = locale;
             state.palette = if light {
                 theme::Palette::light()
             } else {
@@ -71,26 +78,26 @@ pub fn run(cli: &crate::Cli) -> eframe::Result {
 pub(crate) fn fixture(page: &str) -> State {
     let channel = Channel {
         id: "UCsynthetic".into(),
-        name: "Canal demonstrativo".into(),
+        name: "Demo channel".into(),
         avatar: None,
     };
     let videos: Vec<Video> = (0..18)
         .map(|i| Video {
             id: format!("demo{i:07}"),
             title: format!(
-                "{} — uma experiência nativa para assistir e descobrir",
+                "{} — a native experience for watching and discovering",
                 [
-                    "Viagens pelo mundo",
-                    "Rust na prática",
-                    "Música para concentrar",
-                    "A ciência do cotidiano"
+                    "Travel around the world",
+                    "Rust in practice",
+                    "Music for concentration",
+                    "Everyday science"
                 ][i % 4]
             ),
             channel: Some(channel.name.clone()),
             channel_id: Some(channel.id.clone()),
             duration: Some(600.0 + i as f64 * 30.0),
             views: Some(12000 + i as u64 * 1300),
-            published: Some("há 2 dias".into()),
+            published: Some("2 days ago".into()),
             ..Video::from_id(format!("demo{i:07}"))
         })
         .collect();
@@ -113,7 +120,7 @@ pub(crate) fn fixture(page: &str) -> State {
     state.channel_header = Some(ChannelHeader {
         id: channel.id.clone(),
         name: channel.name.clone(),
-        handle: Some("@demonstracao".into()),
+        handle: Some("@demo".into()),
         avatar: None,
         banner: Some("https://synthetic/banner".into()),
         subscribers: Some(120_000),
@@ -124,15 +131,15 @@ pub(crate) fn fixture(page: &str) -> State {
     state.page = Some(Page::Channel(channel.clone()));
     state.watching = Some(videos[0].clone());
     state.queue = videos[1..4].to_vec();
-    state.details=Fetch::Ready(Details{id:videos[0].id.clone(),title:videos[0].title.clone(),channel,subscribers:Some(120_000),views:12500,likes:Some(340),description:vec![Span::Text("Uma descrição demonstrativa com capítulos, conteúdo e informações do vídeo. Todos os dados desta janela são sintéticos.".into())],chapters:vec![Chapter{name:"Introdução".into(),seconds:0},Chapter{name:"Explorando os detalhes".into(),seconds:60},Chapter{name:"Exemplos práticos".into(),seconds:180}],related:videos[4..].to_vec(),..Default::default()});
+    state.details=Fetch::Ready(Details{id:videos[0].id.clone(),title:videos[0].title.clone(),channel,subscribers:Some(120_000),views:12500,likes:Some(340),description:vec![Span::Text("A demo description with chapters, content and video information. All data in this window is synthetic.".into())],chapters:vec![Chapter{name:"Introduction".into(),seconds:0},Chapter{name:"Exploring the details".into(),seconds:60},Chapter{name:"Practical examples".into(),seconds:180}],related:videos[4..].to_vec(),..Default::default()});
     state.extras = Fetch::Ready(crate::video_extras::Extras {
         preview: None,
-        language: "Português".into(),
+        language: "English".into(),
         transcript: Ok((0..50)
             .map(|i| crate::video_extras::Cue {
                 seconds: i as f64 * 12.0,
                 text: format!(
-                    "Trecho {} da transcrição demonstrativa, sincronizado com o vídeo.",
+                    "Section {} of the demo transcript, synchronized with the video.",
                     i + 1
                 ),
             })
@@ -146,18 +153,20 @@ pub(crate) fn fixture(page: &str) -> State {
         "channel" => View::Channel,
         "playlist" => View::Playlist,
         "history" => View::History,
+        "settings" => View::Settings,
+        "account" => View::Account,
         _ => View::Home,
     };
     if page == "playlist" {
         state.page = Some(Page::Playlist {
             id: "PLdemo".into(),
-            name: "Playlist demonstrativa".into(),
+            name: "Demo playlist".into(),
         });
         state.playlist_details = Some(crate::innertube::PlaylistDetails {
-            name: "Playlist demonstrativa".into(),
+            name: "Demo playlist".into(),
             thumbnail: Some("https://synthetic/playlist".into()),
-            channel: Some("Canal demonstrativo".into()),
-            description: "Conteúdo organizado em uma playlist de demonstração.".into(),
+            channel: Some("Demo channel".into()),
+            description: "Content organized in a demo playlist.".into(),
             videos: Some(18),
         });
     }
@@ -205,6 +214,12 @@ impl eframe::App for Demo {
         ui::release_speed_hold(ui.ctx(), &self.state, &mut actions);
         for action in actions {
             match action {
+                Action::SetLanguage(locale) => {
+                    self.state.settings.language = locale;
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(
+                        tr(locale, "YouTFast — demo").into_owned(),
+                    ));
+                }
                 Action::Navigate(v) => self.state.view = v,
                 Action::Open(v) => {
                     self.state.watching = Some(v);
@@ -275,7 +290,8 @@ impl eframe::App for Demo {
                 Action::ClearQueue => self.state.queue.clear(),
                 Action::DismissNotice => self.state.notice = None,
                 Action::CopyLink(_) => {
-                    self.state.notice = Some("Link copiado (demonstração)".into())
+                    self.state.notice =
+                        Some(tr(self.state.settings.language, "Link copied (demo)").into_owned())
                 }
                 _ => {}
             }

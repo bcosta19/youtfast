@@ -5,6 +5,7 @@
 //! YouTube's own notifications have no API; this checks subscriptions on
 //! a timer instead.
 
+use crate::i18n::{Locale, format as trf, gettext as tr};
 use crate::model::Video;
 
 /// At most this many unseen uploads are kept.
@@ -67,12 +68,20 @@ pub fn compute(
 }
 
 /// The desktop notification's summary and body.
-pub fn notify_text(videos: &[Video]) -> (String, String) {
+pub fn notify_text(videos: &[Video], locale: Locale) -> (String, String) {
+    let fallback = tr(locale, "A channel");
     match videos {
         [] => (String::new(), String::new()),
         [video] => {
-            let channel = video.channel.as_deref().unwrap_or("A channel");
-            (format!("{channel} uploaded"), video.title.clone())
+            let channel = video.channel.as_deref().unwrap_or(&fallback);
+            (
+                trf(
+                    locale,
+                    "{channel} uploaded",
+                    &[("channel", channel.to_owned())],
+                ),
+                video.title.clone(),
+            )
         }
         _ => {
             let shown: Vec<String> = videos
@@ -81,7 +90,7 @@ pub fn notify_text(videos: &[Video]) -> (String, String) {
                 .map(|video| {
                     format!(
                         "{}: {}",
-                        video.channel.as_deref().unwrap_or("A channel"),
+                        video.channel.as_deref().unwrap_or(&fallback),
                         video.title
                     )
                 })
@@ -89,9 +98,21 @@ pub fn notify_text(videos: &[Video]) -> (String, String) {
             let mut body = shown.join("\n");
             let rest = videos.len() - shown.len();
             if rest > 0 {
-                body.push_str(&format!("\nand {rest} more"));
+                body.push('\n');
+                body.push_str(&trf(
+                    locale,
+                    "and {count} more",
+                    &[("count", rest.to_string())],
+                ));
             }
-            (format!("{} new videos", videos.len()), body)
+            (
+                trf(
+                    locale,
+                    "{count} new videos",
+                    &[("count", videos.len().to_string())],
+                ),
+                body,
+            )
         }
     }
 }
@@ -159,7 +180,7 @@ mod tests {
         one.channel = Some("Chan".to_owned());
         one.title = "Title".to_owned();
         assert_eq!(
-            notify_text(&[one]),
+            notify_text(&[one], Locale::English),
             ("Chan uploaded".to_owned(), "Title".to_owned())
         );
         let five: Vec<Video> = (0..5)
@@ -170,8 +191,13 @@ mod tests {
                 video
             })
             .collect();
-        let (summary, body) = notify_text(&five);
+        let (summary, body) = notify_text(&five, Locale::English);
         assert_eq!(summary, "5 new videos");
         assert!(body.contains("and 2 more"));
+        let (summary, body) = notify_text(&five, Locale::PortugueseBrazil);
+        assert_eq!(summary, "5 novos vídeos");
+        assert!(body.contains("e mais 2"));
+        // The language choice only changes the notification's own wording.
+        assert!(body.contains("Ch0: T0"));
     }
 }

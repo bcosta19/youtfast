@@ -1,5 +1,7 @@
 //! Small formatting helpers.
 
+use crate::i18n::{Locale, gettext, interpolate, ngettext};
+
 /// `4:05`, or `1:02:03` past an hour.
 pub fn duration(seconds: f64) -> String {
     let total = if seconds.is_finite() && seconds > 0.0 {
@@ -16,7 +18,7 @@ pub fn duration(seconds: f64) -> String {
 }
 
 /// `950 views`, `12K views`, `1.2M views`, the way YouTube shortens them.
-pub fn views(count: u64) -> String {
+pub fn views(count: u64, locale: Locale) -> String {
     let short = |value: f64, unit: &str| {
         if value < 10.0 {
             let text = format!("{value:.1}");
@@ -31,11 +33,13 @@ pub fn views(count: u64) -> String {
         1_000_000..1_000_000_000 => short(count as f64 / 1e6, "M"),
         _ => short(count as f64 / 1e9, "B"),
     };
-    if count == 1 {
-        "1 visualização".to_owned()
-    } else {
-        format!("{number} visualizações")
-    }
+    let label = ngettext(
+        locale,
+        "{count} view",
+        "{count} views",
+        count.min(u32::MAX as u64) as u32,
+    );
+    interpolate(&label, &[("count", number)])
 }
 
 /// `34K`, `1.2M`: a count without its unit, shortened the way YouTube does.
@@ -105,18 +109,27 @@ pub fn now() -> i64 {
 
 /// `just now`, `5 minutes ago`, `2 days ago`, `3 years ago`: how long before
 /// `now` the Unix time `then` was, the way YouTube says it.
-pub fn ago(then: i64, now: i64) -> String {
-    let seconds = (now - then).max(0);
+pub fn ago(then: i64, now: i64, locale: Locale) -> String {
+    let seconds = now.saturating_sub(then).max(0);
     let (count, singular, plural) = match seconds {
-        0..60 => return "agora mesmo".to_owned(),
-        60..3_600 => (seconds / 60, "minuto", "minutos"),
-        3_600..86_400 => (seconds / 3_600, "hora", "horas"),
-        86_400..604_800 => (seconds / 86_400, "dia", "dias"),
-        604_800..2_629_800 => (seconds / 604_800, "semana", "semanas"),
-        2_629_800..31_557_600 => (seconds / 2_629_800, "mês", "meses"),
-        _ => (seconds / 31_557_600, "ano", "anos"),
+        0..60 => return gettext(locale, "just now").into_owned(),
+        60..3_600 => (seconds / 60, "{count} minute ago", "{count} minutes ago"),
+        3_600..86_400 => (seconds / 3_600, "{count} hour ago", "{count} hours ago"),
+        86_400..604_800 => (seconds / 86_400, "{count} day ago", "{count} days ago"),
+        604_800..2_629_800 => (seconds / 604_800, "{count} week ago", "{count} weeks ago"),
+        2_629_800..31_557_600 => (
+            seconds / 2_629_800,
+            "{count} month ago",
+            "{count} months ago",
+        ),
+        _ => (
+            seconds / 31_557_600,
+            "{count} year ago",
+            "{count} years ago",
+        ),
     };
-    format!("há {count} {}", if count == 1 { singular } else { plural })
+    let text = ngettext(locale, singular, plural, count.min(u32::MAX as i64) as u32);
+    interpolate(&text, &[("count", count.to_string())])
 }
 
 /// The last few values put, by key, each with when it was put: a bounded
@@ -245,15 +258,27 @@ mod tests {
     #[test]
     fn time_ago() {
         let now = 1_000_000_000;
-        assert_eq!(ago(now, now), "agora mesmo");
-        assert_eq!(ago(now - 59, now), "agora mesmo");
-        assert_eq!(ago(now - 60, now), "há 1 minuto");
-        assert_eq!(ago(now - 7_200, now), "há 2 horas");
-        assert_eq!(ago(now - 86_400 * 3, now), "há 3 dias");
-        assert_eq!(ago(now - 86_400 * 14, now), "há 2 semanas");
-        assert_eq!(ago(now - 86_400 * 400, now), "há 1 ano");
+        assert_eq!(ago(now, now, Locale::PortugueseBrazil), "agora mesmo");
+        assert_eq!(ago(now - 59, now, Locale::PortugueseBrazil), "agora mesmo");
+        assert_eq!(ago(now - 60, now, Locale::PortugueseBrazil), "há 1 minuto");
+        assert_eq!(
+            ago(now - 7_200, now, Locale::PortugueseBrazil),
+            "há 2 horas"
+        );
+        assert_eq!(
+            ago(now - 86_400 * 3, now, Locale::PortugueseBrazil),
+            "há 3 dias"
+        );
+        assert_eq!(
+            ago(now - 86_400 * 14, now, Locale::PortugueseBrazil),
+            "há 2 semanas"
+        );
+        assert_eq!(
+            ago(now - 86_400 * 400, now, Locale::PortugueseBrazil),
+            "há 1 ano"
+        );
         // A clock behind the source's never says "in the future".
-        assert_eq!(ago(now + 30, now), "agora mesmo");
+        assert_eq!(ago(now + 30, now, Locale::PortugueseBrazil), "agora mesmo");
     }
 
     #[test]
@@ -267,13 +292,24 @@ mod tests {
 
     #[test]
     fn view_counts() {
-        assert_eq!(views(1), "1 visualização");
-        assert_eq!(views(950), "950 visualizações");
-        assert_eq!(views(1_000), "1K visualizações");
-        assert_eq!(views(1_250), "1.2K visualizações");
-        assert_eq!(views(12_400), "12K visualizações");
-        assert_eq!(views(1_200_000), "1.2M visualizações");
-        assert_eq!(views(3_000_000_000), "3B visualizações");
+        assert_eq!(views(0, Locale::English), "0 views");
+        assert_eq!(views(1, Locale::English), "1 view");
+        assert_eq!(views(1_250, Locale::English), "1.2K views");
+        assert_eq!(ago(0, 60, Locale::English), "1 minute ago");
+        assert_eq!(ago(0, 7200, Locale::English), "2 hours ago");
+        assert_eq!(views(1, Locale::PortugueseBrazil), "1 visualização");
+        assert_eq!(views(950, Locale::PortugueseBrazil), "950 visualizações");
+        assert_eq!(views(1_000, Locale::PortugueseBrazil), "1K visualizações");
+        assert_eq!(views(1_250, Locale::PortugueseBrazil), "1.2K visualizações");
+        assert_eq!(views(12_400, Locale::PortugueseBrazil), "12K visualizações");
+        assert_eq!(
+            views(1_200_000, Locale::PortugueseBrazil),
+            "1.2M visualizações"
+        );
+        assert_eq!(
+            views(3_000_000_000, Locale::PortugueseBrazil),
+            "3B visualizações"
+        );
     }
 
     #[test]

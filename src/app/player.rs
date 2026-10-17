@@ -193,14 +193,7 @@ impl App {
             return;
         };
         self.with_player(|player| player.set_muted(!muted));
-        self.show_osd(
-            if muted {
-                "Som ativado"
-            } else {
-                "Som desativado"
-            }
-            .to_owned(),
-        );
+        self.show_osd(if muted { "Unmuted" } else { "Muted" }.to_owned());
     }
 
     pub(super) fn seek_fraction(&mut self, fraction: f64) {
@@ -238,8 +231,8 @@ impl App {
             })
         });
         self.show_osd(match &lang {
-            Some(_) => "Legendas ativadas".to_owned(),
-            None => "Legendas desativadas".to_owned(),
+            Some(_) => "Captions on".to_owned(),
+            None => "Captions off".to_owned(),
         });
         if lang.is_some() || self.state.settings.captions.is_some() {
             self.state.settings.captions = lang;
@@ -279,7 +272,7 @@ impl App {
         let any = subtitles.first().map(|subtitle| subtitle.id);
         match kept.or(desktop).or(any) {
             Some(id) => self.set_subtitle(Some(id)),
-            None => self.show_osd("Sem legendas".to_owned()),
+            None => self.show_osd("No captions".to_owned()),
         }
     }
 
@@ -293,7 +286,7 @@ impl App {
         if edge > 0.0 {
             self.with_player(|player| player.seek_to((edge - 3.0).max(0.0), false));
             self.with_player(|player| player.set_paused(false));
-            self.show_osd("Ao vivo".to_owned());
+            self.show_osd("Live".to_owned());
         }
     }
 
@@ -315,7 +308,7 @@ impl App {
         .cloned();
         match next {
             Some(video) => self.advance(video),
-            None => self.show_osd("Nenhum vídeo a seguir".to_owned()),
+            None => self.show_osd("No video up next".to_owned()),
         }
     }
 
@@ -352,10 +345,10 @@ impl App {
         self.state.queue.retain(|queued| queued.id != video.id);
         if next {
             self.state.queue.insert(0, video);
-            self.state.notice = Some("Será reproduzido a seguir".to_owned());
+            self.state.notice = Some("Playing next".to_owned());
         } else {
             self.state.queue.push(video);
-            self.state.notice = Some("Adicionado à fila".to_owned());
+            self.state.notice = Some("Added to queue".to_owned());
         }
     }
 
@@ -446,10 +439,10 @@ impl App {
             self.apply_seek(segment.end);
             self.show_osd(
                 match segment.category.as_str() {
-                    "sponsor" => "Patrocínio ignorado",
-                    "selfpromo" => "Autopromoção ignorada",
-                    "interaction" => "Pedido de interação ignorado",
-                    _ => "Trecho ignorado",
+                    "sponsor" => "Sponsor skipped",
+                    "selfpromo" => "Self-promotion skipped",
+                    "interaction" => "Interaction reminder skipped",
+                    _ => "Segment skipped",
                 }
                 .to_owned(),
             );

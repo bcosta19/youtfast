@@ -145,7 +145,10 @@ impl App {
             return;
         };
         let picked = rfd::AsyncFileDialog::new()
-            .set_title("Choose the cookies.txt exported from YouTube")
+            .set_title(crate::i18n::gettext(
+                self.state.settings.language,
+                "Choose the cookies.txt exported from YouTube",
+            ))
             .add_filter("cookies.txt", &["txt"])
             .pick_file();
         self.begin_account_change();

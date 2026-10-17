@@ -24,11 +24,11 @@ macro_rules! choices {
     };
 }
 
-choices!(SearchKind, Videos => "Vídeos", Channels => "Canais", Playlists => "Playlists");
-choices!(SearchOrder, Relevance => "Relevância", Date => "Data de envio", Views => "Visualizações", Rating => "Avaliação");
-choices!(SearchDate, Any => "Qualquer data", Hour => "Última hora", Day => "Hoje", Week => "Esta semana", Month => "Este mês", Year => "Este ano");
-choices!(SearchLength, Any => "Qualquer duração", Short => "Menos de 4 minutos", Medium => "De 4 a 20 minutos", Long => "Mais de 20 minutos");
-choices!(ChannelOrder, Latest => "Mais recentes", Popular => "Populares", Oldest => "Mais antigos");
+choices!(SearchKind, Videos => "Videos", Channels => "Channels", Playlists => "Playlists");
+choices!(SearchOrder, Relevance => "Relevance", Date => "Upload date", Views => "View count", Rating => "Rating");
+choices!(SearchDate, Any => "Any time", Hour => "Last hour", Day => "Today", Week => "This week", Month => "This month", Year => "This year");
+choices!(SearchLength, Any => "Any duration", Short => "Under 4 minutes", Medium => "4–20 minutes", Long => "Over 20 minutes");
+choices!(ChannelOrder, Latest => "Latest", Popular => "Popular", Oldest => "Oldest");
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SearchOptions {

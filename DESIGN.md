@@ -56,7 +56,10 @@ The video rectangle is always black.
 - **Top bar** (56 px, `panel`): the sidebar toggle, wordmark when space
   allows, back/forward arrows, centred search field, explicit search button,
   shortcut help, notifications and account. Enter searches or opens a link;
-  `/` focuses the field. Visible control labels are in Brazilian Portuguese.
+  `/` focuses the field. English is the default interface language. Settings
+  offers English and Português (Brasil), applied immediately and saved. Bundled
+  gettext catalogs localize app controls and messages without translating
+  video content or changing caption preferences.
 - **Sidebar** (`panel`, 240 px): the `YouTFast` wordmark and the collapse
   toggle, then nav items (icon + label, 40 px, rounded `surface` fill when
   current, `surface_hover` on hover): Home, Subscriptions, History, Watch

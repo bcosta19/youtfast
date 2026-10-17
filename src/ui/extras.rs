@@ -1,5 +1,6 @@
 //! Optional transcript and storyboard views, sharing the bounded image cache.
 use super::*;
+use crate::i18n::{Locale, gettext as tr};
 use crate::util;
 
 pub(super) fn transcript(
@@ -8,17 +9,18 @@ pub(super) fn transcript(
     status: Option<&Status>,
     actions: &mut Vec<Action>,
 ) {
+    let locale: Locale = state.settings.language;
     ui.add_space(12.0);
     let label = if state.transcript_open {
-        "Ocultar transcrição"
+        tr(locale, "Hide transcript")
     } else {
-        "Mostrar transcrição"
+        tr(locale, "Show transcript")
     };
     if widgets::icon_text_button(
         ui,
         &state.palette,
         Some(Icon::Captions),
-        label,
+        &label,
         widgets::ButtonStyle::Normal,
     )
     .clicked()
@@ -30,32 +32,32 @@ pub(super) fn transcript(
     }
     widgets::card(ui, &state.palette.clone(), |ui| match &state.extras {
         Fetch::Idle => actions.push(Action::LoadExtras),
-        Fetch::Loading => widgets::loading(ui, &state.palette, "transcrição"),
+        Fetch::Loading => widgets::loading(ui, &state.palette, "transcript", locale),
         Fetch::Failed(_) => {
-            ui.label("Não foi possível carregar a transcrição.");
-            if ui.button("Tentar novamente").clicked() {
+            ui.label(tr(locale, "Could not load the transcript."));
+            if ui.button(tr(locale, "Retry")).clicked() {
                 actions.push(Action::LoadExtras);
             }
         }
         Fetch::Ready(extras) => {
             ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new(&extras.language).strong());
-                ui.checkbox(&mut state.transcript_follow, "Acompanhar vídeo");
+                ui.checkbox(&mut state.transcript_follow, tr(locale, "Follow video"));
             });
             ui.add(
                 egui::TextEdit::singleline(&mut state.transcript_query)
-                    .hint_text("Pesquisar na transcrição")
+                    .hint_text(tr(locale, "Search transcript"))
                     .desired_width(ui.available_width()),
             );
             match &extras.transcript {
                 Err(error) => {
-                    ui.label(error);
-                    if ui.button("Tentar novamente").clicked() {
+                    ui.label(crate::i18n::message(locale, error));
+                    if ui.button(tr(locale, "Retry")).clicked() {
                         actions.push(Action::LoadExtras);
                     }
                 }
                 Ok(cues) if cues.is_empty() => {
-                    ui.label("Este vídeo não tem transcrição disponível.");
+                    ui.label(tr(locale, "This video has no transcript available."));
                 }
                 Ok(cues) => {
                     let position = status.map_or(0.0, |s| s.position);

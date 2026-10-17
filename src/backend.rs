@@ -218,6 +218,7 @@ pub enum Command {
     /// Put new uploads on the desktop.
     Notify {
         videos: Vec<Video>,
+        language: crate::i18n::Locale,
     },
     /// A page of comments or replies.
     LoadComments {
@@ -903,10 +904,10 @@ async fn handle(command: Command, context: Context) {
                 }));
             }
         }
-        Command::Notify { videos } => {
+        Command::Notify { videos, language } => {
             // notify-rust's zbus backend blocks on D-Bus; off the runtime.
             tokio::task::spawn_blocking(move || {
-                let (summary, body) = crate::alerts::notify_text(&videos);
+                let (summary, body) = crate::alerts::notify_text(&videos, language);
                 if let Err(error) = notify_rust::Notification::new()
                     .appname("YouTFast")
                     .summary(&summary)

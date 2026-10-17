@@ -4,6 +4,7 @@
 //! states in its place. Also the page frame the list pages share: the
 //! page padding and the bold page title.
 
+use crate::i18n::{format as trf, gettext as tr};
 use egui::{Align, Layout, RichText, Ui};
 
 use super::widgets;
@@ -45,10 +46,12 @@ pub fn title(ui: &mut Ui, state: &State, title: &str, count: Option<usize>) {
 }
 
 pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+
     panel(ui, |ui| {
         super::discovery::filters(ui, state, actions);
         if state.search_options.kind != crate::innertube::SearchKind::Videos {
-            title(ui, state, "Resultados da pesquisa", None);
+            title(ui, state, tr(locale, "Search results").as_ref(), None);
             super::discovery::other_results(ui, state, actions);
             return;
         }
@@ -56,16 +59,18 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         title(
             ui,
             state,
-            "Resultados da pesquisa",
+            tr(locale, "Search results").as_ref(),
             Some(listing.items().len()),
         );
         match listing {
             Listing::Idle => {}
-            Listing::Loading => loading(ui, state, "resultados"),
+            Listing::Loading => loading(ui, state, "results"),
             Listing::Failed(error) => failed(ui, state, error, actions),
-            Listing::Ready(videos) if videos.is_empty() => {
-                nothing(ui, state, "Pesquise um vídeo, canal ou playlist")
-            }
+            Listing::Ready(videos) if videos.is_empty() => nothing(
+                ui,
+                state,
+                tr(locale, "Search for a video, channel or playlist").as_ref(),
+            ),
             Listing::Ready(videos) => rows(ui, state, videos, true, true, actions),
         }
     });
@@ -84,7 +89,7 @@ pub fn videos(
     self::title(ui, state, title, Some(listing.items().len()));
     match listing {
         Listing::Idle => {}
-        Listing::Loading => loading(ui, state, "vídeos"),
+        Listing::Loading => loading(ui, state, "videos"),
         Listing::Failed(error) => failed(ui, state, error, actions),
         Listing::Ready(videos) if videos.is_empty() => nothing(ui, state, empty),
         Listing::Ready(videos) => video_rows(ui, state, videos, actions),
@@ -111,6 +116,8 @@ fn rows<'a>(
     more: bool,
     actions: &mut Vec<Action>,
 ) {
+    let locale = state.settings.language;
+
     let videos: Vec<&Video> = videos.into_iter().collect();
     egui::ScrollArea::vertical()
         .auto_shrink(false)
@@ -130,9 +137,24 @@ fn rows<'a>(
                     let selected = index == state.cursor;
                     let watched = widgets::watched(&state.library, video);
                     let response = if large {
-                        widgets::video_row_large(ui, &state.palette, video, watched, selected)
+                        widgets::video_row_large(
+                            ui,
+                            &state.palette,
+                            video,
+                            watched,
+                            selected,
+                            locale,
+                        )
                     } else {
-                        widgets::video_row(ui, &state.palette, video, None, watched, selected)
+                        widgets::video_row(
+                            ui,
+                            &state.palette,
+                            video,
+                            None,
+                            watched,
+                            selected,
+                            locale,
+                        )
                     };
                     if selected && state.cursor_moved {
                         response.clone().scroll_to_me(None);
@@ -147,6 +169,7 @@ fn rows<'a>(
                     &state.results_more_state,
                     state.results_more.is_some(),
                     actions,
+                    locale,
                 );
             }
         });
@@ -216,15 +239,17 @@ pub fn video_menu(
     video: &Video,
     actions: &mut Vec<Action>,
 ) {
+    let locale = state.settings.language;
+
     response.context_menu(|ui| {
-        if ui.button("Reproduzir a seguir").clicked() {
+        if ui.button(tr(locale, "Play next").as_ref()).clicked() {
             actions.push(Action::Enqueue {
                 video: video.clone(),
                 next: true,
             });
             ui.close();
         }
-        if ui.button("Adicionar à fila").clicked() {
+        if ui.button(tr(locale, "Add to queue").as_ref()).clicked() {
             actions.push(Action::Enqueue {
                 video: video.clone(),
                 next: false,
@@ -233,11 +258,11 @@ pub fn video_menu(
         }
         let later = state.library.in_watch_later(&video.id);
         let label = if later {
-            "Remover de assistir mais tarde"
+            "Remove from Watch later"
         } else {
-            "Assistir mais tarde neste dispositivo"
+            "Watch later on this device"
         };
-        if ui.button(label).clicked() {
+        if ui.button(tr(locale, label).as_ref()).clicked() {
             actions.push(Action::ToggleWatchLater(video.clone()));
             ui.close();
         }
@@ -245,8 +270,17 @@ pub fn video_menu(
 }
 
 /// Keep the list's proportions in place while its first page is loading.
-pub fn loading(ui: &mut Ui, state: &State, what: &str) {
-    ui.label(RichText::new(format!("Carregando {what}…")).color(state.palette.secondary));
+pub fn loading(ui: &mut Ui, state: &State, what: &'static str) {
+    let locale = state.settings.language;
+
+    ui.label(
+        RichText::new(trf(
+            locale,
+            "Loading {what}…",
+            &[("what", tr(locale, what).into_owned())],
+        ))
+        .color(state.palette.secondary),
+    );
     ui.add_space(12.0);
     egui::ScrollArea::vertical()
         .auto_shrink(false)
@@ -364,7 +398,9 @@ fn placeholder(ui: &Ui, state: &State, rect: egui::Rect) {
 
 /// The empty state: a centred title, then what would fill the list.
 pub fn nothing(ui: &mut Ui, state: &State, hint: &str) {
-    empty(ui, state, "Nada por aqui", hint);
+    let locale = state.settings.language;
+
+    empty(ui, state, tr(locale, "Nothing here").as_ref(), hint);
 }
 
 /// An empty state with its own title.
@@ -385,9 +421,11 @@ pub fn empty(ui: &mut Ui, state: &State, title: &str, hint: &str) {
 
 /// The error in red, and Retry.
 pub fn failed(ui: &mut Ui, state: &State, error: &str, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+
     centered(ui, |ui| {
         ui.label(
-            RichText::new(error)
+            RichText::new(crate::i18n::message(locale, error).as_ref())
                 .font(theme::regular(14.0))
                 .color(state.palette.red),
         );
@@ -395,7 +433,7 @@ pub fn failed(ui: &mut Ui, state: &State, error: &str, actions: &mut Vec<Action>
         if widgets::button(
             ui,
             &state.palette,
-            "Tentar novamente",
+            tr(locale, "Retry").as_ref(),
             widgets::ButtonStyle::Normal,
         )
         .clicked()
@@ -531,10 +569,7 @@ mod tests {
         };
         state.search_options.kind = crate::innertube::SearchKind::Channels;
         state.results_channels = Listing::Failed("Falha temporária".into());
-        assert_eq!(
-            click_label(&state, "Tentar novamente", show),
-            [Action::Refresh]
-        );
+        assert_eq!(click_label(&state, "Retry", show), [Action::Refresh]);
     }
 
     #[test]
@@ -556,7 +591,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            click_label(&state, "Reproduzir tudo", super::super::library::page),
+            click_label(&state, "Play all", super::super::library::page),
             [Action::PlayPlaylist]
         );
     }

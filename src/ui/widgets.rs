@@ -3,6 +3,7 @@
 //! sidebar's items, round avatars, rounded thumbnails, the video as a row
 //! or a card, the playlist as a row, the search field, and rich text.
 
+use crate::i18n::{Locale, format as trf, gettext as tr};
 use egui::text::LayoutJob;
 use egui::{
     Color32, CornerRadius, CursorIcon, FontId, Galley, Id, Pos2, Rect, Response, Sense, Stroke, Ui,
@@ -58,13 +59,17 @@ pub fn spinner(ui: &mut Ui, size: f32) {
 }
 
 /// A spinner and `Loading <what>…` in the secondary colour.
-pub fn loading(ui: &mut Ui, palette: &Palette, what: &str) {
+pub fn loading(ui: &mut Ui, palette: &Palette, what: &'static str, locale: Locale) {
     ui.horizontal(|ui| {
         spinner(ui, 16.0);
         ui.label(
-            egui::RichText::new(format!("Carregando {what}…"))
-                .font(theme::regular(13.0))
-                .color(palette.secondary),
+            egui::RichText::new(trf(
+                locale,
+                "Loading {what}…",
+                &[("what", tr(locale, what).into_owned())],
+            ))
+            .font(theme::regular(13.0))
+            .color(palette.secondary),
         );
     });
 }
@@ -233,27 +238,40 @@ pub fn subscribe(
     unsubscribed: ButtonStyle,
     actions: &mut Vec<Action>,
 ) {
+    let locale = state.settings.language;
+
     if state.subscribed_in_account(&channel.id) {
         ui.add_enabled_ui(false, |ui| {
-            button(ui, &state.palette, "Inscrito", ButtonStyle::On)
+            button(
+                ui,
+                &state.palette,
+                tr(locale, "Subscribed").as_ref(),
+                ButtonStyle::On,
+            )
         })
         .inner
-        .on_disabled_hover_text("Inscrição da conta. Gerencie em youtube.com.");
+        .on_disabled_hover_text(
+            tr(
+                locale,
+                "Your account is subscribed. Manage it on youtube.com.",
+            )
+            .as_ref(),
+        );
         return;
     }
     let subscribed = state.library.is_subscribed(&channel.id);
     let (label, style) = if subscribed {
-        ("Inscrito", ButtonStyle::On)
+        ("Subscribed", ButtonStyle::On)
     } else {
-        ("Inscrever-se", unsubscribed)
+        ("Subscribe", unsubscribed)
     };
     let hint = if subscribed {
-        "Deixar de seguir neste dispositivo"
+        "Unsubscribe on this device"
     } else {
-        "Seguir neste dispositivo: os vídeos entram no seu feed"
+        "Follow this channel on this device: its videos join your feed"
     };
-    if button(ui, &state.palette, label, style)
-        .on_hover_text(hint)
+    if button(ui, &state.palette, tr(locale, label).as_ref(), style)
+        .on_hover_text(tr(locale, hint).as_ref())
         .clicked()
     {
         actions.push(Action::ToggleSubscription(channel.clone()));
@@ -480,9 +498,9 @@ pub fn channel_avatar(
 }
 
 /// The duration (or LIVE) in the thumbnail's corner, YouTube's way.
-fn badge(ui: &Ui, thumbnail: Rect, video: &Video, palette: &Palette) {
+fn badge(ui: &Ui, thumbnail: Rect, video: &Video, palette: &Palette, locale: Locale) {
     let (text, fill) = if video.live {
-        ("LIVE".to_owned(), palette.red)
+        (tr(locale, "LIVE").into_owned(), palette.red)
     } else if let Some(seconds) = video.duration {
         (util::duration(seconds), Color32::from_black_alpha(200))
     } else {
@@ -498,7 +516,14 @@ fn badge(ui: &Ui, thumbnail: Rect, video: &Video, palette: &Palette) {
 
 /// The thumbnail, rounded, with its corner badge, and the part watched
 /// (0..1) as YouTube's red bar along its bottom edge.
-fn thumbnail(ui: &Ui, palette: &Palette, video: &Video, rect: Rect, watched: Option<f32>) {
+fn thumbnail(
+    ui: &Ui,
+    palette: &Palette,
+    video: &Video,
+    rect: Rect,
+    watched: Option<f32>,
+    locale: Locale,
+) {
     if !ui.is_rect_visible(rect) {
         return;
     }
@@ -508,7 +533,7 @@ fn thumbnail(ui: &Ui, palette: &Palette, video: &Video, rect: Rect, watched: Opt
         .fit_to_exact_size(rect.size())
         .corner_radius(radius)
         .paint_at(ui, rect);
-    badge(ui, rect, video, palette);
+    badge(ui, rect, video, palette, locale);
     if let Some(watched) = watched {
         let track = Rect::from_min_max(pos2(rect.left(), rect.bottom() - 4.0), rect.right_bottom());
         let bottom = CornerRadius {
@@ -539,6 +564,10 @@ fn thumbnail(ui: &Ui, palette: &Palette, video: &Video, rect: Rect, watched: Opt
 /// The text YouTube puts beside or under a thumbnail: the title on up to
 /// two lines, the channel, then `views · age` (and the note). Drawn from
 /// `at`, `width` wide. Returns the height used.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Explicit language alongside drawing geometry, identity and presentation"
+)]
 fn video_text(
     ui: &Ui,
     palette: &Palette,
@@ -547,6 +576,7 @@ fn video_text(
     id: Id,
     at: Pos2,
     width: f32,
+    locale: Locale,
 ) -> f32 {
     let painter = ui.painter();
     let lines = |text: &str, font: FontId, color: Color32, rows: usize| {
@@ -570,7 +600,7 @@ fn video_text(
         painter.galley(pos2(at.x, y), galley, palette.secondary);
         y += height + 1.0;
     }
-    let rest = [Some(meta(video)), note.map(str::to_owned)]
+    let rest = [Some(meta(video, locale)), note.map(str::to_owned)]
         .into_iter()
         .flatten()
         .filter(|part| !part.is_empty())
@@ -625,6 +655,7 @@ pub fn video_row(
     note: Option<&str>,
     watched: Option<f32>,
     selected: bool,
+    locale: Locale,
 ) -> Response {
     video_row_sized(
         ui,
@@ -634,6 +665,7 @@ pub fn video_row(
         watched,
         selected,
         vec2(168.0, 94.0),
+        locale,
     )
 }
 
@@ -644,13 +676,18 @@ pub fn video_row_large(
     video: &Video,
     watched: Option<f32>,
     selected: bool,
+    locale: Locale,
 ) -> Response {
     // Up to 360x202, and never more than half the row.
     let width = (ui.available_width() / 2.0).clamp(168.0, 360.0);
     let thumb = vec2(width, width * 9.0 / 16.0);
-    video_row_sized(ui, palette, video, None, watched, selected, thumb)
+    video_row_sized(ui, palette, video, None, watched, selected, thumb, locale)
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Explicit language alongside thumbnail geometry and row presentation"
+)]
 fn video_row_sized(
     ui: &mut Ui,
     palette: &Palette,
@@ -659,6 +696,7 @@ fn video_row_sized(
     watched: Option<f32>,
     selected: bool,
     thumb: egui::Vec2,
+    locale: Locale,
 ) -> Response {
     let pad = 6.0;
     let (rect, response) = ui.allocate_exact_size(
@@ -670,7 +708,7 @@ fn video_row_sized(
     }
     row_fill(ui, palette, rect, &response, selected);
     let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), thumb);
-    thumbnail(ui, palette, video, thumb_rect, watched);
+    thumbnail(ui, palette, video, thumb_rect, watched, locale);
     let text_x = thumb_rect.right() + 12.0;
     let width = (rect.right() - text_x - pad - 34.0).max(20.0);
     video_text(
@@ -681,6 +719,7 @@ fn video_row_sized(
         response.id,
         pos2(text_x, thumb_rect.top() + 2.0),
         width,
+        locale,
     );
     response
 }
@@ -697,6 +736,8 @@ pub fn video_interactions(
     video: &Video,
     actions: &mut Vec<Action>,
 ) {
+    let locale = state.settings.language;
+
     let mut handled = false;
     if !ui.is_rect_visible(response.rect) {
         return;
@@ -727,7 +768,7 @@ pub fn video_interactions(
                     Sense::click(),
                 )
                 .on_hover_cursor(CursorIcon::PointingHand)
-                .on_hover_text("Abrir canal");
+                .on_hover_text(tr(locale, "Open channel").as_ref());
             if link.clicked() {
                 handled = true;
                 actions.push(Action::OpenChannel(Channel {
@@ -747,19 +788,19 @@ pub fn video_interactions(
             menu_rect,
             egui::Button::new(Icon::More.image(state.palette.text, 18.0)).frame(false),
         )
-        .on_hover_text("Mais ações");
+        .on_hover_text(tr(locale, "More actions").as_ref());
     handled |= menu.clicked();
     egui::Popup::menu(&menu).show(|ui| {
         for (label, action) in [
             (
-                "Reproduzir a seguir",
+                "Play next",
                 Action::Enqueue {
                     video: video.clone(),
                     next: true,
                 },
             ),
             (
-                "Adicionar à fila",
+                "Add to queue",
                 Action::Enqueue {
                     video: video.clone(),
                     next: false,
@@ -767,16 +808,16 @@ pub fn video_interactions(
             ),
             (
                 if state.library.in_watch_later(&video.id) {
-                    "Remover de assistir mais tarde"
+                    "Remove from Watch later"
                 } else {
-                    "Assistir mais tarde neste dispositivo"
+                    "Watch later on this device"
                 },
                 Action::ToggleWatchLater(video.clone()),
             ),
-            ("Copiar link", Action::CopyLink(video.url())),
-            ("Abrir no navegador", Action::OpenUrl(video.url())),
+            ("Copy link", Action::CopyLink(video.url())),
+            ("Open in browser", Action::OpenUrl(video.url())),
         ] {
-            if ui.button(label).clicked() {
+            if ui.button(tr(locale, label).as_ref()).clicked() {
                 actions.push(action);
                 ui.close();
             }
@@ -794,7 +835,7 @@ pub fn video_interactions(
                 egui::Button::new(Icon::Clock.image(state.palette.text, 18.0))
                     .fill(state.palette.overlay),
             )
-            .on_hover_text("Assistir mais tarde neste dispositivo")
+            .on_hover_text(tr(locale, "Watch later on this device").as_ref())
             .clicked()
         {
             handled = true;
@@ -806,7 +847,7 @@ pub fn video_interactions(
                 egui::Button::new(Icon::Queue.image(state.palette.text, 18.0))
                     .fill(state.palette.overlay),
             )
-            .on_hover_text("Adicionar à fila")
+            .on_hover_text(tr(locale, "Add to queue").as_ref())
             .clicked()
         {
             handled = true;
@@ -832,6 +873,7 @@ pub fn video_card(
     watched: Option<f32>,
     selected: bool,
     width: f32,
+    locale: Locale,
 ) -> Response {
     let pad = 6.0;
     let thumb = vec2(width - 2.0 * pad, (width - 2.0 * pad) * 9.0 / 16.0);
@@ -844,7 +886,7 @@ pub fn video_card(
     }
     row_fill(ui, palette, rect, &response, selected);
     let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), thumb);
-    thumbnail(ui, palette, video, thumb_rect, watched);
+    thumbnail(ui, palette, video, thumb_rect, watched, locale);
     let avatar_rect = Rect::from_min_size(
         pos2(thumb_rect.left(), thumb_rect.bottom() + 10.0),
         vec2(36.0, 36.0),
@@ -866,6 +908,7 @@ pub fn video_card(
         response.id,
         pos2(thumb_rect.left() + 46.0, thumb_rect.bottom() + 10.0),
         (thumb.x - 78.0).max(20.0),
+        locale,
     );
     response
 }
@@ -879,6 +922,7 @@ pub fn playlist_row(
     playlist: &PlaylistSummary,
     selected: bool,
     with_channel: bool,
+    locale: Locale,
 ) -> Response {
     let pad = 6.0;
     let size = vec2(168.0, 94.0);
@@ -916,7 +960,9 @@ pub fn playlist_row(
     let name_height = name.rect.height();
     painter.galley(pos2(text_x, thumb_rect.top() + 2.0), name, palette.text);
     let details: Vec<String> = [
-        playlist.videos.map(|count| format!("{count} videos")),
+        playlist
+            .videos
+            .map(|count| video_count_label(count, locale)),
         playlist.channel.clone().filter(|_| with_channel),
     ]
     .into_iter()
@@ -932,6 +978,17 @@ pub fn playlist_row(
         );
     }
     response
+}
+
+/// Count phrases use the selected catalog's plural rules, independently of content.
+pub fn video_count_label(count: u64, locale: Locale) -> String {
+    let label = crate::i18n::ngettext(
+        locale,
+        "{count} video",
+        "{count} videos",
+        count.min(u32::MAX as u64) as u32,
+    );
+    crate::i18n::interpolate(&label, &[("count", util::thousands(count))])
 }
 
 /// One of the chips over a list, YouTube's way: a pill on `surface`,
@@ -1142,6 +1199,7 @@ pub fn rich_text(
     palette: &Palette,
     spans: &[Span],
     max_rows: Option<usize>,
+    locale: Locale,
 ) -> Option<Action> {
     let (job, links) = span_job(spans, palette, ui.available_width(), max_rows);
     let galley = ui.painter().layout_job(job);
@@ -1183,7 +1241,7 @@ pub fn rich_text(
     // selected the way an ordinary label can. The plain text is built
     // only when the menu is actually opened, not every frame.
     response.context_menu(|ui| {
-        if ui.button("Copy").clicked() {
+        if ui.button(tr(locale, "Copy").as_ref()).clicked() {
             let plain: String = spans.iter().map(Span::text).collect::<Vec<_>>().join("");
             ui.ctx().copy_text(plain);
             ui.close();
@@ -1200,19 +1258,38 @@ pub fn more_row(
     state: &Fetch<()>,
     has_more: bool,
     actions: &mut Vec<Action>,
+    locale: Locale,
 ) {
     match state {
-        Fetch::Loading => loading(ui, palette, "more"),
+        Fetch::Loading => loading(ui, palette, "more", locale),
         Fetch::Failed(error) => {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(error.as_str()).color(palette.red));
-                if button(ui, palette, "Retry", ButtonStyle::Normal).clicked() {
+                ui.label(
+                    egui::RichText::new(crate::i18n::message(locale, error).as_ref())
+                        .color(palette.red),
+                );
+                if button(
+                    ui,
+                    palette,
+                    tr(locale, "Retry").as_ref(),
+                    ButtonStyle::Normal,
+                )
+                .clicked()
+                {
                     actions.push(Action::LoadMore);
                 }
             });
         }
         _ => {
-            if has_more && button(ui, palette, "Load more", ButtonStyle::Normal).clicked() {
+            if has_more
+                && button(
+                    ui,
+                    palette,
+                    tr(locale, "Load more").as_ref(),
+                    ButtonStyle::Normal,
+                )
+                .clicked()
+            {
                 actions.push(Action::LoadMore);
             }
         }
@@ -1228,20 +1305,52 @@ pub fn short_uv() -> Rect {
 }
 
 /// "1.2M views · 2 days ago", or "Live now".
-fn meta(video: &Video) -> String {
+fn meta(video: &Video, locale: Locale) -> String {
     if video.live {
-        return "Live now".to_owned();
+        return tr(locale, "Live now").into_owned();
     }
-    let parts: Vec<String> = [video.views.map(util::views), video.published.clone()]
-        .into_iter()
-        .flatten()
-        .collect();
+    let parts: Vec<String> = [
+        video.views.map(|count| util::views(count, locale)),
+        video.published.clone().or_else(|| {
+            video
+                .published_at
+                .map(|at| util::ago(at, util::now(), locale))
+        }),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
     parts.join(" · ")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_locale_changes_app_counts_without_translating_video_content() {
+        let mut video = Video::from_id("aaaaaaaaaaa".into());
+        video.title = "Settings".into();
+        video.channel = Some("Home".into());
+        video.published = Some("The creator's own date wording".into());
+        assert_eq!(
+            meta(&video, Locale::English),
+            "The creator's own date wording"
+        );
+        assert_eq!(
+            meta(&video, Locale::PortugueseBrazil),
+            "The creator's own date wording"
+        );
+        assert_eq!(video_count_label(1, Locale::English), "1 video");
+        assert_eq!(video_count_label(2, Locale::English), "2 videos");
+        assert_eq!(video_count_label(1, Locale::PortugueseBrazil), "1 vídeo");
+        assert_eq!(video_count_label(2, Locale::PortugueseBrazil), "2 vídeos");
+        video.live = true;
+        assert_eq!(meta(&video, Locale::English), "Live now");
+        assert_eq!(meta(&video, Locale::PortugueseBrazil), "Ao vivo agora");
+        assert_eq!(video.title, "Settings");
+        assert_eq!(video.channel.as_deref(), Some("Home"));
+    }
 
     fn draw_action_cards(
         ctx: &egui::Context,
@@ -1251,6 +1360,8 @@ mod tests {
         width: f32,
         events: Vec<egui::Event>,
     ) -> (Vec<(Id, Rect)>, Vec<Action>) {
+        let locale = state.settings.language;
+
         let mut cards = Vec::new();
         let mut actions = Vec::new();
         let mut output = ctx.run_ui(
@@ -1267,8 +1378,15 @@ mod tests {
                     ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing.x = gap;
                         for video in row {
-                            let response =
-                                video_card(ui, &state.palette, video, None, false, card_width);
+                            let response = video_card(
+                                ui,
+                                &state.palette,
+                                video,
+                                None,
+                                false,
+                                card_width,
+                                locale,
+                            );
                             cards.push((response.id, response.rect));
                             video_interactions(ui, &response, state, video, &mut actions);
                         }

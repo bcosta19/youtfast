@@ -90,8 +90,11 @@ videos.
 
 Channel pages include a banner and video ordering. Playlists show their cover,
 metadata and the currently playing item. Shorts use a portrait stage with
-next/previous controls and wheel navigation. Interface controls are in Brazilian
-Portuguese; this is not yet a language-selection system.
+next/previous controls and wheel navigation. The interface starts in English.
+Choose English or Português (Brasil) under Settings → Appearance → Language;
+the change applies immediately and is kept between runs, including for desktop
+notifications. Older settings also default to English. Video titles, comments,
+and caption preferences keep their own languages.
 
 The watch page can show a searchable, synchronized transcript and timeline
 thumbnail previews when YouTube supplies the required public metadata. These
@@ -104,6 +107,7 @@ For synthetic UI previews, build with `--features demo` and run:
 ```sh
 cargo run --locked --features demo -- --demo --demo-view watch --demo-size 1280x800
 cargo run --locked --features demo -- --demo --demo-view home --demo-light
+cargo run --locked --features demo -- --demo --demo-view settings --demo-language pt-BR
 ```
 
 Demo mode opens an isolated window without accounts, user files, network,

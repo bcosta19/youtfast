@@ -17,6 +17,7 @@ use egui::{
 use super::widgets;
 use crate::app::player::{LIVE_BEHIND, SPEEDS, next_video, previous_video, speed_label};
 use crate::app::{PlayerMenu, State};
+use crate::i18n::{Locale, format as trf, gettext as tr};
 use crate::icons::Icon;
 use crate::model::{Action, Fetch, Quality, Resolution, Segment, Video};
 use crate::mpv::{Status, VideoSurface};
@@ -101,6 +102,7 @@ fn speed_hold(
     status: &Status,
     actions: &mut Vec<Action>,
 ) -> bool {
+    let locale: Locale = state.settings.language;
     let id = hold_id();
     let now = ui.input(|input| input.time);
     let held = ui.input(|input| input.pointer.primary_down());
@@ -141,7 +143,7 @@ fn speed_hold(
         bubble(
             ui,
             pos2(response.rect.center().x, response.rect.top() + 58.0),
-            "Velocidade 2×",
+            &tr(locale, "Speed 2×"),
         );
     }
     consumed
@@ -166,6 +168,7 @@ pub fn player(
     mode: Mode,
     actions: &mut Vec<Action>,
 ) {
+    let locale: Locale = state.settings.language;
     let response = ui.interact(rect, ui.id().with("video"), Sense::click_and_drag());
     ui.ctx()
         .data_mut(|d| d.insert_temp(egui::Id::new("video-keyboard-focus"), response.id));
@@ -210,7 +213,7 @@ pub fn player(
         let button = Rect::from_center_size(rect.center() + vec2(0.0, 52.0), vec2(180.0, 36.0));
         ui.scope_builder(UiBuilder::new().max_rect(button), |ui| {
             if ui
-                .add(egui::Button::new("Tentar novamente").min_size(button.size()))
+                .add(egui::Button::new(tr(locale, "Retry")).min_size(button.size()))
                 .clicked()
             {
                 actions.push(Action::RetryPlayback);
@@ -267,15 +270,19 @@ fn video_context_menu(
     status: &Status,
     actions: &mut Vec<Action>,
 ) {
+    let locale: Locale = state.settings.language;
     let Some(video) = &state.watching else {
         return;
     };
     response.context_menu(|ui| {
-        if ui.button("Copiar link do vídeo").clicked() {
+        if ui.button(tr(locale, "Copy video URL")).clicked() {
             actions.push(Action::CopyLink(video.url()));
             ui.close();
         }
-        if ui.button("Copiar link neste instante").clicked() {
+        if ui
+            .button(tr(locale, "Copy video URL at current time"))
+            .clicked()
+        {
             actions.push(Action::CopyLink(util::video_link(
                 &video.id,
                 Some(status.position.max(0.0) as u64),
@@ -286,13 +293,13 @@ fn video_context_menu(
         if ui
             .add_enabled(
                 !video.short,
-                egui::Checkbox::new(&mut looping, "Repetir vídeo"),
+                egui::Checkbox::new(&mut looping, tr(locale, "Loop video")),
             )
             .changed()
         {
             actions.push(Action::ToggleLoop);
         }
-        if ui.button("Abrir no navegador").clicked() {
+        if ui.button(tr(locale, "Open in browser")).clicked() {
             actions.push(Action::OpenUrl(video.url()));
             ui.close();
         }
@@ -308,6 +315,7 @@ fn picture(
     status: Option<&Status>,
     surface: Option<&VideoSurface>,
 ) {
+    let locale: Locale = state.settings.language;
     ui.painter()
         .rect_filled(rect, CornerRadius::ZERO, Color32::BLACK);
     if let Some(surface) = surface {
@@ -326,7 +334,7 @@ fn picture(
     }
     if let Some(error) = &state.player_error {
         let galley = ui.painter().layout(
-            error.clone(),
+            crate::i18n::message(locale, error).into_owned(),
             theme::regular(16.0),
             Color32::WHITE,
             (rect.width() - 32.0).max(1.0),
@@ -383,6 +391,7 @@ fn buttons(
     live: bool,
     actions: &mut Vec<Action>,
 ) -> (Rect, Rect) {
+    let locale: Locale = state.settings.language;
     // Reserve the entire right-hand group before laying out optional
     // volume/time/chapter content. A long title must never push a control
     // beyond the edge of the video.
@@ -430,11 +439,11 @@ fn buttons(
     left.spacing_mut().item_spacing.x = spacing;
     let ui = &mut left;
     let (icon, hint) = if status.paused {
-        (Icon::Play, "Reproduzir (k)")
+        (Icon::Play, tr(locale, "Play (k)"))
     } else {
-        (Icon::Pause, "Pausar (k)")
+        (Icon::Pause, tr(locale, "Pause (k)"))
     };
-    if control_button(ui, icon, 20.0, hint).clicked() {
+    if control_button(ui, icon, 20.0, &hint).clicked() {
         actions.push(Action::TogglePause);
     }
     let related = state
@@ -449,18 +458,18 @@ fn buttons(
     );
     if !live && mode != Mode::Short && (next.is_some() || state.playing_more.is_some()) {
         let hint = next
-            .map(next_hint)
-            .unwrap_or_else(|| "Carregar próximos vídeos / tentar novamente (Shift+N)".into());
+            .map(|video| next_hint(video, locale))
+            .unwrap_or_else(|| tr(locale, "Load next videos / retry (Shift+N)").into());
         if control_button(ui, Icon::SkipForward, 18.0, &hint).clicked() {
             actions.push(Action::PlayNext);
         }
     }
     let (icon, hint) = if status.muted || status.volume <= 0.0 {
-        (Icon::VolumeMuted, "Ativar som (m)")
+        (Icon::VolumeMuted, tr(locale, "Unmute (m)"))
     } else {
-        (Icon::Volume, "Silenciar (m)")
+        (Icon::Volume, tr(locale, "Mute (m)"))
     };
-    if mute_button && control_button(ui, icon, 18.0, hint).clicked() {
+    if mute_button && control_button(ui, icon, 18.0, &hint).clicked() {
         actions.push(Action::ToggleMute);
     }
     if mode != Mode::Short && left_rect.width() >= 300.0 {
@@ -487,28 +496,28 @@ fn buttons(
 
     right.with_layout(Layout::right_to_left(Align::Center), |ui| {
         let (icon, hint) = if mode == Mode::Fullscreen {
-            (Icon::ExitFullscreen, "Sair da tela cheia (f)")
+            (Icon::ExitFullscreen, tr(locale, "Exit full screen (f)"))
         } else {
-            (Icon::Fullscreen, "Tela cheia (f)")
+            (Icon::Fullscreen, tr(locale, "Full screen (f)"))
         };
-        if fullscreen_button && control_button(ui, icon, 18.0, hint).clicked() {
+        if fullscreen_button && control_button(ui, icon, 18.0, &hint).clicked() {
             actions.push(Action::ToggleFullscreen);
         }
         // Full screen has no page layout to change.
         if page_controls {
             let hint = if state.settings.theater {
-                "Visualização padrão (t)"
+                tr(locale, "Default view (t)")
             } else {
-                "Modo cinema (t)"
+                tr(locale, "Theater mode (t)")
             };
-            if control_button(ui, Icon::Theater, 18.0, hint).clicked() {
+            if control_button(ui, Icon::Theater, 18.0, &hint).clicked() {
                 actions.push(Action::ToggleTheater);
             }
-            if control_button(ui, Icon::MiniPlayer, 18.0, "Miniplayer (i)").clicked() {
+            if control_button(ui, Icon::MiniPlayer, 18.0, &tr(locale, "Miniplayer (i)")).clicked() {
                 actions.push(Action::ToggleMiniPlayer);
             }
         }
-        if control_button(ui, Icon::Settings, 18.0, "Configurações").clicked() {
+        if control_button(ui, Icon::Settings, 18.0, &tr(locale, "Settings")).clicked() {
             state.player_menu = if state.player_menu == PlayerMenu::Closed {
                 PlayerMenu::Main
             } else {
@@ -517,7 +526,7 @@ fn buttons(
         }
         if captions_button {
             let on = status.subtitles.iter().any(|subtitle| subtitle.selected);
-            let response = control_button(ui, Icon::Captions, 18.0, "Legendas (c)");
+            let response = control_button(ui, Icon::Captions, 18.0, &tr(locale, "Captions (c)"));
             if on {
                 // YouTube's red line under the button while they show.
                 let line = Rect::from_center_size(
@@ -543,11 +552,15 @@ fn buttons(
 }
 
 /// `Next: <title> (N)` for the next button's hover.
-fn next_hint(video: &Video) -> String {
+fn next_hint(video: &Video, locale: Locale) -> String {
     if video.title.is_empty() {
-        "Próximo (Shift+N)".to_owned()
+        tr(locale, "Next (Shift+N)").into_owned()
     } else {
-        format!("Próximo: {} (Shift+N)", video.title)
+        trf(
+            locale,
+            "Next: {title} (Shift+N)",
+            &[("title", video.title.clone())],
+        )
     }
 }
 
@@ -559,6 +572,7 @@ fn time_label(
     show_chapter: bool,
     actions: &mut Vec<Action>,
 ) {
+    let locale: Locale = state.settings.language;
     let position = state.seek_preview.unwrap_or(status.position);
     let time = if status.duration > 0.0 {
         format!(
@@ -605,7 +619,7 @@ fn time_label(
                 .sense(Sense::click())
                 .truncate(),
             )
-            .on_hover_text("Abrir capítulos");
+            .on_hover_text(tr(locale, "Open chapters"));
         remember_control_focus(&response);
         egui::Popup::menu(&response).show(|ui| {
             if let Some(details) = state.details.ready() {
@@ -642,6 +656,7 @@ fn chapter_at(state: &State, seconds: f64) -> Option<&str> {
 /// `● LIVE`: red at the live edge; grey and a button back to it when
 /// behind.
 fn live_badge(ui: &mut Ui, state: &State, status: &Status, actions: &mut Vec<Action>) {
+    let locale: Locale = state.settings.language;
     let edge = status.duration.max(status.cached_until);
     let behind = edge > 0.0 && edge - status.position > LIVE_BEHIND;
     let width = ui.available_width().clamp(24.0, 86.0);
@@ -663,15 +678,15 @@ fn live_badge(ui: &mut Ui, state: &State, status: &Status, actions: &mut Vec<Act
         painter.text(
             pos2(rect.left() + 20.0, rect.center().y),
             Align2::LEFT_CENTER,
-            "AO VIVO",
+            tr(locale, "LIVE"),
             theme::semibold(13.0),
             Color32::WHITE,
         );
     }
     let response = response.on_hover_text(if behind {
-        "Voltar ao vivo"
+        tr(locale, "Back to live")
     } else {
-        "Assistindo ao vivo"
+        tr(locale, "Watching live")
     });
     if behind && response.clicked() {
         actions.push(Action::GoLive);
@@ -823,11 +838,14 @@ fn bubble(ui: &Ui, bottom: egui::Pos2, text: &str) {
 
 /// The note over the video's top ("+10 s", "Captions on").
 fn osd(ui: &Ui, rect: Rect, state: &State) {
+    let locale: Locale = state.settings.language;
     if let Some((text, _)) = &state.osd {
         let top = pos2(rect.center().x, rect.top() + 24.0);
-        let galley =
-            ui.painter()
-                .layout_no_wrap(text.clone(), theme::semibold(15.0), Color32::WHITE);
+        let galley = ui.painter().layout_no_wrap(
+            crate::i18n::message(locale, text).into_owned(),
+            theme::semibold(15.0),
+            Color32::WHITE,
+        );
         let size = galley.size() + vec2(24.0, 12.0);
         let pill = Rect::from_center_size(top + vec2(0.0, size.y / 2.0), size);
         ui.painter().rect_filled(
@@ -851,6 +869,7 @@ fn skip_button(
     shown: bool,
     actions: &mut Vec<Action>,
 ) {
+    let locale: Locale = state.settings.language;
     let Some(segment) = state
         .segments
         .iter()
@@ -859,7 +878,11 @@ fn skip_button(
         return;
     };
     let label = segment.label();
-    let text = format!("Pular {label}");
+    let text = trf(
+        locale,
+        "Skip {segment}",
+        &[("segment", tr(locale, label).into_owned())],
+    );
     let galley = ui
         .painter()
         .layout_no_wrap(text, theme::semibold(14.0), Color32::WHITE);
@@ -894,6 +917,7 @@ fn skip_button(
 
 /// The end of the video: the next one, a countdown, Cancel and Play now.
 fn countdown(ui: &mut Ui, rect: Rect, state: &State, actions: &mut Vec<Action>) {
+    let locale: Locale = state.settings.language;
     let Some((video, at)) = &state.autoplay else {
         return;
     };
@@ -908,15 +932,19 @@ fn countdown(ui: &mut Ui, rect: Rect, state: &State, actions: &mut Vec<Action>) 
     );
     on_video_style(&mut ui);
     ui.label(
-        RichText::new(format!("Próximo vídeo em {seconds}"))
-            .font(theme::regular(14.0))
-            .color(Color32::from_white_alpha(200)),
+        RichText::new(trf(
+            locale,
+            "Up next in {seconds}",
+            &[("seconds", seconds.to_string())],
+        ))
+        .font(theme::regular(14.0))
+        .color(Color32::from_white_alpha(200)),
     );
     ui.add_space(6.0);
     let title = if video.title.is_empty() {
-        "Próximo vídeo"
+        tr(locale, "Next video")
     } else {
-        &video.title
+        std::borrow::Cow::Borrowed(video.title.as_str())
     };
     ui.add(
         egui::Label::new(
@@ -937,16 +965,17 @@ fn countdown(ui: &mut Ui, rect: Rect, state: &State, actions: &mut Vec<Action>) 
     ui.horizontal(|ui| {
         let width = 2.0 * 110.0 + 12.0;
         ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
-        let cancel = egui::Button::new(RichText::new("Cancelar").font(theme::medium(14.0)))
-            .fill(Color32::from_white_alpha(40))
-            .min_size(vec2(110.0, 36.0))
-            .corner_radius(CornerRadius::same(18));
+        let cancel =
+            egui::Button::new(RichText::new(tr(locale, "Cancel")).font(theme::medium(14.0)))
+                .fill(Color32::from_white_alpha(40))
+                .min_size(vec2(110.0, 36.0))
+                .corner_radius(CornerRadius::same(18));
         if ui.add(cancel).clicked() {
             actions.push(Action::CancelAutoplay);
         }
         ui.add_space(12.0);
         let play = egui::Button::new(
-            RichText::new("Reproduzir agora")
+            RichText::new(tr(locale, "Play now"))
                 .font(theme::medium(14.0))
                 .color(Color32::BLACK),
         )
@@ -969,6 +998,7 @@ fn menu(
     live: bool,
     actions: &mut Vec<Action>,
 ) {
+    let locale: Locale = state.settings.language;
     let rows = menu_rows(state, status, live);
     let room = (video.height() - STRIP - 24.0).max(MENU_ROW * 2.0);
     let height = (rows as f32 * MENU_ROW + 16.0).min(room);
@@ -1013,12 +1043,12 @@ fn menu(
                         PlayerMenu::Closed => {}
                         PlayerMenu::Main => main_menu(ui, state, status, live, actions),
                         PlayerMenu::Speed => {
-                            if back_row(ui, "Velocidade de reprodução") {
+                            if back_row(ui, &tr(locale, "Playback speed")) {
                                 state.player_menu = PlayerMenu::Main;
                             }
                             for speed in SPEEDS {
                                 let label = if speed == 1.0 {
-                                    "Normal".to_owned()
+                                    tr(locale, "Normal").into_owned()
                                 } else {
                                     speed_label(speed)
                                 };
@@ -1029,10 +1059,14 @@ fn menu(
                             }
                         }
                         PlayerMenu::Quality => {
-                            if back_row(ui, "Qualidade") {
+                            if back_row(ui, &tr(locale, "Quality")) {
                                 state.player_menu = PlayerMenu::Main;
                             }
-                            let auto = format!("Automática (até {}p)", Quality::AUTO);
+                            let auto = trf(
+                                locale,
+                                "Auto (up to {resolution}p)",
+                                &[("resolution", Quality::AUTO.to_string())],
+                            );
                             if pick_row(ui, &auto, state.settings.quality == Quality::Auto) {
                                 actions.push(Action::SetQuality(Quality::Auto));
                                 state.player_menu = PlayerMenu::Closed;
@@ -1050,11 +1084,11 @@ fn menu(
                             }
                         }
                         PlayerMenu::Captions => {
-                            if back_row(ui, "Legendas") {
+                            if back_row(ui, &tr(locale, "Captions")) {
                                 state.player_menu = PlayerMenu::Main;
                             }
                             let none = !status.subtitles.iter().any(|subtitle| subtitle.selected);
-                            if pick_row(ui, "Desativadas", none) {
+                            if pick_row(ui, &tr(locale, "Off"), none) {
                                 actions.push(Action::SetSubtitle(None));
                                 state.player_menu = PlayerMenu::Closed;
                             }
@@ -1064,16 +1098,16 @@ fn menu(
                                     state.player_menu = PlayerMenu::Closed;
                                 }
                             }
-                            if value_row(ui, "Aparência das legendas", "").clicked() {
+                            if value_row(ui, &tr(locale, "Caption appearance"), "").clicked() {
                                 state.player_menu = PlayerMenu::CaptionStyle;
                             }
                         }
                         PlayerMenu::CaptionStyle => {
-                            if back_row(ui, "Aparência das legendas") {
+                            if back_row(ui, &tr(locale, "Caption appearance")) {
                                 state.player_menu = PlayerMenu::Captions;
                             }
                             ui.horizontal(|ui| {
-                                ui.label("Tamanho");
+                                ui.label(tr(locale, "Size"));
                                 let mut scale = state.settings.caption_scale;
                                 if ui
                                     .add(Slider::new(&mut scale, 0.5..=2.0).suffix("×"))
@@ -1083,7 +1117,10 @@ fn menu(
                                 }
                             });
                             let mut background = state.settings.caption_background;
-                            if ui.checkbox(&mut background, "Fundo escuro").changed() {
+                            if ui
+                                .checkbox(&mut background, tr(locale, "Dark background"))
+                                .changed()
+                            {
                                 actions.push(Action::SetCaptionBackground(background));
                             }
                         }
@@ -1123,12 +1160,13 @@ fn main_menu(
     live: bool,
     actions: &mut Vec<Action>,
 ) {
+    let locale: Locale = state.settings.language;
     if value_row(
         ui,
-        if state.fullscreen {
-            "Sair da tela cheia"
+        &if state.fullscreen {
+            tr(locale, "Exit full screen")
         } else {
-            "Tela cheia"
+            tr(locale, "Full screen")
         },
         "F",
     )
@@ -1137,14 +1175,28 @@ fn main_menu(
         actions.push(Action::ToggleFullscreen);
         state.player_menu = PlayerMenu::Closed;
     }
-    if value_row(ui, "Som", if status.muted { "Ativar" } else { "Silenciar" }).clicked() {
+    if value_row(
+        ui,
+        &tr(locale, "Sound"),
+        &if status.muted {
+            tr(locale, "Unmute")
+        } else {
+            tr(locale, "Mute")
+        },
+    )
+    .clicked()
+    {
         actions.push(Action::ToggleMute);
     }
     let on = state.settings.autoplay;
     if value_row(
         ui,
-        "Reprodução automática",
-        if on { "Ativada" } else { "Desativada" },
+        &tr(locale, "Autoplay"),
+        &if on {
+            tr(locale, "On")
+        } else {
+            tr(locale, "Off")
+        },
     )
     .clicked()
     {
@@ -1155,18 +1207,21 @@ fn main_menu(
             .subtitles
             .iter()
             .find(|subtitle| subtitle.selected)
-            .map_or("Desativadas", |subtitle| subtitle.title.as_str());
-        if value_row(ui, "Legendas", current).clicked() {
+            .map_or_else(
+                || tr(locale, "Off").into_owned(),
+                |subtitle| subtitle.title.clone(),
+            );
+        if value_row(ui, &tr(locale, "Captions"), &current).clicked() {
             state.player_menu = PlayerMenu::Captions;
         }
     }
     if !live {
         let speed = if status.speed == 1.0 {
-            "Normal".to_owned()
+            tr(locale, "Normal").into_owned()
         } else {
             speed_label(status.speed)
         };
-        if value_row(ui, "Velocidade de reprodução", &speed).clicked() {
+        if value_row(ui, &tr(locale, "Playback speed"), &speed).clicked() {
             state.player_menu = PlayerMenu::Speed;
         }
     }
@@ -1178,13 +1233,17 @@ fn main_menu(
         )
     });
     let quality = match (state.settings.quality, playing) {
-        (Quality::Auto, Some(playing)) => format!("Automática · {}", playing.label()),
-        (Quality::Auto, None) => "Automática".to_owned(),
+        (Quality::Auto, Some(playing)) => trf(
+            locale,
+            "Auto · {resolution}",
+            &[("resolution", playing.label())],
+        ),
+        (Quality::Auto, None) => tr(locale, "Auto").into_owned(),
         (_, Some(playing)) => playing.label(),
         (Quality::Max(lines), None) => format!("{lines}p"),
     };
-    if value_row(ui, "Qualidade", &quality)
-        .on_hover_text(playback_details(status))
+    if value_row(ui, &tr(locale, "Quality"), &quality)
+        .on_hover_text(playback_details(status, locale))
         .clicked()
     {
         state.player_menu = PlayerMenu::Quality;
@@ -1282,9 +1341,9 @@ fn pick_row(ui: &mut Ui, label: &str, picked: bool) -> bool {
 }
 
 /// "1920×1080 · 60 fps · vp9 · hardware decoding (vaapi)".
-fn playback_details(status: &Status) -> String {
+fn playback_details(status: &Status, locale: Locale) -> String {
     if status.video_width <= 0 || status.video_height <= 0 {
-        return "Qualidade".to_owned();
+        return tr(locale, "Quality").into_owned();
     }
     let mut parts = vec![format!("{}×{}", status.video_width, status.video_height)];
     if status.fps > 0.0 {
@@ -1294,8 +1353,12 @@ fn playback_details(status: &Status) -> String {
         parts.push(codec.clone());
     }
     parts.push(match &status.hwdec {
-        Some(decoder) => format!("decodificação por hardware ({decoder})"),
-        None => "decodificação por software".to_owned(),
+        Some(decoder) => trf(
+            locale,
+            "hardware decoding ({decoder})",
+            &[("decoder", decoder.clone())],
+        ),
+        None => tr(locale, "software decoding").into_owned(),
     });
     parts.join(" · ")
 }
@@ -1311,6 +1374,7 @@ pub fn mini(
     surface: Option<&VideoSurface>,
     actions: &mut Vec<Action>,
 ) {
+    let locale: Locale = state.settings.language;
     let (Some(watching), Some(status)) = (&state.watching, status) else {
         return;
     };
@@ -1321,7 +1385,7 @@ pub fn mini(
     let width = (ctx.content_rect().width() * MINI_SHARE).clamp(220.0, MINI_WIDTH);
     let position =
         ctx.content_rect().right_bottom() - vec2(width + 16.0, width * 9.0 / 16.0 + 104.0);
-    egui::Window::new("Miniplayer")
+    egui::Window::new(tr(locale, "Miniplayer"))
         .id(egui::Id::new("mini-player"))
         .default_pos(position)
         .default_width(width)
@@ -1372,13 +1436,13 @@ pub fn mini(
                             ))
                         };
                         let (icon, hint) = if status.paused {
-                            (Icon::Play, "Reproduzir")
+                            (Icon::Play, tr(locale, "Play"))
                         } else {
-                            (Icon::Pause, "Pausar")
+                            (Icon::Pause, tr(locale, "Pause"))
                         };
                         if over
                             .scope_builder(place(32.0, rect.center()), |ui| {
-                                widgets::icon_button(ui, icon, 32.0, hint).clicked()
+                                widgets::icon_button(ui, icon, 32.0, &hint).clicked()
                             })
                             .inner
                         {
@@ -1400,14 +1464,14 @@ pub fn mini(
                                 -64.0,
                                 previous.is_some(),
                                 Icon::ChevronLeft,
-                                "Vídeo anterior",
+                                tr(locale, "Previous video"),
                                 Action::PlayPrevious,
                             ),
                             (
                                 64.0,
                                 next.is_some() || state.playing_more.is_some(),
                                 Icon::SkipForward,
-                                "Próximo vídeo",
+                                tr(locale, "Next video"),
                                 Action::PlayNext,
                             ),
                         ] {
@@ -1415,7 +1479,7 @@ pub fn mini(
                                 && over
                                     .scope_builder(
                                         place(22.0, rect.center() + vec2(offset, 0.0)),
-                                        |ui| widgets::icon_button(ui, icon, 22.0, hint).clicked(),
+                                        |ui| widgets::icon_button(ui, icon, 22.0, &hint).clicked(),
                                     )
                                     .inner
                             {
@@ -1425,8 +1489,13 @@ pub fn mini(
                         let corner = rect.right_top() + vec2(-20.0, 20.0);
                         if over
                             .scope_builder(place(18.0, corner), |ui| {
-                                widgets::icon_button(ui, Icon::Close, 18.0, "Fechar e pausar")
-                                    .clicked()
+                                widgets::icon_button(
+                                    ui,
+                                    Icon::Close,
+                                    18.0,
+                                    &tr(locale, "Close and pause"),
+                                )
+                                .clicked()
                             })
                             .inner
                         {
@@ -1439,7 +1508,7 @@ pub fn mini(
                                     ui,
                                     Icon::MiniPlayer,
                                     18.0,
-                                    "Abrir página do vídeo",
+                                    &tr(locale, "Back to the video"),
                                 )
                                 .clicked()
                             })
@@ -1457,9 +1526,12 @@ pub fn mini(
                             ui.set_width(width - 24.0);
                             ui.spacing_mut().item_spacing.y = 2.0;
                             let title = if watching.title.is_empty() {
-                                status.title.as_deref().unwrap_or("Carregando…")
+                                status.title.as_deref().map_or_else(
+                                    || tr(locale, "Loading…"),
+                                    std::borrow::Cow::Borrowed,
+                                )
                             } else {
-                                &watching.title
+                                std::borrow::Cow::Borrowed(watching.title.as_str())
                             };
                             let title = ui.add(
                                 egui::Label::new(
@@ -1490,6 +1562,18 @@ mod tests {
     use super::*;
     use crate::model::{Chapter, Details};
     use crate::mpv::Subtitle;
+
+    #[test]
+    fn next_hint_translates_interface_text_and_preserves_the_video_title() {
+        let mut video = Video::from_id("aaaaaaaaaaa".into());
+        video.title = "Qualidade {title}: um vídeo do canal".into();
+        let english = next_hint(&video, Locale::English);
+        let portuguese = next_hint(&video, Locale::PortugueseBrazil);
+        assert_eq!(english, format!("Next: {} (Shift+N)", video.title));
+        assert_eq!(portuguese, format!("Próximo: {} (Shift+N)", video.title));
+        assert!(english.contains(&video.title));
+        assert!(portuguese.contains(&video.title));
+    }
 
     #[test]
     fn a_real_volume_slider_keeps_keyboard_focus_after_controls_timeout() {

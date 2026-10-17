@@ -156,7 +156,8 @@ impl State {
             }
             Err(error) => {
                 self.playing_more_state = Fetch::Failed(error);
-                self.notice=Some("Não foi possível carregar os próximos vídeos da playlist. Use Próximo para tentar novamente.".into());
+                self.notice =
+                    Some("Could not load the next playlist videos. Use Next to retry.".into());
                 None
             }
         }
@@ -285,7 +286,7 @@ impl App {
         if self.state.needs_playlist_page() {
             self.state.playing_waiting = Some(reason);
             self.request_playlist_page();
-            self.show_osd("Carregando próximos vídeos…".into());
+            self.show_osd("Loading next videos…".into());
             true
         } else {
             false

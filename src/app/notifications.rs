@@ -82,6 +82,7 @@ impl App {
         {
             self.backend.send(Command::Notify {
                 videos: found.to_notify,
+                language: self.state.settings.language,
             });
         }
     }

@@ -35,6 +35,9 @@ pub enum ThemeChoice {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
+    /// The interface language; older settings start in English too.
+    #[serde(default)]
+    pub language: crate::i18n::Locale,
     /// The most a video may stream at.
     #[serde(default)]
     pub quality: Quality,
@@ -110,6 +113,7 @@ pub fn clamp_alerts_every(minutes: u32) -> u32 {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            language: crate::i18n::Locale::default(),
             quality: Quality::default(),
             volume: default_volume(),
             theme: ThemeChoice::default(),
@@ -198,6 +202,7 @@ mod tests {
     fn round_trip() {
         let path = path("settings");
         let settings = Settings {
+            language: crate::i18n::Locale::PortugueseBrazil,
             quality: Quality::Max(720),
             volume: 40.0,
             ..Settings::default()
@@ -252,6 +257,7 @@ mod tests {
         let settings: Settings =
             serde_json::from_str(r#"{"quality":{"Max":720},"volume":40}"#).unwrap();
         assert_eq!(settings.theme, ThemeChoice::Auto);
+        assert_eq!(settings.language, crate::i18n::Locale::English);
         assert!(settings.custom_theme_cache.is_none());
         assert!(settings.system_theme_cache.is_none());
     }

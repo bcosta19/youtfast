@@ -839,6 +839,13 @@ impl App {
             }
             Action::SetQuality(quality) => self.set_quality(quality),
             Action::SetTheme(choice) => self.set_theme(choice),
+            Action::SetLanguage(language) => {
+                self.state.settings.language = language;
+                self.state.osd = None;
+                self.state.notice = None;
+                self.save_settings();
+                ctx.request_repaint();
+            }
             Action::ToggleSubscription(channel) => {
                 self.state.library.toggle_subscription(channel);
                 self.save_library();
@@ -855,8 +862,17 @@ impl App {
             }
             Action::ImportTakeout => {
                 let picked = rfd::AsyncFileDialog::new()
-                    .set_title("Importar do Google Takeout")
-                    .add_filter("Takeout subscriptions or history", &["csv", "json"])
+                    .set_title(crate::i18n::gettext(
+                        self.state.settings.language,
+                        "Import from Google Takeout",
+                    ))
+                    .add_filter(
+                        crate::i18n::gettext(
+                            self.state.settings.language,
+                            "Takeout subscriptions or history",
+                        ),
+                        &["csv", "json"],
+                    )
                     .pick_file();
                 self.backend.send(Command::ImportTakeout(Box::pin(picked)));
             }
@@ -894,7 +910,7 @@ impl App {
             Action::SetFeedFilter(filter) => self.state.feed_filter = filter,
             Action::CopyLink(url) => {
                 ctx.copy_text(url);
-                self.state.notice = Some("Link copiado".to_owned());
+                self.state.notice = Some("Link copied".to_owned());
             }
             Action::OpenUrl(url) => {
                 // Web pages, and the share menu's e-mail.

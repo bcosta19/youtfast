@@ -3,6 +3,7 @@
 //! search at its right, and the tab: a grid of video cards, playlist rows,
 //! or the About cards.
 
+use crate::i18n::{Locale, format as trf, gettext as tr};
 use egui::{Align, Layout, RichText, Sense, Ui, pos2, vec2};
 
 use super::{results, widgets};
@@ -65,6 +66,8 @@ fn same_kind(a: &ChannelTab, b: &ChannelTab) -> bool {
 }
 
 pub fn show(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+
     results::panel(ui, |ui| {
         if let Some(url) = state
             .channel_header
@@ -93,7 +96,7 @@ pub fn show(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Act
                     if widgets::chip(
                         ui,
                         &state.palette,
-                        order.label(),
+                        tr(locale, order.label()).as_ref(),
                         state.channel_order == order,
                     )
                     .clicked()
@@ -115,6 +118,8 @@ pub fn show(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Act
 /// The header: the round avatar, the name in bold, the handle and the
 /// numbers in secondary, and Subscribe as the primary pill.
 fn header(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+
     let palette = &state.palette;
     let header = state.channel_header.as_ref();
     let title = header
@@ -137,10 +142,20 @@ fn header(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Actio
                     parts.push(handle.clone());
                 }
                 if let Some(subscribers) = header.subscribers {
-                    parts.push(format!("{} inscritos", util::compact(subscribers)));
+                    parts.push(channel_count(
+                        subscribers,
+                        "{count} subscriber",
+                        "{count} subscribers",
+                        locale,
+                    ));
                 }
                 if let Some(videos) = header.videos {
-                    parts.push(format!("{} vídeos", util::compact(videos)));
+                    parts.push(channel_count(
+                        videos,
+                        "{count} video",
+                        "{count} videos",
+                        locale,
+                    ));
                 }
                 if !parts.is_empty() {
                     ui.label(
@@ -156,15 +171,25 @@ fn header(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Actio
     });
 }
 
+fn channel_count(
+    count: u64,
+    singular: &'static str,
+    plural: &'static str,
+    locale: Locale,
+) -> String {
+    let phrase = crate::i18n::ngettext(locale, singular, plural, count.min(u32::MAX as u64) as u32);
+    crate::i18n::interpolate(&phrase, &[("count", util::compact(count))])
+}
+
 /// The tab's name in the bar.
-fn tab_label(tab: &ChannelTab) -> String {
+fn tab_label(tab: &ChannelTab, locale: Locale) -> String {
     match tab {
-        ChannelTab::Videos => "Vídeos".to_owned(),
-        ChannelTab::Shorts => "Shorts".to_owned(),
-        ChannelTab::Live => "Ao vivo".to_owned(),
-        ChannelTab::Playlists => "Playlists".to_owned(),
-        ChannelTab::About => "Sobre".to_owned(),
-        ChannelTab::Search(query) => format!("Pesquisa: {query}"),
+        ChannelTab::Videos => tr(locale, "Videos").into_owned(),
+        ChannelTab::Shorts => tr(locale, "Shorts").into_owned(),
+        ChannelTab::Live => tr(locale, "Live").into_owned(),
+        ChannelTab::Playlists => tr(locale, "Playlists").into_owned(),
+        ChannelTab::About => tr(locale, "About").into_owned(),
+        ChannelTab::Search(query) => trf(locale, "Search: {query}", &[("query", query.clone())]),
     }
 }
 
@@ -172,15 +197,19 @@ fn tab_label(tab: &ChannelTab) -> String {
 /// a 2 px underline, the others in `secondary`; a hairline under the bar;
 /// the channel's own search at its right.
 fn tab_bar(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+
     let palette = &state.palette;
     let height = 40.0;
     let bar = ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 24.0;
         for tab in tabs(state.channel_header.as_ref(), &state.channel_tab) {
             let current = same_kind(&tab, &state.channel_tab);
-            let galley =
-                ui.painter()
-                    .layout_no_wrap(tab_label(&tab), theme::medium(15.0), palette.text);
+            let galley = ui.painter().layout_no_wrap(
+                tab_label(&tab, locale),
+                theme::medium(15.0),
+                palette.text,
+            );
             let (rect, response) =
                 ui.allocate_exact_size(vec2(galley.size().x, height), Sense::click());
             if response.hovered() {
@@ -219,12 +248,14 @@ fn tab_bar(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 
 /// The field that searches this channel: Enter opens the Search tab.
 fn channel_search(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+
     let mut query = state.channel_query.clone();
     let field = widgets::search_field(
         ui,
         &state.palette,
         &mut query,
-        "Pesquisar neste canal",
+        tr(locale, "Search this channel").as_ref(),
         egui::Id::new("channel search"),
         240.0_f32.min(ui.available_width()),
     );
@@ -248,11 +279,13 @@ fn channel_search(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 /// A video tab: Videos, Shorts, Live, or search results — a grid of
 /// cards with the cursor, paging as the last card scrolls into view.
 fn videos(ui: &mut Ui, state: &State, tab: &ChannelTab, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+
     let what = match tab {
-        ChannelTab::Videos => "vídeos",
+        ChannelTab::Videos => "videos",
         ChannelTab::Shorts => "shorts",
-        ChannelTab::Live => "transmissões ao vivo",
-        ChannelTab::Search(_) => "resultados",
+        ChannelTab::Live => "live streams",
+        ChannelTab::Search(_) => "results",
         _ => unreachable!(),
     };
     match &state.page_videos {
@@ -263,14 +296,22 @@ fn videos(ui: &mut Ui, state: &State, tab: &ChannelTab, actions: &mut Vec<Action
             ChannelTab::Search(query) => results::empty(
                 ui,
                 state,
-                "Nenhum resultado",
-                &format!("Nenhum vídeo deste canal corresponde a \u{201c}{query}\u{201d}"),
+                tr(locale, "No results").as_ref(),
+                &trf(
+                    locale,
+                    "No video on this channel matches “{query}”",
+                    &[("query", query.clone())],
+                ),
             ),
             _ => results::empty(
                 ui,
                 state,
-                &format!("Nenhum conteúdo em {what}"),
-                "Este canal ainda não publicou conteúdo nesta aba",
+                &trf(
+                    locale,
+                    "No content in {tab}",
+                    &[("tab", tr(locale, what).into_owned())],
+                ),
+                tr(locale, "This channel has not posted anything here yet").as_ref(),
             ),
         },
         Listing::Ready(videos) => {
@@ -294,6 +335,7 @@ fn videos(ui: &mut Ui, state: &State, tab: &ChannelTab, actions: &mut Vec<Action
                                     watched,
                                     selected,
                                     width,
+                                    locale,
                                 );
                                 if selected && state.cursor_moved {
                                     response.clone().scroll_to_me(None);
@@ -315,17 +357,22 @@ fn videos(ui: &mut Ui, state: &State, tab: &ChannelTab, actions: &mut Vec<Action
 
 /// The tab's paged list's tail: the page on its way, Retry, or Load more.
 fn more_row(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+
     widgets::more_row(
         ui,
         &state.palette,
         &state.page_more_state,
         state.page_more.is_some(),
         actions,
+        locale,
     );
 }
 
 /// The playlists tab: rows of thumbnail, name, `N videos`.
 fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+
     match &state.page_playlists {
         Listing::Idle => {}
         Listing::Loading => results::loading(ui, state, "playlists"),
@@ -333,8 +380,8 @@ fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         Listing::Ready(playlists) if playlists.is_empty() => results::empty(
             ui,
             state,
-            "Nenhuma playlist",
-            "Este canal não tem playlists públicas",
+            tr(locale, "No playlists").as_ref(),
+            tr(locale, "This channel has no public playlists").as_ref(),
         ),
         Listing::Ready(playlists) => {
             egui::ScrollArea::vertical()
@@ -354,6 +401,7 @@ fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                                 playlist,
                                 selected,
                                 false,
+                                locale,
                             );
                             if selected && state.cursor_moved {
                                 response.clone().scroll_to_me(None);
@@ -383,7 +431,7 @@ fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         .auto_shrink(false)
         .show(ui, |ui| match &state.channel_about {
             Fetch::Idle => {}
-            Fetch::Loading => results::loading(ui, state, "informações do canal"),
+            Fetch::Loading => results::loading(ui, state, "channel information"),
             Fetch::Failed(error) => results::failed(ui, state, error, actions),
             Fetch::Ready(about) => {
                 // set_max_width also widens: a narrow window would cut
@@ -395,9 +443,11 @@ fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 }
 
 /// A label in secondary and its value in text, one line of a card's grid.
-fn detail(ui: &mut Ui, state: &State, label: &str, value: &str) {
+fn detail(ui: &mut Ui, state: &State, label: &'static str, value: &str) {
+    let locale = state.settings.language;
+
     ui.label(
-        RichText::new(label)
+        RichText::new(tr(locale, label).as_ref())
             .font(theme::regular(14.0))
             .color(state.palette.secondary),
     );
@@ -411,22 +461,30 @@ fn detail(ui: &mut Ui, state: &State, label: &str, value: &str) {
 
 /// Description, Links and More info, YouTube's About in cards.
 fn about_cards(ui: &mut Ui, state: &State, about: &ChannelAbout, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+
     let palette = &state.palette;
     let header = &state.channel_header;
     if !about.description.is_empty() {
-        widgets::section(ui, palette, "Descrição", None, |ui| {
-            widgets::card(ui, palette, |ui| {
-                ui.label(
-                    RichText::new(&about.description)
-                        .font(theme::regular(14.0))
-                        .color(palette.text),
-                );
-            });
-        });
+        widgets::section(
+            ui,
+            palette,
+            tr(locale, "Description").as_ref(),
+            None,
+            |ui| {
+                widgets::card(ui, palette, |ui| {
+                    ui.label(
+                        RichText::new(&about.description)
+                            .font(theme::regular(14.0))
+                            .color(palette.text),
+                    );
+                });
+            },
+        );
         ui.add_space(24.0);
     }
     if !about.links.is_empty() {
-        widgets::section(ui, palette, "Links", None, |ui| {
+        widgets::section(ui, palette, tr(locale, "Links").as_ref(), None, |ui| {
             widgets::card(ui, palette, |ui| {
                 egui::Grid::new("channel links")
                     .num_columns(2)
@@ -453,37 +511,37 @@ fn about_cards(ui: &mut Ui, state: &State, about: &ChannelAbout, actions: &mut V
         });
         ui.add_space(24.0);
     }
-    widgets::section(ui, palette, "Mais informações", None, |ui| {
+    widgets::section(ui, palette, tr(locale, "More info").as_ref(), None, |ui| {
         widgets::card(ui, palette, |ui| {
             egui::Grid::new("channel details")
                 .num_columns(2)
                 .spacing(vec2(24.0, GAP))
                 .show(ui, |ui| {
                     if let Some(handle) = header.as_ref().and_then(|header| header.handle.clone()) {
-                        detail(ui, state, "Identificador", &handle);
+                        detail(ui, state, "Handle", &handle);
                     }
                     let subscribers = about
                         .subscribers
                         .or_else(|| header.as_ref().and_then(|header| header.subscribers));
                     if let Some(count) = subscribers {
-                        detail(ui, state, "Inscritos", &util::compact(count));
+                        detail(ui, state, "Subscribers", &util::compact(count));
                     }
                     let videos = about
                         .videos
                         .or_else(|| header.as_ref().and_then(|header| header.videos));
                     if let Some(count) = videos {
-                        detail(ui, state, "Vídeos", &util::compact(count));
+                        detail(ui, state, "Videos", &util::compact(count));
                     }
                     if let Some(views) = about.views {
-                        detail(ui, state, "Visualizações", &util::thousands(views));
+                        detail(ui, state, "Views", &util::thousands(views));
                     }
                     if let Some(created) = &about.created {
-                        detail(ui, state, "Inscreveu-se em", created);
+                        detail(ui, state, "Joined", created);
                     }
                     if let Some(country) = &about.country {
-                        detail(ui, state, "País", country);
+                        detail(ui, state, "Country", country);
                     }
-                    detail(ui, state, "Endereço", &about.url);
+                    detail(ui, state, "Address", &about.url);
                 });
         });
     });

@@ -7,6 +7,7 @@ mod backend;
 #[cfg(feature = "demo")]
 mod demo;
 mod diagnostics;
+mod i18n;
 mod icons;
 mod innertube;
 mod instance;
@@ -40,6 +41,9 @@ struct Cli {
     #[cfg(feature = "demo")]
     #[arg(long, default_value = "home")]
     demo_view: String,
+    #[cfg(feature = "demo")]
+    #[arg(long, default_value = "en", value_parser = ["en", "pt-BR"])]
+    demo_language: String,
     #[cfg(feature = "demo")]
     #[arg(long)]
     demo_light: bool,

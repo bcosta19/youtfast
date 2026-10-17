@@ -96,8 +96,13 @@ impl State {
             return false;
         }
         self.library = library;
-        self.notice = Some(format!(
-            "Imported {subscriptions} new subscriptions and {history} new videos of history."
+        self.notice = Some(crate::i18n::format(
+            self.settings.language,
+            "Imported {subscriptions} new subscriptions and {history} new videos of history.",
+            &[
+                ("subscriptions", subscriptions.to_string()),
+                ("history", history.to_string()),
+            ],
         ));
         true
     }

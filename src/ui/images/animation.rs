@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
+use crate::i18n::{Locale, gettext as tr};
 use egui::{ColorImage, Context, Id, Rect, TextureHandle, Ui};
 use image::metadata::LoopCount;
 use image::{AnimationDecoder, ImageDecoder};
@@ -400,7 +401,7 @@ pub fn forget(ctx: &Context, uri: &str) {
     }
 }
 
-pub fn show(ui: &mut Ui, uri: &str, bytes: Arc<[u8]>, rect: Rect) -> Option<bool> {
+pub fn show(ui: &mut Ui, uri: &str, bytes: Arc<[u8]>, rect: Rect, locale: Locale) -> Option<bool> {
     let manager = manager(ui.ctx());
     let mut m = manager.lock().unwrap();
     if !m.entries.contains_key(uri) {
@@ -410,7 +411,7 @@ pub fn show(ui: &mut Ui, uri: &str, bytes: Arc<[u8]>, rect: Rect) -> Option<bool
             if !ui
                 .put(
                     rect,
-                    egui::Button::new("Play GIF · pause another animation"),
+                    egui::Button::new(tr(locale, "Play GIF · pause another animation")),
                 )
                 .clicked()
             {
@@ -568,7 +569,12 @@ pub fn show(ui: &mut Ui, uri: &str, bytes: Arc<[u8]>, rect: Rect) -> Option<bool
         let area = Rect::from_min_max(rect.min, rect.max - egui::vec2(0.0, 24.0));
         let scale = (area.width() / size.x).min(area.height() / size.y);
         let target = Rect::from_center_size(area.center(), size * scale);
-        ui.put(target, egui::Image::new(texture).corner_radius(8));
+        ui.put(
+            target,
+            egui::Image::new(texture)
+                .corner_radius(8)
+                .alt_text(tr(locale, "Comment animation")),
+        );
         let controls = Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - 24.0), rect.max);
         let label = if e.error.is_some() {
             "Preview only · Retry"
@@ -579,7 +585,10 @@ pub fn show(ui: &mut Ui, uri: &str, bytes: Arc<[u8]>, rect: Rect) -> Option<bool
         } else {
             "Pause GIF"
         };
-        if ui.put(controls, egui::Button::new(label).small()).clicked() {
+        if ui
+            .put(controls, egui::Button::new(tr(locale, label)).small())
+            .clicked()
+        {
             if e.error.is_some() || e.ended {
                 restart = true;
                 repair = e.error.is_some();
@@ -596,11 +605,14 @@ pub fn show(ui: &mut Ui, uri: &str, bytes: Arc<[u8]>, rect: Rect) -> Option<bool
         if ui
             .put(
                 rect,
-                egui::Button::new(if e.error == Some("animation: memory budget reached") {
-                    "GIF paused to save memory · Play"
-                } else {
-                    "Image / GIF unavailable · Retry"
-                }),
+                egui::Button::new(tr(
+                    locale,
+                    if e.error == Some("animation: memory budget reached") {
+                        "GIF paused to save memory · Play"
+                    } else {
+                        "Image / GIF unavailable · Retry"
+                    },
+                )),
             )
             .clicked()
         {
@@ -608,7 +620,7 @@ pub fn show(ui: &mut Ui, uri: &str, bytes: Arc<[u8]>, rect: Rect) -> Option<bool
             repair = true;
         }
     } else {
-        ui.put(rect, egui::Label::new("Loading GIF…"));
+        ui.put(rect, egui::Label::new(tr(locale, "Loading GIF…")));
     }
     let memory_retry = restart && e.error == Some("animation: memory budget reached");
     let auto_repair = !e.repair_reported && e.error == Some("animation: invalid data");
@@ -782,7 +794,7 @@ pub(crate) mod tests {
             },
             |ui| {
                 let rect = Rect::from_min_size(egui::pos2(10.0, 10.0), egui::vec2(320.0, 200.0));
-                show(ui, "synthetic", bytes.clone(), rect);
+                show(ui, "synthetic", bytes.clone(), rect, Locale::English);
             },
         );
         output.textures_delta.clear();

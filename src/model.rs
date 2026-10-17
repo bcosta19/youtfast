@@ -182,15 +182,15 @@ impl Segment {
     /// The category as the skip button names it.
     pub fn label(&self) -> &'static str {
         match self.category.as_str() {
-            "sponsor" => "patrocínio",
-            "selfpromo" => "autopromoção",
-            "interaction" => "pedido de interação",
-            "intro" => "introdução",
-            "outro" => "encerramento",
-            "preview" => "prévia",
-            "music_offtopic" => "trecho sem música",
-            "filler" => "digressão",
-            _ => "trecho",
+            "sponsor" => "sponsor",
+            "selfpromo" => "self-promotion",
+            "interaction" => "interaction reminder",
+            "intro" => "intro",
+            "outro" => "outro",
+            "preview" => "preview",
+            "music_offtopic" => "non-music section",
+            "filler" => "filler",
+            _ => "segment",
         }
     }
 }
@@ -444,11 +444,11 @@ impl FeedFilter {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::ForYou => "Para você",
-            Self::All => "Todos",
-            Self::Today => "Hoje",
-            Self::Unwatched => "Não assistidos",
-            Self::Live => "Ao vivo",
+            Self::ForYou => "For you",
+            Self::All => "All",
+            Self::Today => "Today",
+            Self::Unwatched => "Unwatched",
+            Self::Live => "Live",
         }
     }
 
@@ -592,6 +592,7 @@ pub enum Action {
     ToggleTranscript,
     SetQuality(Quality),
     SetTheme(crate::settings::ThemeChoice),
+    SetLanguage(crate::i18n::Locale),
     /// Subscribes on this device, or unsubscribes.
     ToggleSubscription(Channel),
     /// Adds to this device's Watch later, or removes.
