@@ -2,6 +2,7 @@ import hashlib
 import io
 import json
 import shutil
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -13,7 +14,8 @@ from release import ROOT
 
 
 def write_source_package(destination, files):
-    with tarfile.open(destination, "w:zst") as archive:
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w") as archive:
         directory = tarfile.TarInfo("mingw-w64-example")
         directory.type = tarfile.DIRTYPE
         archive.addfile(directory)
@@ -21,6 +23,9 @@ def write_source_package(destination, files):
             info = tarfile.TarInfo(name)
             info.size = len(data)
             archive.addfile(info, io.BytesIO(data))
+    # The zstd tool rather than tarfile: CI's Python predates zstd support.
+    destination.write_bytes(subprocess.run(["zstd", "-q", "-c"], input=buffer.getvalue(),
+                                           stdout=subprocess.PIPE, check=True).stdout)
 
 
 class NativeSourcesTests(unittest.TestCase):
