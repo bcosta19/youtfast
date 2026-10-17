@@ -123,9 +123,14 @@ impl Rotating {
             std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
         }
         let path = dir.join("youtfast.log");
+        regular(&path)?;
+        // Windows append handles lack the write access `set_len` needs, so an
+        // oversized log is capped through its own handle before appending.
+        if std::fs::metadata(&path).is_ok_and(|metadata| metadata.len() > limit) {
+            OpenOptions::new().write(true).open(&path)?.set_len(limit)?;
+        }
         let file = open_file(&path)?;
         let length = file.metadata()?.len().min(limit);
-        file.set_len(length)?;
         Ok(Self {
             path,
             file: Some(file),
@@ -209,6 +214,25 @@ mod tests {
         assert!(std::fs::metadata(dir.join("youtfast.log")).unwrap().len() <= 64);
         assert!(std::fs::metadata(dir.join("youtfast.log.1")).unwrap().len() <= 64);
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn an_oversized_existing_log_is_capped_and_still_appended() {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("diagnostic-oversized-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("youtfast.log"), [b'x'; 200]).unwrap();
+        let mut log = Rotating::open(dir.clone(), 64).unwrap();
+        assert_eq!(log.length, 64);
+        log.write_all(b"next\n").unwrap();
+        drop(log);
+        assert_eq!(std::fs::read(dir.join("youtfast.log")).unwrap(), b"next\n");
+        assert_eq!(
+            std::fs::metadata(dir.join("youtfast.log.1")).unwrap().len(),
+            64
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 

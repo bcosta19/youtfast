@@ -69,7 +69,8 @@ struct Stream {
     cancel: Arc<AtomicBool>,
     budget: Arc<Budget>,
     _workspace: Lease,
-    slow: bool,
+    frame_budget: Duration,
+    slow: u8,
 }
 impl Stream {
     fn new(
@@ -104,14 +105,15 @@ impl Stream {
             cancel,
             budget,
             _workspace: workspace,
-            slow: false,
+            frame_budget: Duration::from_millis(200),
+            slow: 0,
         })
     }
     fn frame(&mut self) -> Result<Option<Frame>, &'static str> {
         if self.cancel.load(Ordering::Relaxed) {
             return Ok(None);
         }
-        if self.slow {
+        if self.slow >= SLOW_FRAMES {
             return Err("animation: decode budget reached");
         }
         let started = Instant::now();
@@ -124,7 +126,7 @@ impl Stream {
             .transpose();
         // A very expensive source retains a preview instead of monopolizing
         // the single worker indefinitely. Ordinary frame timing is unchanged.
-        self.slow = started.elapsed() > Duration::from_millis(200);
+        self.slow = slow_streak(self.slow, started.elapsed(), self.frame_budget);
         result
     }
     fn next(&mut self) -> Result<Option<Frame>, &'static str> {
@@ -178,6 +180,18 @@ fn decoder(bytes: Arc<[u8]>) -> Result<(image::Frames<'static>, LoopCount), &'st
         Err("animation: invalid data")
     }
 }
+/// Consecutive over-budget frames before a source keeps only its preview, so a
+/// single scheduling stall does not stop an otherwise cheap animation.
+const SLOW_FRAMES: u8 = 3;
+
+fn slow_streak(streak: u8, elapsed: Duration, budget: Duration) -> u8 {
+    if elapsed > budget {
+        streak.saturating_add(1)
+    } else {
+        0
+    }
+}
+
 fn downscale(frame: image::Frame, budget: &Arc<Budget>) -> Result<Frame, &'static str> {
     let delay = Duration::from(frame.delay()).max(Duration::from_millis(20));
     let buffer = image::DynamicImage::ImageRgba8(frame.into_buffer())
@@ -739,6 +753,7 @@ pub(crate) mod tests {
         let budget = Arc::new(Budget::default());
         let cancelled = Arc::new(AtomicBool::new(false));
         let mut stream = Stream::new(gif().into(), cancelled, budget.clone()).unwrap();
+        stream.frame_budget = Duration::MAX;
         // Model a 173-frame, 498x452 canvas (149 MiB if retained at source size).
         stream.frames = image::Frames::new(Box::new((0..173).map(|n| {
             Ok(image::Frame::from_parts(
@@ -933,6 +948,7 @@ pub(crate) mod tests {
             Arc::new(Budget::default()),
         )
         .unwrap();
+        stream.frame_budget = Duration::MAX;
         stream.frames = image::Frames::new(Box::new(
             (0..600).map(|_| Ok(image::Frame::new(image::RgbaImage::new(1, 1)))),
         ));
@@ -944,5 +960,31 @@ pub(crate) mod tests {
             count += 1;
         }
         assert_eq!(count, 600);
+    }
+    #[test]
+    fn only_consecutive_slow_frames_stop_an_animation() {
+        let budget = Duration::from_millis(200);
+        let (slow, fast) = (Duration::from_millis(250), Duration::from_millis(5));
+        let mut streak = 0;
+        for elapsed in [slow, slow, fast, slow] {
+            streak = slow_streak(streak, elapsed, budget);
+        }
+        assert!(streak < SLOW_FRAMES);
+        for _ in 0..SLOW_FRAMES {
+            streak = slow_streak(streak, slow, budget);
+        }
+        assert!(streak >= SLOW_FRAMES);
+
+        let mut stream = Stream::new(
+            gif().into(),
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(Budget::default()),
+        )
+        .unwrap();
+        stream.slow = SLOW_FRAMES;
+        assert!(matches!(
+            stream.frame(),
+            Err("animation: decode budget reached")
+        ));
     }
 }
