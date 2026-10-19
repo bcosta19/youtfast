@@ -8,6 +8,15 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Changed
+
+- The window opens without waiting for the installed fonts that draw the
+  scripts Inter lacks; they are found meanwhile and put in once ready. After a
+  while without opening the app, its first frame came 1.5 s sooner on the
+  benchmark machine ([docs/benchmarks.md](docs/benchmarks.md#startup)).
+- Thumbnails already on disk show at once instead of waiting behind the
+  page's downloads, and downloads keep their connections open.
+
 ### Fixed
 
 - A network failure while fetching YouTube's visitor data, which the first

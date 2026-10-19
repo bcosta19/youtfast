@@ -154,6 +154,11 @@ this guide and the repository's own contribution policy take precedence.
   writes it (`Command::SaveSettings`), and `on_exit` saves directly.
 - `src/icons.rs` lists the Lucide icons fastframe-icons shares with the
   sibling apps; `fastframe_icons::install` serves them to egui.
+- The window does not wait for the installed fonts that draw the scripts
+  Inter lacks: finding them probes every installed font (1.5 s from disk),
+  so `theme::SystemFonts` looks on a thread started in `main`, and `App`
+  swaps them in once found. `theme::install_fonts` is the synchronous path
+  for tests and the demo.
 - `src/theme.rs` is the palette: YouTube's dark and light defaults, the
   mapping onto `egui::Visuals`, and the fastframe-theme catalogue's
   desktop integration (shared presets, Omarchy on Linux, followed live).
@@ -224,6 +229,9 @@ large scratch files in `/tmp`.
   limited to 4 MiB, 4096 pixels per side and four million pixels; the disk cache
   is limited to 2,000 files and 128 MiB. Requests retry with backoff, and late
   failures must not recreate retry entries for images already forgotten.
+  A kept file answers without a download turn (`thumbs::cached`); only
+  downloads wait, `thumbs::DOWNLOADS` at a time, through one keep-alive
+  agent.
 - Logs and external errors use controlled messages, also under `--verbose`
   and `RUST_LOG`. `account::CacheFile` sanitizes both reads and writes, retaining
   only public client/deobfuscation data; a cache cannot restore credentials.

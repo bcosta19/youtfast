@@ -32,16 +32,19 @@ struct Cache {
     repaired: HashSet<String>,
 }
 impl Cache {
-    fn request(&mut self, url: &str, now: f64) {
+    /// Queues `url` for the backend; false when it is already on its way
+    /// or waiting to be retried.
+    fn request(&mut self, url: &str, now: f64) -> bool {
         if self
             .failed
             .get(url)
             .is_some_and(|f| f.retry_at.is_none_or(|at| now < at))
             || !self.asked.insert(url.to_owned())
         {
-            return;
+            return false;
         }
         self.wanted.push((url.to_owned(), false));
+        true
     }
     fn completed(&mut self, url: &str, result: &Result<Arc<[u8]>, Failure>, now: f64, seen: bool) {
         self.asked.remove(url);
@@ -165,7 +168,11 @@ pub fn remote<'a>(ui: &Ui, url: &'a str) -> Image<'a> {
         if cache.loaded.contains(url) {
             return Image::new(memory_uri(&cache.dir, url));
         }
-        cache.request(url, now);
+        // The next pass hands the request to the backend; it should not
+        // wait for unrelated input to come.
+        if cache.request(url, now) {
+            ctx.request_repaint();
+        }
         if let Some(retry) = cache.failed.get(url).and_then(|f| f.retry_at) {
             ctx.request_repaint_after(std::time::Duration::from_secs_f64(
                 (retry - now).clamp(0.1, 60.0),
@@ -341,6 +348,13 @@ mod tests {
         assert!(!c.retry("limited", 299.0, false));
         c.request("limited", 300.0);
         assert_eq!(c.wanted.last(), Some(&("limited".to_owned(), false)));
+    }
+    #[test]
+    fn a_url_is_queued_once_while_on_its_way() {
+        let mut c = cache();
+        assert!(c.request("synthetic", 0.0));
+        assert!(!c.request("synthetic", 0.0));
+        assert_eq!(c.wanted.len(), 1);
     }
     #[test]
     fn expired_source_and_corrupt_cache_are_retried_only_once() {

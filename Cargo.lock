@@ -6398,6 +6398,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tokio",
+ "ureq",
  "windows-native-keyring-store",
  "zbus-secret-service-keyring-store",
 ]

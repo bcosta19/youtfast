@@ -497,7 +497,7 @@ struct Context {
     /// Thumbnails being downloaded to the disk cache; a URL goes in while
     /// its fetch runs so it is not fetched twice at once.
     thumb_pending: Arc<std::sync::Mutex<HashSet<String>>>,
-    /// At most this many thumbnail fetches at a time.
+    /// At most this many thumbnail downloads at a time.
     thumb_sem: Arc<tokio::sync::Semaphore>,
 }
 
@@ -538,7 +538,7 @@ impl Backend {
             loads: Arc::new(std::sync::Mutex::new(HashMap::new())),
             rss: Arc::new(std::sync::Mutex::new(HashMap::new())),
             thumb_pending: Arc::new(std::sync::Mutex::new(HashSet::new())),
-            thumb_sem: Arc::new(tokio::sync::Semaphore::new(4)),
+            thumb_sem: Arc::new(tokio::sync::Semaphore::new(crate::thumbs::DOWNLOADS)),
         };
         let backend = Self {
             commands,
@@ -935,13 +935,30 @@ async fn handle(command: Command, context: Context) {
                 let path = crate::thumbs::path(&dir, &url);
                 let context = context.clone();
                 tokio::spawn(async move {
-                    let _permit = context.thumb_sem.acquire().await;
-                    let task = url.clone();
-                    let result = tokio::task::spawn_blocking(move || {
-                        crate::thumbs::load_or_fetch(&task, &path, refresh)
-                    })
-                    .await
-                    .unwrap_or(Err(crate::thumbs::Failure::Network));
+                    // A kept file answers at once: only downloads wait for
+                    // a turn, so a page's cached thumbnails never queue
+                    // behind its new ones.
+                    let kept = if refresh {
+                        None
+                    } else {
+                        let path = path.clone();
+                        tokio::task::spawn_blocking(move || crate::thumbs::cached(&path))
+                            .await
+                            .ok()
+                            .flatten()
+                    };
+                    let result = match kept {
+                        Some(bytes) => Ok(bytes),
+                        None => {
+                            let _permit = context.thumb_sem.acquire().await;
+                            let task = url.clone();
+                            tokio::task::spawn_blocking(move || {
+                                crate::thumbs::load_or_fetch(&task, &path, refresh)
+                            })
+                            .await
+                            .unwrap_or(Err(crate::thumbs::Failure::Network))
+                        }
+                    };
                     if let Err(reason) = &result {
                         log::warn!("{}", reason.code());
                     }
@@ -1665,5 +1682,74 @@ mod tests {
             })
             .ordered()
         );
+    }
+
+    #[tokio::test]
+    async fn kept_thumbnails_answer_while_downloads_hold_every_turn() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("kept-thumbnail-turns-{}", std::process::id()));
+        let dirs = Dirs {
+            data: root.join("data"),
+            config: root.join("config"),
+            cache: root.join("cache"),
+        };
+        let url = "https://i.ytimg.com/vi/synthetic/mqdefault.jpg".to_owned();
+        let kept = crate::thumbs::path(&dirs.cache.join("thumbnails"), &url);
+        std::fs::create_dir_all(kept.parent().unwrap()).unwrap();
+        let mut png = Vec::new();
+        image::ImageEncoder::write_image(
+            image::codecs::png::PngEncoder::new(&mut png),
+            &[0, 0, 0, 255],
+            1,
+            1,
+            image::ExtendedColorType::Rgba8,
+        )
+        .unwrap();
+        std::fs::write(&kept, &png).unwrap();
+        let (outgoing, events) = mpsc::channel();
+        let context = Context {
+            rp: innertube::client(&dirs).unwrap(),
+            dirs,
+            events: outgoing,
+            epoch: 0,
+            waker: egui::Context::default(),
+            alerts_timer: Arc::default(),
+            library_saves: Arc::new(watch::channel(None).0),
+            settings_saves: Arc::new(watch::channel(None).0),
+            account_writes: Arc::default(),
+            loads: Arc::default(),
+            rss: Arc::default(),
+            thumb_pending: Arc::default(),
+            thumb_sem: Arc::new(tokio::sync::Semaphore::new(crate::thumbs::DOWNLOADS)),
+        };
+        // Slow downloads hold every turn.
+        let _turns = context
+            .thumb_sem
+            .clone()
+            .acquire_many_owned(crate::thumbs::DOWNLOADS as u32)
+            .await
+            .unwrap();
+        handle(
+            Command::CacheThumbnails(vec![(url.clone(), false)]),
+            context,
+        )
+        .await;
+        let answer = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                if let Ok((_, event)) = events.try_recv() {
+                    break event;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("a kept thumbnail answers without a download turn");
+        assert!(matches!(
+            answer,
+            Event::Thumbnail { url: answered, result: Ok(bytes) }
+                if answered == url && bytes.as_ref() == png.as_slice()
+        ));
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
