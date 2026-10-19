@@ -109,6 +109,10 @@ impl VisitorDataCache {
     }
 
     /// Fetch a new visitor data ID and store it in the cache
+    ///
+    /// A transport failure is an `Err`, not a panic: a `panic` here would end
+    /// the task that awaited this call, and the caller of the request never
+    /// sees an answer.
     pub async fn new_visitor_data(&self) -> Result<String, Error> {
         let vd = self.fetch_visitor_data().await?;
 
