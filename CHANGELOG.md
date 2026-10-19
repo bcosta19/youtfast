@@ -20,6 +20,12 @@ are the distribution record.
   console, menus, command palette), which YouTFast never shows: six fewer
   threads and a little less memory from the start.
 
+### Fixed
+
+- A network failure while fetching YouTube's visitor data, which the first
+  requests of a session do, no longer closes the app: the page shows the
+  error and can be retried.
+
 ## [0.1.0] - 2026-10-17
 
 First release, published as a pre-release for Linux x86_64, Windows x86_64 and

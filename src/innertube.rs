@@ -741,6 +741,24 @@ fn absolute(url: &str) -> String {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn a_failed_visitor_data_fetch_is_an_error_not_a_crash() {
+        // Requests go through a proxy nothing listens on, so the fetch fails
+        // without leaving this machine. The release build aborts on any
+        // panic, so the failure has to come back as an error.
+        let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let proxy = format!("http://{}", closed.local_addr().unwrap());
+        drop(closed);
+        let client = reqwest::ClientBuilder::new().proxy(reqwest::Proxy::all(proxy).unwrap());
+        let rp = RustyPipe::builder()
+            .no_storage()
+            .no_reporter()
+            .no_botguard()
+            .build_with_client(client)
+            .unwrap();
+        assert!(rp.query().get_visitor_data(true).await.is_err());
+    }
+
     /// TextComponent is non_exhaustive, so tests build it from JSON.
     fn from_json(json: &str) -> TextComponent {
         serde_json::from_str(json).unwrap()

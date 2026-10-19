@@ -73,8 +73,9 @@ this guide and the repository's own contribution policy take precedence.
   and each write is shown at once and undone if YouTube refuses it.
   rustypipe is a copy in `vendor/rustypipe` (`[patch.crates-io]`): 0.11.4
   with upstream PR #80 (codeberg.org/ThetaDev/rustypipe) applied, for
-  comment authors' avatars and the comment count; drop the copy once a
-  release carries it.
+  comment authors' avatars and the comment count, and with a failed
+  visitor-data fetch returned as an error instead of unwrapped (a panic
+  aborts the release build); drop the copy once a release carries both.
 - `src/alerts.rs` is the new-upload check's brain: a pure split of a
   feed's videos into unseen (`alerts_seen_at`) and not-yet-notified
   (`alerts_notified_at`) stamps the library keeps. A tokio timer in
