@@ -16,6 +16,9 @@ are the distribution record.
   benchmark machine ([docs/benchmarks.md](docs/benchmarks.md#startup)).
 - Thumbnails already on disk show at once instead of waiting behind the
   page's downloads, and downloads keep their connections open.
+- The player no longer loads mpv's own interface scripts (statistics,
+  console, menus, command palette), which YouTFast never shows: six fewer
+  threads and a little less memory from the start.
 
 ### Fixed
 

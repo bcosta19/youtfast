@@ -327,6 +327,31 @@ impl Mpv {
                 );
             }
         }
+        // mpv's own interface scripts (statistics, console, menus, command
+        // palette, conditional profiles) each start a Lua thread at
+        // initialize; YouTFast draws its own interface and keeps only the
+        // ytdl hook. Each option goes by mpv's current name, then the one
+        // older releases used; a release without either lacks the script
+        // too, so a rejection says nothing worth logging.
+        for names in [
+            &[c"load-stats-overlay"][..],
+            &[c"load-console", c"load-osd-console"],
+            &[c"load-select"],
+            &[c"load-positioning"],
+            &[c"load-context-menu"],
+            &[c"load-commands"],
+            &[c"load-auto-profiles"],
+        ] {
+            for name in names {
+                // SAFETY: valid handle and NUL-terminated strings.
+                if unsafe {
+                    ffi::mpv_set_option_string(handle.ptr(), name.as_ptr(), c"no".as_ptr())
+                } >= 0
+                {
+                    break;
+                }
+            }
+        }
         // SAFETY: valid handle, options set, not yet initialized.
         check(unsafe { ffi::mpv_initialize(handle.ptr()) }, "starting mpv")?;
 
@@ -803,6 +828,26 @@ unsafe extern "C" fn wake(context: *mut c_void) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Scripts start on threads of their own during initialize, and Linux
+    /// lists threads by name.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn of_mpvs_own_scripts_only_the_ytdl_hook_runs() {
+        let player = Mpv::new(&egui::Context::default(), 1080, 0.0, Vec::new()).unwrap();
+        let scripts: Vec<String> = std::fs::read_dir("/proc/self/task")
+            .unwrap()
+            .filter_map(|task| std::fs::read_to_string(task.ok()?.path().join("comm")).ok())
+            .map(|name| name.trim().to_owned())
+            .filter(|name| name.starts_with("lua/"))
+            .collect();
+        // An mpv built without Lua runs no script at all.
+        assert!(
+            scripts.is_empty() || scripts == ["lua/ytdl_hook"],
+            "{scripts:?}"
+        );
+        drop(player);
+    }
 
     #[test]
     fn reads_why_yt_dlp_failed() {
