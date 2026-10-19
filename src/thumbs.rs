@@ -9,6 +9,9 @@ use std::path::{Path, PathBuf};
 const KEEP: usize = 2000;
 const MAX_BYTES: u64 = 4 * 1024 * 1024;
 const DISK_BYTES: u64 = 128 * 1024 * 1024;
+/// How many thumbnails download at once; each keeps its connection open
+/// for the next one (see [`agent`]).
+pub const DOWNLOADS: usize = 4;
 static DISK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Where `url`'s bytes belong: a file named by the URL's hash.
@@ -53,6 +56,24 @@ impl Failure {
     }
 }
 
+/// The kept copy at `path`, when it is a regular file that passes the same
+/// checks as a download. Reading one needs no download turn.
+pub fn cached(path: &Path) -> Option<std::sync::Arc<[u8]>> {
+    use std::io::Read;
+    let meta = std::fs::symlink_metadata(path).ok()?;
+    if !meta.is_file() || meta.len() > MAX_BYTES {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)
+        .ok()?
+        .take(MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    validate(&bytes).ok()?;
+    Some(bytes.into())
+}
+
 /// A cache hit and a network response follow the same bounded validation path.
 /// A corrupt regular cache entry is repaired once; no other files are touched.
 pub fn load_or_fetch(
@@ -60,22 +81,12 @@ pub fn load_or_fetch(
     path: &Path,
     refresh: bool,
 ) -> Result<std::sync::Arc<[u8]>, Failure> {
-    use std::io::Read;
     if let Ok(meta) = std::fs::symlink_metadata(path) {
         if !meta.is_file() {
             return fetch(url, path);
         }
-        if !refresh && meta.len() <= MAX_BYTES {
-            let cached = std::fs::File::open(path).and_then(|file| {
-                let mut bytes = Vec::new();
-                file.take(MAX_BYTES + 1).read_to_end(&mut bytes)?;
-                Ok(bytes)
-            });
-            if let Ok(bytes) = cached
-                && validate(&bytes).is_ok()
-            {
-                return Ok(bytes.into());
-            }
+        if !refresh && let Some(bytes) = cached(path) {
+            return Ok(bytes);
         }
         let _disk = DISK.lock().unwrap();
         let _ = std::fs::remove_file(path);
@@ -112,12 +123,23 @@ fn retry_after(value: Option<&str>) -> u64 {
         })
         .unwrap_or(30)
 }
+/// One HTTP client for every thumbnail: its connections stay open between
+/// downloads, so a page of thumbnails does not pay a TLS handshake each.
+fn agent() -> &'static ureq::Agent {
+    static AGENT: std::sync::OnceLock<ureq::Agent> = std::sync::OnceLock::new();
+    AGENT.get_or_init(|| {
+        ureq::Agent::config_builder()
+            .timeout_global(Some(std::time::Duration::from_secs(20)))
+            .http_status_as_error(false)
+            .max_idle_connections_per_host(DOWNLOADS)
+            .build()
+            .into()
+    })
+}
+
 fn download(url: &str) -> Result<(Vec<u8>, bool), Failure> {
     use std::io::Read;
-    let mut response = ehttp::Request::get(url)
-        .with_timeout(Some(std::time::Duration::from_secs(20)))
-        .fetch_raw_native(true)
-        .map_err(|_| Failure::Network)?;
+    let mut response = agent().get(url).call().map_err(|_| Failure::Network)?;
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         return Err(match status {
@@ -385,6 +407,78 @@ mod tests {
         assert!((598..=600).contains(&retry_after(Some(&future))));
         assert_eq!(retry_after(Some("invalid")), 30);
     }
+    #[test]
+    fn only_a_regular_file_within_the_limits_that_decodes_is_kept() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("kept-thumbnails-{}", std::process::id()));
+        std::fs::create_dir(&dir).unwrap();
+        let image = png();
+        std::fs::write(dir.join("valid"), &image).unwrap();
+        std::fs::write(dir.join("corrupt"), b"broken").unwrap();
+        std::fs::write(dir.join("large"), vec![0; MAX_BYTES as usize + 1]).unwrap();
+        std::fs::create_dir(dir.join("folder")).unwrap();
+        assert_eq!(
+            cached(&dir.join("valid")).as_deref(),
+            Some(image.as_slice())
+        );
+        for name in ["corrupt", "large", "folder", "missing"] {
+            assert!(cached(&dir.join(name)).is_none(), "{name}");
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Answers `bodies` in turn on the first connection it accepts, keeping
+    /// it open; returns how many it answered and how many connections came.
+    fn keep_alive_server(
+        bodies: Vec<Vec<u8>>,
+    ) -> (String, std::thread::JoinHandle<(usize, usize)>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/", listener.local_addr().unwrap());
+        let worker = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                .unwrap();
+            let mut answered = 0;
+            for body in bodies {
+                let mut head = Vec::new();
+                let mut byte = [0; 1];
+                while !head.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
+                    head.push(byte[0]);
+                }
+                if !head.ends_with(b"\r\n\r\n") {
+                    break;
+                }
+                let header = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", body.len());
+                stream.write_all(header.as_bytes()).unwrap();
+                stream.write_all(&body).unwrap();
+                answered += 1;
+            }
+            listener.set_nonblocking(true).unwrap();
+            let others = std::iter::from_fn(|| listener.accept().ok()).count();
+            (answered, 1 + others)
+        });
+        (url, worker)
+    }
+
+    #[test]
+    fn downloads_reuse_their_connection() {
+        let image = png();
+        let (url, worker) = keep_alive_server(vec![image.clone(), image.clone()]);
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("keep-alive-thumbnails-{}", std::process::id()));
+        std::fs::create_dir(&dir).unwrap();
+        for (page, file) in [("first", "a"), ("second", "b")] {
+            let bytes = fetch(&format!("{url}{page}"), &dir.join(file)).unwrap();
+            assert_eq!(bytes.as_ref(), image);
+        }
+        assert_eq!(worker.join().unwrap(), (2, 1));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn response_headers_control_disk_storage_and_retry_delay() {
         let image = png();

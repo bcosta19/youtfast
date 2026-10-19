@@ -248,9 +248,80 @@ fn text_rendering() -> fastframe_text::TextRendering {
 /// installed faces behind it for other scripts, drawn the way the desktop
 /// renders text: the siblings' setup.
 pub fn install_fonts(ctx: &egui::Context) {
-    let mut fonts = fastframe_fonts::FontSetup::default().definitions();
+    ctx.set_fonts(font_definitions(true));
+}
+
+fn font_definitions(system_fallbacks: bool) -> egui::FontDefinitions {
+    let mut fonts = fastframe_fonts::FontSetup::default()
+        .system_fallbacks(system_fallbacks)
+        .definitions();
     text_rendering().apply_to(&mut fonts);
-    ctx.set_fonts(fonts);
+    fonts
+}
+
+/// The installed faces for the scripts Inter does not draw, looked for on
+/// a thread of their own. Finding them probes every installed font, which
+/// takes a second or more when the files are not in memory, so the window
+/// opens with the rest of [`install_fonts`]'s setup and they follow.
+pub struct SystemFonts {
+    found: std::sync::mpsc::Receiver<egui::FontDefinitions>,
+    /// Woken when the search ends after the window opened.
+    waker: std::sync::Arc<std::sync::OnceLock<egui::Context>>,
+}
+
+impl SystemFonts {
+    /// Starts looking; called before the window is made, so the search
+    /// overlaps its setup.
+    pub fn find() -> Self {
+        let (sender, fonts) = Self::channel();
+        let wake = std::sync::Arc::clone(&fonts.waker);
+        // A thread that cannot start leaves the channel disconnected, and
+        // `poll` then searches on the caller's thread.
+        let _ = std::thread::Builder::new()
+            .name("youtfast-fonts".into())
+            .spawn(move || {
+                if sender.send(font_definitions(true)).is_ok()
+                    && let Some(ctx) = wake.get()
+                {
+                    ctx.request_repaint();
+                }
+            });
+        fonts
+    }
+
+    fn channel() -> (std::sync::mpsc::SyncSender<egui::FontDefinitions>, Self) {
+        let (sender, found) = std::sync::mpsc::sync_channel(1);
+        let fonts = Self {
+            found,
+            waker: std::sync::Arc::default(),
+        };
+        (sender, fonts)
+    }
+
+    /// Gives `ctx` every font if the search is over, else everything but
+    /// the installed faces. Returns whether the fonts are complete.
+    pub fn install(&self, ctx: &egui::Context) -> bool {
+        // Known before looking, so a search ending in between still wakes
+        // the window.
+        let _ = self.waker.set(ctx.clone());
+        if self.poll(ctx) {
+            return true;
+        }
+        ctx.set_fonts(font_definitions(false));
+        false
+    }
+
+    /// Swaps in the complete fonts once found; true when they are in.
+    pub fn poll(&self, ctx: &egui::Context) -> bool {
+        match self.found.try_recv() {
+            Ok(fonts) => ctx.set_fonts(fonts),
+            Err(std::sync::mpsc::TryRecvError::Empty) => return false,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => install_fonts(ctx),
+        }
+        // New fonts take effect from the next pass.
+        ctx.request_repaint();
+        true
+    }
 }
 
 /// Applies the palette to egui's own widgets so dialogs, menus, and text
@@ -423,5 +494,39 @@ mod tests {
             include_str!("../contrib/omarchy/youtfast-theme"),
             fastframe_theme::omarchy::hook_script("youtfast")
         );
+    }
+
+    fn fonts_in(ctx: &egui::Context) -> egui::FontDefinitions {
+        // Fonts given to egui take effect from the next pass.
+        let mut output = ctx.run_ui(egui::RawInput::default(), |_| {});
+        output.textures_delta.clear();
+        ctx.fonts(|fonts| fonts.definitions().clone())
+    }
+
+    #[test]
+    fn the_window_opens_without_installed_faces_and_takes_them_once_found() {
+        let ctx = egui::Context::default();
+        let (sender, fonts) = SystemFonts::channel();
+        assert!(!fonts.install(&ctx));
+        assert!(!fonts.poll(&ctx));
+        assert!(fonts_in(&ctx) == font_definitions(false));
+        // What the search found, told apart by a family of its own.
+        let mut found = font_definitions(false);
+        found.families.insert(
+            egui::FontFamily::Name("found".into()),
+            vec![fastframe_fonts::INTER_REGULAR.to_owned()],
+        );
+        sender.send(found.clone()).unwrap();
+        assert!(fonts.poll(&ctx));
+        assert!(fonts_in(&ctx) == found);
+    }
+
+    #[test]
+    fn a_search_that_never_answers_is_done_on_the_spot() {
+        let ctx = egui::Context::default();
+        let (sender, fonts) = SystemFonts::channel();
+        drop(sender);
+        assert!(fonts.install(&ctx));
+        assert!(fonts_in(&ctx) == font_definitions(true));
     }
 }
