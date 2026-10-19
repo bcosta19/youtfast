@@ -10,6 +10,12 @@ are the distribution record.
 
 ### Changed
 
+- The window opens without waiting for the installed fonts that draw the
+  scripts Inter lacks; they are found meanwhile and put in once ready. After a
+  while without opening the app, its first frame came 1.5 s sooner on the
+  benchmark machine ([docs/benchmarks.md](docs/benchmarks.md#startup)).
+- Thumbnails already on disk show at once instead of waiting behind the
+  page's downloads, and downloads keep their connections open.
 - The player no longer loads mpv's own interface scripts (statistics,
   console, menus, command palette), which YouTFast never shows: six fewer
   threads and a little less memory from the start.
