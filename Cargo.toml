@@ -79,7 +79,7 @@ ehttp = "0.7"
 # same version and features, so their connections stay open between them.
 ureq = "3"
 # The window's icon, drawn from packaging/icons as in ZapFast.
-resvg = { version = "0.45", default-features = false }
+resvg = { version = "0.48", default-features = false }
 # SponsorBlock's lookups name a prefix of the video id's SHA-256, not the id.
 sha2 = "0.11"
 
