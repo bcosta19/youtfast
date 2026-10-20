@@ -6,6 +6,10 @@ for release gates. This repository can be built without sibling checkouts.
 `../spotifast` and `../zapfast`, when available, are convention references;
 this guide and the repository's own contribution policy take precedence.
 
+Anything that talks to YouTube can break when YouTube changes its responses:
+read [docs/youtube-api-format.md](docs/youtube-api-format.md) before working
+on it, and follow [YouTube response formats](#youtube-response-formats).
+
 ## Product boundaries
 
 - Keep it a small native client. No browser engine, no telemetry, no hosted
@@ -80,8 +84,10 @@ this guide and the repository's own contribution policy take precedence.
   order}` under field 8, 7 on Shorts), Shorts items read their
   `thumbnailViewModel`, the Playlists tab sends its new `params`, podcast
   lockups count as playlists, and header metadata parts are told apart by
-  their field (`MetadataPart` is untagged). Drop the copy once a release
-  carries these changes.
+  their field (`MetadataPart` is untagged). The `regression` feature (a
+  dev-dependency feature only) exposes `client::regression`, the hooks
+  `tests/youtube_api.rs` calls. Drop the copy once a release carries these
+  changes.
 - `src/alerts.rs` is the new-upload check's brain: a pure split of a
   feed's videos into unseen (`alerts_seen_at`) and not-yet-notified
   (`alerts_notified_at`) stamps the library keeps. A tokio timer in
@@ -188,10 +194,41 @@ RustyPipe search, i18n, persistence and the offline demo are in the tree.
 0.1.0 targets Linux x86_64, Windows x86_64 and macOS Apple Silicon; candidate
 packaging is not completed interactive platform qualification.
 
+## YouTube response formats
+
+YouTube changes InnerTube's parameters and responses without notice. A change
+either gets requests refused, or makes rustypipe skip items silently (lists
+deserialize through `MapResult`/`VecSkipError`), so a tab comes back empty or
+a field takes another's value without any error.
+
+- Before changing anything that builds requests to YouTube or reads its
+  responses (`vendor/rustypipe`, `src/innertube*.rs`, `src/backend.rs`
+  loads), and whenever a listing comes back empty, wrong or refused, read
+  [docs/youtube-api-format.md](docs/youtube-api-format.md). Check the known
+  changes (`YT-n`) first: a new symptom is often an old one in another place.
+- Whenever a bug turns out to come from a YouTube format change, in the same
+  PR as the fix:
+  1. add a `YT-n` entry to `docs/youtube-api-format.md` (symptom, old
+     format, new format, fix, tests);
+  2. add regression tests named `ytn_…` to `tests/youtube_api.rs` that pass
+     on the new format and fail on the old one. Prove the second part: put
+     the old behaviour back for a moment and watch the test fail.
+- `tests/youtube_api.rs` reaches the vendored code through
+  `rustypipe::client::regression`; add a hook there when a test needs a code
+  path it does not reach yet. Keep the JSON trimmed and synthetic: no raw
+  responses, real tokens of accounts, or personal data.
+- Unit tests inside `vendor/rustypipe` do not run in CI: the crate is not a
+  workspace member and its fixtures are not vendored. A guarantee that must
+  hold belongs in `tests/youtube_api.rs`.
+- Confirm a fix live, with a request to YouTube outside the app, before
+  calling it done: recorded fixtures keep passing after YouTube changes.
+
 ## Definition of done
 
 - Add focused tests for changed behaviour (see `src/youtube.rs` and
   `src/util.rs`).
+- A bug caused by a YouTube format change also gets its `YT-n` entry and
+  regression tests ([YouTube response formats](#youtube-response-formats)).
 - Run the checks before finishing:
 
   ```sh

@@ -62,6 +62,9 @@ rss = ["dep:quick-xml"]
 rustls-tls-native-roots = ["reqwest/rustls-tls-native-roots"]
 rustls-tls-webpki-roots = ["reqwest/rustls-tls-webpki-roots"]
 userdata = []
+# YouTFast: exposes `client::regression` to its response-format regression
+# tests (tests/youtube_api.rs). Enabled only as a dev-dependency feature.
+regression = []
 
 [lib]
 name = "rustypipe"
