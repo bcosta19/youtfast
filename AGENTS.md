@@ -250,11 +250,9 @@ large scratch files in `/tmp`.
   Native platform tests are not interactive QA.
 - Keep Actions pinned to reviewed SHAs and contributor permissions read-only.
   Never execute contributor code through `pull_request_target` with secrets.
-- The repository is public since 2026-10-17, created from a cleaned history
-  (no raw RustyPipe report, author e-mail replaced by the GitHub noreply
-  address). The original history lives only in the private, archived
-  `bcosta19/youtfast-private-archive`; never push from it or open the report.
-  Never commit raw API reports, cookies, logs or personal data.
+- Never commit raw API reports, cookies, logs or personal data. The
+  repository holds documents about the application only: diagnoses, reviews
+  and notes of local work stay out of it.
 - `main` is protected: `release-gate` required, linear history, no force
   pushes or deletion; the maintainer may push directly. Actions are limited to
   GitHub-owned, `msys2/setup-msys2` and `Swatinem/rust-cache`, SHA-pinned.
