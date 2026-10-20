@@ -30,7 +30,7 @@ struct QChannel<'a> {
 }
 
 #[derive(Debug, Serialize)]
-enum ChannelTab {
+pub(crate) enum ChannelTab {
     #[serde(rename = "EgZ2aWRlb3PyBgQKAjoA")]
     Videos,
     #[serde(rename = "EgZzaG9ydHPyBgUKA5oBAA%3D%3D")]
@@ -457,24 +457,9 @@ fn map_channel(
             }
             response::channel::Header::PageHeaderRenderer(header) => {
                 let hdata = header.content.page_header_view_model;
-                // channel handle - subscriber count - video count
                 let md_rows = hdata.metadata.content_metadata_view_model.metadata_rows;
-                let (sub_part, vc_part) = if md_rows.len() > 1 {
-                    let mp = &md_rows[1].metadata_parts;
-                    (mp.first(), mp.get(1))
-                } else {
-                    (
-                        md_rows.first().and_then(|md| md.metadata_parts.get(1)),
-                        None,
-                    )
-                };
-                let subscriber_count = sub_part.and_then(|t| {
-                    util::parse_large_numstr_or_warn::<u64>(t.as_str(), ctx.lang, &mut warnings)
-                });
-                // A large count is abbreviated like the subscribers ("2.2K videos").
-                let video_count = vc_part.and_then(|t| {
-                    util::parse_large_numstr_or_warn::<u64>(t.as_str(), ctx.lang, &mut warnings)
-                });
+                let (subscriber_count, video_count) =
+                    header_counts(&md_rows, ctx.lang, &mut warnings);
 
                 Channel {
                     id: metadata.external_id,
@@ -623,13 +608,38 @@ fn combine_channel_data<T>(channel_data: Channel<()>, content: T) -> Channel<T> 
     }
 }
 
+/// The subscriber and video counts of a channel's page header.
+///
+/// Rows: channel handle, then subscriber count and video count. A large
+/// video count is abbreviated like the subscribers ("2.2K videos").
+pub(crate) fn header_counts(
+    md_rows: &[response::PhMetadataRow],
+    lang: Language,
+    warnings: &mut Vec<String>,
+) -> (Option<u64>, Option<u64>) {
+    let (sub_part, vc_part) = if md_rows.len() > 1 {
+        let mp = &md_rows[1].metadata_parts;
+        (mp.first(), mp.get(1))
+    } else {
+        (
+            md_rows.first().and_then(|md| md.metadata_parts.get(1)),
+            None,
+        )
+    };
+    let subscriber_count =
+        sub_part.and_then(|t| util::parse_large_numstr_or_warn::<u64>(t.as_str(), lang, warnings));
+    let video_count =
+        vc_part.and_then(|t| util::parse_large_numstr_or_warn::<u64>(t.as_str(), lang, warnings));
+    (subscriber_count, video_count)
+}
+
 /// Get the continuation token to fetch channel videos in the given order
 ///
 /// Since October 2026 YouTube refuses the older layout (the target as field 2,
 /// the order as fields 3/4/5 beside it) with "Request contains an invalid
 /// argument". The tab now holds one message, `{1: target, 3: order}`, under
 /// field 8 (7 on the Shorts tab), as the sort chips of a channel tab send it.
-fn order_ctoken(
+pub(crate) fn order_ctoken(
     channel_id: &str,
     tab: ChannelVideoTab,
     order: ChannelOrder,

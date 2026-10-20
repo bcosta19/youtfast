@@ -3,6 +3,10 @@
 pub(crate) mod response;
 
 mod channel;
+/// Hooks for YouTFast's response-format regression tests; not a stable API.
+#[cfg(feature = "regression")]
+#[doc(hidden)]
+pub mod regression;
 mod music_artist;
 mod music_charts;
 mod music_details;
