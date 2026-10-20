@@ -25,6 +25,9 @@ are the distribution record.
 - A network failure while fetching YouTube's visitor data, which the first
   requests of a session do, no longer closes the app: the page shows the
   error and can be retried.
+- Sorting a channel's videos, Shorts or live streams by Latest, Popular or
+  Oldest works again: YouTube had started refusing the request.
+- A channel's Shorts tab lists its Shorts again instead of showing none.
 
 ## [0.1.0] - 2026-10-17
 
