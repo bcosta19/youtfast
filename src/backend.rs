@@ -676,8 +676,8 @@ async fn dispatch(ordered: bool, task: impl Future<Output = ()> + Send + 'static
 }
 
 /// A load may not outlive this: the interface shows the listing as failed
-/// with a fixed message rather than a spinner forever
-/// (`docs/diagnostics/for-you-loading-2026-10-16.md`).
+/// with a fixed message rather than a spinner forever, as For you once did
+/// when a request never answered.
 const LOAD_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// The deadline of a load. The feed has none: it reads the RSS of every device
