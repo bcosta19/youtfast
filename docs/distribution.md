@@ -2,8 +2,8 @@
 
 0.1.0 targets Linux x86_64, Windows x86_64 and macOS Apple Silicon. Workflows
 prepare candidates; new platform packaging is not certified by interactive
-testing just because these files exist. See [ROADMAP.md](../ROADMAP.md) and the
-[release checklist](public-release-checklist.md) for outstanding gates.
+testing just because these files exist. See [ROADMAP.md](../ROADMAP.md) for
+outstanding gates.
 
 ## Package matrix
 

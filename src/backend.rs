@@ -675,6 +675,75 @@ async fn dispatch(ordered: bool, task: impl Future<Output = ()> + Send + 'static
     }
 }
 
+/// A load may not outlive this: a request that never answers shows the
+/// listing as failed, with a fixed message, rather than a spinner forever.
+const LOAD_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// The deadline of a load. The feed has none: it reads the RSS of every device
+/// subscription, eight at a time, so a cold cache of a large Takeout outgrows
+/// any fixed minute, and each channel already answers its own failure.
+fn deadline_of(request: &Request) -> Option<std::time::Duration> {
+    match request {
+        Request::Feed { .. } => None,
+        _ => Some(LOAD_DEADLINE),
+    }
+}
+
+/// Fixed failure texts: they never echo the payload, which a panic message of
+/// a dependency can carry.
+const LOAD_NO_ANSWER: &str = "the listing's task stopped before an answer";
+const LOAD_OVERDUE: &str = "the listing's task outlived its minute";
+
+/// Aborts the load it watches when dropped. Dropping the watcher (the slot's
+/// request was superseded and its task aborted) is what stops the load.
+struct AbortOnDrop(tokio::task::AbortHandle);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+/// Runs `future` in its own task and answers its result, a panic (an
+/// `unwrap` on a missing line in rustypipe, say) or an overdue load with a
+/// failure whose text carries no payload. Every ending sends the
+/// `Event::Loaded`: the interface is never left loading forever.
+///
+/// Only builds that unwind (development builds and tests) ever see the
+/// panic arm: the release build sets `panic = "abort"`, so there a panic
+/// ends the process before the task can report it. What a release build
+/// gets from this is the deadline.
+///
+/// The outcome of the inner task is only inspected after a completion: the
+/// watcher aborts what still runs when it itself is dropped (also on the
+/// deadline), so a superseded slot's load stops with its watcher's abort.
+async fn watched<R: Send + 'static>(
+    future: impl Future<Output = Result<R, String>> + Send + 'static,
+    deadline: Option<std::time::Duration>,
+) -> Result<R, String> {
+    let load_task = tokio::spawn(future);
+    // A named `let` keeps it alive to the end of the scope, when the abort of
+    // an unfinished load (also one stopped by the deadline) is asked for.
+    let _watcher = AbortOnDrop(load_task.abort_handle());
+    let outcome = match deadline {
+        Some(deadline) => tokio::time::timeout(deadline, load_task).await,
+        None => Ok(load_task.await),
+    };
+    match outcome {
+        // The load's own failure keeps its controlled text.
+        Ok(Ok(Ok(answer))) => Ok(answer),
+        Ok(Ok(Err(error))) => Err(error),
+        Ok(Err(_)) => {
+            log::error!("a load task panicked; its payload stays hidden");
+            Err(LOAD_NO_ANSWER.to_owned())
+        }
+        Err(_) => {
+            log::warn!("a load task outlived its deadline");
+            Err(LOAD_OVERDUE.to_owned())
+        }
+    }
+}
+
 async fn handle(command: Command, context: Context) {
     match command {
         Command::Load {
@@ -683,8 +752,14 @@ async fn handle(command: Command, context: Context) {
             request,
         } => {
             let worker = context.clone();
+            let loader = context.clone();
+            log::debug!("loading {slot:?} started");
+            let deadline = deadline_of(&request);
             let task = tokio::spawn(async move {
-                let result = load(&worker, request).await;
+                // Watched: a load that never answers still answers the
+                // interface, and so does a panic where builds unwind
+                // (`watched`).
+                let result = watched(async move { load(&loader, request).await }, deadline).await;
                 if let Err(error) = &result {
                     log::warn!("loading {slot:?} failed: {error}");
                 }
@@ -1289,6 +1364,71 @@ fn signed_in(context: &Context, account: &Account) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn a_load_that_panics_still_answers_with_a_controlled_failure() {
+        let answer: Result<(), String> = watched(
+            async { panic!("a synthetic panic") },
+            Some(std::time::Duration::from_secs(1)),
+        )
+        .await;
+        assert_eq!(answer.unwrap_err(), LOAD_NO_ANSWER);
+    }
+
+    #[tokio::test]
+    async fn an_overdue_load_answers_with_the_deadline_failure() {
+        let answer = watched(
+            std::future::pending::<Result<(), String>>(),
+            Some(std::time::Duration::from_millis(5)),
+        )
+        .await;
+        assert_eq!(answer.unwrap_err(), LOAD_OVERDUE);
+    }
+
+    #[tokio::test]
+    async fn a_normal_load_passes_its_answer_through() {
+        let answer = watched(
+            async { Ok::<u8, String>(7) },
+            Some(std::time::Duration::from_secs(1)),
+        )
+        .await;
+        assert_eq!(answer, Ok(7));
+    }
+
+    #[tokio::test]
+    async fn a_failing_load_keeps_its_own_controlled_text() {
+        let answer = watched(
+            async { Err::<u8, String>("the feed is gone".into()) },
+            Some(std::time::Duration::from_secs(1)),
+        )
+        .await;
+        assert_eq!(answer.unwrap_err(), "the feed is gone");
+    }
+
+    #[tokio::test]
+    async fn a_load_without_deadline_still_answers_a_panic() {
+        let answer: Result<(), String> = watched(async { panic!("a synthetic panic") }, None).await;
+        assert_eq!(answer.unwrap_err(), LOAD_NO_ANSWER);
+    }
+
+    #[test]
+    fn only_the_feed_loads_without_deadline() {
+        let feed = Request::Feed {
+            channels: Vec::new(),
+            account: false,
+        };
+        assert_eq!(deadline_of(&feed), None);
+        assert_eq!(deadline_of(&Request::Subscriptions), Some(LOAD_DEADLINE));
+    }
+
+    #[tokio::test]
+    async fn dropping_the_watcher_stops_the_load_it_watches() {
+        let task = tokio::spawn(std::future::pending::<()>());
+        let watcher = AbortOnDrop(task.abort_handle());
+        drop(watcher);
+        // A task of `pending` can only end aborted.
+        assert!(task.await.is_err());
+    }
 
     #[test]
     fn search_requests_keep_filters_kind_generation_and_session_epoch() {

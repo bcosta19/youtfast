@@ -7,6 +7,10 @@
 /dist/
 /tasks.md
 /vendor/**/Cargo.lock
+# What the vendored crate's own tests download or leave behind: YouTube's
+# player scripts and pending insta snapshots.
+/vendor/rustypipe/testfiles/
+/vendor/**/*.snap.new
 /rustypipe_reports/
 /.flatpak-builder/
 /build-dir/

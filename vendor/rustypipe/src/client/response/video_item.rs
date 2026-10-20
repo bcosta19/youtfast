@@ -152,8 +152,25 @@ pub(crate) struct ReelItemRenderer {
 pub(crate) struct ShortsLockupViewModel {
     /// `shorts-shelf-item-[video_id]`
     pub entity_id: String,
+    /// Older layout of the thumbnail
+    #[serde(default)]
     pub thumbnail: Thumbnails,
+    /// Thumbnail since October 2026, which no longer sends `thumbnail`:
+    /// `thumbnailViewModel.thumbnailViewModel.image.sources`
+    pub thumbnail_view_model: Option<ShortsThumbnailViewModel>,
     pub overlay_metadata: ShortsOverlayMetadata,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ShortsThumbnailViewModel {
+    pub thumbnail_view_model: ShortsThumbnailImage,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ShortsThumbnailImage {
+    pub image: Thumbnails,
 }
 
 #[serde_as]
@@ -592,11 +609,17 @@ impl<T> YouTubeListMapper<T> {
 
     fn map_short_video2(&mut self, video: ShortsLockupViewModel) -> Option<VideoItem> {
         if let Some(video_id) = video.entity_id.strip_prefix("shorts-shelf-item-") {
+            let thumbnail = match video.thumbnail_view_model {
+                Some(view) if video.thumbnail.thumbnails.is_empty() => {
+                    view.thumbnail_view_model.image
+                }
+                _ => video.thumbnail,
+            };
             Some(VideoItem {
                 id: video_id.to_owned(),
                 name: video.overlay_metadata.primary_text,
                 duration: None,
-                thumbnail: video.thumbnail.into(),
+                thumbnail: thumbnail.into(),
                 channel: self.channel.clone(),
                 publish_date: None,
                 publish_date_txt: None,
@@ -964,5 +987,55 @@ impl YouTubeListMapper<PlaylistItem> {
     pub(crate) fn map_response(&mut self, mut res: MapResult<Vec<YouTubeListItem>>) {
         self.warnings.append(&mut res.warnings);
         res.c.into_iter().for_each(|item| self.map_item(item));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{YouTubeListItem, YouTubeListMapper};
+    use crate::{model::VideoItem, param::Language};
+
+    fn short(json: serde_json::Value) -> VideoItem {
+        let item: YouTubeListItem = serde_json::from_value(json).unwrap();
+        let mut mapper = YouTubeListMapper::<VideoItem>::new(Language::En);
+        mapper.map_item(item);
+        assert!(mapper.warnings.is_empty(), "{:?}", mapper.warnings);
+        mapper.items.pop().expect("the short is kept")
+    }
+
+    /// Since October 2026 the Shorts tab sends the thumbnail only as a
+    /// `thumbnailViewModel`; the item used to be dropped for lack of `thumbnail`.
+    #[test]
+    fn short_with_thumbnail_view_model() {
+        let video = short(serde_json::json!({ "shortsLockupViewModel": {
+            "entityId": "shorts-shelf-item-aaaaaaaaaaa",
+            "thumbnailViewModel": { "thumbnailViewModel": { "image": { "sources": [
+                { "url": "https://i.ytimg.com/vi/aaaaaaaaaaa/sardefault.jpg", "width": 405, "height": 720 }
+            ] } } },
+            "overlayMetadata": {
+                "primaryText": { "content": "A short" },
+                "secondaryText": { "content": "63M views" }
+            }
+        } }));
+        assert_eq!(video.id, "aaaaaaaaaaa");
+        assert_eq!(video.name, "A short");
+        assert_eq!(video.view_count, Some(63_000_000));
+        assert_eq!(video.thumbnail.len(), 1);
+        assert_eq!(video.thumbnail[0].height, 720);
+        assert!(video.is_short);
+    }
+
+    #[test]
+    fn short_with_older_thumbnail() {
+        let video = short(serde_json::json!({ "shortsLockupViewModel": {
+            "entityId": "shorts-shelf-item-bbbbbbbbbbb",
+            "thumbnail": { "sources": [
+                { "url": "https://i.ytimg.com/vi/bbbbbbbbbbb/frame0.jpg", "width": 1080, "height": 1920 }
+            ] },
+            "overlayMetadata": { "primaryText": { "content": "Another short" } }
+        } }));
+        assert_eq!(video.id, "bbbbbbbbbbb");
+        assert_eq!(video.thumbnail[0].width, 1080);
+        assert_eq!(video.view_count, None);
     }
 }

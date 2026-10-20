@@ -126,7 +126,7 @@ impl RustyPipeQuery {
         order: ChannelOrder,
     ) -> Result<Paginator<VideoItem>, Error> {
         self.continuation(
-            order_ctoken(channel_id.as_ref(), tab, order, &random_target()),
+            order_ctoken(channel_id.as_ref(), tab, order, &util::random_uuid()),
             ContinuationEndpoint::Browse,
             None,
         )
@@ -624,41 +624,50 @@ fn combine_channel_data<T>(channel_data: Channel<()>, content: T) -> Channel<T> 
 }
 
 /// Get the continuation token to fetch channel videos in the given order
+///
+/// Since October 2026 YouTube refuses the older layout (the target as field 2,
+/// the order as fields 3/4/5 beside it) with "Request contains an invalid
+/// argument". The tab now holds one message, `{1: target, 3: order}`, under
+/// field 8 (7 on the Shorts tab), as the sort chips of a channel tab send it.
 fn order_ctoken(
     channel_id: &str,
     tab: ChannelVideoTab,
     order: ChannelOrder,
     target_id: &str,
 ) -> String {
-    let mut pb_tab = ProtoBuilder::new();
-    pb_tab.string(2, target_id);
+    let (sort_field, sort) = match tab {
+        ChannelVideoTab::Videos => (
+            8,
+            match order {
+                ChannelOrder::Latest => 4,
+                ChannelOrder::Popular => 2,
+                ChannelOrder::Oldest => 5,
+            },
+        ),
+        ChannelVideoTab::Shorts => (
+            7,
+            match order {
+                ChannelOrder::Latest => 4,
+                ChannelOrder::Popular => 2,
+                ChannelOrder::Oldest => 5,
+            },
+        ),
+        ChannelVideoTab::Live => (
+            8,
+            match order {
+                ChannelOrder::Latest => 12,
+                ChannelOrder::Popular => 14,
+                ChannelOrder::Oldest => 13,
+            },
+        ),
+    };
 
-    match tab {
-        ChannelVideoTab::Videos => match order {
-            ChannelOrder::Latest => {
-                pb_tab.varint(3, 1);
-                pb_tab.varint(4, 4);
-            }
-            ChannelOrder::Popular => {
-                pb_tab.varint(3, 2);
-                pb_tab.varint(4, 2);
-            }
-            ChannelOrder::Oldest => {
-                pb_tab.varint(3, 4);
-                pb_tab.varint(4, 5);
-            }
-        },
-        ChannelVideoTab::Shorts => match order {
-            ChannelOrder::Latest => pb_tab.varint(4, 4),
-            ChannelOrder::Popular => pb_tab.varint(4, 2),
-            ChannelOrder::Oldest => pb_tab.varint(4, 5),
-        },
-        ChannelVideoTab::Live => match order {
-            ChannelOrder::Latest => pb_tab.varint(5, 12),
-            ChannelOrder::Popular => pb_tab.varint(5, 14),
-            ChannelOrder::Oldest => pb_tab.varint(5, 13),
-        },
-    }
+    let mut pb_sort = ProtoBuilder::new();
+    pb_sort.string(1, target_id);
+    pb_sort.varint(3, sort);
+
+    let mut pb_tab = ProtoBuilder::new();
+    pb_tab.embedded(sort_field, pb_sort);
 
     let mut pb_3 = ProtoBuilder::new();
     pb_3.embedded(tab.order_ctoken_id(), pb_tab);
@@ -823,31 +832,37 @@ mod tests {
 
     #[test]
     fn t_order_ctoken() {
-        let channel_id = "UCXuqSBlHAE6Xw-yeJA0Tunw";
-
-        let videos_popular_token = order_ctoken(
-            channel_id,
-            ChannelVideoTab::Videos,
-            ChannelOrder::Popular,
-            "\n$6461d7c8-0000-2040-87aa-089e0827e420",
-        );
-        assert_eq!(videos_popular_token, "4qmFsgJgEhhVQ1h1cVNCbEhBRTZYdy15ZUpBMFR1bncaRDhnWXdHaTU2TEJJbUNpUTJORFl4WkRkak9DMHdNREF3TFRJd05EQXRPRGRoWVMwd09EbGxNRGd5TjJVME1qQVlBaUFD");
+        // Tokens of the sort chips YouTube sent on 2026-10-19, built back from
+        // the same channel and target.
+        let videos = "UC9-y-6csu5WGm29I7JiwpnA";
+        let videos_target = "6b8fab71-0000-261f-96d9-14c14ef8d168";
+        for (order, token) in [
+            (ChannelOrder::Latest, "4qmFsgJkEhhVQzkteS02Y3N1NVdHbTI5STdKaXdwbkEaSDhnWXVHaXg2S2tJb0NpUTJZamhtWVdJM01TMHdNREF3TFRJMk1XWXRPVFprT1MweE5HTXhOR1ZtT0dReE5qZ1lCQSUzRCUzRA%3D%3D"),
+            (ChannelOrder::Popular, "4qmFsgJkEhhVQzkteS02Y3N1NVdHbTI5STdKaXdwbkEaSDhnWXVHaXg2S2tJb0NpUTJZamhtWVdJM01TMHdNREF3TFRJMk1XWXRPVFprT1MweE5HTXhOR1ZtT0dReE5qZ1lBZyUzRCUzRA%3D%3D"),
+            (ChannelOrder::Oldest, "4qmFsgJkEhhVQzkteS02Y3N1NVdHbTI5STdKaXdwbkEaSDhnWXVHaXg2S2tJb0NpUTJZamhtWVdJM01TMHdNREF3TFRJMk1XWXRPVFprT1MweE5HTXhOR1ZtT0dReE5qZ1lCUSUzRCUzRA%3D%3D"),
+        ] {
+            assert_eq!(
+                order_ctoken(videos, ChannelVideoTab::Videos, order, videos_target),
+                token,
+                "{order:?}"
+            );
+        }
 
         let shorts_popular_token = order_ctoken(
-            channel_id,
+            "UCX6OQ3DkcsbYNE6H8uQQuVA",
             ChannelVideoTab::Shorts,
             ChannelOrder::Popular,
-            "\n$64679ffb-0000-26b3-a1bd-582429d2c794",
+            "6b616d9b-0000-2748-9ca6-10d9a242eca6",
         );
-        assert_eq!(shorts_popular_token, "4qmFsgJkEhhVQ1h1cVNCbEhBRTZYdy15ZUpBMFR1bncaSDhnWXVHaXhTS2hJbUNpUTJORFkzT1dabVlpMHdNREF3TFRJMllqTXRZVEZpWkMwMU9ESTBNamxrTW1NM09UUWdBZyUzRCUzRA%3D%3D");
+        assert_eq!(shorts_popular_token, "4qmFsgJkEhhVQ1g2T1EzRGtjc2JZTkU2SDh1UVF1VkEaSDhnWXVHaXhTS2pvb0NpUTJZall4Tm1RNVlpMHdNREF3TFRJM05EZ3RPV05oTmkweE1HUTVZVEkwTW1WallUWVlBZyUzRCUzRA%3D%3D");
 
         let live_popular_token = order_ctoken(
-            channel_id,
+            "UCSJ4gkVC6NrvII8umztf0Ow",
             ChannelVideoTab::Live,
             ChannelOrder::Popular,
-            "\n$64693069-0000-2a1e-8c7d-582429bd5ba8",
+            "6bf3cdad-0000-26b3-90bc-582429af698c",
         );
-        assert_eq!(live_popular_token, "4qmFsgJkEhhVQ1h1cVNCbEhBRTZYdy15ZUpBMFR1bncaSDhnWXVHaXh5S2hJbUNpUTJORFk1TXpBMk9TMHdNREF3TFRKaE1XVXRPR00zWkMwMU9ESTBNamxpWkRWaVlUZ29EZyUzRCUzRA%3D%3D");
+        assert_eq!(live_popular_token, "4qmFsgJkEhhVQ1NKNGdrVkM2TnJ2SUk4dW16dGYwT3caSDhnWXVHaXh5S2tJb0NpUTJZbVl6WTJSaFpDMHdNREF3TFRJMllqTXRPVEJpWXkwMU9ESTBNamxoWmpZNU9HTVlEZyUzRCUzRA%3D%3D");
     }
 
     #[test]

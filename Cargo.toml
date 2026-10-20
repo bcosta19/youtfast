@@ -143,10 +143,11 @@ epaint = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce
 # panel, plus image/GIF attachments on comments. It also returns a failed
 # visitor-data fetch as an error: upstream unwraps it, and a panic aborts the
 # release build (`panic = "abort"`). Channel pages follow YouTube's October
-# 2026 layout: the Playlists tab's new `params`, podcasts kept as playlists,
-# header counts read past an `accessibilityLabel`, and abbreviated video
-# counts. Drop the copy once a release carries
-# these changes.
+# 2026 layout: the sort chips' continuation token, the Shorts items'
+# `thumbnailViewModel` (without which every Short was dropped), the Playlists
+# tab's new `params`, podcasts kept as playlists, header counts read past an
+# `accessibilityLabel`, and abbreviated video counts. Drop the copy once a
+# release carries these changes.
 rustypipe = { path = "vendor/rustypipe" }
 epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
 winit = { git = "https://github.com/crmne/winit", rev = "ed7caa9023f10b397f5b6ec8284a840cbd8a6f65" }

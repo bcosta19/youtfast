@@ -121,7 +121,7 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md); questions in issues are welcome.
 | Report a bug or contribute | [Contributing](CONTRIBUTING.md) |
 | Report a security issue privately | [Security policy](SECURITY.md) |
 | Compare resource use | [Benchmarks](docs/benchmarks.md) |
-| Prepare a release | [Release process](RELEASING.md) and [checklist](docs/public-release-checklist.md) |
+| Prepare a release | [Release process](RELEASING.md) |
 
 Library/settings stay on this device. Account cookies belong in the native
 credential store, and local diagnostics redact private details. Account access
