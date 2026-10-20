@@ -28,6 +28,9 @@ are the distribution record.
 - A listing whose loading hangs now shows, after a minute, an error that can
   be retried instead of loading forever. The subscriptions feed keeps no time
   limit, since many channels take long.
+- Sorting a channel's videos, Shorts or live streams by Latest, Popular or
+  Oldest works again: YouTube had started refusing the request.
+- A channel's Shorts tab lists its Shorts again instead of showing none.
 
 ## [0.1.0] - 2026-10-17
 

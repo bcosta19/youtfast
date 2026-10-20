@@ -142,8 +142,10 @@ epaint = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce
 # `author.avatarThumbnailUrl`, and the comment count from the engagement
 # panel, plus image/GIF attachments on comments. It also returns a failed
 # visitor-data fetch as an error: upstream unwraps it, and a panic aborts the
-# release build (`panic = "abort"`). Drop the copy once a release carries
-# these changes.
+# release build (`panic = "abort"`). Channel tabs follow YouTube's October
+# 2026 layout: the sort chips' continuation token and the Shorts items'
+# `thumbnailViewModel`, without which every Short was dropped. Drop the copy
+# once a release carries these changes.
 rustypipe = { path = "vendor/rustypipe" }
 epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
 winit = { git = "https://github.com/crmne/winit", rev = "ed7caa9023f10b397f5b6ec8284a840cbd8a6f65" }
