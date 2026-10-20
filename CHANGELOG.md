@@ -25,6 +25,9 @@ are the distribution record.
 - A network failure while fetching YouTube's visitor data, which the first
   requests of a session do, no longer closes the app: the page shows the
   error and can be retried.
+- A listing whose loading hangs now shows, after a minute, an error that can
+  be retried instead of loading forever. The subscriptions feed keeps no time
+  limit, since many channels take long.
 - Sorting a channel's videos, Shorts or live streams by Latest, Popular or
   Oldest works again: YouTube had started refusing the request.
 - A channel's Shorts tab lists its Shorts again instead of showing none.
