@@ -4,19 +4,16 @@ This file tracks work that is not shipped. It is not a release commitment.
 [CHANGELOG.md](CHANGELOG.md) records implemented changes; frozen release notes
 describe exactly what each version includes and excludes.
 
-## Required before publishing 0.1.0
+## Open release gates
 
-- Complete the binary gates of the [public-release checklist](docs/public-release-checklist.md).
-  The source repository is already public with a cleaned history.
-- Run the hosted Release dry run on the intended commit and inspect every
-  platform artifact. Local preparation is not a successful hosted build.
-- Qualify Linux native, Flatpak, Windows x86_64 and macOS Apple Silicon using
-  clean profiles and the [platform checklist](docs/distribution.md).
-- For Windows/macOS bundles, collect the corresponding native dependency
-  sources and notices matching the exact binaries. Packaging inventories alone
-  do not satisfy this gate.
-- Replace the pending changelog date, align AppStream metadata, freeze notes
-  and approve the final draft only after the gates pass.
+0.1.0 is published as a pre-release. Before it is promoted to latest:
+
+- Review the Windows and macOS native source archives and notices that the
+  0.1.0 runners collected; nobody has reviewed them yet.
+- Run clean-machine QA from the [platform checklist](docs/distribution.md) on
+  Windows ([#5](https://github.com/bcosta19/youtfast/issues/5)) and macOS
+  ([#6](https://github.com/bcosta19/youtfast/issues/6)). Local demo rendering
+  and `--version` do not prove playback or keyring behaviour.
 
 ## Distribution follow-ups
 

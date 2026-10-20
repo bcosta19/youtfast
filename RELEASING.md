@@ -2,9 +2,8 @@
 
 ## Current state and release policy
 
-0.1.0 is in preparation; no release was published at this review (2026-10-17).
-The source repository is public since 2026-10-17, created from a cleaned history.
-Binary publication still follows the remaining [release gates](docs/public-release-checklist.md).
+0.1.0 was published on 2026-10-17 as a pre-release. Its remaining gates, and
+those of later releases, are tracked in [ROADMAP.md](ROADMAP.md).
 
 Use stable SemVer tags `vMAJOR.MINOR.PATCH`. During 0.x, use patches for
 compatible fixes and minor versions for features or incompatible changes;

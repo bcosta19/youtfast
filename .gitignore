@@ -3,6 +3,7 @@
 .idea/
 .vscode/
 .claude/
+.ai-memory.toml
 /.cache/
 /dist/
 /tasks.md
