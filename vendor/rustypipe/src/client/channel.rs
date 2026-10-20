@@ -37,7 +37,10 @@ enum ChannelTab {
     Shorts,
     #[serde(rename = "EgdzdHJlYW1z8gYECgJ6AA%3D%3D")]
     Live,
-    #[serde(rename = "EglwbGF5bGlzdHMgAQ%3D%3D")]
+    /// Since October 2026 YouTube answers the older `EglwbGF5bGlzdHMgAQ%3D%3D`
+    /// with the channel's Home tab, which holds no playlist grid. This is the
+    /// value its own Playlists tab sends.
+    #[serde(rename = "EglwbGF5bGlzdHPyBgoKCEIGCgIQaCIA")]
     Playlists,
     #[serde(rename = "EgZzZWFyY2jyBgQKAloA")]
     Search,
@@ -468,8 +471,10 @@ fn map_channel(
                 let subscriber_count = sub_part.and_then(|t| {
                     util::parse_large_numstr_or_warn::<u64>(t.as_str(), ctx.lang, &mut warnings)
                 });
-                let video_count =
-                    vc_part.and_then(|t| util::parse_numeric_or_warn(t.as_str(), &mut warnings));
+                // A large count is abbreviated like the subscribers ("2.2K videos").
+                let video_count = vc_part.and_then(|t| {
+                    util::parse_large_numstr_or_warn::<u64>(t.as_str(), ctx.lang, &mut warnings)
+                });
 
                 Channel {
                     id: metadata.external_id,

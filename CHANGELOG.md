@@ -25,6 +25,10 @@ are the distribution record.
 - A network failure while fetching YouTube's visitor data, which the first
   requests of a session do, no longer closes the app: the page shows the
   error and can be retried.
+- A channel's Playlists tab lists its playlists and podcasts again instead of
+  showing none.
+- A channel's header shows its real subscriber and video counts: it showed
+  the video count as subscribers, and "2.2K videos" as 22.
 
 ## [0.1.0] - 2026-10-17
 

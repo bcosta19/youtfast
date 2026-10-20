@@ -645,21 +645,28 @@ pub(crate) struct PhMetadataRow {
     pub metadata_parts: Vec<MetadataPart>,
 }
 
+/// Told apart by the field it carries, not by being its only key: since
+/// October 2026 a channel's subscriber count also sends an
+/// `accessibilityLabel`, and an externally tagged enum rejected that part, so
+/// the video count took its place.
 #[serde_as]
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(untagged)]
 pub(crate) enum MetadataPart {
-    Text(#[serde_as(as = "AttributedText")] TextComponent),
     #[serde(rename_all = "camelCase")]
     AvatarStack {
         avatar_stack_view_model: TextComponentBox,
+    },
+    Text {
+        #[serde_as(as = "AttributedText")]
+        text: TextComponent,
     },
 }
 
 impl MetadataPart {
     pub fn into_text_component(self) -> TextComponent {
         match self {
-            MetadataPart::Text(text_component) => text_component,
+            MetadataPart::Text { text } => text,
             MetadataPart::AvatarStack {
                 avatar_stack_view_model,
             } => avatar_stack_view_model.text,
@@ -668,7 +675,7 @@ impl MetadataPart {
 
     pub fn as_str(&self) -> &str {
         match self {
-            MetadataPart::Text(s) => s.as_str(),
+            MetadataPart::Text { text } => text.as_str(),
             MetadataPart::AvatarStack {
                 avatar_stack_view_model,
             } => avatar_stack_view_model.text.as_str(),
@@ -723,3 +730,47 @@ pub(crate) struct ThumbnailBadges {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct Empty {}
+
+#[cfg(test)]
+mod tests {
+    use super::{video_item::LockupContentType, MetadataPart, PhMetadataView2};
+
+    /// A channel header row as YouTube sent it on 2026-10-20: the subscriber
+    /// part carries an `accessibilityLabel` beside its text.
+    #[test]
+    fn metadata_part_keeps_a_part_with_more_keys() {
+        let view: PhMetadataView2 = serde_json::from_value(serde_json::json!({
+            "metadataRows": [
+                { "metadataParts": [{ "text": { "content": "@handle" } }] },
+                { "metadataParts": [
+                    { "text": { "content": "572K subscribers" }, "accessibilityLabel": "572 thousand subscribers" },
+                    { "text": { "content": "151 videos", "styleRuns": [{ "startIndex": 0, "length": 10 }] } }
+                ] }
+            ]
+        }))
+        .unwrap();
+        let parts: Vec<&str> = view.metadata_rows[1]
+            .metadata_parts
+            .iter()
+            .map(MetadataPart::as_str)
+            .collect();
+        assert_eq!(parts, ["572K subscribers", "151 videos"]);
+    }
+
+    #[test]
+    fn metadata_part_reads_an_avatar_stack() {
+        let part: MetadataPart = serde_json::from_value(serde_json::json!({
+            "avatarStackViewModel": { "text": { "content": "by Someone" }, "avatars": [] }
+        }))
+        .unwrap();
+        assert!(matches!(part, MetadataPart::AvatarStack { .. }));
+        assert_eq!(part.as_str(), "by Someone");
+    }
+
+    #[test]
+    fn a_podcast_lockup_is_a_playlist() {
+        let kind: LockupContentType =
+            serde_json::from_value(serde_json::json!("LOCKUP_CONTENT_TYPE_PODCAST")).unwrap();
+        assert!(matches!(kind, LockupContentType::LockupContentTypePlaylist));
+    }
+}
