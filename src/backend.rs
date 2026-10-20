@@ -675,9 +675,8 @@ async fn dispatch(ordered: bool, task: impl Future<Output = ()> + Send + 'static
     }
 }
 
-/// A load may not outlive this: the interface shows the listing as failed
-/// with a fixed message rather than a spinner forever, as For you once did
-/// when a request never answered.
+/// A load may not outlive this: a request that never answers shows the
+/// listing as failed, with a fixed message, rather than a spinner forever.
 const LOAD_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// The deadline of a load. The feed has none: it reads the RSS of every device
@@ -689,6 +688,7 @@ fn deadline_of(request: &Request) -> Option<std::time::Duration> {
         _ => Some(LOAD_DEADLINE),
     }
 }
+
 /// Fixed failure texts: they never echo the payload, which a panic message of
 /// a dependency can carry.
 const LOAD_NO_ANSWER: &str = "the listing's task stopped before an answer";
@@ -708,6 +708,11 @@ impl Drop for AbortOnDrop {
 /// `unwrap` on a missing line in rustypipe, say) or an overdue load with a
 /// failure whose text carries no payload. Every ending sends the
 /// `Event::Loaded`: the interface is never left loading forever.
+///
+/// Only builds that unwind (development builds and tests) ever see the
+/// panic arm: the release build sets `panic = "abort"`, so there a panic
+/// ends the process before the task can report it. What a release build
+/// gets from this is the deadline.
 ///
 /// The outcome of the inner task is only inspected after a completion: the
 /// watcher aborts what still runs when it itself is dropped (also on the
@@ -751,8 +756,9 @@ async fn handle(command: Command, context: Context) {
             log::debug!("loading {slot:?} started");
             let deadline = deadline_of(&request);
             let task = tokio::spawn(async move {
-                // Watched: a panic inside a dependency must still answer the
-                // interface (`watched`).
+                // Watched: a load that never answers still answers the
+                // interface, and so does a panic where builds unwind
+                // (`watched`).
                 let result = watched(async move { load(&loader, request).await }, deadline).await;
                 if let Err(error) = &result {
                     log::warn!("loading {slot:?} failed: {error}");
