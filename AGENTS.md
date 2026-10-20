@@ -75,10 +75,13 @@ this guide and the repository's own contribution policy take precedence.
   with upstream PR #80 (codeberg.org/ThetaDev/rustypipe) applied, for
   comment authors' avatars and the comment count, and with a failed
   visitor-data fetch returned as an error instead of unwrapped (a panic
-  aborts the release build). Channel tabs follow YouTube's October 2026
+  aborts the release build). Channel pages follow YouTube's October 2026
   layout: `order_ctoken` builds the sort chips' token (`{1: target, 3:
-  order}` under field 8, 7 on Shorts) and Shorts items read their
-  `thumbnailViewModel`. Drop the copy once a release carries these changes.
+  order}` under field 8, 7 on Shorts), Shorts items read their
+  `thumbnailViewModel`, the Playlists tab sends its new `params`, podcast
+  lockups count as playlists, and header metadata parts are told apart by
+  their field (`MetadataPart` is untagged). Drop the copy once a release
+  carries these changes.
 - `src/alerts.rs` is the new-upload check's brain: a pure split of a
   feed's videos into unseen (`alerts_seen_at`) and not-yet-notified
   (`alerts_notified_at`) stamps the library keeps. A tokio timer in

@@ -31,6 +31,10 @@ are the distribution record.
 - Sorting a channel's videos, Shorts or live streams by Latest, Popular or
   Oldest works again: YouTube had started refusing the request.
 - A channel's Shorts tab lists its Shorts again instead of showing none.
+- A channel's Playlists tab lists its playlists and podcasts again instead of
+  showing none.
+- A channel's header shows its real subscriber and video counts: it showed
+  the video count as subscribers, and "2.2K videos" as 22.
 
 ## [0.1.0] - 2026-10-17
 

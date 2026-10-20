@@ -140,7 +140,7 @@ impl MapResponse<Playlist> for response::Playlist {
                         .next()
                         .and_then(|r| r.metadata_parts.into_iter().next())
                         .and_then(|p| match p {
-                            response::MetadataPart::Text(_) => None,
+                            response::MetadataPart::Text { .. } => None,
                             response::MetadataPart::AvatarStack {
                                 avatar_stack_view_model,
                             } => ChannelId::try_from(avatar_stack_view_model.text).ok(),

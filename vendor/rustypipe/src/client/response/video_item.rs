@@ -202,6 +202,9 @@ pub(crate) struct LockupViewModel {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[allow(clippy::enum_variant_names)]
 pub(crate) enum LockupContentType {
+    /// A podcast is a playlist (`PL…` id) the channel marked as such; a
+    /// channel's Playlists tab lists both.
+    #[serde(alias = "LOCKUP_CONTENT_TYPE_PODCAST")]
     LockupContentTypePlaylist,
     LockupContentTypeVideo,
     #[default]
