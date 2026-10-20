@@ -279,6 +279,18 @@ mod tests {
         );
         // A clock behind the source's never says "in the future".
         assert_eq!(ago(now + 30, now, Locale::PortugueseBrazil), "agora mesmo");
+        assert_eq!(ago(now, now, Locale::Spanish), "ahora mismo");
+        assert_eq!(ago(now - 60, now, Locale::Spanish), "hace 1 minuto");
+        assert_eq!(ago(now - 7_200, now, Locale::Spanish), "hace 2 horas");
+        assert_eq!(ago(now, now, Locale::French), "à l'instant");
+        assert_eq!(ago(now - 60, now, Locale::French), "il y a 1 minute");
+        assert_eq!(ago(now - 7_200, now, Locale::French), "il y a 2 heures");
+        assert_eq!(ago(now, now, Locale::German), "gerade eben");
+        assert_eq!(ago(now - 60, now, Locale::German), "vor 1 Minute");
+        assert_eq!(ago(now - 7_200, now, Locale::German), "vor 2 Stunden");
+        assert_eq!(ago(now, now, Locale::Italian), "adesso");
+        assert_eq!(ago(now - 60, now, Locale::Italian), "1 minuto fa");
+        assert_eq!(ago(now - 7_200, now, Locale::Italian), "2 ore fa");
     }
 
     #[test]
@@ -310,6 +322,14 @@ mod tests {
             views(3_000_000_000, Locale::PortugueseBrazil),
             "3B visualizações"
         );
+        assert_eq!(views(1, Locale::Spanish), "1 visualización");
+        assert_eq!(views(2, Locale::Spanish), "2 visualizaciones");
+        assert_eq!(views(1, Locale::French), "1 vue");
+        assert_eq!(views(2, Locale::French), "2 vues");
+        assert_eq!(views(1, Locale::German), "1 Aufruf");
+        assert_eq!(views(2, Locale::German), "2 Aufrufe");
+        assert_eq!(views(1, Locale::Italian), "1 visualizzazione");
+        assert_eq!(views(2, Locale::Italian), "2 visualizzazioni");
     }
 
     #[test]

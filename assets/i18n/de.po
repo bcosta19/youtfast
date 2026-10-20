@@ -1,0 +1,1396 @@
+# YouTFast German translations. GPL-3.0-only.
+msgid ""
+msgstr ""
+"Project-Id-Version: YouTFast\n"
+"PO-Revision-Date: 2026-10-20 00:00+0000\n"
+"Last-Translator: YouTFast contributors\n"
+"Language-Team: German\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid " · left at {time}"
+msgstr " · angehalten bei {time}"
+
+msgid ", next check in {minutes} min"
+msgstr ", nächste Überprüfung in {minutes} Min."
+
+msgid "...more"
+msgstr "...mehr"
+
+msgid "1 comment"
+msgstr "1 Kommentar"
+
+msgid "1 reply"
+msgstr "1 Antwort"
+
+msgid "4–20 minutes"
+msgstr "4–20 Minuten"
+
+msgid "A channel"
+msgstr "Ein Kanal"
+
+msgid "A subscriptions row exceeds 1 MiB."
+msgstr "Eine Zeile mit Abonnements überschreitet 1 MiB."
+
+msgid "About"
+msgstr "Kanalinfo"
+
+msgid "Account"
+msgstr "Konto"
+
+msgid "Account name"
+msgstr "Kontoname"
+
+msgid "Accounts"
+msgstr "Konten"
+
+msgid "Active"
+msgstr "Aktiv"
+
+msgid "Add an account"
+msgstr "Konto hinzufügen"
+
+msgid "Add an account below"
+msgstr "Fügen Sie unten ein Konto hinzu"
+
+msgid "Add to queue"
+msgstr "In die Warteschlange"
+
+msgid "Added"
+msgstr "Hinzugefügt"
+
+msgid "Added to queue"
+msgstr "Zur Warteschlange hinzugefügt"
+
+msgid "Address"
+msgstr "Adresse"
+
+msgid "Adds channels from a Takeout subscriptions.csv to this device"
+msgstr "Fügt diesem Gerät Kanäle aus einer Takeout-Datei subscriptions.csv hinzu"
+
+msgid "Alerts are off"
+msgstr "Benachrichtigungen sind aus"
+
+msgid "All"
+msgstr "Alle"
+
+msgid "Another browser or profile"
+msgstr "Anderer Browser oder Profil"
+
+msgid "Any duration"
+msgstr "Beliebige Dauer"
+
+msgid "Any time"
+msgstr "Jederzeit"
+
+msgid "Appearance"
+msgstr "Darstellung"
+
+msgid "At the end of a video, the next one starts after a countdown: first the queue, then the source list, then related videos."
+msgstr "Am Ende eines Videos startet das nächste nach einem Countdown: zuerst die Warteschlange, dann die Quellliste, dann ähnliche Videos."
+
+msgid "Auto"
+msgstr "Automatisch"
+
+msgid "Auto (up to {resolution}p)"
+msgstr "Automatisch (bis zu {resolution}p)"
+
+msgid "Auto · {resolution}"
+msgstr "Automatisch · {resolution}"
+
+msgid "Automatic"
+msgstr "Automatisch"
+
+msgid "Automatic follows your Omarchy theme."
+msgstr "Automatisch folgt Ihrem Omarchy-Design."
+
+msgid "Automatic uses YouTFast's dark theme."
+msgstr "Automatisch verwendet das dunkle Design von YouTFast."
+
+msgid "Autoplay"
+msgstr "Autoplay"
+
+msgid "Back (Alt+←)"
+msgstr "Zurück (Alt+←)"
+
+msgid "Back / forward"
+msgstr "Zurück / vor"
+
+msgid "Back / forward 10 s"
+msgstr "10 s zurück / vor"
+
+msgid "Back / forward 5 s"
+msgstr "5 s zurück / vor"
+
+msgid "Back to live"
+msgstr "Zurück zum Livestream"
+
+msgid "Back to the video"
+msgstr "Zurück zum Video"
+
+msgid "Before you sign in"
+msgstr "Vor der Anmeldung"
+
+msgid "By the creator"
+msgstr "Vom Ersteller"
+
+msgid "Cancel"
+msgstr "Abbrechen"
+
+msgid "Caption appearance"
+msgstr "Untertitel-Darstellung"
+
+msgid "Captions"
+msgstr "Untertitel"
+
+msgid "Captions (c)"
+msgstr "Untertitel (c)"
+
+msgid "Captions off"
+msgstr "Untertitel aus"
+
+msgid "Captions on"
+msgstr "Untertitel ein"
+
+msgid "Channel tabs"
+msgstr "Kanal-Tabs"
+
+msgid "Channels"
+msgstr "Kanäle"
+
+msgid "Chapters"
+msgstr "Kapitel"
+
+msgid "Chapters (Option on Mac)"
+msgstr "Kapitel (Option auf dem Mac)"
+
+msgid "Check every"
+msgstr "Prüfen alle"
+
+msgid "Check for new uploads"
+msgstr "Auf neue Uploads prüfen"
+
+msgid "Check now"
+msgstr "Jetzt prüfen"
+
+msgid "Checked at {time}"
+msgstr "Geprüft um {time}"
+
+msgid "Checks the same sources as Home. YouTube's notifications have no API, so the app watches subscribed channels instead."
+msgstr "Prüft dieselben Quellen wie die Startseite. Da die YouTube-Benachrichtigungen keine API haben, beobachtet die App stattdessen abonnierte Kanäle."
+
+msgid "Choose the cookies.txt exported from YouTube"
+msgstr "Wählen Sie die von YouTube exportierte Datei cookies.txt"
+
+msgid "Choose the language used by the interface."
+msgstr "Wählen Sie die Sprache der Benutzeroberfläche."
+
+msgid "Clear"
+msgstr "Löschen"
+
+msgid "Clear history"
+msgstr "Verlauf löschen"
+
+msgid "Clear this device's history and resume positions"
+msgstr "Verlauf und Fortsetzungsmarken dieses Geräts löschen"
+
+msgid "Close"
+msgstr "Schließen"
+
+msgid "Close and pause"
+msgstr "Schließen und pausieren"
+
+msgid "Close details"
+msgstr "Details schließen"
+
+msgid "Close or go back"
+msgstr "Schließen oder zurückgehen"
+
+msgid "Comment animation"
+msgstr "Kommentaranimation"
+
+msgid "Comment image"
+msgstr "Kommentarbild"
+
+msgid "Comments"
+msgstr "Kommentare"
+
+msgid "Copy"
+msgstr "Kopieren"
+
+msgid "Copy link"
+msgstr "Link kopieren"
+
+msgid "Copy video URL"
+msgstr "Video-URL kopieren"
+
+msgid "Copy video URL at current time"
+msgstr "Video-URL an aktueller Stelle kopieren"
+
+msgid "Could not change the playlist: {error}"
+msgstr "Playlist konnte nicht geändert werden: {error}"
+
+msgid "Could not check for uploads: {error}"
+msgstr "Uploads konnten nicht geprüft werden: {error}"
+
+msgid "Could not complete the YouTube request. Retry."
+msgstr "YouTube-Anfrage konnte nicht abgeschlossen werden. Erneut versuchen."
+
+msgid "Could not import this Takeout file."
+msgstr "Diese Takeout-Datei konnte nicht importiert werden."
+
+msgid "Could not load image · Retry"
+msgstr "Bild konnte nicht geladen werden · Erneut versuchen"
+
+msgid "Could not load the next playlist videos. Use Next to retry."
+msgstr "Nächste Videos der Playlist konnten nicht geladen werden. Nutzen Sie Weiter für einen neuen Versuch."
+
+msgid "Could not load the transcript."
+msgstr "Transkript konnte nicht geladen werden."
+
+msgid "Could not load the transcript. Try again."
+msgstr "Transkript konnte nicht geladen werden. Bitte erneut versuchen."
+
+msgid "Could not merge this Takeout file."
+msgstr "Diese Takeout-Datei konnte nicht zusammengeführt werden."
+
+msgid "Could not open this Takeout file."
+msgstr "Diese Takeout-Datei konnte nicht geöffnet werden."
+
+msgid "Could not play this video. The player did not identify the cause. Try reopening the video."
+msgstr "Dieses Video konnte nicht abgespielt werden. Die Ursache ist unbekannt. Versuchen Sie, das Video erneut zu öffnen."
+
+msgid "Could not rate the video: {error}"
+msgstr "Video konnte nicht bewertet werden: {error}"
+
+msgid "Could not read the transcript."
+msgstr "Transkript konnte nicht gelesen werden."
+
+msgid "Could not read this file (64 MiB limit)."
+msgstr "Diese Datei konnte nicht gelesen werden (64-MiB-Limit)."
+
+msgid "Could not read this history file. Check its JSON format and the 64 MiB size limit."
+msgstr "Diese Verlaufsdatei konnte nicht gelesen werden. Überprüfen Sie das JSON-Format und das 64-MiB-Limit."
+
+msgid "Could not read this subscriptions file (64 MiB limit)."
+msgstr "Diese Abonnementsdatei konnte nicht gelesen werden (64-MiB-Limit)."
+
+msgid "Could not save the library: {error}"
+msgstr "Mediathek konnte nicht gespeichert werden: {error}"
+
+msgid "Could not save the settings: {error}"
+msgstr "Einstellungen konnten nicht gespeichert werden: {error}"
+
+msgid "Could not start the YouTube session."
+msgstr "YouTube-Sitzung konnte nicht gestartet werden."
+
+msgid "Country"
+msgstr "Land"
+
+msgid "Dark"
+msgstr "Dunkel"
+
+msgid "Dark background"
+msgstr "Dunkler Hintergrund"
+
+msgid "Default view (t)"
+msgstr "Standardansicht (t)"
+
+msgid "Description"
+msgstr "Beschreibung"
+
+msgid "Description and comments"
+msgstr "Beschreibung und Kommentare"
+
+msgid "Desktop notifications"
+msgstr "Desktop-Benachrichtigungen"
+
+msgid "Details"
+msgstr "Details"
+
+msgid "Disliked"
+msgstr "Mag ich nicht"
+
+msgid "Drag to reorder"
+msgstr "Ziehen zum Neuanordnen"
+
+msgid "Earlier"
+msgstr "Früher"
+
+msgid "Enter the profile folder (\"Profile 2\" in Chromium and similar browsers, \"xxxx.default-release\" in Firefox). Leave blank for the default profile. On Linux, Chromium, Chrome, Brave and similar browsers encrypt cookies using the desktop keyring, which needs Python secretstorage (python-secretstorage on Arch)."
+msgstr "Geben Sie den Profilordner ein („Profile 2“ in Chromium und ähnlichen Browsern, „xxxx.default-release“ in Firefox). Für das Standardprofil leer lassen. Unter Linux verschlüsseln Chromium, Chrome, Brave und ähnliche Browser Cookies mit dem Desktop-Schlüsselbund, der Python-secretstorage erfordert (python-secretstorage unter Arch)."
+
+msgid "Exit full screen"
+msgstr "Vollbild beenden"
+
+msgid "Exit full screen (f)"
+msgstr "Vollbild beenden (f)"
+
+msgid "First / last item"
+msgstr "Erstes / letztes Element"
+
+msgid "Focus search"
+msgstr "Suche fokussieren"
+
+msgid "Follow this channel on this device: its videos join your feed"
+msgstr "Diesem Kanal auf diesem Gerät folgen: Videos erscheinen in Ihrem Feed"
+
+msgid "Follow video"
+msgstr "Video verfolgen"
+
+msgid "For you"
+msgstr "Für dich"
+
+msgid "Forgets the session on this computer. The account stays listed."
+msgstr "Vergisst die Sitzung auf diesem Computer. Das Konto bleibt gelistet."
+
+msgid "Forward (Alt+→)"
+msgstr "Vorwärts (Alt+→)"
+
+msgid "Full screen"
+msgstr "Vollbild"
+
+msgid "Full screen (f)"
+msgstr "Vollbild (f)"
+
+msgid "GIF paused to save memory · Play"
+msgstr "GIF pausiert, um Speicher zu sparen · Abspielen"
+
+msgid "Handle"
+msgstr "Handle"
+
+msgid "Hearted by the creator"
+msgstr "Vom Ersteller mit Herz versehen"
+
+msgid "Helps preserve your browser session, which YouTube can change:\n1. Open a private window and sign in to youtube.com.\n2. Export cookies with an extension such as \"Get cookies.txt LOCALLY\".\n3. Close the private window without signing out."
+msgstr "Hilft, Ihre Browsersitzung zu erhalten, die von YouTube geändert werden kann:\n1. Öffnen Sie ein privates Fenster und melden Sie sich bei youtube.com an.\n2. Exportieren Sie Cookies mit einer Erweiterung wie „Get cookies.txt LOCALLY“.\n3. Schließen Sie das private Fenster, ohne sich abzumeldet."
+
+msgid "Hide replies"
+msgstr "Antworten ausblenden"
+
+msgid "Hide transcript"
+msgstr "Transkript ausblenden"
+
+msgid "History"
+msgstr "Verlauf"
+
+msgid "Home"
+msgstr "Startseite"
+
+msgid "I dislike this"
+msgstr "Mag ich nicht"
+
+msgid "I like this"
+msgstr "Mag ich"
+
+msgid "Image / GIF unavailable · Retry"
+msgstr "Bild / GIF nicht verfügbar · Erneut versuchen"
+
+msgid "Image data invalid · Retry"
+msgstr "Ungültige Bilddaten · Erneut versuchen"
+
+msgid "Image exceeds safety limits · Retry"
+msgstr "Bild überschreitet Sicherheitsgrenzen · Erneut versuchen"
+
+msgid "Image removed or unavailable · Retry"
+msgstr "Bild entfernt oder nicht verfügbar · Erneut versuchen"
+
+msgid "Image temporarily limited · Retry later"
+msgstr "Bild vorübergehend eingeschränkt · Später erneut versuchen"
+
+msgid "Image unavailable · Retry source"
+msgstr "Bild nicht verfügbar · Quelle erneut abfragen"
+
+msgid "Import from Google Takeout"
+msgstr "Aus Google Takeout importieren"
+
+msgid "Import from Takeout"
+msgstr "Aus Takeout importieren"
+
+msgid "Imported {subscriptions} new subscriptions and {history} new videos of history."
+msgstr "Es wurden {subscriptions} neue Abonnements und {history} neue Videos im Verlauf importiert."
+
+msgid "Install python-secretstorage, unlock the desktop keyring, and retry browser sign-in."
+msgstr "Installieren Sie python-secretstorage, entsperren Sie den Desktop-Schlüsselbund und wiederholen Sie die Browser-Anmeldung."
+
+msgid "Interaction reminder skipped"
+msgstr "Interaktionserinnerung übersprungen"
+
+msgid "Joined"
+msgstr "Beigetreten am"
+
+msgid "Keyboard shortcuts"
+msgstr "Tastaturkürzel"
+
+msgid "Keyboard shortcuts (?)"
+msgstr "Tastaturkürzel (?)"
+
+msgid "LIVE"
+msgstr "LIVE"
+
+msgid "Language"
+msgstr "Sprache"
+
+msgid "Last hour"
+msgstr "Letzte Stunde"
+
+msgid "Latest"
+msgstr "Neueste"
+
+msgid "Leave blank to use the profile name"
+msgstr "Leer lassen, um den Profilnamen zu verwenden"
+
+msgid "Light"
+msgstr "Hell"
+
+msgid "Liked"
+msgstr "Mag ich"
+
+msgid "Liked videos"
+msgstr "Videos, die ich mag"
+
+msgid "Link copied"
+msgstr "Link kopiert"
+
+msgid "Link copied (demo)"
+msgstr "Link kopiert (Demo)"
+
+msgid "Links"
+msgstr "Links"
+
+msgid "Live"
+msgstr "Live"
+
+msgid "Live now"
+msgstr "Jetzt live"
+
+msgid "Load more"
+msgstr "Mehr laden"
+
+msgid "Load next videos / retry (Shift+N)"
+msgstr "Nächste Videos laden / erneut versuchen (Umschalt+N)"
+
+msgid "Loading GIF…"
+msgstr "GIF wird geladen…"
+
+msgid "Loading image…"
+msgstr "Bild wird geladen…"
+
+msgid "Loading next videos…"
+msgstr "Nächste Videos werden geladen…"
+
+msgid "Loading palettes…"
+msgstr "Farbpaletten werden geladen…"
+
+msgid "Loading {what}…"
+msgstr "{what} wird geladen…"
+
+msgid "Loading…"
+msgstr "Wird geladen…"
+
+msgid "Loop video"
+msgstr "Video wiederholen"
+
+msgid "Mark all as seen"
+msgstr "Alle als gesehen markieren"
+
+msgid "Miniplayer"
+msgstr "Miniplayer"
+
+msgid "Miniplayer (i)"
+msgstr "Miniplayer (i)"
+
+msgid "More actions"
+msgstr "Weitere Aktionen"
+
+msgid "More info"
+msgstr "Mehr Infos"
+
+msgid "Move down"
+msgstr "Nach unten"
+
+msgid "Move up"
+msgstr "Nach oben"
+
+msgid "Mute"
+msgstr "Stummschalten"
+
+msgid "Mute (m)"
+msgstr "Stummschalten (m)"
+
+msgid "Muted"
+msgstr "Stummgeschaltet"
+
+msgid "Name (optional)"
+msgstr "Name (optional)"
+
+msgid "New videos from subscribed channels appear here"
+msgstr "Neue Videos von abonnierten Kanälen erscheinen hier"
+
+msgid "Next (Shift+N)"
+msgstr "Weiter (Umschalt+N)"
+
+msgid "Next / previous"
+msgstr "Weiter / zurück"
+
+msgid "Next Short (↓)"
+msgstr "Nächster Short (↓)"
+
+msgid "Next account"
+msgstr "Nächstes Konto"
+
+msgid "Next item"
+msgstr "Nächstes Element"
+
+msgid "Next video"
+msgstr "Nächstes Video"
+
+msgid "Next: {title} (Shift+N)"
+msgstr "Nächstes Video: {title} (Umschalt+N)"
+
+msgid "No accounts"
+msgstr "Keine Konten"
+
+msgid "No captions"
+msgstr "Keine Untertitel"
+
+msgid "No channels found"
+msgstr "Keine Kanäle gefunden"
+
+msgid "No comments yet"
+msgstr "Noch keine Kommentare"
+
+msgid "No content in {tab}"
+msgstr "Keine Inhalte unter {tab}"
+
+msgid "No playlists"
+msgstr "Keine Playlists"
+
+msgid "No playlists found"
+msgstr "Keine Playlists gefunden"
+
+msgid "No results"
+msgstr "Keine Ergebnisse"
+
+msgid "No session is kept on this computer any more."
+msgstr "Auf diesem Computer wird keine Sitzung mehr gespeichert."
+
+msgid "No supported browser was found on this computer."
+msgstr "Auf diesem Computer wurde kein unterstützter Browser gefunden."
+
+msgid "No video matches this filter"
+msgstr "Kein Video entspricht diesem Filter"
+
+msgid "No video on this channel matches “{query}”"
+msgstr "Kein Video auf diesem Kanal entspricht „{query}“"
+
+msgid "No video up next"
+msgstr "Kein nachfolgendes Video"
+
+msgid "No videos found in history"
+msgstr "Keine Videos im Verlauf gefunden"
+
+msgid "No videos in this playlist"
+msgstr "Keine Videos in dieser Playlist"
+
+msgid "Nobody has commented on this video."
+msgstr "Niemand hat dieses Video bisher kommentiert."
+
+msgid "Normal"
+msgstr "Normal"
+
+msgid "Not checked yet"
+msgstr "Noch nicht überprüft"
+
+msgid "Nothing from your subscriptions yet"
+msgstr "Noch keine neuen Videos von Ihren Abonnements"
+
+msgid "Nothing here"
+msgstr "Hier gibt es nichts"
+
+msgid "Nothing new"
+msgstr "Nichts Neues"
+
+msgid "Notifications"
+msgstr "Benachrichtigungen"
+
+msgid "Notifications: {count} new"
+msgstr "Benachrichtigungen: {count} neu"
+
+msgid "Off"
+msgstr "Aus"
+
+msgid "Oldest"
+msgstr "Älteste"
+
+msgid "On"
+msgstr "Ein"
+
+msgid "Only the first 128 palettes in the folder are listed."
+msgstr "Nur die ersten 128 Farbpaletten im Ordner werden aufgeführt."
+
+msgid "Open channel"
+msgstr "Kanal öffnen"
+
+msgid "Open chapters"
+msgstr "Kapitel öffnen"
+
+msgid "Open in browser"
+msgstr "Im Browser öffnen"
+
+msgid "Open item"
+msgstr "Element öffnen"
+
+msgid "Or a cookies.txt file"
+msgstr "Oder eine Datei cookies.txt"
+
+msgid "Over 20 minutes"
+msgstr "Über 20 Minuten"
+
+msgid "Palettes are JSON files in {path}"
+msgstr "Farbpaletten sind JSON-Dateien in {path}"
+
+msgid "Pause"
+msgstr "Pause"
+
+msgid "Pause (k)"
+msgstr "Pause (k)"
+
+msgid "Pause GIF"
+msgstr "GIF anhalten"
+
+msgid "Picked from videos related to what you watched"
+msgstr "Ausgewählt basierend auf den von Ihnen angesehenen Videos"
+
+msgid "Pinned"
+msgstr "Angepinnt"
+
+msgid "Play"
+msgstr "Wiedergeben"
+
+msgid "Play (k)"
+msgstr "Wiedergeben (k)"
+
+msgid "Play GIF"
+msgstr "GIF abspielen"
+
+msgid "Play GIF · pause another animation"
+msgstr "GIF abspielen · andere Animation anhalten"
+
+msgid "Play all"
+msgstr "Alle wiedergeben"
+
+msgid "Play next"
+msgstr "Als Nächstes wiedergeben"
+
+msgid "Play now"
+msgstr "Jetzt wiedergeben"
+
+msgid "Play or pause"
+msgstr "Wiedergabe oder Pause"
+
+msgid "Play/pause in miniplayer"
+msgstr "Wiedergabe/Pause im Miniplayer"
+
+msgid "Playback"
+msgstr "Wiedergabe"
+
+msgid "Playback speed"
+msgstr "Wiedergabegeschwindigkeit"
+
+msgid "Playback was interrupted after the video loaded. The player did not identify the cause; the connection or stream link may no longer be valid. Try reopening the video."
+msgstr "Die Wiedergabe wurde nach dem Laden des Videos unterbrochen. Die Ursache ist unbekannt; Verbindung oder Stream-Link sind möglicherweise ungültig. Versuchen Sie, das Video erneut zu öffnen."
+
+msgid "Playing next"
+msgstr "Wird als Nächstes abgespielt"
+
+msgid "Playlists"
+msgstr "Playlists"
+
+msgid "Popular"
+msgstr "Beliebt"
+
+msgid "Preview only · Retry"
+msgstr "Nur Vorschau · Erneut versuchen"
+
+msgid "Previous / next frame"
+msgstr "Vorheriges / nächstes Bild"
+
+msgid "Previous Short (↑)"
+msgstr "Vorheriger Short (↑)"
+
+msgid "Previous item"
+msgstr "Vorheriges Element"
+
+msgid "Previous video"
+msgstr "Vorheriges Video"
+
+msgid "Profile folder"
+msgstr "Profilordner"
+
+msgid "Quality"
+msgstr "Qualität"
+
+msgid "Queue"
+msgstr "Warteschlange"
+
+msgid "Rating"
+msgstr "Bewertung"
+
+msgid "Read more"
+msgstr "Mehr lesen"
+
+msgid "Recommended by YouTube for your account"
+msgstr "Von YouTube für Ihr Konto empfohlen"
+
+msgid "Refresh page"
+msgstr "Seite aktualisieren"
+
+msgid "Related"
+msgstr "Ähnliche Videos"
+
+msgid "Relevance"
+msgstr "Relevanz"
+
+msgid "Remove"
+msgstr "Entfernen"
+
+msgid "Remove from Watch later"
+msgstr "Aus „Später ansehen“ entfernen"
+
+msgid "Remove from queue"
+msgstr "Aus Warteschlange entfernen"
+
+msgid "Remove from this device's history"
+msgstr "Aus dem Verlauf dieses Geräts entfernen"
+
+msgid "Remove “{name}”?"
+msgstr "„{name}“ entfernen?"
+
+msgid "Rename"
+msgstr "Umbenennen"
+
+msgid "Replay GIF"
+msgstr "GIF wiederholen"
+
+msgid "Retry"
+msgstr "Erneut versuchen"
+
+msgid "Save"
+msgstr "Speichern"
+
+msgid "Save videos from their page"
+msgstr "Speichern Sie Videos direkt auf deren Seite"
+
+msgid "Saved"
+msgstr "Gespeichert"
+
+msgid "Search (Enter)"
+msgstr "Suchen (Eingabe)"
+
+msgid "Search for a channel"
+msgstr "Nach einem Kanal suchen"
+
+msgid "Search for a playlist"
+msgstr "Nach einer Playlist suchen"
+
+msgid "Search for a video, channel or playlist"
+msgstr "Nach Video, Kanal oder Playlist suchen"
+
+msgid "Search or open link"
+msgstr "Suchen oder Link öffnen"
+
+msgid "Search or paste a link"
+msgstr "Suchen oder Link einfügen"
+
+msgid "Search results"
+msgstr "Suchergebnisse"
+
+msgid "Search this channel"
+msgstr "Diesen Kanal durchsuchen"
+
+msgid "Search this device's history"
+msgstr "Verlauf dieses Geräts durchsuchen"
+
+msgid "Search transcript"
+msgstr "Transkript durchsuchen"
+
+msgid "Search: {query}"
+msgstr "Suche: {query}"
+
+msgid "Seek to 0–90%"
+msgstr "Zu 0–90 % springen"
+
+msgid "Segment skipped"
+msgstr "Segment übersprungen"
+
+msgid "Self-promotion skipped"
+msgstr "Eigenwerbung übersprungen"
+
+msgid "Settings"
+msgstr "Einstellungen"
+
+msgid "Share"
+msgstr "Teilen"
+
+msgid "Shorts"
+msgstr "Shorts"
+
+msgid "Show less"
+msgstr "Weniger anzeigen"
+
+msgid "Show this list"
+msgstr "Diese Liste anzeigen"
+
+msgid "Show transcript"
+msgstr "Transkript anzeigen"
+
+msgid "Shows a desktop notification for each new video found."
+msgstr "Zeigt eine Desktop-Benachrichtigung für jedes neu gefundene Video an."
+
+msgid "Sidebar"
+msgstr "Seitenleiste"
+
+msgid "Sidebar (b)"
+msgstr "Seitenleiste (b)"
+
+msgid "Sign in"
+msgstr "Anmelden"
+
+msgid "Sign in to rate"
+msgstr "Anmelden, um zu bewerten"
+
+msgid "Sign in to rate videos"
+msgstr "Anmelden, um Videos zu bewerten"
+
+msgid "Sign in to save to the account's playlists"
+msgstr "Anmelden, um in den Playlists des Kontos zu speichern"
+
+msgid "Sign in to youtube.com in your browser, then select its profile here. YouTFast reads that profile's YouTube session through yt-dlp and reads it again when it expires."
+msgstr "Melden Sie sich im Browser bei youtube.com an und wählen Sie hier dessen Profil aus. YouTFast liest die YouTube-Sitzung über yt-dlp ein und erneuert sie bei Ablauf."
+
+msgid "Sign in with cookies.txt"
+msgstr "Mit cookies.txt anmelden"
+
+msgid "Sign in with your browser"
+msgstr "Mit Ihrem Browser anmelden"
+
+msgid "Sign in with {browser}"
+msgstr "Mit {browser} anmelden"
+
+msgid "Sign out"
+msgstr "Abmelden"
+
+msgid "Signing in"
+msgstr "Anmeldung läuft"
+
+msgid "Signing in…"
+msgstr "Anmeldung läuft…"
+
+msgid "Size"
+msgstr "Größe"
+
+msgid "Skip sponsors (SponsorBlock)"
+msgstr "Sponsoren überspringen (SponsorBlock)"
+
+msgid "Skip {segment}"
+msgstr "{segment} überspringen"
+
+msgid "Skips sponsors and offers to skip intros, credits and other segments marked by the SponsorBlock community. Requests to sponsor.ajay.app use a hash prefix matching thousands of videos."
+msgstr "Überspringt Sponsoren und bietet an, Intros, Abspänne und andere von der SponsorBlock-Community markierte Abschnitte zu überspringen. Anfragen an sponsor.ajay.app nutzen ein Hash-Präfix, das Tausenden von Videos entspricht."
+
+msgid "Sound"
+msgstr "Ton"
+
+msgid "Space"
+msgstr "Leertaste"
+
+msgid "Space / k"
+msgstr "Leertaste / k"
+
+msgid "Speed 2×"
+msgstr "Geschwindigkeit 2×"
+
+msgid "Sponsor skipped"
+msgstr "Sponsor übersprungen"
+
+msgid "Start / end"
+msgstr "Start / Ende"
+
+msgid "Start at {time}"
+msgstr "Starten bei {time}"
+
+msgid "Subscribe"
+msgstr "Abonnieren"
+
+msgid "Subscribe from a video's page or import a Takeout"
+msgstr "Abonnieren Sie auf einer Videoseite oder importieren Sie aus Takeout"
+
+msgid "Subscribe to channels to fill your feed"
+msgstr "Abonnieren Sie Kanäle, um Ihren Feed zu füllen"
+
+msgid "Subscribed"
+msgstr "Abonniert"
+
+msgid "Subscribers"
+msgstr "Abonnenten"
+
+msgid "Subscriptions"
+msgstr "Abos"
+
+msgid "Subscriptions, history and Watch later also work on this computer alone. To import them from Google Takeout, select YouTube and YouTube Music, choose JSON for history, then import subscriptions.csv and watch-history.json."
+msgstr "Abonnements, Verlauf und „Später ansehen“ funktionieren auch allein auf diesem Computer. Um sie aus Google Takeout zu importieren, wählen Sie YouTube und YouTube Music, JSON für den Verlauf, und importieren Sie subscriptions.csv sowie watch-history.json."
+
+msgid "Switch"
+msgstr "Wechseln"
+
+msgid "Takeout subscriptions or history"
+msgstr "Takeout-Abos oder -Verlauf"
+
+msgid "That name is already used"
+msgstr "Dieser Name wird bereits verwendet"
+
+msgid "The Omarchy palette could not be read; keeping the last usable appearance."
+msgstr "Omarchy-Farbpalette konnte nicht gelesen werden; das letzte gültige Erscheinungsbild wird beibehalten."
+
+msgid "The account was removed, but its session could not be deleted from the keyring: {error}"
+msgstr "Das Konto wurde entfernt, aber die Sitzung konnte nicht aus dem Schlüsselbund gelöscht werden: {error}"
+
+msgid "The account's Watch later"
+msgstr "„Später ansehen“ des Kontos"
+
+msgid "The account's liked videos"
+msgstr "Mit „Mag ich“ bewertete Videos des Kontos"
+
+msgid "The account's playlists"
+msgstr "Playlists des Kontos"
+
+msgid "The account's subscriptions"
+msgstr "Abonnements des Kontos"
+
+msgid "The account's watch history"
+msgstr "Wiedergabeverlauf des Kontos"
+
+msgid "The history file has invalid or oversized trailing data."
+msgstr "Die Verlaufsdatei enthält ungültige oder überdimensionierte nachfolgende Daten."
+
+msgid "The library changed while importing. Retry the import to keep your latest changes."
+msgstr "Die Mediathek hat sich während des Imports geändert. Wiederholen Sie den Vorgang, um die neuesten Änderungen zu behalten."
+
+msgid "The palettes could not be listed."
+msgstr "Farbpaletten konnten nicht aufgelistet werden."
+
+msgid "The received transcript is invalid."
+msgstr "Das empfangene Transkript ist ungültig."
+
+msgid "The request timed out. Retry."
+msgstr "Zeitüberschreitung der Anfrage. Erneut versuchen."
+
+msgid "The selected palette is unavailable; keeping the last usable appearance."
+msgstr "Die ausgewählte Farbpalette ist nicht verfügbar; das letzte gültige Erscheinungsbild wird beibehalten."
+
+msgid "The system keyring could not complete the request. Unlock it and retry."
+msgstr "Der System-Schlüsselbund konnte die Anfrage nicht abschließen. Bitte entsperren und erneut versuchen."
+
+msgid "The system keyring did not respond."
+msgstr "Der System-Schlüsselbund hat nicht geantwortet."
+
+msgid "The system keyring failed."
+msgstr "Der System-Schlüsselbund ist fehlgeschlagen."
+
+msgid "The system keyring is locked. Unlock it to stay signed in."
+msgstr "Der System-Schlüsselbund ist gesperrt. Bitte entsperren, um angemeldet zu bleiben."
+
+msgid "The system keyring is unavailable, so the session cannot be kept."
+msgstr "Der System-Schlüsselbund ist nicht verfügbar, daher kann die Sitzung nicht gespeichert werden."
+
+msgid "The themes folder could not be read."
+msgstr "Der Design-Ordner konnte nicht gelesen werden."
+
+msgid "The themes folder has more than 512 entries."
+msgstr "Der Design-Ordner enthält mehr als 512 Einträge."
+
+msgid "The transcript exceeds the allowed size."
+msgstr "Das Transkript überschreitet die zulässige Größe."
+
+msgid "The transcript is unavailable. Try again."
+msgstr "Das Transkript ist nicht verfügbar. Bitte erneut versuchen."
+
+msgid "Theater mode"
+msgstr "Kinomodus"
+
+msgid "Theater mode (t)"
+msgstr "Kinomodus (t)"
+
+msgid "Theme"
+msgstr "Design"
+
+msgid "This channel has no public playlists"
+msgstr "Dieser Kanal hat keine öffentlichen Playlists"
+
+msgid "This channel has not posted anything here yet"
+msgstr "Dieser Kanal hat hier noch nichts veröffentlicht"
+
+msgid "This device"
+msgstr "Dieses Gerät"
+
+msgid "This file exceeds 20,000 subscriptions."
+msgstr "Diese Datei überschreitet 20.000 Abonnements."
+
+msgid "This month"
+msgstr "Diesen Monat"
+
+msgid "This session is too large for the Windows Credential Manager (2560 bytes), so it cannot be kept there."
+msgstr "Diese Sitzung ist zu groß für die Windows-Anmeldeinformationsverwaltung (2560 Bytes) und kann dort nicht gespeichert werden."
+
+msgid "This subscriptions CSV has an unclosed quote."
+msgstr "Diese Abonnements-CSV enthält ein nicht geschlossenes Anführungszeichen."
+
+msgid "This video has no transcript available."
+msgstr "Für dieses Video ist kein Transkript verfügbar."
+
+msgid "This video is age-restricted and needs signing in."
+msgstr "Dieses Video ist altersbeschränkt und erfordert eine Anmeldung."
+
+msgid "This video is private or unavailable."
+msgstr "Dieses Video ist privat oder nicht verfügbar."
+
+msgid "This week"
+msgstr "Diese Woche"
+
+msgid "This year"
+msgstr "Dieses Jahr"
+
+msgid "Time between checks."
+msgstr "Zeit zwischen Überprüfungen."
+
+msgid "Today"
+msgstr "Heute"
+
+msgid "Transcript source unavailable."
+msgstr "Transkriptquelle nicht verfügbar."
+
+msgid "Turn on"
+msgstr "Einschalten"
+
+msgid "Under 4 minutes"
+msgstr "Unter 4 Minuten"
+
+msgid "Unmute"
+msgstr "Stummschaltung aufheben"
+
+msgid "Unmute (m)"
+msgstr "Stummschaltung aufheben (m)"
+
+msgid "Unmuted"
+msgstr "Ton an"
+
+msgid "Unsubscribe on this device"
+msgstr "Auf diesem Gerät nicht mehr folgen"
+
+msgid "Unwatched"
+msgstr "Ungesehen"
+
+msgid "Up next"
+msgstr "Nächstes Video"
+
+msgid "Up next in {seconds}"
+msgstr "Nächstes Video in {seconds}"
+
+msgid "Upload date"
+msgstr "Upload-Datum"
+
+msgid "Videos"
+msgstr "Videos"
+
+msgid "Videos you liked"
+msgstr "Videos, die Ihnen gefallen haben"
+
+msgid "Videos you watch appear here"
+msgstr "Videos, die Sie ansehen, erscheinen hier"
+
+msgid "View count"
+msgstr "Aufrufe"
+
+msgid "Views"
+msgstr "Aufrufe"
+
+msgid "Views (outside the video)"
+msgstr "Aufrufe (außerhalb des Videos)"
+
+msgid "Volume: 5%; switch Shorts"
+msgstr "Lautstärke: 5 %; Shorts wechseln"
+
+msgid "Watch a few videos to get recommendations here"
+msgstr "Sehen Sie sich einige Videos an, um hier Empfehlungen zu erhalten"
+
+msgid "Watch later"
+msgstr "Später ansehen"
+
+msgid "Watch later on this computer"
+msgstr "„Später ansehen“ auf diesem Computer"
+
+msgid "Watch later on this device"
+msgstr "„Später ansehen“ auf diesem Gerät"
+
+msgid "Watched {age}"
+msgstr "Gesehen {age}"
+
+msgid "Watching live"
+msgstr "Live-Zuschauer"
+
+msgid "Without an account"
+msgstr "Ohne Konto"
+
+msgid "Yesterday"
+msgstr "Gestern"
+
+msgid "YouTFast — demo"
+msgstr "YouTFast — Demo"
+
+msgid "YouTube did not accept this session. Sign in again on youtube.com and retry."
+msgstr "YouTube hat diese Sitzung nicht akzeptiert. Melden Sie sich auf youtube.com erneut an und versuchen Sie es noch einmal."
+
+msgid "YouTube is limiting requests (HTTP 429). Wait a while before trying again."
+msgstr "YouTube begrenzt die Anfragen (HTTP 429). Bitte warten Sie eine Weile vor dem nächsten Versuch."
+
+msgid "YouTube is limiting requests from this connection. Try again later."
+msgstr "YouTube begrenzt die Anfragen von dieser Verbindung. Bitte versuchen Sie es später erneut."
+
+msgid "YouTube is limiting requests. Retry later."
+msgstr "YouTube begrenzt die Anfragen. Bitte später erneut versuchen."
+
+msgid "YouTube needs a valid session. Sign in again."
+msgstr "YouTube benötigt eine gültige Sitzung. Bitte erneut anmelden."
+
+msgid "YouTube offers no sign-in for apps like this, so YouTFast uses your browser session, as yt-dlp does. Google may treat this as automated access and ask for verification, end the session or, in rare cases, suspend the account. A secondary account reduces this risk."
+msgstr "YouTube bietet keine Anmeldung für Anwendungen dieser Art an. Daher nutzt YouTFast wie yt-dlp Ihre Browsersitzung. Google könnte dies als automatisierten Zugriff werten und eine Überprüfung fordern, die Sitzung beenden oder im Einzelfall das Konto sperren. Ein Zweitkonto mindert dieses Risiko."
+
+msgid "YouTube refused access to the stream (HTTP 403). The stream link may have expired or access may be restricted. Try reopening the video."
+msgstr "YouTube hat den Zugriff auf den Stream verweigert (HTTP 403). Der Stream-Link ist möglicherweise abgelaufen oder der Zugriff ist eingeschränkt. Versuchen Sie, das Video erneut zu öffnen."
+
+msgid "YouTube refused the request from this connection. Retry later."
+msgstr "YouTube hat die Anfrage von dieser Verbindung abgelehnt. Bitte später erneut versuchen."
+
+msgid "YouTube returned an unreadable response. Retry."
+msgstr "YouTube hat eine unlesbare Antwort zurückgegeben. Bitte erneut versuchen."
+
+msgid "Your YouTube session has expired."
+msgstr "Ihre YouTube-Sitzung ist abgelaufen."
+
+msgid "Your account is subscribed. Manage it on youtube.com."
+msgstr "Konto hat abonniert. Auf youtube.com verwalten."
+
+msgid "Your feed is empty"
+msgstr "Ihr Feed ist leer"
+
+msgid "Your rating could not be read"
+msgstr "Ihre Bewertung konnte nicht gelesen werden"
+
+msgid "a cookies.txt file"
+msgstr "eine Datei cookies.txt"
+
+msgid "and {count} more"
+msgstr "und {count} weitere"
+
+msgid "channel information"
+msgstr "Kanalinformationen"
+
+msgid "channels"
+msgstr "Kanäle"
+
+msgid "comments"
+msgstr "Kommentare"
+
+msgid "credits"
+msgstr "Abspann"
+
+msgid "feed"
+msgstr "Feed"
+
+msgid "filler"
+msgstr "Füllmaterial"
+
+msgid "hardware decoding ({decoder})"
+msgstr "Hardware-Dekodierung ({decoder})"
+
+msgid "history"
+msgstr "Verlauf"
+
+msgid "interaction reminder"
+msgstr "Interaktionserinnerung"
+
+msgid "intro"
+msgstr "Intro"
+
+msgid "just now"
+msgstr "gerade eben"
+
+msgid "live streams"
+msgstr "Livestreams"
+
+msgid "more"
+msgstr "mehr"
+
+msgid "mpv could not initialize audio output. Check your audio device and try again."
+msgstr "mpv konnte die Audioausgabe nicht initialisieren. Überprüfen Sie Ihr Audiogerät und versuchen Sie es erneut."
+
+msgid "mpv could not initialize video output. Try restarting the app."
+msgstr "mpv konnte die Videoausgabe nicht initialisieren. Versuchen Sie, die App neu zu starten."
+
+msgid "mpv could not open the video stream. Check your connection and try reopening the video."
+msgstr "mpv konnte den Videostream nicht öffnen. Überprüfen Sie Ihre Verbindung und versuchen Sie, das Video erneut zu öffnen."
+
+msgid "mpv could not recognize the stream format."
+msgstr "mpv konnte das Format des Streams nicht erkennen."
+
+msgid "new uploads"
+msgstr "neue Uploads"
+
+msgid "non-music part"
+msgstr "Nicht-Musik-Teil"
+
+msgid "non-music section"
+msgstr "Nicht-Musik-Abschnitt"
+
+msgid "outro"
+msgstr "Outro"
+
+msgid "playlists"
+msgstr "Playlists"
+
+msgid "preview"
+msgstr "Vorschau"
+
+msgid "recommendations"
+msgstr "Empfehlungen"
+
+msgid "reminder to subscribe"
+msgstr "Abonniererinnerung"
+
+msgid "replies"
+msgstr "Antworten"
+
+msgid "results"
+msgstr "Ergebnisse"
+
+msgid "segment"
+msgstr "Segment"
+
+msgid "self-promotion"
+msgstr "Eigenwerbung"
+
+msgid "shorts"
+msgstr "Shorts"
+
+msgid "software decoding"
+msgstr "Software-Dekodierung"
+
+msgid "someone"
+msgstr "jemand"
+
+msgid "sponsor"
+msgstr "Sponsor"
+
+msgid "subscriptions"
+msgstr "Abos"
+
+msgid "tangent"
+msgstr "Abschweifung"
+
+msgid "the replies' token is missing"
+msgstr "Antwort-Token fehlt"
+
+msgid "transcript"
+msgstr "Transkript"
+
+msgid "videos"
+msgstr "Videos"
+
+msgid "yt-dlp could not extract the stream signature. Try updating yt-dlp and reopening the video."
+msgstr "yt-dlp konnte die Stream-Signatur nicht extrahieren. Aktualisieren Sie yt-dlp und öffnen Sie das Video erneut."
+
+msgid "yt-dlp is not installed for Python, so the browser cannot be read."
+msgstr "yt-dlp ist für Python nicht installiert, daher kann der Browser nicht ausgelesen werden."
+
+msgid "{channel} uploaded"
+msgstr "{channel} hat ein Video hochgeladen"
+
+msgid "{count} comments"
+msgstr "{count} Kommentare"
+
+msgid "{count} day ago"
+msgid_plural "{count} days ago"
+msgstr[0] "vor {count} Tag"
+msgstr[1] "vor {count} Tagen"
+
+msgid "{count} hour ago"
+msgid_plural "{count} hours ago"
+msgstr[0] "vor {count} Stunde"
+msgstr[1] "vor {count} Stunden"
+
+msgid "{count} minute ago"
+msgid_plural "{count} minutes ago"
+msgstr[0] "vor {count} Minute"
+msgstr[1] "vor {count} Minuten"
+
+msgid "{count} month ago"
+msgid_plural "{count} months ago"
+msgstr[0] "vor {count} Monat"
+msgstr[1] "vor {count} Monaten"
+
+msgid "{count} new videos"
+msgstr "{count} neue Videos"
+
+msgid "{count} replies"
+msgstr "{count} Antworten"
+
+msgid "{count} subscriber"
+msgid_plural "{count} subscribers"
+msgstr[0] "{count} Abonnent"
+msgstr[1] "{count} Abonnenten"
+
+msgid "{count} subscribers"
+msgstr "{count} Abonnenten"
+
+msgid "{count} video"
+msgid_plural "{count} videos"
+msgstr[0] "{count} Video"
+msgstr[1] "{count} Videos"
+
+msgid "{count} videos"
+msgstr "{count} Videos"
+
+msgid "{count} view"
+msgid_plural "{count} views"
+msgstr[0] "{count} Aufruf"
+msgstr[1] "{count} Aufrufe"
+
+msgid "{count} views"
+msgstr "{count} Aufrufe"
+
+msgid "{count} watching now"
+msgstr "{count} Zuschauer jetzt"
+
+msgid "{count} week ago"
+msgid_plural "{count} weeks ago"
+msgstr[0] "vor {count} Woche"
+msgstr[1] "vor {count} Wochen"
+
+msgid "{count} year ago"
+msgid_plural "{count} years ago"
+msgstr[0] "vor {count} Jahr"
+msgstr[1] "vor {count} Jahren"
+
+msgid "{error} Sign in again to see your account."
+msgstr "{error} Melden Sie sich erneut an, um Ihr Konto zu sehen."
+
+msgid "{minutes} min"
+msgstr "{minutes} Min."
+
+msgid "{number} · Playing"
+msgstr "{number} · Wird abgespielt"
+

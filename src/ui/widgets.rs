@@ -1345,9 +1345,21 @@ mod tests {
         assert_eq!(video_count_label(2, Locale::English), "2 videos");
         assert_eq!(video_count_label(1, Locale::PortugueseBrazil), "1 vídeo");
         assert_eq!(video_count_label(2, Locale::PortugueseBrazil), "2 vídeos");
+        assert_eq!(video_count_label(1, Locale::Spanish), "1 vídeo");
+        assert_eq!(video_count_label(2, Locale::Spanish), "2 vídeos");
+        assert_eq!(video_count_label(1, Locale::French), "1 vidéo");
+        assert_eq!(video_count_label(2, Locale::French), "2 vidéos");
+        assert_eq!(video_count_label(1, Locale::German), "1 Video");
+        assert_eq!(video_count_label(2, Locale::German), "2 Videos");
+        assert_eq!(video_count_label(1, Locale::Italian), "1 video");
+        assert_eq!(video_count_label(2, Locale::Italian), "2 video");
         video.live = true;
         assert_eq!(meta(&video, Locale::English), "Live now");
         assert_eq!(meta(&video, Locale::PortugueseBrazil), "Ao vivo agora");
+        assert_eq!(meta(&video, Locale::Spanish), "En directo ahora");
+        assert_eq!(meta(&video, Locale::French), "En direct");
+        assert_eq!(meta(&video, Locale::German), "Jetzt live");
+        assert_eq!(meta(&video, Locale::Italian), "In diretta ora");
         assert_eq!(video.title, "Settings");
         assert_eq!(video.channel.as_deref(), Some("Home"));
     }

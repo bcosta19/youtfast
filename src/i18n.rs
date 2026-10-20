@@ -13,19 +13,38 @@ include!(concat!(env!("OUT_DIR"), "/catalogs.rs"));
 pub enum Locale {
     #[serde(rename = "pt-BR")]
     PortugueseBrazil,
+    #[serde(rename = "es")]
+    Spanish,
+    #[serde(rename = "fr")]
+    French,
+    #[serde(rename = "de")]
+    German,
+    #[serde(rename = "it")]
+    Italian,
     #[default]
     #[serde(rename = "en", other)]
     English,
 }
 
 impl Locale {
-    pub const ALL: &'static [Self] = &[Self::English, Self::PortugueseBrazil];
+    pub const ALL: &'static [Self] = &[
+        Self::English,
+        Self::PortugueseBrazil,
+        Self::Spanish,
+        Self::French,
+        Self::German,
+        Self::Italian,
+    ];
 
     /// Native names remain recognizable even when another language is selected.
     pub fn native_name(self) -> &'static str {
         match self {
             Self::English => "English",
             Self::PortugueseBrazil => "Português (Brasil)",
+            Self::Spanish => "Español",
+            Self::French => "Français",
+            Self::German => "Deutsch",
+            Self::Italian => "Italiano",
         }
     }
 }
@@ -35,6 +54,10 @@ impl fastframe_i18n::Locale for Locale {
         match self {
             Self::English => None,
             Self::PortugueseBrazil => Some(&pt_br::Translator),
+            Self::Spanish => Some(&es::Translator),
+            Self::French => Some(&fr::Translator),
+            Self::German => Some(&de::Translator),
+            Self::Italian => Some(&it::Translator),
         }
     }
 }
@@ -135,6 +158,10 @@ mod tests {
             gettext(Locale::PortugueseBrazil, "Settings"),
             "Configurações"
         );
+        assert_eq!(gettext(Locale::Spanish, "Settings"), "Configuración");
+        assert_eq!(gettext(Locale::French, "Settings"), "Paramètres");
+        assert_eq!(gettext(Locale::German, "Settings"), "Einstellungen");
+        assert_eq!(gettext(Locale::Italian, "Settings"), "Impostazioni");
         assert_eq!(
             gettext(Locale::PortugueseBrazil, "A future message"),
             "A future message"
@@ -196,22 +223,30 @@ mod tests {
             keys.sort_unstable();
             keys
         }
-        let mut source = String::new();
-        for line in include_str!("../assets/i18n/pt-BR.po").lines() {
-            if let Some(value) = line
-                .strip_prefix("msgid ")
-                .or_else(|| line.strip_prefix("msgid_plural "))
-            {
-                source = serde_json::from_str(value).unwrap();
-            } else if line.starts_with("msgstr") && !source.is_empty() {
-                let (_, value) = line.split_once(' ').unwrap();
-                let translation: String = serde_json::from_str(value).unwrap();
-                assert!(!translation.is_empty(), "{source}");
-                assert_eq!(
-                    placeholders(&source),
-                    placeholders(&translation),
-                    "{source}"
-                );
+        for catalog in [
+            include_str!("../assets/i18n/pt-BR.po"),
+            include_str!("../assets/i18n/es.po"),
+            include_str!("../assets/i18n/fr.po"),
+            include_str!("../assets/i18n/de.po"),
+            include_str!("../assets/i18n/it.po"),
+        ] {
+            let mut source = String::new();
+            for line in catalog.lines() {
+                if let Some(value) = line
+                    .strip_prefix("msgid ")
+                    .or_else(|| line.strip_prefix("msgid_plural "))
+                {
+                    source = serde_json::from_str(value).unwrap();
+                } else if line.starts_with("msgstr") && !source.is_empty() {
+                    let (_, value) = line.split_once(' ').unwrap();
+                    let translation: String = serde_json::from_str(value).unwrap();
+                    assert!(!translation.is_empty(), "{source}");
+                    assert_eq!(
+                        placeholders(&source),
+                        placeholders(&translation),
+                        "{source}"
+                    );
+                }
             }
         }
     }

@@ -410,6 +410,10 @@ mod tests {
         let mut actions = Vec::new();
         for (locale, expected_title) in [
             (Locale::PortugueseBrazil, "Configurações"),
+            (Locale::Spanish, "Configuración"),
+            (Locale::French, "Paramètres"),
+            (Locale::German, "Einstellungen"),
+            (Locale::Italian, "Impostazioni"),
             (Locale::English, "Settings"),
         ] {
             let labels = render(&ctx, &state, Vec::new(), &mut actions);
