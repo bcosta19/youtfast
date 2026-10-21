@@ -104,7 +104,7 @@ do not need to know Rust to help:
 - **Pick an issue.** Look for
   [good first issues](https://github.com/bcosta19/youtfast/labels/good%20first%20issue)
   and [help wanted](https://github.com/bcosta19/youtfast/labels/help%20wanted).
-- **Translate.** English and Brazilian Portuguese exist; more languages are welcome.
+- **Translate.** English, Brazilian Portuguese, Spanish, French, German, and Italian exist; more languages are welcome.
 - **Package it.** Flathub and AUR submissions are open tasks.
 - **Measure it.** Run the [benchmarks](docs/benchmarks.md) on your machine.
 
