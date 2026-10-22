@@ -10,6 +10,8 @@ are the distribution record.
 
 ### Added
 
+- Spanish, French, German and Italian interface languages, chosen in
+  Settings alongside English and Brazilian Portuguese.
 - Optional miniplayer while scrolling to the watch page's comments, enabled
   in Playback settings. Returning from it reveals the inline video again.
 
