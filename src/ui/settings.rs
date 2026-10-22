@@ -149,7 +149,7 @@ fn theme_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         });
 }
 
-/// The Playback group: autoplay, SponsorBlock.
+/// The Playback group: autoplay, scrolling mini player, SponsorBlock.
 fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
     let palette = &state.palette;
@@ -168,6 +168,30 @@ fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 |ui| {
                     if switch(ui, palette, autoplay, &tr(locale, "Autoplay")).clicked() {
                         actions.push(Action::SetAutoplay(!autoplay));
+                    }
+                },
+            );
+            ui.add_space(12.0);
+            let scroll_miniplayer = state.settings.scroll_miniplayer;
+            setting_row(
+                ui,
+                palette,
+                &tr(locale, "Miniplayer while scrolling"),
+                &tr(
+                    locale,
+                    "Keep the video visible when scrolling down to the comments.",
+                ),
+                CONTROL_WIDTH,
+                |ui| {
+                    if switch(
+                        ui,
+                        palette,
+                        scroll_miniplayer,
+                        &tr(locale, "Miniplayer while scrolling"),
+                    )
+                    .clicked()
+                    {
+                        actions.push(Action::SetScrollMiniplayer(!scroll_miniplayer));
                     }
                 },
             );

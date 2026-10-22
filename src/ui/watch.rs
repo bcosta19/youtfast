@@ -43,54 +43,63 @@ pub fn show(
                 return;
             };
             let theater = state.settings.theater;
-            egui::ScrollArea::vertical()
+            let mut scrolled_past_video = false;
+            let mut scroll = egui::ScrollArea::vertical()
                 .id_salt("watch-page")
-                .auto_shrink(false)
-                .show(ui, |ui| {
-                    // Theater mode: the video across the window, the columns
-                    // under it.
-                    if theater {
+                .auto_shrink(false);
+            if std::mem::take(&mut state.watch_scroll_to_video) {
+                scroll = scroll.vertical_scroll_offset(0.0);
+            }
+            scroll.show(ui, |ui| {
+                // Theater mode: the video across the window, the columns
+                // under it.
+                if theater {
+                    scrolled_past_video =
                         video_pane(ui, state, status, surface, max_video_height, actions);
-                    }
-                    if ui.available_width() >= WIDE {
-                        ui.horizontal_top(|ui| {
-                            let gap = 24.0;
-                            let main_width = ui.available_width() - SIDEBAR_WIDTH - gap;
-                            ui.vertical(|ui| {
-                                ui.set_width(main_width);
-                                if !theater {
-                                    video_pane(
-                                        ui,
-                                        state,
-                                        status,
-                                        surface,
-                                        max_video_height,
-                                        actions,
-                                    );
-                                }
-                                about_video(ui, state, &watching, status, actions);
-                            });
-                            ui.add_space(gap);
-                            ui.vertical(|ui| {
-                                ui.set_width(SIDEBAR_WIDTH);
-                                queue(ui, state, actions);
-                                up_next(ui, state, actions);
-                                ui.add_space(24.0);
-                                related(ui, state, actions);
-                            });
+                }
+                if ui.available_width() >= WIDE {
+                    ui.horizontal_top(|ui| {
+                        let gap = 24.0;
+                        let main_width = ui.available_width() - SIDEBAR_WIDTH - gap;
+                        ui.vertical(|ui| {
+                            ui.set_width(main_width);
+                            if !theater {
+                                scrolled_past_video = video_pane(
+                                    ui,
+                                    state,
+                                    status,
+                                    surface,
+                                    max_video_height,
+                                    actions,
+                                );
+                            }
+                            about_video(ui, state, &watching, status, actions);
                         });
-                    } else {
-                        if !theater {
+                        ui.add_space(gap);
+                        ui.vertical(|ui| {
+                            ui.set_width(SIDEBAR_WIDTH);
+                            queue(ui, state, actions);
+                            up_next(ui, state, actions);
+                            ui.add_space(24.0);
+                            related(ui, state, actions);
+                        });
+                    });
+                } else {
+                    if !theater {
+                        scrolled_past_video =
                             video_pane(ui, state, status, surface, max_video_height, actions);
-                        }
-                        about_video(ui, state, &watching, status, actions);
-                        ui.add_space(24.0);
-                        queue(ui, state, actions);
-                        up_next(ui, state, actions);
-                        ui.add_space(24.0);
-                        related(ui, state, actions);
                     }
-                });
+                    about_video(ui, state, &watching, status, actions);
+                    ui.add_space(24.0);
+                    queue(ui, state, actions);
+                    up_next(ui, state, actions);
+                    ui.add_space(24.0);
+                    related(ui, state, actions);
+                }
+            });
+            if scrolled_past_video && state.settings.scroll_miniplayer && !state.mini_closed {
+                player::mini(ui.ctx(), state, status, surface, actions);
+            }
         });
 }
 
@@ -348,7 +357,7 @@ fn video_pane(
     surface: Option<&VideoSurface>,
     max_video_height: f32,
     actions: &mut Vec<Action>,
-) {
+) -> bool {
     let width = ui.available_width();
     let (row, _) = if state.watching_short() {
         let height = max_video_height.max(320.0);
@@ -365,6 +374,7 @@ fn video_pane(
     };
     player::player(ui, rect, state, status, surface, Mode::Page, actions);
     ui.add_space(16.0);
+    rect.bottom() <= ui.clip_rect().top()
 }
 
 /// Under the video, as on YouTube: the title, the channel's line with the
@@ -1704,6 +1714,81 @@ mod tests {
                 );
                 output.textures_delta.clear();
             }
+        }
+    }
+
+    #[test]
+    fn scrolling_miniplayer_is_optional_and_returning_reveals_the_video() {
+        fn contains_miniplayer(shape: &egui::Shape) -> bool {
+            match shape {
+                egui::Shape::Text(text) => text.galley.text() == "Miniplayer",
+                egui::Shape::Vec(shapes) => shapes.iter().any(contains_miniplayer),
+                _ => false,
+            }
+        }
+        for (width, theater) in [(1280.0, false), (600.0, false), (1280.0, true)] {
+            let ctx = egui::Context::default();
+            crate::theme::install_fonts(&ctx);
+            let mut state = State {
+                view: crate::model::View::Watch,
+                watching: Some(Video::from_id("synthetic".into())),
+                details: Fetch::Ready(crate::model::Details {
+                    comment_count: Some(30),
+                    ..Default::default()
+                }),
+                comments: Fetch::Ready((0..30).map(|i| row(&i.to_string(), 0)).collect()),
+                ..Default::default()
+            };
+            state.settings.theater = theater;
+            let status = Status {
+                paused: true,
+                ..Default::default()
+            };
+            let draw = |state: &mut State, wheel: f32, time: f64| {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(width, 600.0))),
+                        time: Some(time),
+                        events: vec![
+                            egui::Event::PointerMoved(pos2(300.0, 300.0)),
+                            egui::Event::MouseWheel {
+                                unit: egui::MouseWheelUnit::Point,
+                                phase: egui::TouchPhase::Move,
+                                delta: vec2(0.0, wheel),
+                                modifiers: egui::Modifiers::NONE,
+                            },
+                        ],
+                        ..Default::default()
+                    },
+                    |ui| show(ui, state, Some(&status), None, &mut Vec::new()),
+                );
+                let mini = output
+                    .shapes
+                    .iter()
+                    .any(|shape| contains_miniplayer(&shape.shape));
+                output.textures_delta.clear();
+                mini
+            };
+            for frame in 0..20 {
+                assert!(!draw(&mut state, -120.0, frame as f64 * 0.1));
+            }
+            state.settings.scroll_miniplayer = true;
+            // egui measures a newly opened window before painting it.
+            for frame in 0..3 {
+                draw(&mut state, 0.0, 2.0 + frame as f64 * 0.1);
+            }
+            assert!(
+                draw(&mut state, 0.0, 2.3),
+                "width={width}, theater={theater}"
+            );
+            state.mini_closed = true;
+            assert!(!draw(&mut state, 0.0, 2.4));
+            state.mini_closed = false;
+            state.watch_scroll_to_video = true;
+            for frame in 0..4 {
+                assert!(!draw(&mut state, 0.0, 2.5 + frame as f64 * 0.1));
+            }
+            assert!(!state.watch_scroll_to_video);
         }
     }
 

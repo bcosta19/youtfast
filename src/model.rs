@@ -579,6 +579,7 @@ pub enum Action {
     /// The watch page between its usual layout and theater mode.
     ToggleTheater,
     ToggleMiniPlayer,
+    SetScrollMiniplayer(bool),
     SeekChapter(bool),
     RetryPlayback,
     ToggleLoop,

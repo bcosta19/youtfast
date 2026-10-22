@@ -127,9 +127,13 @@ impl Inner {
                 }
             }
         }
-        let viewport = info.viewport_in_pixels();
+        // egui's viewport_in_pixels clamps to the screen. A scrolling video
+        // still needs its full framebuffer and destination, otherwise mpv
+        // changes the aspect ratio as the picture leaves the window.
+        let viewport = video_viewport(info);
+        let clip = info.clip_rect_in_pixels();
         let (width, height) = (viewport.width_px, viewport.height_px);
-        if width <= 0 || height <= 0 {
+        if width <= 0 || height <= 0 || clip.width_px <= 0 || clip.height_px <= 0 {
             return;
         }
         // SAFETY: GL calls on the context egui_glow made current for this
@@ -171,6 +175,15 @@ impl Inner {
 
             gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(target.framebuffer));
             gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, framebuffer(previous_draw));
+            // libmpv changes GL state, including the scissor test. Reinstate
+            // egui's clip before the blit so video cannot cover the toolbar.
+            gl.enable(glow::SCISSOR_TEST);
+            gl.scissor(
+                clip.left_px,
+                clip.from_bottom_px,
+                clip.width_px,
+                clip.height_px,
+            );
             gl.blit_framebuffer(
                 0,
                 0,
@@ -185,6 +198,22 @@ impl Inner {
             );
             restore(gl, previous_draw, previous_read);
         }
+    }
+}
+
+fn video_viewport(info: &egui::PaintCallbackInfo) -> egui::epaint::ViewportInPixels {
+    let rect = info.viewport;
+    let scale = info.pixels_per_point;
+    let left_px = (rect.left() * scale).round() as i32;
+    let top_px = (rect.top() * scale).round() as i32;
+    let width_px = (rect.width() * scale).round() as i32;
+    let height_px = (rect.height() * scale).round() as i32;
+    egui::epaint::ViewportInPixels {
+        left_px,
+        top_px,
+        from_bottom_px: info.screen_size_px[1] as i32 - top_px - height_px,
+        width_px,
+        height_px,
     }
 }
 
@@ -436,4 +465,35 @@ unsafe extern "C" fn frame_ready(context: *mut c_void) {
     // SAFETY: the pointer is the boxed context RenderContext::new registered.
     let context = unsafe { &*(context as *const egui::Context) };
     context.request_repaint();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui::{Rect, pos2, vec2};
+
+    #[test]
+    fn scrolling_clips_the_picture_without_resizing_the_video_framebuffer() {
+        for scale in [1.0, 1.25, 2.0] {
+            for top in [100.0, 0.0, -150.0, -400.0] {
+                let info = egui::PaintCallbackInfo {
+                    viewport: Rect::from_min_size(pos2(100.0, top), vec2(640.0, 360.0)),
+                    clip_rect: Rect::from_min_max(pos2(80.0, 80.0), pos2(900.0, 700.0)),
+                    pixels_per_point: scale,
+                    screen_size_px: [(1000.0 * scale) as u32, (800.0 * scale) as u32],
+                };
+                let viewport = video_viewport(&info);
+                assert_eq!(viewport.width_px, (640.0 * scale) as i32);
+                assert_eq!(viewport.height_px, (360.0 * scale) as i32);
+                assert_eq!(viewport.top_px, (top * scale).round() as i32);
+                assert_eq!(
+                    viewport.from_bottom_px,
+                    ((800.0 - top - 360.0) * scale).round() as i32
+                );
+                // The toolbar remains outside the scissor, even if the video
+                // itself has a negative top or is completely offscreen.
+                assert_eq!(info.clip_rect_in_pixels().top_px, (80.0 * scale) as i32);
+            }
+        }
+    }
 }

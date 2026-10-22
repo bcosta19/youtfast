@@ -168,6 +168,7 @@ impl App {
         self.state.autoplay = None;
         self.state.playback_loop = false;
         self.state.mini_closed = false;
+        self.state.watch_scroll_to_video = true;
         self.state.player_menu = crate::app::PlayerMenu::Closed;
         self.state.segments.clear();
         self.state.skipped.clear();
@@ -507,6 +508,7 @@ impl App {
             self.state.view = View::Watch;
         }
         self.state.mini_closed = false;
+        self.state.watch_scroll_to_video = true;
     }
 
     /// A video playing must be drawn: the mini player does it, and once it

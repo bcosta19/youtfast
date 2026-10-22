@@ -55,6 +55,11 @@ can be reordered or trimmed; the mini player can be moved and resized inside
 the application. Playlist playback continues beyond the initially loaded page.
 Device history supports filtering and removing individual entries.
 
+Settings → Playback → Miniplayer while scrolling keeps a video visible in a
+floating player when you scroll past it to read comments. It is off by default.
+Scrolling back reveals the inline player again; clicking the miniplayer returns
+to the video at the top of the page. Closing the miniplayer pauses playback.
+
 The watch page also shows the description (timestamps seek), chapters
 and comments, loaded through rustypipe. Comments and replies also display
 image and animated GIF/WebP attachments. Attachments use the bounded thumbnail
