@@ -8,6 +8,8 @@ are the distribution record.
 
 ## [Unreleased]
 
+## [0.2.0] - Unreleased
+
 ### Added
 
 - Spanish, French, German and Italian interface languages, chosen in
@@ -98,5 +100,6 @@ macOS Apple Silicon. Interactive Windows/macOS qualification is still pending.
 These exclusions are scope decisions, not completed features promised for a
 specific next version. See [ROADMAP.md](ROADMAP.md) for follow-up gates.
 
-[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/bcosta19/youtfast/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/bcosta19/youtfast/releases/tag/v0.1.0
