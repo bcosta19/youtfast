@@ -84,6 +84,31 @@ impl State {
         self.page_videos = Listing::Ready(items);
     }
 
+    fn fill_channel_page(
+        &mut self,
+        header: ChannelHeader,
+        items: PageItems,
+        more: Option<innertube::More>,
+    ) {
+        // A channel opened from a link only gets its UC… id, real name and
+        // avatar once the header arrives.
+        if let Some(Page::Channel(channel)) = &mut self.page {
+            channel.id = header.id.clone();
+            channel.name = header.name.clone();
+            if header.avatar.is_some() {
+                channel.avatar = header.avatar.clone();
+            }
+        }
+        self.channel_header = Some(header);
+        self.page_more = more;
+        self.page_more_state = Fetch::Idle;
+        match items {
+            PageItems::Videos(videos) => self.page_videos = Listing::Ready(videos),
+            PageItems::Playlists(items) => self.page_playlists = Listing::Ready(items),
+            _ => {}
+        }
+    }
+
     fn accept_import(
         &mut self,
         library: Library,
@@ -540,14 +565,8 @@ impl App {
                     more,
                 }),
             ) => {
-                state.channel_header = Some(header);
-                state.page_more = more;
-                state.page_more_state = Fetch::Idle;
-                match items {
-                    PageItems::Videos(videos) => put(&mut state.page_videos, Ok(videos)),
-                    PageItems::Playlists(items) => put(&mut state.page_playlists, Ok(items)),
-                    _ => {}
-                }
+                self.open_channel = Some(header.id.clone());
+                state.fill_channel_page(header, items, more);
             }
             (Slot::Page, Ok(Payload::About(about))) => {
                 state.channel_about = Fetch::Ready(about);
@@ -760,7 +779,19 @@ impl App {
         self.send_request(Slot::Shorts, Request::Shorts { channels });
     }
 
-    pub(super) fn open_page(&mut self, ctx: &egui::Context, view: View, page: Page) {
+    pub(super) fn open_page(&mut self, ctx: &egui::Context, view: View, mut page: Page) {
+        if let Page::Channel(channel) = &mut page
+            && channel.name.is_empty()
+            && let Some(known) = self
+                .state
+                .library
+                .subscriptions
+                .iter()
+                .find(|subscribed| subscribed.id == channel.id)
+        {
+            channel.name = known.name.clone();
+            channel.avatar = known.avatar.clone();
+        }
         if self.state.view != view || self.state.page.as_ref() != Some(&page) {
             self.push_location();
         }
@@ -1065,6 +1096,36 @@ mod tests {
         );
         assert_eq!(state.page_more.as_ref().unwrap().ctoken, "next");
         assert!(matches!(state.page_more_state, Fetch::Idle));
+    }
+
+    #[test]
+    fn channel_header_completes_a_channel_opened_from_a_link() {
+        let linked = youtube::channel_from_link("https://www.youtube.com/@BlenderStudio").unwrap();
+        let mut state = State {
+            view: View::Channel,
+            page: Some(Page::Channel(linked)),
+            ..Default::default()
+        };
+        let header = ChannelHeader {
+            id: "UCz75RVbH8q2jdBJ4SnwuZZQ".into(),
+            name: "Blender Studio".into(),
+            handle: Some("@BlenderStudio".into()),
+            avatar: Some("https://yt3.ggpht.com/avatar".into()),
+            ..Default::default()
+        };
+        state.fill_channel_page(
+            header,
+            PageItems::Videos(vec![Video::from_id("aaaaaaaaaaa".into())]),
+            None,
+        );
+        assert_eq!(
+            state.page,
+            Some(Page::Channel(Channel {
+                id: "UCz75RVbH8q2jdBJ4SnwuZZQ".into(),
+                name: "Blender Studio".into(),
+                avatar: Some("https://yt3.ggpht.com/avatar".into()),
+            }))
+        );
     }
 
     #[test]

@@ -671,7 +671,13 @@ impl App {
                     return;
                 }
                 if let Some(id) = youtube::video_id_from_link(text) {
+                    self.state.suggestions.clear();
                     self.open(Video::from_id(id));
+                    return;
+                }
+                if let Some(channel) = youtube::channel_from_link(text) {
+                    self.state.suggestions.clear();
+                    self.open_page(ctx, View::Channel, Page::Channel(channel));
                     return;
                 }
                 self.push_location();

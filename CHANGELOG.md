@@ -14,6 +14,8 @@ are the distribution record.
   Settings alongside English and Brazilian Portuguese.
 - Optional miniplayer while scrolling to the watch page's comments, enabled
   in Playback settings. Returning from it reveals the inline video again.
+- Opening or pasting a channel link (`/@handle`, `/channel/UC…`, `/c/name`,
+  `/user/name`) opens the channel page instead of searching for the URL.
 
 ### Changed
 
