@@ -69,49 +69,53 @@ pub fn show(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Act
     let locale = state.settings.language;
 
     results::panel(ui, |ui| {
-        if let Some(url) = state
-            .channel_header
-            .as_ref()
-            .and_then(|header| header.banner.as_deref())
-        {
-            let width = ui.available_width();
-            let height = (width / 6.0).clamp(80.0, 200.0);
-            let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
-            super::images::remote(ui, url)
-                .fit_to_exact_size(rect.size())
-                .corner_radius(egui::CornerRadius::same(theme::RADIUS))
-                .paint_at(ui, rect);
-            ui.add_space(16.0);
-        }
-        header(ui, state, channel, actions);
-        ui.add_space(16.0);
-        tab_bar(ui, state, actions);
-        ui.add_space(16.0);
-        if matches!(
-            state.channel_tab,
-            ChannelTab::Videos | ChannelTab::Shorts | ChannelTab::Live
-        ) {
-            ui.horizontal_wrapped(|ui| {
-                for &order in crate::innertube::ChannelOrder::ALL {
-                    if widgets::chip(
-                        ui,
-                        &state.palette,
-                        tr(locale, order.label()).as_ref(),
-                        state.channel_order == order,
-                    )
-                    .clicked()
-                    {
-                        actions.push(Action::SetChannelOrder(order));
-                    }
+        egui::ScrollArea::vertical()
+            .auto_shrink(false)
+            .show(ui, |ui| {
+                if let Some(url) = state
+                    .channel_header
+                    .as_ref()
+                    .and_then(|header| header.banner.as_deref())
+                {
+                    let width = ui.available_width();
+                    let height = (width / 6.0).clamp(80.0, 200.0);
+                    let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
+                    super::images::remote(ui, url)
+                        .fit_to_exact_size(rect.size())
+                        .corner_radius(egui::CornerRadius::same(theme::RADIUS))
+                        .paint_at(ui, rect);
+                    ui.add_space(16.0);
+                }
+                header(ui, state, channel, actions);
+                ui.add_space(16.0);
+                tab_bar(ui, state, actions);
+                ui.add_space(16.0);
+                if matches!(
+                    state.channel_tab,
+                    ChannelTab::Videos | ChannelTab::Shorts | ChannelTab::Live
+                ) {
+                    ui.horizontal_wrapped(|ui| {
+                        for &order in crate::innertube::ChannelOrder::ALL {
+                            if widgets::chip(
+                                ui,
+                                &state.palette,
+                                tr(locale, order.label()).as_ref(),
+                                state.channel_order == order,
+                            )
+                            .clicked()
+                            {
+                                actions.push(Action::SetChannelOrder(order));
+                            }
+                        }
+                    });
+                    ui.add_space(12.0);
+                }
+                match &state.channel_tab {
+                    ChannelTab::About => about(ui, state, actions),
+                    ChannelTab::Playlists => playlists(ui, state, actions),
+                    tab => videos(ui, state, tab, actions),
                 }
             });
-            ui.add_space(12.0);
-        }
-        match &state.channel_tab {
-            ChannelTab::About => about(ui, state, actions),
-            ChannelTab::Playlists => playlists(ui, state, actions),
-            tab => videos(ui, state, tab, actions),
-        }
     });
 }
 
@@ -295,7 +299,7 @@ fn videos(ui: &mut Ui, state: &State, tab: &ChannelTab, actions: &mut Vec<Action
     };
     match &state.page_videos {
         Listing::Idle => {}
-        Listing::Loading => results::loading(ui, state, what),
+        Listing::Loading => results::loading_content(ui, state, what),
         Listing::Failed(error) => results::failed(ui, state, error, actions),
         Listing::Ready(videos) if videos.is_empty() => match tab {
             ChannelTab::Search(query) => results::empty(
@@ -320,42 +324,37 @@ fn videos(ui: &mut Ui, state: &State, tab: &ChannelTab, actions: &mut Vec<Action
             ),
         },
         Listing::Ready(videos) => {
-            egui::ScrollArea::vertical()
-                .auto_shrink(false)
-                .show(ui, |ui| {
-                    let (columns, width) =
-                        widgets::grid_columns(ui.available_width(), CARD_WIDTH, GAP, 5);
-                    let indices: Vec<usize> = (0..videos.len()).collect();
-                    for row in indices.chunks(columns) {
-                        ui.horizontal_top(|ui| {
-                            ui.spacing_mut().item_spacing.x = GAP;
-                            for &index in row {
-                                let video = &videos[index];
-                                let selected = index == state.cursor;
-                                let watched = widgets::watched(&state.library, video);
-                                let response = widgets::video_card(
-                                    ui,
-                                    &state.palette,
-                                    video,
-                                    watched,
-                                    selected,
-                                    width,
-                                    locale,
-                                );
-                                if selected && state.cursor_moved {
-                                    response.clone().scroll_to_me(None);
-                                }
-                                // The last card visible asks for the next page.
-                                if index == videos.len() - 1 && ui.is_rect_visible(response.rect) {
-                                    actions.push(Action::LoadMore);
-                                }
-                                widgets::video_interactions(ui, &response, state, video, actions);
-                            }
-                        });
+            let (columns, width) = widgets::grid_columns(ui.available_width(), CARD_WIDTH, GAP, 5);
+            let indices: Vec<usize> = (0..videos.len()).collect();
+            for row in indices.chunks(columns) {
+                ui.horizontal_top(|ui| {
+                    ui.spacing_mut().item_spacing.x = GAP;
+                    for &index in row {
+                        let video = &videos[index];
+                        let selected = index == state.cursor;
+                        let watched = widgets::watched(&state.library, video);
+                        let response = widgets::video_card(
+                            ui,
+                            &state.palette,
+                            video,
+                            watched,
+                            selected,
+                            width,
+                            locale,
+                        );
+                        if selected && state.cursor_moved {
+                            response.clone().scroll_to_me(None);
+                        }
+                        // The last card visible asks for the next page.
+                        if index == videos.len() - 1 && ui.is_rect_visible(response.rect) {
+                            actions.push(Action::LoadMore);
+                        }
+                        widgets::video_interactions(ui, &response, state, video, actions);
                     }
-                    ui.add_space(GAP);
-                    more_row(ui, state, actions);
                 });
+            }
+            ui.add_space(GAP);
+            more_row(ui, state, actions);
         }
     }
 }
@@ -380,7 +379,7 @@ fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 
     match &state.page_playlists {
         Listing::Idle => {}
-        Listing::Loading => results::loading(ui, state, "playlists"),
+        Listing::Loading => results::loading_content(ui, state, "playlists"),
         Listing::Failed(error) => results::failed(ui, state, error, actions),
         Listing::Ready(playlists) if playlists.is_empty() => results::empty(
             ui,
@@ -389,42 +388,38 @@ fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             tr(locale, "This channel has no public playlists").as_ref(),
         ),
         Listing::Ready(playlists) => {
-            egui::ScrollArea::vertical()
-                .auto_shrink(false)
-                .show(ui, |ui| {
-                    results::virtual_rows(
+            results::virtual_rows(
+                ui,
+                106.0,
+                playlists.len(),
+                state.cursor_moved.then_some(state.cursor),
+                |ui, index| {
+                    let playlist = &playlists[index];
+                    let selected = index == state.cursor;
+                    let response = widgets::playlist_row(
                         ui,
-                        106.0,
-                        playlists.len(),
-                        state.cursor_moved.then_some(state.cursor),
-                        |ui, index| {
-                            let playlist = &playlists[index];
-                            let selected = index == state.cursor;
-                            let response = widgets::playlist_row(
-                                ui,
-                                &state.palette,
-                                playlist,
-                                selected,
-                                false,
-                                locale,
-                            );
-                            if selected && state.cursor_moved {
-                                response.clone().scroll_to_me(None);
-                            }
-                            if index == playlists.len() - 1 && ui.is_rect_visible(response.rect) {
-                                actions.push(Action::LoadMore);
-                            }
-                            if response.clicked() {
-                                actions.push(Action::OpenPlaylist {
-                                    id: playlist.id.clone(),
-                                    name: playlist.name.clone(),
-                                });
-                            }
-                        },
+                        &state.palette,
+                        playlist,
+                        selected,
+                        false,
+                        locale,
                     );
-                    ui.add_space(GAP);
-                    more_row(ui, state, actions);
-                });
+                    if selected && state.cursor_moved {
+                        response.clone().scroll_to_me(None);
+                    }
+                    if index == playlists.len() - 1 && ui.is_rect_visible(response.rect) {
+                        actions.push(Action::LoadMore);
+                    }
+                    if response.clicked() {
+                        actions.push(Action::OpenPlaylist {
+                            id: playlist.id.clone(),
+                            name: playlist.name.clone(),
+                        });
+                    }
+                },
+            );
+            ui.add_space(GAP);
+            more_row(ui, state, actions);
         }
     }
 }
@@ -432,19 +427,17 @@ fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 /// The About tab: the description, the links and the details, each a card
 /// under its heading.
 fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
-    egui::ScrollArea::vertical()
-        .auto_shrink(false)
-        .show(ui, |ui| match &state.channel_about {
-            Fetch::Idle => {}
-            Fetch::Loading => results::loading(ui, state, "channel information"),
-            Fetch::Failed(error) => results::failed(ui, state, error, actions),
-            Fetch::Ready(about) => {
-                // set_max_width also widens: a narrow window would cut
-                // the text off at its edge instead of wrapping it.
-                ui.set_max_width(ABOUT_WIDTH.min(ui.available_width()));
-                about_cards(ui, state, about, actions);
-            }
-        });
+    match &state.channel_about {
+        Fetch::Idle => {}
+        Fetch::Loading => results::loading_content(ui, state, "channel information"),
+        Fetch::Failed(error) => results::failed(ui, state, error, actions),
+        Fetch::Ready(about) => {
+            // set_max_width also widens: a narrow window would cut
+            // the text off at its edge instead of wrapping it.
+            ui.set_max_width(ABOUT_WIDTH.min(ui.available_width()));
+            about_cards(ui, state, about, actions);
+        }
+    }
 }
 
 /// A label in secondary and its value in text, one line of a card's grid.
@@ -555,6 +548,7 @@ fn about_cards(ui: &mut Ui, state: &State, about: &ChannelAbout, actions: &mut V
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::Video;
 
     /// A channel with a Shorts tab but no Live tab.
     fn header() -> ChannelHeader {
@@ -614,6 +608,86 @@ mod tests {
         assert_eq!(
             cycle_tab(&with_search, &ChannelTab::About, 1),
             ChannelTab::Search("rust".to_owned())
+        );
+    }
+
+    #[test]
+    fn mouse_wheel_outside_video_box_scrolls_channel() {
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 720.0));
+        let channel = Channel {
+            id: "UC123".into(),
+            name: "Test Channel".into(),
+            avatar: None,
+        };
+        let state = State {
+            view: crate::model::View::Channel,
+            page: Some(crate::app::Page::Channel(channel.clone())),
+            channel_header: Some(ChannelHeader {
+                name: "Test Channel".into(),
+                banner: Some("https://example.com/banner.jpg".into()),
+                ..Default::default()
+            }),
+            page_videos: Listing::Ready(
+                (0..30)
+                    .map(|i| Video::from_id(format!("{i:011}")))
+                    .collect(),
+            ),
+            ..Default::default()
+        };
+
+        // Find the channel name text position in an output.
+        let get_title_y = |output: &egui::FullOutput| {
+            output.shapes.iter().find_map(|shape| match &shape.shape {
+                egui::epaint::Shape::Text(text) if text.galley.text() == "Test Channel" => {
+                    Some(text.pos.y)
+                }
+                _ => None,
+            })
+        };
+
+        // Frame 0: render initial state
+        let mut first = ctx.run_ui(
+            egui::RawInput {
+                time: Some(0.0),
+                screen_rect: Some(screen),
+                ..Default::default()
+            },
+            |ui| show(ui, &state, &channel, &mut Vec::new()),
+        );
+        first.textures_delta.clear();
+        let y0 = get_title_y(&first).expect("title found in frame 0");
+
+        // The banner / header is at y < 300. We place pointer on the header (pos2(300.0, 100.0)).
+        // This is outside the box with videos.
+        let mut last = first;
+        for frame in 1..3 {
+            let scroll_event = egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                phase: egui::TouchPhase::Move,
+                delta: egui::vec2(0.0, -20.0),
+                modifiers: egui::Modifiers::NONE,
+            };
+            last = ctx.run_ui(
+                egui::RawInput {
+                    time: Some(frame as f64 / 10.0),
+                    screen_rect: Some(screen),
+                    events: vec![
+                        egui::Event::PointerMoved(egui::pos2(300.0, 100.0)),
+                        scroll_event,
+                    ],
+                    ..Default::default()
+                },
+                |ui| show(ui, &state, &channel, &mut Vec::new()),
+            );
+            last.textures_delta.clear();
+        }
+
+        let y1 = get_title_y(&last).expect("title found in last frame");
+        assert!(
+            y1 < y0,
+            "Channel content should have scrolled up when mouse wheeled over header: y0={y0}, y1={y1}"
         );
     }
 }

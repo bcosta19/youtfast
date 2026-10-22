@@ -8,6 +8,12 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Fixed
+
+- Scrolling a channel page works from anywhere on the view (including over
+  the banner, header, tab bar, and chips), scrolling the whole page rather
+  than restricting scroll interaction to the video grid box.
+
 ## [0.2.0] - 2026-10-22
 
 ### Added
