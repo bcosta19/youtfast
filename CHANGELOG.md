@@ -8,7 +8,7 @@ are the distribution record.
 
 ## [Unreleased]
 
-## [0.2.0] - Unreleased
+## [0.2.0] - 2026-10-22
 
 ### Added
 

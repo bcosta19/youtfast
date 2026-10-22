@@ -5,10 +5,8 @@
 0.1.0 was published on 2026-10-17 as a pre-release. Its remaining gates, and
 those of later releases, are tracked in [ROADMAP.md](ROADMAP.md).
 
-0.2.0 is the next candidate. Its changelog date remains `Unreleased` and its
-AppStream date is provisional until freeze; the versioned notes describe the
-included changes and outstanding qualification. Use `v0.2.0` for the manual
-Release dry run.
+0.2.0 is the next release. Its changelog and AppStream dates are frozen at
+2026-10-22, so it can be tagged from `main`.
 
 Use stable SemVer tags `vMAJOR.MINOR.PATCH`. During 0.x, use patches for
 compatible fixes and minor versions for features or incompatible changes;
