@@ -6,10 +6,13 @@ describe exactly what each version includes and excludes.
 
 ## Open release gates
 
-0.1.0 is published as a pre-release. Before it is promoted to latest:
+0.1.0 is published as a pre-release; 0.2.0 is being prepared as a candidate.
+Before publishing 0.2.0 or promoting a release to latest:
 
-- Review the Windows and macOS native source archives and notices that the
-  0.1.0 runners collected; nobody has reviewed them yet.
+- Validate the exact candidate with the hosted Release dry run, inspect every
+  package and its checksums, and review the matching Windows and macOS native
+  source archives and notices. The previous release's artifacts do not qualify
+  the new candidate.
 - Run clean-machine QA from the [platform checklist](docs/distribution.md) on
   Windows ([#5](https://github.com/bcosta19/youtfast/issues/5)) and macOS
   ([#6](https://github.com/bcosta19/youtfast/issues/6)). Local demo rendering
