@@ -79,7 +79,10 @@ pub enum Request {
         order: innertube::ChannelOrder,
     },
     /// A channel page's About pane.
-    ChannelAbout(String),
+    ChannelAbout {
+        id: String,
+        needs_header: bool,
+    },
     /// The next page of the channel tab's or a playlist's list.
     More {
         more: crate::innertube::More,
@@ -158,7 +161,10 @@ pub enum Payload {
         more: Option<crate::innertube::More>,
     },
     /// A channel's About tab.
-    About(ChannelAbout),
+    About {
+        header: Option<Box<ChannelHeader>>,
+        about: ChannelAbout,
+    },
     /// Home's For you, and whether it is the account's own.
     ForYou {
         videos: Vec<Video>,
@@ -1243,7 +1249,13 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
                 }
             }
         },
-        Request::ChannelAbout(id) => Payload::About(innertube::channel_about(rp, &id).await?),
+        Request::ChannelAbout { id, needs_header } => {
+            let (header, about) = innertube::channel_about(rp, &id, needs_header).await?;
+            Payload::About {
+                header: header.map(Box::new),
+                about,
+            }
+        }
         Request::More {
             more,
             playlists: true,

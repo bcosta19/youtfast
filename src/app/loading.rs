@@ -90,8 +90,33 @@ impl State {
         items: PageItems,
         more: Option<innertube::More>,
     ) {
+        self.fill_channel_header(header);
+        self.page_more = more;
+        self.page_more_state = Fetch::Idle;
+        match items {
+            PageItems::Videos(videos) => self.page_videos = Listing::Ready(videos),
+            PageItems::Playlists(items) => self.page_playlists = Listing::Ready(items),
+            _ => {}
+        }
+    }
+
+    fn channel_about_request(&self, id: String) -> Request {
+        Request::ChannelAbout {
+            id,
+            needs_header: self.channel_header.is_none(),
+        }
+    }
+
+    fn fill_channel_about(&mut self, header: Option<ChannelHeader>, about: ChannelAbout) {
+        if let Some(header) = header {
+            self.fill_channel_header(header);
+        }
+        self.channel_about = Fetch::Ready(about);
+    }
+
+    fn fill_channel_header(&mut self, header: ChannelHeader) {
         // A channel opened from a link only gets its UC… id, real name and
-        // avatar once the header arrives.
+        // avatar once the header arrives, including through About.
         if let Some(Page::Channel(channel)) = &mut self.page {
             channel.id = header.id.clone();
             channel.name = header.name.clone();
@@ -100,13 +125,6 @@ impl State {
             }
         }
         self.channel_header = Some(header);
-        self.page_more = more;
-        self.page_more_state = Fetch::Idle;
-        match items {
-            PageItems::Videos(videos) => self.page_videos = Listing::Ready(videos),
-            PageItems::Playlists(items) => self.page_playlists = Listing::Ready(items),
-            _ => {}
-        }
     }
 
     fn accept_import(
@@ -216,7 +234,8 @@ impl App {
                     ChannelTab::About => {
                         if force || stale_fetch(&self.state.channel_about) {
                             self.state.channel_about = Fetch::Loading;
-                            self.send_request(Slot::Page, Request::ChannelAbout(id));
+                            let request = self.state.channel_about_request(id);
+                            self.send_request(Slot::Page, request);
                         }
                     }
                     ChannelTab::Playlists => {
@@ -568,8 +587,11 @@ impl App {
                 self.open_channel = Some(header.id.clone());
                 state.fill_channel_page(header, items, more);
             }
-            (Slot::Page, Ok(Payload::About(about))) => {
-                state.channel_about = Fetch::Ready(about);
+            (Slot::Page, Ok(Payload::About { header, about })) => {
+                if let Some(header) = &header {
+                    self.open_channel = Some(header.id.clone());
+                }
+                state.fill_channel_about(header.map(|header| *header), about);
             }
             (Slot::Page, Ok(Payload::More { items, more })) => {
                 state.page_more = more;
@@ -837,7 +859,7 @@ impl App {
         }
         if let Some(Page::Channel(channel)) = &self.state.page {
             let request = match &self.state.channel_tab {
-                ChannelTab::About => Request::ChannelAbout(channel.id.clone()),
+                ChannelTab::About => self.state.channel_about_request(channel.id.clone()),
                 tab => Request::ChannelTab {
                     id: channel.id.clone(),
                     tab: tab.clone(),
@@ -1126,6 +1148,95 @@ mod tests {
                 avatar: Some("https://yt3.ggpht.com/avatar".into()),
             }))
         );
+    }
+
+    #[test]
+    fn about_completes_channel_links_when_the_initial_videos_response_is_superseded() {
+        for link in [
+            "https://youtube.com/@ExampleChannel",
+            "https://youtube.com/channel/UCaaaaaaaaaaaaaaaaaaaaaa",
+            "https://youtube.com/c/ExampleChannel",
+            "https://youtube.com/user/ExampleChannel",
+        ] {
+            let linked = youtube::channel_from_link(link).unwrap();
+            let mut state = State {
+                view: View::Channel,
+                page: Some(Page::Channel(linked.clone())),
+                channel_tab: ChannelTab::About,
+                channel_about: Fetch::Loading,
+                page_videos: Listing::Loading,
+                ..Default::default()
+            };
+            assert!(matches!(
+                state.channel_about_request(linked.id.clone()),
+                Request::ChannelAbout { id, needs_header: true } if id == linked.id
+            ));
+            let header = ChannelHeader {
+                id: "UCaaaaaaaaaaaaaaaaaaaaaa".into(),
+                name: "Example Channel".into(),
+                avatar: Some("https://example.com/avatar.png".into()),
+                has_shorts: true,
+                has_live: true,
+                ..Default::default()
+            };
+            let about = ChannelAbout {
+                description: "Channel description".into(),
+                ..Default::default()
+            };
+            // Only About's response arrives: the initial Videos generation
+            // is obsolete, so it cannot supply the missing header.
+            state.fill_channel_about(Some(header.clone()), about.clone());
+            assert_eq!(state.channel_tab, ChannelTab::About);
+            assert_eq!(state.channel_header, Some(header.clone()));
+            assert_eq!(
+                state.page,
+                Some(Page::Channel(Channel {
+                    id: header.id,
+                    name: header.name,
+                    avatar: header.avatar,
+                })),
+                "{link}"
+            );
+            assert!(matches!(state.channel_about, Fetch::Ready(ref value) if value == &about));
+            let header = state.channel_header.as_ref().unwrap();
+            assert!(header.has_shorts && header.has_live);
+        }
+    }
+
+    #[test]
+    fn about_reuses_an_existing_header_and_keeps_tab_rows_and_continuations() {
+        let header = ChannelHeader {
+            id: "UCaaaaaaaaaaaaaaaaaaaaaa".into(),
+            name: "Example Channel".into(),
+            ..Default::default()
+        };
+        let mut state = State {
+            view: View::Channel,
+            page: Some(Page::Channel(Channel {
+                id: header.id.clone(),
+                name: header.name.clone(),
+                avatar: None,
+            })),
+            channel_tab: ChannelTab::About,
+            ..Default::default()
+        };
+        state.fill_channel_page(
+            header.clone(),
+            PageItems::Videos(vec![Video::from_id("aaaaaaaaaaa".into())]),
+            Some(more("next")),
+        );
+        assert!(matches!(
+            state.channel_about_request(header.id.clone()),
+            Request::ChannelAbout {
+                needs_header: false,
+                ..
+            }
+        ));
+        state.fill_channel_about(None, ChannelAbout::default());
+        assert_eq!(state.channel_header, Some(header));
+        assert_eq!(state.page_videos.items()[0].id, "aaaaaaaaaaa");
+        assert_eq!(state.page_more.as_ref().unwrap().ctoken, "next");
+        assert!(matches!(state.channel_about, Fetch::Ready(_)));
     }
 
     #[test]

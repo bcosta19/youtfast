@@ -31,6 +31,8 @@ are the distribution record.
 
 ### Fixed
 
+- Switching to About while a channel link is loading keeps the channel's
+  resolved identity, header and Subscribe button.
 - Scrolling a playing video keeps its aspect ratio and clips it below the
   toolbar instead of drawing over the search field.
 - A network failure while fetching YouTube's visitor data, which the first

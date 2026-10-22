@@ -435,10 +435,22 @@ pub async fn channel_playlists_page(
 }
 
 /// A channel's About tab.
-pub async fn channel_about(rp: &RustyPipe, id: &str) -> Result<ChannelAbout, String> {
+pub async fn channel_about(
+    rp: &RustyPipe,
+    id: &str,
+    needs_header: bool,
+) -> Result<(Option<ChannelHeader>, ChannelAbout), String> {
     let id = resolve_channel_id(rp, id).await?;
+    // About can supersede the first Videos request before its header arrives.
+    // ChannelInfo has no name or avatar, so fetch the header in that case.
+    let header = if needs_header {
+        let channel = rp.query().channel_videos(id.as_ref()).await.map_err(text)?;
+        Some(channel_header(&channel))
+    } else {
+        None
+    };
     let info = rp.query().channel_info(id.as_ref()).await.map_err(text)?;
-    Ok(ChannelAbout {
+    let about = ChannelAbout {
         url: info.url,
         description: info.description,
         links: info.links,
@@ -449,7 +461,8 @@ pub async fn channel_about(rp: &RustyPipe, id: &str) -> Result<ChannelAbout, Str
         country: info.country.map(|country| country.name().to_owned()),
         subscribers: info.subscriber_count,
         videos: info.video_count,
-    })
+    };
+    Ok((header, about))
 }
 
 /// The header every channel response carries.
