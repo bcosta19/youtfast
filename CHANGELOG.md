@@ -14,6 +14,8 @@ are the distribution record.
   Settings alongside English and Brazilian Portuguese.
 - Optional miniplayer while scrolling to the watch page's comments, enabled
   in Playback settings. Returning from it reveals the inline video again.
+- Opening or pasting a channel link (`/@handle`, `/channel/UC…`, `/c/name`,
+  `/user/name`) opens the channel page instead of searching for the URL.
 
 ### Changed
 
@@ -29,6 +31,8 @@ are the distribution record.
 
 ### Fixed
 
+- Switching to About while a channel link is loading keeps the channel's
+  resolved identity, header and Subscribe button.
 - Scrolling a playing video keeps its aspect ratio and clips it below the
   toolbar instead of drawing over the search field.
 - A network failure while fetching YouTube's visitor data, which the first

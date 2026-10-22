@@ -124,10 +124,13 @@ fn header(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Actio
     let header = state.channel_header.as_ref();
     let title = header
         .map(|header| header.name.clone())
-        .unwrap_or_else(|| channel.name.clone());
+        .or_else(|| (!channel.name.is_empty()).then(|| channel.name.clone()))
+        .unwrap_or_else(|| tr(locale, "Loading…").into_owned());
     ui.horizontal(|ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(80.0, 80.0), Sense::hover());
-        let avatar = header.and_then(|header| header.avatar.as_deref());
+        let avatar = header
+            .and_then(|header| header.avatar.as_deref())
+            .or(channel.avatar.as_deref());
         widgets::avatar(ui, palette, avatar, &title, rect);
         ui.add_space(8.0);
         ui.vertical(|ui| {
@@ -165,8 +168,10 @@ fn header(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Actio
                     );
                 }
             }
-            ui.add_space(4.0);
-            widgets::subscribe(ui, state, channel, widgets::ButtonStyle::Primary, actions);
+            if channel.id.starts_with("UC") && !channel.name.is_empty() {
+                ui.add_space(4.0);
+                widgets::subscribe(ui, state, channel, widgets::ButtonStyle::Primary, actions);
+            }
         });
     });
 }

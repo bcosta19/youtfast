@@ -349,6 +349,22 @@ pub async fn more_history(
     Ok((page.items.into_iter().map(history_row).collect(), more))
 }
 
+/// A channel's `UC…` id: `id` itself when it already is one, or resolved
+/// from a handle or vanity path (`@handle`, `c/name`, `user/name`).
+async fn resolve_channel_id<'a>(
+    rp: &RustyPipe,
+    id: &'a str,
+) -> Result<std::borrow::Cow<'a, str>, String> {
+    if id.starts_with("UC") {
+        return Ok(std::borrow::Cow::Borrowed(id));
+    }
+    let url = format!("https://youtube.com/{}", id.trim_start_matches('/'));
+    match rp.query().resolve_url(&url, false).await.map_err(text)? {
+        UrlTarget::Channel { id } => Ok(std::borrow::Cow::Owned(id)),
+        _ => Err("Could not complete the YouTube request. Retry.".to_owned()),
+    }
+}
+
 /// A channel's Videos, Shorts or Live tab, or its videos matching `query`.
 /// Returns the header every call sends along.
 pub async fn channel_tab(
@@ -357,6 +373,8 @@ pub async fn channel_tab(
     tab: &ChannelTab,
     order: ChannelOrder,
 ) -> Result<(ChannelHeader, Vec<Video>, Option<More>), String> {
+    let id = resolve_channel_id(rp, id).await?;
+    let id = id.as_ref();
     let query = rp.query();
     let result = match tab {
         ChannelTab::Search(text) => query.channel_search(id, text).await,
@@ -401,7 +419,12 @@ pub async fn channel_playlists_page(
     rp: &RustyPipe,
     id: &str,
 ) -> Result<(ChannelHeader, Vec<PlaylistSummary>, Option<More>), String> {
-    let result = rp.query().channel_playlists(id).await.map_err(text)?;
+    let id = resolve_channel_id(rp, id).await?;
+    let result = rp
+        .query()
+        .channel_playlists(id.as_ref())
+        .await
+        .map_err(text)?;
     let header = channel_header(&result);
     let more = More::of(&result.content);
     Ok((
@@ -412,9 +435,22 @@ pub async fn channel_playlists_page(
 }
 
 /// A channel's About tab.
-pub async fn channel_about(rp: &RustyPipe, id: &str) -> Result<ChannelAbout, String> {
-    let info = rp.query().channel_info(id).await.map_err(text)?;
-    Ok(ChannelAbout {
+pub async fn channel_about(
+    rp: &RustyPipe,
+    id: &str,
+    needs_header: bool,
+) -> Result<(Option<ChannelHeader>, ChannelAbout), String> {
+    let id = resolve_channel_id(rp, id).await?;
+    // About can supersede the first Videos request before its header arrives.
+    // ChannelInfo has no name or avatar, so fetch the header in that case.
+    let header = if needs_header {
+        let channel = rp.query().channel_videos(id.as_ref()).await.map_err(text)?;
+        Some(channel_header(&channel))
+    } else {
+        None
+    };
+    let info = rp.query().channel_info(id.as_ref()).await.map_err(text)?;
+    let about = ChannelAbout {
         url: info.url,
         description: info.description,
         links: info.links,
@@ -425,7 +461,8 @@ pub async fn channel_about(rp: &RustyPipe, id: &str) -> Result<ChannelAbout, Str
         country: info.country.map(|country| country.name().to_owned()),
         subscribers: info.subscriber_count,
         videos: info.video_count,
-    })
+    };
+    Ok((header, about))
 }
 
 /// The header every channel response carries.
