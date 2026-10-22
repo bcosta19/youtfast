@@ -8,6 +8,11 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Added
+
+- Optional miniplayer while scrolling to the watch page's comments, enabled
+  in Playback settings. Returning from it reveals the inline video again.
+
 ### Changed
 
 - The window opens without waiting for the installed fonts that draw the
@@ -22,6 +27,8 @@ are the distribution record.
 
 ### Fixed
 
+- Scrolling a playing video keeps its aspect ratio and clips it below the
+  toolbar instead of drawing over the search field.
 - A network failure while fetching YouTube's visitor data, which the first
   requests of a session do, no longer closes the app: the page shows the
   error and can be retried.

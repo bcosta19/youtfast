@@ -75,6 +75,9 @@ pub struct Settings {
     /// rest under it.
     #[serde(default)]
     pub theater: bool,
+    /// Show the mini player when the watch page's video scrolls out of view.
+    #[serde(default)]
+    pub scroll_miniplayer: bool,
     /// The sidebar collapsed to its rail of keys and avatars.
     #[serde(default)]
     pub sidebar_collapsed: bool,
@@ -123,6 +126,7 @@ impl Default for Settings {
             desktop_notifications: on(),
             alerts_every_minutes: default_alerts_every(),
             theater: false,
+            scroll_miniplayer: false,
             sidebar_collapsed: false,
             autoplay: on(),
             captions: None,
@@ -195,6 +199,7 @@ mod tests {
         assert_eq!(parsed.alerts_every_minutes, 15);
         assert!(parsed.alerts);
         assert!(parsed.desktop_notifications);
+        assert!(!parsed.scroll_miniplayer);
         assert_eq!(parsed.volume, 40.0);
     }
 
@@ -205,6 +210,7 @@ mod tests {
             language: crate::i18n::Locale::PortugueseBrazil,
             quality: Quality::Max(720),
             volume: 40.0,
+            scroll_miniplayer: true,
             ..Settings::default()
         };
         settings.save(&path).unwrap();

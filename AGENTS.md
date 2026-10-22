@@ -137,6 +137,8 @@ on it, and follow [YouTube response formats](#youtube-response-formats).
   A dropped surface never frees GL objects: without a current context that
   would be undefined. The wl_display or X11 Display goes to mpv so hardware
   decoding can share frames with OpenGL (VAAPI on Linux).
+  Scrolling keeps the framebuffer at the full video's size, even outside the
+  window; reinstate egui's scissor after mpv renders and before blitting.
 - The eframe fork exposes `CreationContext::get_proc_address`, which the
   render API needs. That is one more reason to stay on the shared egui and
   winit forks; move their revisions together with the sibling apps.
@@ -145,6 +147,9 @@ on it, and follow [YouTube response formats](#youtube-response-formats).
   output stalls. Closing the mini player pauses the video; playing again
   from the desktop's media controls then comes back to the watch page
   (`App::show_playing`).
+  The optional `Settings::scroll_miniplayer` also shows it when the inline
+  video scrolls completely above the watch page's clip. Returning from it
+  sets `State::watch_scroll_to_video` to reveal the inline player.
 - `src/ui/player.rs` is the player as YouTube draws it: the controls over
   the video's bottom edge (shown while the pointer moves, kept while
   paused), the seek bar with chapters and SponsorBlock's segments, the

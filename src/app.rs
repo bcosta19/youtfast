@@ -228,6 +228,8 @@ pub struct State {
     pub suggestion_cursor: Option<usize>,
     /// The mini player was closed: the video stays paused until reopened.
     pub mini_closed: bool,
+    /// A return from the mini player reveals the inline video again.
+    pub watch_scroll_to_video: bool,
     pub playback_loop: bool,
     pub extras: Fetch<crate::video_extras::Extras>,
     pub transcript_open: bool,
@@ -719,6 +721,10 @@ impl App {
                 } else {
                     self.return_to_watch();
                 }
+            }
+            Action::SetScrollMiniplayer(on) => {
+                self.state.settings.scroll_miniplayer = on;
+                self.save_settings();
             }
             Action::Back => self.travel(ctx, false),
             Action::Forward => self.travel(ctx, true),

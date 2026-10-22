@@ -1393,3 +1393,9 @@ msgstr "{minutes} min"
 
 msgid "{number} · Playing"
 msgstr "{number} · Em reprodução"
+
+msgid "Miniplayer while scrolling"
+msgstr "Miniplayer ao rolar"
+
+msgid "Keep the video visible when scrolling down to the comments."
+msgstr "Mantenha o vídeo visível ao rolar para baixo até os comentários."
