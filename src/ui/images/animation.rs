@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
-use crate::i18n::{Locale, gettext as tr};
+use crate::appearance::i18n::{Locale, gettext as tr};
 use egui::{ColorImage, Context, Id, Rect, TextureHandle, Ui};
 use image::metadata::LoopCount;
 use image::{AnimationDecoder, ImageDecoder};

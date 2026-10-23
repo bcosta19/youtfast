@@ -17,12 +17,12 @@ use rustypipe::param::ChannelVideoTab;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
-use crate::account::CacheFile;
 use crate::model::{
     Channel, ChannelAbout, ChannelHeader, ChannelTab, Chapter, CommentRow, Details, HistoryRow,
     PlaylistSummary, Span, Video,
 };
-use crate::paths::Dirs;
+use crate::storage::account::CacheFile;
+use crate::storage::paths::Dirs;
 use crate::util;
 
 mod discovery;

@@ -5,8 +5,8 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::appearance::theme::{CustomTheme, Palette};
 use crate::model::Quality;
-use crate::theme::{CustomTheme, Palette};
 
 fn on() -> bool {
     true
@@ -37,7 +37,7 @@ pub enum ThemeChoice {
 pub struct Settings {
     /// The interface language; older settings start in English too.
     #[serde(default)]
-    pub language: crate::i18n::Locale,
+    pub language: crate::appearance::i18n::Locale,
     /// The most a video may stream at.
     #[serde(default)]
     pub quality: Quality,
@@ -116,7 +116,7 @@ pub fn clamp_alerts_every(minutes: u32) -> u32 {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            language: crate::i18n::Locale::default(),
+            language: crate::appearance::i18n::Locale::default(),
             quality: Quality::default(),
             volume: default_volume(),
             theme: ThemeChoice::default(),
@@ -141,11 +141,11 @@ impl Settings {
     /// Reads the settings. A missing file is the defaults; an unreadable
     /// one is moved aside rather than overwritten by the next save.
     pub fn load(path: &Path) -> std::io::Result<Self> {
-        crate::paths::load_json(path, "settings")
+        crate::storage::paths::load_json(path, "settings")
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        crate::paths::save_json(path, self)
+        crate::storage::paths::save_json(path, self)
     }
 
     /// The colours the interface draws with now: the selected palette's
@@ -207,7 +207,7 @@ mod tests {
     fn round_trip() {
         let path = path("settings");
         let settings = Settings {
-            language: crate::i18n::Locale::PortugueseBrazil,
+            language: crate::appearance::i18n::Locale::PortugueseBrazil,
             quality: Quality::Max(720),
             volume: 40.0,
             scroll_miniplayer: true,
@@ -263,7 +263,7 @@ mod tests {
         let settings: Settings =
             serde_json::from_str(r#"{"quality":{"Max":720},"volume":40}"#).unwrap();
         assert_eq!(settings.theme, ThemeChoice::Auto);
-        assert_eq!(settings.language, crate::i18n::Locale::English);
+        assert_eq!(settings.language, crate::appearance::i18n::Locale::English);
         assert!(settings.custom_theme_cache.is_none());
         assert!(settings.system_theme_cache.is_none());
     }

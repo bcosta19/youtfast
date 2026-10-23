@@ -2,10 +2,11 @@
 //! media controls or single-instance channel are created here.
 use crate::{
     app::{Page, State, apply_sidebar_action},
-    i18n::{Locale, gettext as tr},
+    appearance::i18n::{Locale, gettext as tr},
+    appearance::theme,
     model::*,
     mpv::Status,
-    theme, ui,
+    ui,
 };
 
 pub fn run(cli: &crate::Cli) -> eframe::Result {
@@ -45,7 +46,7 @@ pub fn run(cli: &crate::Cli) -> eframe::Result {
         options,
         Box::new(move |cc| {
             theme::install_fonts(&cc.egui_ctx);
-            fastframe_icons::install::<crate::icons::Icon>(&cc.egui_ctx);
+            fastframe_icons::install::<crate::appearance::icons::Icon>(&cc.egui_ctx);
             egui_extras::install_image_loaders(&cc.egui_ctx);
             cc.egui_ctx
                 .data_mut(|d| d.insert_temp(egui::Id::new("synthetic-images"), true));
@@ -132,11 +133,11 @@ pub(crate) fn fixture(page: &str) -> State {
     state.watching = Some(videos[0].clone());
     state.queue = videos[1..4].to_vec();
     state.details=Fetch::Ready(Details{id:videos[0].id.clone(),title:videos[0].title.clone(),channel,subscribers:Some(120_000),views:12500,likes:Some(340),description:vec![Span::Text("A demo description with chapters, content and video information. All data in this window is synthetic.".into())],chapters:vec![Chapter{name:"Introduction".into(),seconds:0},Chapter{name:"Exploring the details".into(),seconds:60},Chapter{name:"Practical examples".into(),seconds:180}],related:videos[4..].to_vec(),..Default::default()});
-    state.extras = Fetch::Ready(crate::video_extras::Extras {
+    state.extras = Fetch::Ready(crate::youtube::extras::Extras {
         preview: None,
         language: "English".into(),
         transcript: Ok((0..50)
-            .map(|i| crate::video_extras::Cue {
+            .map(|i| crate::youtube::extras::Cue {
                 seconds: i as f64 * 12.0,
                 text: format!(
                     "Section {} of the demo transcript, synchronized with the video.",
@@ -162,7 +163,7 @@ pub(crate) fn fixture(page: &str) -> State {
             id: "PLdemo".into(),
             name: "Demo playlist".into(),
         });
-        state.playlist_details = Some(crate::innertube::PlaylistDetails {
+        state.playlist_details = Some(crate::youtube::innertube::PlaylistDetails {
             name: "Demo playlist".into(),
             thumbnail: Some("https://synthetic/playlist".into()),
             channel: Some("Demo channel".into()),

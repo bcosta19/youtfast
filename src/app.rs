@@ -7,22 +7,22 @@ use anyhow::Context as _;
 use eframe::glow;
 use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 
+use crate::appearance::theme::{self, Palette};
 use crate::backend::{
     Backend, Command, CommentsKey, Event, PageItems, Payload, Request, SignInMethod, Slot,
 };
-use crate::innertube;
-use crate::instance::{self, Queue as RemoteQueue};
-use crate::library::{Account, Import, Library};
+use crate::desktop::instance::{self, Queue as RemoteQueue};
 use crate::model::{
     AccountSource, Action, Channel, ChannelAbout, ChannelHeader, ChannelTab, CommentRow, Details,
     FeedFilter, Fetch, HistoryRow, Listing, PlaylistSummary, Quality, Rating, Resolution, Results,
     SaveTarget, Segment, Source, Video, View,
 };
 use crate::mpv::{self, Mpv, NativeDisplay, VideoSurface};
-use crate::paths::Dirs;
-use crate::settings::{Settings, ThemeChoice};
-use crate::theme::{self, Palette};
-use crate::{account, alerts, ui, util, youtube};
+use crate::storage::library::{Account, Import, Library};
+use crate::storage::paths::Dirs;
+use crate::storage::settings::{Settings, ThemeChoice};
+use crate::youtube::innertube;
+use crate::{logic::alerts, storage::account, ui, util, youtube::ytdlp};
 
 /// The signed-in account, as the interface shows it.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -234,7 +234,7 @@ pub struct State {
     /// A return from the mini player reveals the inline video again.
     pub watch_scroll_to_video: bool,
     pub playback_loop: bool,
-    pub extras: Fetch<crate::video_extras::Extras>,
+    pub extras: Fetch<crate::youtube::extras::Extras>,
     pub transcript_open: bool,
     pub transcript_query: String,
     pub transcript_follow: bool,
@@ -437,7 +437,7 @@ pub struct App {
     /// What later launches ask the running copy, drained each frame.
     remote: RemoteQueue,
     /// The desktop's media controls.
-    media: crate::now_playing::MediaControls,
+    media: crate::desktop::now_playing::MediaControls,
     /// The installed fonts for other scripts, until they are in.
     fonts: Option<theme::SystemFonts>,
     /// Held so the instance lock and channel outlive the app; the app
@@ -458,7 +458,7 @@ impl App {
         let fonts = (!fonts.install(ctx)).then_some(fonts);
         egui_extras::install_image_loaders(ctx);
         ui::images::install_animation_loader(ctx);
-        fastframe_icons::install::<crate::icons::Icon>(ctx);
+        fastframe_icons::install::<crate::appearance::icons::Icon>(ctx);
         let dirs = Dirs::new().context("could not make the data folders")?;
         ui::images::init(dirs.cache.join("thumbnails"));
         let backend =
@@ -551,7 +551,7 @@ impl App {
             query_changed: None,
             captions_pending: false,
             remote: guard.commands(),
-            media: crate::now_playing::MediaControls::start(ctx),
+            media: crate::desktop::now_playing::MediaControls::start(ctx),
             fonts,
             _instance: guard,
         };
@@ -705,12 +705,12 @@ impl App {
                 if text.is_empty() {
                     return;
                 }
-                if let Some(id) = youtube::video_id_from_link(text) {
+                if let Some(id) = ytdlp::video_id_from_link(text) {
                     self.state.suggestions.clear();
                     self.open(Video::from_id(id));
                     return;
                 }
-                if let Some(channel) = youtube::channel_from_link(text) {
+                if let Some(channel) = ytdlp::channel_from_link(text) {
                     self.state.suggestions.clear();
                     self.open_page(ctx, View::Channel, Page::Channel(channel));
                     return;
@@ -917,12 +917,12 @@ impl App {
             }
             Action::ImportTakeout => {
                 let picked = rfd::AsyncFileDialog::new()
-                    .set_title(crate::i18n::gettext(
+                    .set_title(crate::appearance::i18n::gettext(
                         self.state.settings.language,
                         "Import from Google Takeout",
                     ))
                     .add_filter(
-                        crate::i18n::gettext(
+                        crate::appearance::i18n::gettext(
                             self.state.settings.language,
                             "Takeout subscriptions or history",
                         ),
@@ -1065,9 +1065,9 @@ impl eframe::App for App {
         // What the desktop's media controls asked for, and what they show.
         for effect in self.media.commands(&self.state) {
             match effect {
-                crate::now_playing::Effect::Action(action) => self.apply(ctx, *action),
-                crate::now_playing::Effect::Raise => focus(ctx),
-                crate::now_playing::Effect::Quit => {
+                crate::desktop::now_playing::Effect::Action(action) => self.apply(ctx, *action),
+                crate::desktop::now_playing::Effect::Raise => focus(ctx),
+                crate::desktop::now_playing::Effect::Quit => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close)
                 }
             }

@@ -4,13 +4,13 @@
 //! states in its place. Also the page frame the list pages share: the
 //! page padding and the bold page title.
 
-use crate::i18n::{format as trf, gettext as tr};
+use crate::appearance::i18n::{format as trf, gettext as tr};
 use egui::{Align, Layout, RichText, Ui};
 
 use super::widgets;
 use crate::app::State;
+use crate::appearance::theme;
 use crate::model::{Action, Listing, Video};
-use crate::theme;
 
 /// A page's central panel with DESIGN.md's padding: 24 px at the sides,
 /// 16 px at the top.
@@ -50,7 +50,7 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 
     panel(ui, |ui| {
         super::discovery::filters(ui, state, actions);
-        if state.search_options.kind != crate::innertube::SearchKind::Videos {
+        if state.search_options.kind != crate::youtube::innertube::SearchKind::Videos {
             title(ui, state, tr(locale, "Search results").as_ref(), None);
             super::discovery::other_results(ui, state, actions);
             return;
@@ -351,9 +351,9 @@ fn loading_placeholders(ui: &mut Ui, state: &State) -> Vec<egui::Rect> {
     } else {
         let channels = state.view == View::Subscriptions
             || (state.view == View::Results
-                && state.search_options.kind == crate::innertube::SearchKind::Channels);
+                && state.search_options.kind == crate::youtube::innertube::SearchKind::Channels);
         let large = state.view == View::Results
-            && state.search_options.kind == crate::innertube::SearchKind::Videos;
+            && state.search_options.kind == crate::youtube::innertube::SearchKind::Videos;
         let width = ui.available_width();
         let thumbnail_width = if channels {
             48.0
@@ -441,7 +441,7 @@ pub fn failed(ui: &mut Ui, state: &State, error: &str, actions: &mut Vec<Action>
 
     centered(ui, |ui| {
         ui.label(
-            RichText::new(crate::i18n::message(locale, error).as_ref())
+            RichText::new(crate::appearance::i18n::message(locale, error).as_ref())
                 .font(theme::regular(14.0))
                 .color(state.palette.red),
         );
@@ -481,7 +481,7 @@ mod tests {
                 crate::model::View::Playlist,
             ] {
                 let ctx = egui::Context::default();
-                crate::theme::install_fonts(&ctx);
+                crate::appearance::theme::install_fonts(&ctx);
                 let state = State {
                     view,
                     ..Default::default()
@@ -533,7 +533,7 @@ mod tests {
         render: fn(&mut Ui, &State, &mut Vec<Action>),
     ) -> Vec<Action> {
         let ctx = egui::Context::default();
-        crate::theme::install_fonts(&ctx);
+        crate::appearance::theme::install_fonts(&ctx);
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 720.0));
         let mut first = ctx.run_ui(
             egui::RawInput {
@@ -583,7 +583,7 @@ mod tests {
             search_query: "Rust".into(),
             ..Default::default()
         };
-        state.search_options.kind = crate::innertube::SearchKind::Channels;
+        state.search_options.kind = crate::youtube::innertube::SearchKind::Channels;
         state.results_channels = Listing::Failed("Falha temporária".into());
         assert_eq!(click_label(&state, "Retry", show), [Action::Refresh]);
     }
@@ -596,7 +596,7 @@ mod tests {
                 id: "synthetic-playlist".into(),
                 name: "Título anterior".into(),
             }),
-            playlist_details: Some(crate::innertube::PlaylistDetails {
+            playlist_details: Some(crate::youtube::innertube::PlaylistDetails {
                 name: "Aulas de Rust".into(),
                 channel: Some("Canal".into()),
                 description: "Aprenda Rust".into(),
@@ -618,7 +618,7 @@ mod tests {
         render: fn(&mut Ui, &State, &mut Vec<Action>),
     ) {
         let ctx = egui::Context::default();
-        crate::theme::install_fonts(&ctx);
+        crate::appearance::theme::install_fonts(&ctx);
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 720.0));
         let mut button = None;
         for frame in 0..40 {
@@ -688,7 +688,7 @@ mod tests {
 
     #[test]
     fn channel_search_and_playlist_footers_are_reachable_and_clickable_after_long_lists() {
-        let more = crate::innertube::More {
+        let more = crate::youtube::innertube::More {
             ctoken: "synthetic-next-page".into(),
             endpoint: rustypipe::model::paginator::ContinuationEndpoint::Browse,
             visitor_data: None,
@@ -700,7 +700,7 @@ mod tests {
             results_more: Some(more.clone()),
             ..Default::default()
         };
-        channels.search_options.kind = crate::innertube::SearchKind::Channels;
+        channels.search_options.kind = crate::youtube::innertube::SearchKind::Channels;
         channels.results_channels = Listing::Ready(
             (0..60)
                 .map(|index| crate::model::Channel {
@@ -785,7 +785,7 @@ mod tests {
         assert_eq!(visible_rows(-500.0, -100.0, 100.0, 1000), 0..0);
         assert_eq!(visible_rows(-500.0, -10.0, 100.0, 1000), 0..1);
         let ctx = egui::Context::default();
-        crate::theme::install_fonts(&ctx);
+        crate::appearance::theme::install_fonts(&ctx);
         let state = State::default();
         let videos: Vec<_> = (0..1000)
             .map(|index| Video::from_id(format!("{index:011}")))

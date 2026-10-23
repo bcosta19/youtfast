@@ -9,11 +9,11 @@ use egui::{
 
 use super::{results, widgets};
 use crate::app::{AccountState, State};
-use crate::i18n::{Locale, format as trf, gettext as tr};
-use crate::icons::Icon;
-use crate::library::Account;
+use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
+use crate::appearance::icons::Icon;
+use crate::appearance::theme::{self, Palette, RADIUS};
 use crate::model::{Action, browser_label};
-use crate::theme::{self, Palette, RADIUS};
+use crate::storage::library::Account;
 
 /// The text column's width: long lines of explanation read badly wider.
 const WIDTH: f32 = 640.0;
@@ -66,7 +66,7 @@ fn accounts(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 Icon::Alert.image(palette.red, 16.0).paint_at(ui, rect);
                 ui.add(
                     egui::Label::new(
-                        RichText::new(crate::i18n::message(locale, error))
+                        RichText::new(crate::appearance::i18n::message(locale, error))
                             .font(theme::regular(14.0))
                             .color(palette.red),
                     )
@@ -390,7 +390,7 @@ fn profile_row(
     ui: &mut Ui,
     state: &State,
     index: usize,
-    profile: &crate::account::BrowserProfile,
+    profile: &crate::storage::account::BrowserProfile,
     busy: bool,
     actions: &mut Vec<Action>,
 ) {
@@ -627,8 +627,8 @@ fn field(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::account::BrowserProfile;
     use crate::model::AccountSource;
+    use crate::storage::account::BrowserProfile;
 
     /// The form with profiles found, one already added, and Advanced open
     /// lays out without a NaN or a negative rect.
@@ -661,7 +661,7 @@ mod tests {
             source: AccountSource::Browser("chromium".to_owned()),
         });
         let ctx = egui::Context::default();
-        crate::theme::install_fonts(&ctx);
+        crate::appearance::theme::install_fonts(&ctx);
         for (width, advanced) in [(1200.0, false), (420.0, true)] {
             state.account_advanced = advanced;
             let input = egui::RawInput {

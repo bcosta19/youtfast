@@ -5,7 +5,7 @@
 //! YouTube's own notifications have no API; this checks subscriptions on
 //! a timer instead.
 
-use crate::i18n::{Locale, format as trf, gettext as tr};
+use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use crate::model::Video;
 
 /// At most this many unseen uploads are kept.

@@ -6,10 +6,10 @@ use egui::{Align, Color32, CornerRadius, Layout, Response, RichText, Sense, Ui, 
 
 use super::{results, widgets};
 use crate::app::State;
-use crate::i18n::{Locale, format as trf, gettext as tr};
+use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
+use crate::appearance::theme::{self, Palette};
 use crate::model::Action;
-use crate::settings::ThemeChoice;
-use crate::theme::{self, Palette};
+use crate::storage::settings::ThemeChoice;
 
 /// The widest the settings read well.
 const WIDTH: f32 = 760.0;
@@ -73,9 +73,12 @@ fn appearance(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             if !state.theme_status.is_empty() {
                 ui.add_space(8.0);
                 ui.label(
-                    RichText::new(crate::i18n::message(locale, &state.theme_status))
-                        .font(theme::regular(13.0))
-                        .color(palette.secondary),
+                    RichText::new(crate::appearance::i18n::message(
+                        locale,
+                        &state.theme_status,
+                    ))
+                    .font(theme::regular(13.0))
+                    .color(palette.secondary),
                 );
             }
             ui.add_space(8.0);
@@ -429,7 +432,7 @@ mod tests {
             }
         }
         let ctx = egui::Context::default();
-        crate::theme::install_fonts(&ctx);
+        crate::appearance::theme::install_fonts(&ctx);
         let mut state = State::default();
         let mut actions = Vec::new();
         for (locale, expected_title) in [

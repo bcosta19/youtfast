@@ -99,7 +99,7 @@ pub fn fetch(url: &str, path: &Path) -> Result<std::sync::Arc<[u8]>, Failure> {
     let (bytes, store) = download(url)?;
     let _disk = DISK.lock().unwrap();
     if store
-        && crate::paths::write_atomic(path, &bytes).is_ok()
+        && crate::storage::paths::write_atomic(path, &bytes).is_ok()
         && let Some(dir) = path.parent()
     {
         prune_locked(dir, KEEP, DISK_BYTES);

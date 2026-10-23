@@ -543,8 +543,8 @@ pub enum View {
 /// applies them after the frame.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action {
-    SetSearchOptions(crate::innertube::SearchOptions),
-    SetChannelOrder(crate::innertube::ChannelOrder),
+    SetSearchOptions(crate::youtube::innertube::SearchOptions),
+    SetChannelOrder(crate::youtube::innertube::ChannelOrder),
     SetHistoryQuery(String),
     RemoveHistory(String),
     PlayPlaylist,
@@ -592,8 +592,8 @@ pub enum Action {
     LoadExtras,
     ToggleTranscript,
     SetQuality(Quality),
-    SetTheme(crate::settings::ThemeChoice),
-    SetLanguage(crate::i18n::Locale),
+    SetTheme(crate::storage::settings::ThemeChoice),
+    SetLanguage(crate::appearance::i18n::Locale),
     /// Subscribes on this device, or unsubscribes.
     ToggleSubscription(Channel),
     /// Adds to this device's Watch later, or removes.

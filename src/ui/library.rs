@@ -3,13 +3,13 @@
 //! playlist's videos. Pages that exist both ways switch between the
 //! signed-in account and this device with chips under their title.
 
-use crate::i18n::{format as trf, gettext as tr};
+use crate::appearance::i18n::{format as trf, gettext as tr};
 use egui::{Align2, CornerRadius, Rect, RichText, Sense, Ui, pos2, vec2};
 
 use super::{results, widgets};
 use crate::app::{AccountState, Page, State};
+use crate::appearance::theme;
 use crate::model::{Action, Channel, FeedFilter, Fetch, Listing, Source, Video, View};
-use crate::theme;
 use crate::util;
 
 /// The Account / This device chips (when signed in) and a page's extra
@@ -740,7 +740,7 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                             );
                             if widgets::icon_button(
                                 ui,
-                                crate::icons::Icon::Close,
+                                crate::appearance::icons::Icon::Close,
                                 32.0,
                                 tr(locale, "Remove from this device's history").as_ref(),
                             )
@@ -1030,7 +1030,7 @@ mod tests {
 
     #[test]
     fn empty_account_subscriptions_and_watch_later_use_the_explicit_locale() {
-        use crate::i18n::Locale;
+        use crate::appearance::i18n::Locale;
         for locale in [Locale::English, Locale::PortugueseBrazil] {
             for (view, english, portuguese) in [
                 (
@@ -1045,7 +1045,7 @@ mod tests {
                 ),
             ] {
                 let ctx = egui::Context::default();
-                crate::theme::install_fonts(&ctx);
+                crate::appearance::theme::install_fonts(&ctx);
                 let mut state = State {
                     view,
                     account: AccountState::SignedIn(1),
@@ -1084,7 +1084,7 @@ mod tests {
     fn large_channel_playlist_and_feed_lists_request_only_visible_images() {
         for kind in 0..3 {
             let ctx = egui::Context::default();
-            crate::theme::install_fonts(&ctx);
+            crate::appearance::theme::install_fonts(&ctx);
             let mut state = State::default();
             if kind == 0 {
                 state.library.subscriptions = (0..20_000)
