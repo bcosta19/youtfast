@@ -563,6 +563,7 @@ pub enum Action {
     /// Loads the page on screen again.
     Refresh,
     SetSource(Source),
+    SetHistoryFilter(crate::logic::history::HistoryFilter),
     TogglePause,
     /// The desktop's media controls ask for play or pause directly.
     SetPaused(bool),
@@ -580,6 +581,7 @@ pub enum Action {
     ToggleTheater,
     ToggleMiniPlayer,
     SetScrollMiniplayer(bool),
+    SetHistorySync(crate::storage::settings::HistorySync),
     SeekChapter(bool),
     RetryPlayback,
     ToggleLoop,

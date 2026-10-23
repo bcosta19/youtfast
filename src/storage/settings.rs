@@ -33,11 +33,27 @@ pub enum ThemeChoice {
     Custom(String),
 }
 
+/// How signed-in history relates to this device's history.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HistorySync {
+    /// Keep the account and device lists separate, without reporting plays.
+    #[default]
+    Separate,
+    /// Combine the lists only in YouTFast.
+    Merged,
+    /// Combine the lists and report started playback to the active account.
+    SendToYoutube,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
     /// The interface language; older settings start in English too.
     #[serde(default)]
     pub language: crate::appearance::i18n::Locale,
+    /// Applies only while signed in; older files keep separate histories.
+    #[serde(default)]
+    pub history_sync: HistorySync,
     /// The most a video may stream at.
     #[serde(default)]
     pub quality: Quality,
@@ -117,6 +133,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             language: crate::appearance::i18n::Locale::default(),
+            history_sync: HistorySync::default(),
             quality: Quality::default(),
             volume: default_volume(),
             theme: ThemeChoice::default(),
@@ -201,6 +218,24 @@ mod tests {
         assert!(parsed.desktop_notifications);
         assert!(!parsed.scroll_miniplayer);
         assert_eq!(parsed.volume, 40.0);
+    }
+
+    #[test]
+    fn history_sync_defaults_for_old_files_and_round_trips_every_choice() {
+        let old: Settings = serde_json::from_str(r#"{"volume": 40.0}"#).unwrap();
+        assert_eq!(old.history_sync, HistorySync::Separate);
+        for history_sync in [
+            HistorySync::Separate,
+            HistorySync::Merged,
+            HistorySync::SendToYoutube,
+        ] {
+            let settings = Settings {
+                history_sync,
+                ..Settings::default()
+            };
+            let json = serde_json::to_string(&settings).unwrap();
+            assert_eq!(serde_json::from_str::<Settings>(&json).unwrap(), settings);
+        }
     }
 
     #[test]

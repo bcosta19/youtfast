@@ -29,6 +29,9 @@ impl State {
         self.subscriptions_more = None;
         self.subscriptions_more_state = Fetch::Idle;
         self.account_history = Listing::Idle;
+        self.history_needs_refresh = false;
+        self.history_requested_at = None;
+        self.history_filter = crate::logic::history::HistoryFilter::All;
         self.history_more = None;
         self.history_more_state = Fetch::Idle;
         self.account_watch_later = Listing::Idle;
@@ -86,6 +89,7 @@ impl State {
 
 impl App {
     pub(super) fn begin_account_change(&mut self) {
+        self.playback_report.cancel();
         self.playing_generation += 1;
         self.back.clear();
         self.forward.clear();
@@ -241,6 +245,8 @@ impl App {
         self.state.library.active_account = Some(id);
         self.save_library();
         self.state.source = Source::Account;
+        self.state.history_filter = crate::logic::history::HistoryFilter::All;
+        self.state.history_needs_refresh = false;
         // The account's subscriptions keep their channels out of the
         // RSS half of the feed, so they come first.
         self.request(Slot::Subscriptions, Request::Subscriptions);

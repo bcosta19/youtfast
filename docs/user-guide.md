@@ -121,6 +121,27 @@ recent unique history entries. Parsing and merging run in the background.
 If the library changes during the merge, retry the import; those newer
 changes are never replaced by an older import snapshot.
 
+**History sync** in Settings → History applies while signed in:
+
+- **Separate** (the default) keeps the Account and This device lists separate.
+- **Merged in YouTFast** opens History on **All**, combining both lists without
+  duplicate videos. **Account** and **This device** remain available as filters.
+  Search filters the combined list; local resume positions and watched notes
+  take precedence. Nothing is sent to YouTube.
+- **Merged and sent to YouTube** also reports videos that actually start playing
+  here, after two seconds of active playback, to the account active when playback
+  starts. Quickly passed-over Shorts are not reported. This sends playback reports
+  to Google from your account; Google may treat it as automated access. Failed
+  reports do not interrupt playback. The account list refreshes when History is
+  next opened after a successful report.
+
+The merged list keeps YouTube's day headings. Because account history has day
+labels rather than exact watch times, ordering between the two sources is an
+approximation; unfamiliar day labels retain account order. The remove button is
+available only for videos kept on this device and deletes only that local entry.
+Account history stays read-only for deletion. The setting has no effect while
+signed out.
+
 An unreadable library or settings file is backed up before defaults can be
 saved. A read or backup failure stops startup rather than overwriting the
 original. Saves at exit wait for in-progress saves and prevent older queued
@@ -144,7 +165,9 @@ may be treated by Google as automated access**: the account could be asked to
 verify itself, signed out, or suspended. A secondary account is the safe
 choice. Subscribing and the device's Watch later act locally. Rating a video or
 editing an account playlist through the watch page changes that selected
-account, with rollback if YouTube refuses it.
+account, with rollback if YouTube refuses it. History sync can additionally
+report started playback to that account when you explicitly choose **Merged and
+sent to YouTube**; the default sends no playback reports.
 
 Account changes clear private lists and caches immediately and dismiss open
 menus. Pending writes finish on their originating session before switching,

@@ -27,6 +27,7 @@ use crate::util;
 
 mod discovery;
 mod edit;
+mod history_sync;
 mod home;
 mod playlist;
 pub use discovery::{
@@ -34,6 +35,7 @@ pub use discovery::{
     SearchOrder, playlist_details, search_filtered,
 };
 pub use edit::{rate, rating, save_targets, set_saved};
+pub use history_sync::mark_watched;
 pub use home::recommended;
 
 /// Channel feeds fetched at once: RSS is cheap, but hundreds of

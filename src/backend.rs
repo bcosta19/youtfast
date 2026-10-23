@@ -189,6 +189,10 @@ impl Backend {
         Ok(backend)
     }
 
+    pub fn session_epoch(&self) -> u64 {
+        self.epoch.get()
+    }
+
     pub fn context(&self) -> &egui::Context {
         &self.waker
     }
@@ -332,6 +336,21 @@ async fn watched<R: Send + 'static>(
 
 async fn handle(command: Command, context: Context) {
     match command {
+        Command::MarkWatched { id, session } => {
+            if session != context.epoch {
+                return;
+            }
+            let _turn = context.account_writes.lock().await;
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(20),
+                innertube::mark_watched(&context.rp, &id),
+            )
+            .await
+            {
+                Ok(Ok(())) => context.send(Event::HistoryMarked),
+                _ => log::warn!("history: playback report failed"),
+            }
+        }
         Command::Load {
             slot,
             generation,
@@ -1413,6 +1432,15 @@ mod tests {
             }
             .ordered()
         );
+        assert!(
+            Command::MarkWatched {
+                id: "synthetic".into(),
+                session: 1
+            }
+            .ordered()
+        );
+        assert!(!Event::HistoryMarked.current(1, 2));
+        assert!(Event::HistoryMarked.current(2, 2));
         assert!(Command::SignOut.ordered());
         assert!(
             Command::Switch(Account {

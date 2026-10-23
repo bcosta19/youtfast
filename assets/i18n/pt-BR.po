@@ -1399,3 +1399,30 @@ msgstr "Miniplayer ao rolar"
 
 msgid "Keep the video visible when scrolling down to the comments."
 msgstr "Mantenha o vídeo visível ao rolar para baixo até os comentários."
+
+msgid "History sync"
+msgstr "Sincronização do histórico"
+
+msgid "Separate"
+msgstr "Separado"
+
+msgid "Merged in YouTFast"
+msgstr "Unificado no YouTFast"
+
+msgid "Merged and sent to YouTube"
+msgstr "Unificado e enviado ao YouTube"
+
+msgid "Keep account and device history separate. Nothing is sent to YouTube."
+msgstr "Mantenha separados os históricos da conta e deste dispositivo. Nada é enviado ao YouTube."
+
+msgid "Combine account and device history in YouTFast. Nothing is sent to YouTube."
+msgstr "Combine os históricos da conta e deste dispositivo no YouTFast. Nada é enviado ao YouTube."
+
+msgid "Combine history and send playback reports to Google from your account. Google may treat this as automated access."
+msgstr "Combine os históricos e envie relatórios de reprodução ao Google pela sua conta. O Google pode tratar isso como acesso automatizado."
+
+msgid "Applies to signed-in accounts only."
+msgstr "Aplica-se apenas a contas conectadas."
+
+msgid "Search history"
+msgstr "Buscar no histórico"

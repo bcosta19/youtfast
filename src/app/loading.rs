@@ -206,7 +206,12 @@ impl App {
             View::Subscriptions if account && (force || stale(&state.account_subscriptions)) => {
                 self.request(Slot::Subscriptions, Request::Subscriptions);
             }
-            View::History if account && (force || stale(&state.account_history)) => {
+            View::History
+                if state.history_source() != Some(Source::Device)
+                    && (force || state.history_needs_refresh || stale(&state.account_history)) =>
+            {
+                self.state.history_needs_refresh = false;
+                self.state.history_requested_at = Some(util::now());
                 self.request(Slot::History, Request::History);
             }
             View::WatchLater if account && (force || stale(&state.account_watch_later)) => {
@@ -442,7 +447,7 @@ impl App {
                 .clone()
                 .filter(|_| in_flight(&state.subscriptions_more_state))
                 .map(|more| (Slot::Subscriptions, Request::MoreSubscriptions(more))),
-            View::History if state.source() == Source::Account => state
+            View::History if state.history_source() != Some(Source::Device) => state
                 .history_more
                 .clone()
                 .filter(|_| in_flight(&state.history_more_state))

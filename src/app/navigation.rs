@@ -23,6 +23,7 @@ pub(super) struct Location {
     page_more: Option<innertube::More>,
     playlist_details: Option<innertube::PlaylistDetails>,
     source: Source,
+    history_filter: crate::logic::history::HistoryFilter,
     filter: FeedFilter,
     cursor: usize,
     watching: Option<Video>,
@@ -53,6 +54,7 @@ impl Location {
             page_more: s.page_more.clone(),
             playlist_details: s.playlist_details.clone(),
             source: s.source,
+            history_filter: s.history_filter,
             filter: s.feed_filter,
             cursor: s.cursor,
             watching: s.watching.clone(),
@@ -94,6 +96,7 @@ impl Location {
         s.page_more_state = Fetch::Idle;
         s.playlist_details = self.playlist_details;
         s.source = self.source;
+        s.history_filter = self.history_filter;
         s.feed_filter = self.filter;
         s.cursor = self.cursor;
         s.cursor_moved = false;

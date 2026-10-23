@@ -2,4 +2,5 @@
 //! to recommend when the account has nothing to give.
 
 pub mod alerts;
+pub mod history;
 pub mod recommend;

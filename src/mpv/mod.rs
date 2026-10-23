@@ -175,8 +175,10 @@ impl Subtitle {
 /// Something the app acts on after [`Mpv::poll`].
 #[derive(Debug, PartialEq)]
 pub enum Event {
-    /// A video started playing.
+    /// The file loaded; playback may still be buffering.
     Loaded,
+    /// Decoding started or resumed after a seek.
+    Started,
     /// The video reached its end.
     Finished,
     /// The video could not be opened or stopped with an error.
@@ -246,6 +248,45 @@ impl Failure {
     }
 }
 
+/// Associates untagged loaded/restart events with their preceding start-file.
+/// A replacement's playlist id is captured before consuming any queued events.
+#[derive(Default)]
+struct PlaybackEvents {
+    expected: Option<i64>,
+    active: bool,
+    loaded: bool,
+    restarted: bool,
+    announced: bool,
+}
+
+impl PlaybackEvents {
+    fn start(&mut self, id: i64) {
+        self.active = self.expected == Some(id);
+        self.loaded = false;
+        self.restarted = false;
+        self.announced = false;
+    }
+
+    fn loaded(&mut self) -> bool {
+        self.loaded = self.active;
+        self.loaded
+    }
+
+    fn restart(&mut self) {
+        self.restarted = self.active && self.loaded;
+    }
+
+    fn started(&mut self, playing: bool) -> bool {
+        let started = self.active && self.loaded && self.restarted && playing && !self.announced;
+        self.announced |= started;
+        started
+    }
+
+    fn current(&self, id: i64) -> bool {
+        self.active && self.expected == Some(id)
+    }
+}
+
 pub struct Mpv {
     handle: Arc<Handle>,
     status: Status,
@@ -253,8 +294,8 @@ pub struct Mpv {
     wakeup: *mut egui::Context,
     /// yt-dlp's last error, until the load it belongs to ends.
     ytdl_failure: Option<Failure>,
-    /// Whether the current file reached FILE_LOADED before failing.
-    loaded: bool,
+    /// The identity and lifecycle of the current requested file.
+    playback_events: PlaybackEvents,
     /// What [`Mpv::set_max_resolution`] last set.
     max_resolution: u32,
     /// The captions' languages yt-dlp is asked for (see [`raw_options`]).
@@ -402,7 +443,7 @@ impl Mpv {
             },
             wakeup,
             ytdl_failure: None,
-            loaded: false,
+            playback_events: PlaybackEvents::default(),
             max_resolution,
             captions,
             cookies_from_browser: None,
@@ -430,7 +471,7 @@ impl Mpv {
         self.signed_in = false;
         match start {
             Some(start) => self.load_with(url, &format!("start={start:.3}"))?,
-            None => self.command(&["loadfile", url, "replace"])?,
+            None => self.replace(&["loadfile", url, "replace"])?,
         }
         self.set_paused(false)
     }
@@ -474,10 +515,32 @@ impl Mpv {
     }
 
     /// Opens `url` in place of the current video with per-file `options`.
-    fn load_with(&self, url: &str, options: &str) -> Result<(), Error> {
+    fn load_with(&mut self, url: &str, options: &str) -> Result<(), Error> {
         // The index argument (-1, ignored by "replace") came in mpv 0.38;
         // per-file options follow it.
-        self.command(&["loadfile", url, "replace", "-1", options])
+        self.replace(&["loadfile", url, "replace", "-1", options])
+    }
+
+    fn replace(&mut self, args: &[&str]) -> Result<(), Error> {
+        // Consume earlier observations before changing the file. Later queued
+        // events still have to pass the playlist-id gate below.
+        let _ = self.poll();
+        self.playback_events = PlaybackEvents::default();
+        self.ytdl_failure = None;
+        self.at_end = false;
+        self.status.idle = true;
+        self.status.buffering = true;
+        self.status.position = 0.0;
+        self.status.duration = 0.0;
+        self.status.seekable = false;
+        self.command(args)?;
+        // loadfile replace changes the playlist synchronously, while opening
+        // and decoding happen later. IDs are unique for the mpv instance.
+        // Missing identity fails closed: it cannot authorize a playback report.
+        self.playback_events.expected = self
+            .get_property("playlist/0/id")
+            .and_then(|id| id.parse().ok());
+        Ok(())
     }
 
     /// Bounds the streams of the next video loaded to `resolution` (720 for
@@ -639,6 +702,16 @@ impl Mpv {
         )
     }
 
+    /// Whether this file is actively playing rather than waiting at its end.
+    pub fn is_playing(&self) -> bool {
+        self.playback_events.active
+            && self.playback_events.loaded
+            && !self.status.idle
+            && !self.status.paused
+            && !self.status.buffering
+            && !self.at_end
+    }
+
     /// Reads every pending event without waiting. Call once per frame on
     /// the interface thread; the wakeup callback asks for that frame.
     pub fn poll(&mut self) -> Vec<Event> {
@@ -651,30 +724,46 @@ impl Mpv {
             match event.event_id {
                 ffi::MPV_EVENT_NONE => break,
                 ffi::MPV_EVENT_START_FILE => {
-                    self.loaded = false;
+                    // SAFETY: mpv documents start-file's payload as this struct.
+                    let start = unsafe { &*(event.data as *const ffi::mpv_event_start_file) };
+                    self.playback_events.start(start.playlist_entry_id);
                     self.ytdl_failure = None;
                 }
                 ffi::MPV_EVENT_PROPERTY_CHANGE => {
                     // SAFETY: mpv documents data as mpv_event_property here.
                     let property = unsafe { &*(event.data as *const ffi::mpv_event_property) };
                     // SAFETY: data matches the format mpv reports.
-                    unsafe { self.apply_property(event.reply_userdata, property) };
+                    if self.playback_events.active
+                        || matches!(event.reply_userdata, VOLUME | PAUSE | SPEED | MUTE)
+                    {
+                        unsafe { self.apply_property(event.reply_userdata, property) };
+                    }
                 }
-                ffi::MPV_EVENT_FILE_LOADED => {
-                    self.loaded = true;
+                ffi::MPV_EVENT_FILE_LOADED if self.playback_events.loaded() => {
+                    self.status.idle = false;
                     self.ytdl_failure = None;
                     events.push(Event::Loaded);
+                }
+                ffi::MPV_EVENT_PLAYBACK_RESTART
+                    if self.playback_events.active && self.playback_events.loaded =>
+                {
+                    self.playback_events.restart();
+                    self.status.idle = false;
+                    self.status.buffering = false;
                 }
                 ffi::MPV_EVENT_END_FILE => {
                     // SAFETY: mpv documents data as mpv_event_end_file here.
                     let end = unsafe { &*(event.data as *const ffi::mpv_event_end_file) };
+                    if !self.playback_events.current(end.playlist_entry_id) {
+                        continue;
+                    }
                     match end.reason {
                         ffi::MPV_END_FILE_REASON_EOF => events.push(Event::Finished),
                         ffi::MPV_END_FILE_REASON_ERROR => {
                             log::warn!("mpv could not play: {}", Error::new(end.error, "playback"));
                             let failure = Failure::from_playback(
                                 end.error,
-                                self.loaded,
+                                self.playback_events.loaded,
                                 self.ytdl_failure.take(),
                             );
                             events.push(Event::Failed(failure));
@@ -693,7 +782,8 @@ impl Mpv {
                         )
                     };
                     log::warn!(target: "mpv", "mpv reported a playback diagnostic");
-                    if prefix == "ytdl_hook"
+                    if self.playback_events.active
+                        && prefix == "ytdl_hook"
                         && let Some(failure) = Failure::from_ytdl(&text)
                     {
                         self.ytdl_failure = Some(failure);
@@ -702,6 +792,10 @@ impl Mpv {
                 ffi::MPV_EVENT_SHUTDOWN => break,
                 _ => {}
             }
+        }
+        let playing = self.is_playing();
+        if self.playback_events.started(playing) {
+            events.push(Event::Started);
         }
         if self.at_end && !was_at_end && !events.contains(&Event::Finished) {
             events.push(Event::Finished);
@@ -827,6 +921,41 @@ unsafe extern "C" fn wake(context: *mut c_void) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn replacement_ignores_old_events_until_its_own_load_started() {
+        let mut gate = super::PlaybackEvents {
+            expected: Some(2),
+            ..Default::default()
+        };
+        assert!(!gate.started(true));
+        gate.restart();
+        assert!(!gate.started(true));
+        gate.start(1);
+        assert!(!gate.loaded());
+        gate.restart();
+        assert!(!gate.started(true));
+        assert!(!gate.current(1));
+        gate.start(2);
+        assert!(!gate.started(true));
+        assert!(gate.loaded());
+        assert!(!gate.started(true));
+        gate.restart();
+        assert!(!gate.started(false));
+        assert!(gate.started(true));
+        assert!(!gate.started(true));
+        assert!(!gate.current(1));
+        assert!(gate.current(2));
+        // Even a queued start from a superseded third load cannot qualify.
+        gate.start(3);
+        assert!(!gate.started(true));
+        assert!(!gate.loaded());
+        // An unreadable playlist id also fails closed.
+        let mut unknown = super::PlaybackEvents::default();
+        unknown.start(2);
+        assert!(!unknown.loaded());
+        assert!(!unknown.started(true));
+    }
+
     use super::*;
 
     /// Scripts start on threads of their own during initialize, and Linux
