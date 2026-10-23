@@ -8,6 +8,12 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Fixed
+
+- The sidebar toggle (`b`, or the top bar's button) overrides the automatic
+  rail on watch and narrow layouts on its first press. Its choice then rules
+  every page for that run; the collapsed preference continues to be saved.
+
 ## [0.2.0] - 2026-10-22
 
 ### Added

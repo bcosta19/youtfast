@@ -125,6 +125,9 @@ pub struct State {
     /// Shown over the video in place of the picture.
     pub player_error: Option<String>,
     pub fullscreen: bool,
+    /// The sidebar toggle has been pressed this run: since then the saved
+    /// choice rules every page, over the watch page's automatic rail.
+    pub sidebar_toggled: bool,
     /// The seek bar's position while it is dragged.
     pub seek_preview: Option<f64>,
     /// The choices kept between runs (quality, volume).
@@ -260,6 +263,21 @@ pub enum PlayerMenu {
 }
 
 impl State {
+    /// The sidebar's toggle (`b`, or the top bar's button).
+    pub fn toggle_sidebar(&mut self, automatically_collapsed: bool) {
+        // The watch page starts folded to its rail, so the first press there
+        // opens the sidebar instead of folding it again. Narrow windows use
+        // the same automatic rail. From the first use the saved choice rules
+        // every page, remembered for the run.
+        if !self.sidebar_toggled {
+            let was_collapsed = self.settings.sidebar_collapsed || automatically_collapsed;
+            self.settings.sidebar_collapsed = !was_collapsed;
+        } else {
+            self.settings.sidebar_collapsed = !self.settings.sidebar_collapsed;
+        }
+        self.sidebar_toggled = true;
+    }
+
     /// The video being watched is a live stream now: yt-dlp's word once it
     /// has loaded, the list's or rustypipe's until then.
     pub fn watching_live(&self) -> bool {
@@ -327,6 +345,23 @@ impl State {
             .cloned()
             .collect()
     }
+}
+
+/// Applies the sidebar action through the shared state transition used by
+/// the app, demo and UI regression test.
+pub(crate) fn apply_sidebar_action(state: &mut State, action: Action, width: f32) -> bool {
+    let Action::ToggleSidebar = action else {
+        return false;
+    };
+    let automatically_collapsed = sidebar_uses_automatic_rail(state, width);
+    state.toggle_sidebar(automatically_collapsed);
+    true
+}
+
+/// Whether the current view/window would use the rail before the user
+/// overrides that automatic choice in this run.
+pub(crate) fn sidebar_uses_automatic_rail(state: &State, width: f32) -> bool {
+    state.view == View::Watch || width < 900.0
 }
 
 /// Where the chosen quality was kept in eframe's storage before the
@@ -850,7 +885,11 @@ impl App {
                 self.save_settings();
             }
             Action::ToggleSidebar => {
-                self.state.settings.sidebar_collapsed = !self.state.settings.sidebar_collapsed;
+                apply_sidebar_action(
+                    &mut self.state,
+                    Action::ToggleSidebar,
+                    ctx.content_rect().width(),
+                );
                 self.save_settings();
             }
             Action::SetQuality(quality) => self.set_quality(quality),
