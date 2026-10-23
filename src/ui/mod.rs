@@ -150,7 +150,7 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                     ui.add_enabled_ui(state.can_go_forward, |ui| {
                         if widgets::icon_button(
                             ui,
-                            Icon::ChevronRight,
+                            Icon::Forward,
                             18.0,
                             tr(locale, "Forward (Alt+→)").as_ref(),
                         )

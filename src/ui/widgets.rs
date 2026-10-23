@@ -74,7 +74,7 @@ pub fn loading(ui: &mut Ui, palette: &Palette, what: &'static str, locale: Local
     });
 }
 
-/// A part of a page: its heading (and a count in the dim colour), then its
+/// A part of a page: its heading (and a count in the secondary colour), then its
 /// contents. No box: the siblings' sections sit on the page.
 pub fn section<R>(
     ui: &mut Ui,
@@ -95,7 +95,7 @@ pub fn section<R>(
                     ui.label(
                         egui::RichText::new(util::thousands(count as u64))
                             .font(theme::regular(14.0))
-                            .color(palette.dim),
+                            .color(palette.secondary),
                     );
                 }
             });
@@ -400,7 +400,7 @@ pub fn nav_item(
 }
 
 /// A round avatar in `rect`: the picture, or the name's initial on
-/// `surface_active` while there is none.
+/// `secondary` with a `window` letter while there is none.
 pub fn avatar(ui: &Ui, palette: &Palette, url: Option<&str>, name: &str, rect: Rect) {
     if !ui.is_rect_visible(rect) {
         return;
@@ -413,7 +413,7 @@ pub fn avatar(ui: &Ui, palette: &Palette, url: Option<&str>, name: &str, rect: R
             .paint_at(ui, rect),
         None => {
             ui.painter()
-                .circle_filled(rect.center(), rect.width() / 2.0, palette.surface_active);
+                .circle_filled(rect.center(), rect.width() / 2.0, palette.secondary);
             let initial: String = name
                 .trim_start_matches('@')
                 .chars()
@@ -425,7 +425,7 @@ pub fn avatar(ui: &Ui, palette: &Palette, url: Option<&str>, name: &str, rect: R
                 egui::Align2::CENTER_CENTER,
                 initial,
                 theme::semibold(rect.height() * 0.45),
-                palette.text,
+                palette.window,
             );
         }
     }
@@ -534,16 +534,8 @@ fn thumbnail(
         .corner_radius(radius)
         .paint_at(ui, rect);
     badge(ui, rect, video, palette, locale);
-    if let Some(watched) = watched {
+    if let Some(watched) = watched.filter(|fraction| *fraction > 0.0) {
         let track = Rect::from_min_max(pos2(rect.left(), rect.bottom() - 4.0), rect.right_bottom());
-        let bottom = CornerRadius {
-            nw: 0,
-            ne: 0,
-            sw: RADIUS,
-            se: RADIUS,
-        };
-        ui.painter()
-            .rect_filled(track, bottom, Color32::from_white_alpha(70));
         let played = Rect::from_min_size(
             track.min,
             vec2(track.width() * watched.clamp(0.0, 1.0), track.height()),
@@ -1326,6 +1318,38 @@ fn meta(video: &Video, locale: Locale) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn thumbnail_draws_only_positive_watched_progress() {
+        for watched in [None, Some(0.0), Some(0.5), Some(1.5)] {
+            let ctx = egui::Context::default();
+            let palette = Palette::dark();
+            let rect = Rect::from_min_size(pos2(10.0, 10.0), vec2(168.0, 94.0));
+            let video = Video::from_id("thumbnail00".into());
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                thumbnail(ui, &palette, &video, rect, watched, Locale::English);
+            });
+            output.textures_delta.clear();
+            let bars: Vec<_> = output
+                .shapes
+                .iter()
+                .filter_map(|shape| {
+                    if let egui::Shape::Rect(shape) = &shape.shape {
+                        assert_ne!(shape.fill, Color32::from_white_alpha(70));
+                        (shape.fill == palette.accent).then_some(shape.rect)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            if let Some(fraction) = watched.filter(|fraction| *fraction > 0.0) {
+                assert_eq!(bars.len(), 1);
+                assert_eq!(bars[0].width(), rect.width() * fraction.min(1.0));
+            } else {
+                assert!(bars.is_empty());
+            }
+        }
+    }
 
     #[test]
     fn explicit_locale_changes_app_counts_without_translating_video_content() {

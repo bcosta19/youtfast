@@ -8,6 +8,7 @@ fastframe_icons::icons! {
         prefix: "youtfast-icon-",
         directory: "../../assets/icons/",
         Back => lucide "arrow-left",
+        Forward => "arrow-right",
         Play => lucide "play",
         Pause => lucide "pause",
         Volume => lucide "volume-2",

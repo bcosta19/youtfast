@@ -33,11 +33,16 @@ before decoration. Every keyboard binding stays; the `?` overlay lists them.
 | Sidebar, top bar | `panel` (the same as `window` in the built-in palettes) |
 | Cards, inputs, chips, soft buttons | `surface`; hover `surface_hover`; pressed or the keyboard's selected row `surface_active` |
 | Menus, toasts, modals | `overlay` with a 1 px `outline` and the popup shadow |
-| Body text | `text`; channel names, counts, ages and other metadata `secondary`; hints and placeholders `dim` |
+| Body text | `text`; channel names, counts, ages and other metadata `secondary`; helper text `secondary`; placeholders and disabled states `dim` |
 | Primary button (Subscribe), the chip that is on | `text` fill, `window` label (white on dark) |
 | Progress (seek bar played, watched bar), focus, badges' counts | `accent` |
 | LIVE, errors | `red` |
 | Links in descriptions and comments | `blue`, underlined on hover |
+
+The built-in selected fill is `#454545` in dark mode (`secondary` `#b5b5b5`)
+and `#dbdbdb` in light mode (`secondary` `#606060`), keeping secondary text
+at WCAG AA contrast. Letter avatars use a `secondary` circle and a `window`
+letter so they remain visible on selected rows.
 
 The video rectangle is always black.
 
