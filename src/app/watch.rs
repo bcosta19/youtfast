@@ -119,7 +119,7 @@ impl App {
         }
         if let Some(json) = json {
             // Kept from before a quality change until there is news.
-            let (details, resolutions) = youtube::ytdl_loaded(&json);
+            let (details, resolutions) = ytdlp::ytdl_loaded(&json);
             self.state.resolutions = resolutions;
             if let (Some(details), Some(watching)) = (details, self.state.watching.as_mut())
                 && details.id == watching.id

@@ -416,7 +416,7 @@ mod tests {
     #[test]
     fn transcript_failures_retry_and_refresh_does_not_strand_an_inflight_request() {
         let mut s = State {
-            extras: Fetch::Ready(crate::video_extras::Extras {
+            extras: Fetch::Ready(crate::youtube::extras::Extras {
                 preview: None,
                 language: "en".into(),
                 transcript: Err("unavailable".into()),
@@ -428,7 +428,7 @@ mod tests {
         assert!(!s.extras_need_request());
         s.reset_watch_fetches();
         assert!(s.extras_need_request());
-        s.extras = Fetch::Ready(crate::video_extras::Extras {
+        s.extras = Fetch::Ready(crate::youtube::extras::Extras {
             preview: None,
             language: "en".into(),
             transcript: Ok(Vec::new()),

@@ -21,7 +21,7 @@ on it, and follow [YouTube response formats](#youtube-response-formats).
   Do not scrape YouTube's HTML or reimplement signature or n-parameter
   deobfuscation here; that belongs to an extractor library.
 - The signed-in session (YouTube cookies) is the user's Google session.
-  It lives only in the platform credential store (`src/account.rs`): never
+  It lives only in the platform credential store (`src/storage/account.rs`): never
   in a file, settings, the library, rustypipe's cache, a log line or an
   error message. Credential-store errors are mapped to fixed messages,
   because their text can carry platform data.
@@ -30,6 +30,22 @@ on it, and follow [YouTube response formats](#youtube-response-formats).
 - Do not broaden a task into adjacent features or a general refactor.
 
 ## Architecture
+
+`src/` is grouped by domain. A new module goes in the group that matches
+its job, not at the root:
+
+| Folder | Holds |
+|---|---|
+| `ui/` | the views |
+| `app.rs`, `app/` | the state and the actions the views push |
+| `backend.rs`, `backend/` | the runtime thread; `protocol.rs` is its `Command`s and `Event`s |
+| `youtube/` | the network: InnerTube (`innertube`), yt-dlp (`ytdlp`), SponsorBlock, captions and storyboards (`extras`), the thumbnails' cache |
+| `storage/` | what stays on this computer: library, settings, sessions (`account`), Takeout, file paths |
+| `logic/` | pure decisions over video lists: new-upload alerts, local recommendations |
+| `mpv/` | the player |
+| `desktop/` | single instance, media controls, local logs |
+| `appearance/` | palette, icons, interface languages |
+| `model.rs`, `util.rs` | the shared types and formatting helpers |
 
 - `src/ui/` draws views from `app::State` and the player's `mpv::Status`, and
   pushes `model::Action`s. `src/app.rs` applies them after the frame,
@@ -40,17 +56,17 @@ on it, and follow [YouTube response formats](#youtube-response-formats).
   the ones not drawn for a minute; the watch page's details are kept for
   the last 50 videos (`App::details_cache`), for half an hour.
 - `src/backend.rs` is the interface's handle to a tokio runtime on its own
-  thread. The two sides talk only through `Command` and `Event`, and every
-  event wakes the window. Nothing blocks the interface thread.
-- `src/library.rs` is what this computer keeps, with or without an
+  thread. The two sides talk only through `Command` and `Event`
+  (`src/backend/protocol.rs`), and every event wakes the window. Nothing blocks the interface thread.
+- `src/storage/library.rs` is what this computer keeps, with or without an
   account: subscriptions, history (with resume positions) and Watch later,
   in one JSON file (`paths::Dirs::library`). Saves go to the backend
   (`Command::SaveLibrary`) and are atomic (`paths::write_atomic`); an
   unreadable file is moved aside, never overwritten. New fields need
   `#[serde(default)]` so older files keep loading. `on_exit` saves directly.
-- `src/takeout.rs` imports Google Takeout's `subscriptions.csv` (columns by
+- `src/storage/takeout.rs` imports Google Takeout's `subscriptions.csv` (columns by
   position: the header is localized) and `watch-history.json`.
-- `src/innertube.rs` is everything through rustypipe: the home feed (the
+- `src/youtube/innertube.rs` is everything through rustypipe: the home feed (the
   account's subscription feed plus RSS for channels subscribed on this
   device, merged and deduplicated), a channel's RSS, and the account's
   subscriptions, history, Watch later, liked videos and playlists. The watch
@@ -60,18 +76,18 @@ on it, and follow [YouTube response formats](#youtube-response-formats).
   videos, shorts, live, playlists and the channel's own search, paged through
   `More` continuations (`more_videos`, `more_playlists`), as is the home
   feed (`more_videos` again). Home's For you is the account's own
-  recommendations (`src/innertube/home.rs`: `browse` `FEwhat_to_watch`
+  recommendations (`src/youtube/innertube/home.rs`: `browse` `FEwhat_to_watch`
   through rustypipe's `raw`, read here, continued by rustypipe), and when
-  the account has none or there is no account, `src/recommend.rs` ranks
+  the account has none or there is no account, `src/logic/recommend.rs` ranks
   the related videos of the history's latest videos. Playlists (Watch later and liked videos included) come in a newer
-  layout rustypipe fails to read; when it does, `src/innertube/playlist.rs`
+  layout rustypipe fails to read; when it does, `src/youtube/innertube/playlist.rs`
   reads them through `raw` (`browse` `VL<id>`) and pages them itself
   (`More::ours`) — its shorts land on the shelf, filled further
   by `channel_shorts` (each device channel's Shorts tab). rustypipe has no
   posts or podcasts tabs, no write actions and no home recommendations call:
   subscribing acts on the local library. The watch page's rating and the
   account playlists of `[ save ]` are the only writes to the account
-  (`src/innertube/edit.rs`, through rustypipe's `raw` request to
+  (`src/youtube/innertube/edit.rs`, through rustypipe's `raw` request to
   InnerTube's `like/*`, `playlist/get_add_to_playlist` and
   `browse/edit_playlist`); ratings are kept 30 minutes (`App::ratings`),
   and each write is shown at once and undone if YouTube refuses it.
@@ -88,7 +104,7 @@ on it, and follow [YouTube response formats](#youtube-response-formats).
   dev-dependency feature only) exposes `client::regression`, the hooks
   `tests/youtube_api.rs` calls. Drop the copy once a release carries these
   changes.
-- `src/alerts.rs` is the new-upload check's brain: a pure split of a
+- `src/logic/alerts.rs` is the new-upload check's brain: a pure split of a
   feed's videos into unseen (`alerts_seen_at`) and not-yet-notified
   (`alerts_notified_at`) stamps the library keeps. A tokio timer in
   `src/backend.rs` (restarted by `Command::SetAlertsEvery`; the feed's own
@@ -96,7 +112,7 @@ on it, and follow [YouTube response formats](#youtube-response-formats).
   `Event::CheckAlerts`, and `Command::Notify` shows the result through
   notify-rust on a blocking thread. YouTube's real notifications have no
   API; this is the replacement the user chose.
-- `src/account.rs` holds the sessions: cookies.txt parsing, reading a
+- `src/storage/account.rs` holds the sessions: cookies.txt parsing, reading a
   browser's cookies through yt-dlp's `extract_cookies_from_browser` (a short
   Python script whose output is piped, never written; it tries each Linux
   keyring because yt-dlp guesses wrong on Hyprland), and the credential
@@ -112,7 +128,7 @@ on it, and follow [YouTube response formats](#youtube-response-formats).
   requests, one current request per `backend::Slot`; an answer to an older
   one is dropped (`App::generations`). Account-or-device pages switch with
   `model::Source`.
-- `src/youtube.rs` parses extraction JSON; search goes through RustyPipe.
+- `src/youtube/ytdlp.rs` parses extraction JSON; search goes through RustyPipe.
   Playback hands the watch link to mpv, whose ytdl hook asks yt-dlp for the streams
   (`mpv::FORMAT`, bounded by the quality chosen, 1080p on Auto). Updating yt-dlp fixes YouTube
   breakage without a release. Videos play signed out: with a session,
@@ -161,33 +177,33 @@ on it, and follow [YouTube response formats](#youtube-response-formats).
   behind them: what plays next (the queue, Up next, then related), the
   kept captions language, the skips. mpv runs with `keep-open`, so the end
   of a video is `eof-reached` turning on, not an end-file event.
-- `src/sponsorblock.rs` asks sponsor.ajay.app for a video's segments by
+- `src/youtube/sponsorblock.rs` asks sponsor.ajay.app for a video's segments by
   the first four hex digits of its id's SHA-256, never the id; it is off
   unless the settings turn it on. Search suggestions come from rustypipe's
   `search_suggestion`, signed out, once typing pauses.
-- `src/settings.rs` is what survives between runs (quality, volume, the
+- `src/storage/settings.rs` is what survives between runs (quality, volume, the
   theme choice and its palette caches), in one JSON file at
   `paths::Dirs::settings`. Loads and saves mirror `library.rs`; the backend
   writes it (`Command::SaveSettings`), and `on_exit` saves directly.
-- `src/icons.rs` lists the Lucide icons fastframe-icons shares with the
+- `src/appearance/icons.rs` lists the Lucide icons fastframe-icons shares with the
   sibling apps; `fastframe_icons::install` serves them to egui.
 - The window does not wait for the installed fonts that draw the scripts
   Inter lacks: finding them probes every installed font (1.5 s from disk),
   so `theme::SystemFonts` looks on a thread started in `main`, and `App`
   swaps them in once found. `theme::install_fonts` is the synchronous path
   for tests and the demo.
-- `src/theme.rs` is the palette: YouTube's dark and light defaults, the
+- `src/appearance/theme.rs` is the palette: YouTube's dark and light defaults, the
   mapping onto `egui::Visuals`, and the fastframe-theme catalogue's
   desktop integration (shared presets, Omarchy on Linux, followed live).
   `Settings::palette` resolves the choice through the caches; a change is
   revealed by `fastframe_theme::Transition`. The Omarchy hook
   (`contrib/omarchy/youtfast-theme`) calls `youtfast reload-themes`; the
   palette is also followed through filesystem notifications.
-- `src/instance.rs` is one running copy per user (fastframe-instance): a
+- `src/desktop/instance.rs` is one running copy per user (fastframe-instance): a
   second launch hands `show`, `open <text>` or `reload-themes` to the
   window already open and exits; the handler only parses and queues, `App`
   drains the queue.
-- `src/now_playing.rs` is the desktop's media controls
+- `src/desktop/now_playing.rs` is the desktop's media controls
   (fastframe-now-playing; MPRIS on Linux): it maps their commands onto
   `Action`s and reports what mpv plays; the units differ (`SeekBy` is
   milliseconds, `SetVolume` is 0..1).
@@ -207,7 +223,7 @@ deserialize through `MapResult`/`VecSkipError`), so a tab comes back empty or
 a field takes another's value without any error.
 
 - Before changing anything that builds requests to YouTube or reads its
-  responses (`vendor/rustypipe`, `src/innertube*.rs`, `src/backend.rs`
+  responses (`vendor/rustypipe`, `src/youtube/innertube*`, `src/backend.rs`
   loads), and whenever a listing comes back empty, wrong or refused, read
   [docs/youtube-api-format.md](docs/youtube-api-format.md). Check the known
   changes (`YT-n`) first: a new symptom is often an old one in another place.
@@ -230,7 +246,7 @@ a field takes another's value without any error.
 
 ## Definition of done
 
-- Add focused tests for changed behaviour (see `src/youtube.rs` and
+- Add focused tests for changed behaviour (see `src/youtube/ytdlp.rs` and
   `src/util.rs`).
 - A bug caused by a YouTube format change also gets its `YT-n` entry and
   regression tests ([YouTube response formats](#youtube-response-formats)).

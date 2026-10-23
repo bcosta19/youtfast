@@ -4,8 +4,8 @@
 mod animation;
 pub use animation::install as install_animation_loader;
 
-use crate::i18n::{Locale, gettext as tr};
-use crate::thumbs::Failure;
+use crate::appearance::i18n::{Locale, gettext as tr};
+use crate::youtube::thumbs::Failure;
 use egui::{Context, Id, Image, Ui};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -138,7 +138,7 @@ pub(crate) fn drawn_count(ctx: &Context) -> usize {
 fn memory_uri(dir: &std::path::Path, url: &str) -> String {
     format!(
         "bytes://thumbnail/{}",
-        crate::thumbs::path(dir, url)
+        crate::youtube::thumbs::path(dir, url)
             .file_name()
             .unwrap()
             .to_string_lossy()

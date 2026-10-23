@@ -10,7 +10,7 @@ use crate::app::State;
 use crate::app::player::{next_video, previous_video};
 use crate::model::Action;
 use crate::mpv::Status;
-use crate::youtube;
+use crate::youtube::ytdlp;
 
 /// A desktop command mapped onto what the app does with it.
 #[derive(Debug, PartialEq)]
@@ -86,7 +86,7 @@ fn effect(command: &np::Command, state: &State) -> Option<Effect> {
             }
         }
         np::Command::SetVolume(volume) => Action::SetVolume(volume.clamp(0.0, 1.0) * 100.0),
-        np::Command::OpenUri(uri) if youtube::video_id_from_link(uri).is_some() => {
+        np::Command::OpenUri(uri) if ytdlp::video_id_from_link(uri).is_some() => {
             Action::Search(uri.clone())
         }
         np::Command::Raise => return Some(Effect::Raise),
@@ -324,7 +324,7 @@ mod tests {
         assert!(!media_state(&state, Some(&playing())).controls.next);
         state.up_next.remove(0);
         assert!(!media_state(&state, Some(&playing())).controls.previous);
-        state.playing_more = Some(crate::innertube::More {
+        state.playing_more = Some(crate::youtube::innertube::More {
             ctoken: "next".into(),
             endpoint: rustypipe::model::paginator::ContinuationEndpoint::Browse,
             visitor_data: None,

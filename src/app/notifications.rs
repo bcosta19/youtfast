@@ -114,7 +114,8 @@ impl App {
 
     /// Sets how often the alerts check runs, clamped to the offered choices.
     pub(super) fn set_alerts_every(&mut self, minutes: u32) {
-        self.state.settings.alerts_every_minutes = crate::settings::clamp_alerts_every(minutes);
+        self.state.settings.alerts_every_minutes =
+            crate::storage::settings::clamp_alerts_every(minutes);
         self.save_settings();
         self.set_alerts_timer();
     }

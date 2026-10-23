@@ -224,11 +224,11 @@ mod tests {
             keys
         }
         for catalog in [
-            include_str!("../assets/i18n/pt-BR.po"),
-            include_str!("../assets/i18n/es.po"),
-            include_str!("../assets/i18n/fr.po"),
-            include_str!("../assets/i18n/de.po"),
-            include_str!("../assets/i18n/it.po"),
+            include_str!("../../assets/i18n/pt-BR.po"),
+            include_str!("../../assets/i18n/es.po"),
+            include_str!("../../assets/i18n/fr.po"),
+            include_str!("../../assets/i18n/de.po"),
+            include_str!("../../assets/i18n/it.po"),
         ] {
             let mut source = String::new();
             for line in catalog.lines() {

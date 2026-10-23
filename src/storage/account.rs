@@ -582,7 +582,7 @@ impl rustypipe::cache::CacheStorage for CacheFile {
             log::warn!("not writing rustypipe's cache: it was not the JSON expected");
             return;
         };
-        if let Err(error) = crate::paths::write_atomic(&self.path, clean.as_bytes()) {
+        if let Err(error) = crate::storage::paths::write_atomic(&self.path, clean.as_bytes()) {
             log::warn!("could not write rustypipe's cache: {error}");
         }
     }

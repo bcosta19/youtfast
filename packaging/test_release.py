@@ -37,7 +37,7 @@ class ReleaseTests(unittest.TestCase):
     def test_sensitive_and_generated_paths_are_rejected(self):
         for name in ["rustypipe_reports/raw.json", "target/out", ".env", ".env.local", "data/cookies.txt"]:
             self.assertTrue(release.forbidden_path(name))
-        for name in ["src/account.rs", "vendor/rustypipe/LICENSE", "packaging/test_release.py"]:
+        for name in ["src/storage/account.rs", "vendor/rustypipe/LICENSE", "packaging/test_release.py"]:
             self.assertFalse(release.forbidden_path(name))
 
     def test_workflows_pin_actions_and_keep_contributor_tokens_read_only(self):

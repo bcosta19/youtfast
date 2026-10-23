@@ -3,13 +3,13 @@
 //! search at its right, and the tab: a grid of video cards, playlist rows,
 //! or the About cards.
 
-use crate::i18n::{Locale, format as trf, gettext as tr};
+use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use egui::{Align, Layout, RichText, Sense, Ui, pos2, vec2};
 
 use super::{results, widgets};
 use crate::app::State;
+use crate::appearance::theme;
 use crate::model::{Action, Channel, ChannelAbout, ChannelHeader, ChannelTab, Fetch, Listing};
-use crate::theme;
 use crate::util;
 
 /// The smallest a video card gets before the grid drops a column.
@@ -95,7 +95,7 @@ pub fn show(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Act
                     ChannelTab::Videos | ChannelTab::Shorts | ChannelTab::Live
                 ) {
                     ui.horizontal_wrapped(|ui| {
-                        for &order in crate::innertube::ChannelOrder::ALL {
+                        for &order in crate::youtube::innertube::ChannelOrder::ALL {
                             if widgets::chip(
                                 ui,
                                 &state.palette,
@@ -186,8 +186,13 @@ fn channel_count(
     plural: &'static str,
     locale: Locale,
 ) -> String {
-    let phrase = crate::i18n::ngettext(locale, singular, plural, count.min(u32::MAX as u64) as u32);
-    crate::i18n::interpolate(&phrase, &[("count", util::compact(count))])
+    let phrase = crate::appearance::i18n::ngettext(
+        locale,
+        singular,
+        plural,
+        count.min(u32::MAX as u64) as u32,
+    );
+    crate::appearance::i18n::interpolate(&phrase, &[("count", util::compact(count))])
 }
 
 /// The tab's name in the bar.
@@ -614,7 +619,7 @@ mod tests {
     #[test]
     fn mouse_wheel_outside_video_box_scrolls_channel() {
         let ctx = egui::Context::default();
-        crate::theme::install_fonts(&ctx);
+        crate::appearance::theme::install_fonts(&ctx);
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 720.0));
         let channel = Channel {
             id: "UC123".into(),

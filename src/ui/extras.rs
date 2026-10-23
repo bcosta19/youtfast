@@ -1,6 +1,6 @@
 //! Optional transcript and storyboard views, sharing the bounded image cache.
 use super::*;
-use crate::i18n::{Locale, gettext as tr};
+use crate::appearance::i18n::{Locale, gettext as tr};
 use crate::util;
 
 pub(super) fn transcript(
@@ -51,7 +51,7 @@ pub(super) fn transcript(
             );
             match &extras.transcript {
                 Err(error) => {
-                    ui.label(crate::i18n::message(locale, error));
+                    ui.label(crate::appearance::i18n::message(locale, error));
                     if ui.button(tr(locale, "Retry")).clicked() {
                         actions.push(Action::LoadExtras);
                     }

@@ -145,7 +145,7 @@ impl App {
             return;
         };
         let picked = rfd::AsyncFileDialog::new()
-            .set_title(crate::i18n::gettext(
+            .set_title(crate::appearance::i18n::gettext(
                 self.state.settings.language,
                 "Choose the cookies.txt exported from YouTube",
             ))

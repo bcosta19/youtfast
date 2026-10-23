@@ -17,11 +17,11 @@ use egui::{
 use super::widgets;
 use crate::app::player::{LIVE_BEHIND, SPEEDS, next_video, previous_video, speed_label};
 use crate::app::{PlayerMenu, State};
-use crate::i18n::{Locale, format as trf, gettext as tr};
-use crate::icons::Icon;
+use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
+use crate::appearance::icons::Icon;
+use crate::appearance::theme;
 use crate::model::{Action, Fetch, Quality, Resolution, Segment, Video};
 use crate::mpv::{Status, VideoSurface};
-use crate::theme;
 use crate::util;
 
 /// How long the controls stay after the pointer stops moving.
@@ -334,7 +334,7 @@ fn picture(
     }
     if let Some(error) = &state.player_error {
         let galley = ui.painter().layout(
-            crate::i18n::message(locale, error).into_owned(),
+            crate::appearance::i18n::message(locale, error).into_owned(),
             theme::regular(16.0),
             Color32::WHITE,
             (rect.width() - 32.0).max(1.0),
@@ -842,7 +842,7 @@ fn osd(ui: &Ui, rect: Rect, state: &State) {
     if let Some((text, _)) = &state.osd {
         let top = pos2(rect.center().x, rect.top() + 24.0);
         let galley = ui.painter().layout_no_wrap(
-            crate::i18n::message(locale, text).into_owned(),
+            crate::appearance::i18n::message(locale, text).into_owned(),
             theme::semibold(15.0),
             Color32::WHITE,
         );
@@ -1606,7 +1606,7 @@ mod tests {
             actions
         }
         let ctx = egui::Context::default();
-        crate::theme::install_fonts(&ctx);
+        crate::appearance::theme::install_fonts(&ctx);
         let mut state = State {
             watching: Some(Video::from_id("aaaaaaaaaaa".into())),
             queue: vec![Video::from_id("bbbbbbbbbbb".into())],
@@ -1667,7 +1667,7 @@ mod tests {
     #[test]
     fn narrow_controls_stay_inside_the_video_and_keep_the_groups_apart() {
         let ctx = egui::Context::default();
-        crate::theme::install_fonts(&ctx);
+        crate::appearance::theme::install_fonts(&ctx);
         let mut state = State {
             watching: Some(Video::from_id("aaaaaaaaaaa".into())),
             queue: vec![Video::from_id("bbbbbbbbbbb".into())],
@@ -1739,7 +1739,7 @@ mod tests {
     #[test]
     fn a_long_press_restores_the_original_speed_without_pausing_on_release() {
         let ctx = egui::Context::default();
-        crate::theme::install_fonts(&ctx);
+        crate::appearance::theme::install_fonts(&ctx);
         let mut state = State {
             view: crate::model::View::Watch,
             watching: Some(Video::from_id("aaaaaaaaaaa".into())),
@@ -1860,7 +1860,7 @@ mod tests {
             PlayerMenu::CaptionStyle,
         ];
         let ctx = egui::Context::default();
-        crate::theme::install_fonts(&ctx);
+        crate::appearance::theme::install_fonts(&ctx);
         for size in [vec2(1600.0, 900.0), vec2(320.0, 180.0)] {
             for live in [false, true] {
                 for (menu, autoplay) in menus
@@ -1933,7 +1933,7 @@ mod tests {
             ..State::default()
         };
         let ctx = egui::Context::default();
-        crate::theme::install_fonts(&ctx);
+        crate::appearance::theme::install_fonts(&ctx);
         for width in [900.0, 1600.0] {
             let input = egui::RawInput {
                 screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(width, 1000.0))),

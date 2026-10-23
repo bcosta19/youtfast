@@ -15,7 +15,7 @@ pub type Catalog = fastframe_theme::Catalog<Palette>;
 
 /// The template Omarchy renders `youtfast.json` from, when neither Omarchy
 /// nor the user has installed one.
-pub const OMARCHY_TEMPLATE: &str = include_str!("../contrib/omarchy/youtfast.json.tpl");
+pub const OMARCHY_TEMPLATE: &str = include_str!("../../contrib/omarchy/youtfast.json.tpl");
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Palette {
@@ -491,7 +491,7 @@ mod tests {
     #[test]
     fn the_omarchy_hook_is_the_crate_one() {
         assert_eq!(
-            include_str!("../contrib/omarchy/youtfast-theme"),
+            include_str!("../../contrib/omarchy/youtfast-theme"),
             fastframe_theme::omarchy::hook_script("youtfast")
         );
     }

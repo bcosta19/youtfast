@@ -1,13 +1,13 @@
 //! The Notifications page: uploads newer than the last visit, in the
 //! usual rows grouped by day, with Check now and Mark all as seen.
 
-use crate::i18n::{Locale, format as trf, gettext as tr};
+use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use egui::{RichText, Ui};
 
 use super::{results, widgets};
 use crate::app::State;
+use crate::appearance::theme;
 use crate::model::Action;
-use crate::theme;
 use crate::util;
 
 pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {

@@ -139,7 +139,7 @@ impl State {
             return false;
         }
         self.library = library;
-        self.notice = Some(crate::i18n::format(
+        self.notice = Some(crate::appearance::i18n::format(
             self.settings.language,
             "Imported {subscriptions} new subscriptions and {history} new videos of history.",
             &[
@@ -275,12 +275,13 @@ impl App {
     fn load_for_you(&mut self) {
         let state = &self.state;
         let signed_in = state.signed_in();
-        let seeds = crate::recommend::seeds(&state.library.history);
+        let seeds = crate::logic::recommend::seeds(&state.library.history);
         if seeds.is_empty() && !signed_in {
             self.state.for_you = Listing::Ready(Vec::new());
             return;
         }
-        let taste = crate::recommend::taste(&state.library.history, &state.library.subscriptions);
+        let taste =
+            crate::logic::recommend::taste(&state.library.history, &state.library.subscriptions);
         self.request(
             Slot::ForYou,
             Request::ForYou {
@@ -1122,7 +1123,7 @@ mod tests {
 
     #[test]
     fn channel_header_completes_a_channel_opened_from_a_link() {
-        let linked = youtube::channel_from_link("https://www.youtube.com/@BlenderStudio").unwrap();
+        let linked = ytdlp::channel_from_link("https://www.youtube.com/@BlenderStudio").unwrap();
         let mut state = State {
             view: View::Channel,
             page: Some(Page::Channel(linked)),
@@ -1158,7 +1159,7 @@ mod tests {
             "https://youtube.com/c/ExampleChannel",
             "https://youtube.com/user/ExampleChannel",
         ] {
-            let linked = youtube::channel_from_link(link).unwrap();
+            let linked = ytdlp::channel_from_link(link).unwrap();
             let mut state = State {
                 view: View::Channel,
                 page: Some(Page::Channel(linked.clone())),

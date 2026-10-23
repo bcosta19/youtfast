@@ -1,6 +1,6 @@
 //! Small formatting helpers.
 
-use crate::i18n::{Locale, gettext, interpolate, ngettext};
+use crate::appearance::i18n::{Locale, gettext, interpolate, ngettext};
 
 /// `4:05`, or `1:02:03` past an hour.
 pub fn duration(seconds: f64) -> String {

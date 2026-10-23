@@ -7,7 +7,7 @@ offers follow what a video page expects (home's grid of cards under chips,
 search's large rows, the watch page's title, channel line, actions and
 description box, the subscribed channels in the sidebar). The palette is
 YouTFast's dark or light, a shared preset, or the desktop's (Omarchy), as
-`src/theme.rs` resolves it.
+`src/appearance/theme.rs` resolves it.
 
 Mode: Operate. Scanning a feed, opening a video, and keyboard control come
 before decoration. Every keyboard binding stays; the `?` overlay lists them.

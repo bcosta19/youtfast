@@ -3,7 +3,7 @@
 //! sidebar's items, round avatars, rounded thumbnails, the video as a row
 //! or a card, the playlist as a row, the search field, and rich text.
 
-use crate::i18n::{Locale, format as trf, gettext as tr};
+use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use egui::text::LayoutJob;
 use egui::{
     Color32, CornerRadius, CursorIcon, FontId, Galley, Id, Pos2, Rect, Response, Sense, Stroke, Ui,
@@ -11,10 +11,10 @@ use egui::{
 };
 
 use crate::app::State;
-use crate::icons::Icon;
-use crate::library::Library;
+use crate::appearance::icons::Icon;
+use crate::appearance::theme::{self, Palette, RADIUS, RADIUS_SMALL};
 use crate::model::{Action, Channel, Fetch, PlaylistSummary, Span, Video};
-use crate::theme::{self, Palette, RADIUS, RADIUS_SMALL};
+use crate::storage::library::Library;
 use crate::util;
 
 /// The height of one line of body text.
@@ -982,13 +982,13 @@ pub fn playlist_row(
 
 /// Count phrases use the selected catalog's plural rules, independently of content.
 pub fn video_count_label(count: u64, locale: Locale) -> String {
-    let label = crate::i18n::ngettext(
+    let label = crate::appearance::i18n::ngettext(
         locale,
         "{count} video",
         "{count} videos",
         count.min(u32::MAX as u64) as u32,
     );
-    crate::i18n::interpolate(&label, &[("count", util::thousands(count))])
+    crate::appearance::i18n::interpolate(&label, &[("count", util::thousands(count))])
 }
 
 /// One of the chips over a list, YouTube's way: a pill on `surface`,
@@ -1265,7 +1265,7 @@ pub fn more_row(
         Fetch::Failed(error) => {
             ui.horizontal(|ui| {
                 ui.label(
-                    egui::RichText::new(crate::i18n::message(locale, error).as_ref())
+                    egui::RichText::new(crate::appearance::i18n::message(locale, error).as_ref())
                         .color(palette.red),
                 );
                 if button(
@@ -1427,7 +1427,7 @@ mod tests {
         for light in [false, true] {
             for (width, columns) in [(480.0, 1), (960.0, 3), (1512.0, 4)] {
                 let ctx = egui::Context::default();
-                crate::theme::install_fonts(&ctx);
+                crate::appearance::theme::install_fonts(&ctx);
                 let state = State {
                     palette: if light {
                         Palette::light()
@@ -1436,7 +1436,7 @@ mod tests {
                     },
                     ..Default::default()
                 };
-                crate::theme::apply(&ctx, &state.palette);
+                crate::appearance::theme::apply(&ctx, &state.palette);
                 let videos = action_videos(columns * 2);
                 let (baseline, _) =
                     draw_action_cards(&ctx, &state, &videos, columns, width, Vec::new());
@@ -1478,7 +1478,7 @@ mod tests {
     fn video_targets_keep_their_own_actions_without_moving_siblings() {
         for target in ["later", "queue", "channel", "menu", "video"] {
             let ctx = egui::Context::default();
-            crate::theme::install_fonts(&ctx);
+            crate::appearance::theme::install_fonts(&ctx);
             let state = State::default();
             let videos = action_videos(3);
             let (baseline, _) = draw_action_cards(&ctx, &state, &videos, 3, 960.0, Vec::new());

@@ -2,32 +2,22 @@
 // Release builds open no console window on Windows, like Spotifast and ZapFast.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod account;
-mod alerts;
 mod app;
+mod appearance;
 mod backend;
 #[cfg(feature = "demo")]
 mod demo;
-mod diagnostics;
-mod i18n;
-mod icons;
-mod innertube;
-mod instance;
-mod library;
+mod desktop;
+mod logic;
 mod model;
 mod mpv;
-mod now_playing;
-mod paths;
-mod recommend;
-mod settings;
-mod sponsorblock;
-mod takeout;
-mod theme;
-mod thumbs;
+mod storage;
 mod ui;
 mod util;
-mod video_extras;
 mod youtube;
+
+use appearance::theme;
+use desktop::{diagnostics, instance};
 
 use std::sync::Arc;
 

@@ -7,7 +7,7 @@
 //! search field, a sidebar of views and subscribed channels, notices as
 //! toasts at the bottom right, and `?` for the keyboard shortcuts.
 
-use crate::i18n::{format as trf, gettext as tr};
+use crate::appearance::i18n::{format as trf, gettext as tr};
 mod account;
 mod discovery;
 mod extras;
@@ -28,10 +28,10 @@ use egui::{
 };
 
 use crate::app::{AccountState, State};
-use crate::icons::Icon;
+use crate::appearance::icons::Icon;
+use crate::appearance::theme::{self, RADIUS};
 use crate::model::{Action, ChannelTab, Fetch, Listing, View};
 use crate::mpv::{Status, VideoSurface};
-use crate::theme::{self, RADIUS};
 
 /// The search field's widget id, so `/` can focus it.
 fn command_line_id() -> egui::Id {
@@ -556,9 +556,11 @@ fn notice_toast(ctx: &egui::Context, state: &State, actions: &mut Vec<Action>) {
                             ui.set_max_width(320.0);
                             ui.add(
                                 egui::Label::new(
-                                    RichText::new(crate::i18n::message(locale, notice).as_ref())
-                                        .font(theme::medium(13.5))
-                                        .color(palette.text),
+                                    RichText::new(
+                                        crate::appearance::i18n::message(locale, notice).as_ref(),
+                                    )
+                                    .font(theme::medium(13.5))
+                                    .color(palette.text),
                                 )
                                 .wrap(),
                             );
@@ -590,9 +592,9 @@ pub fn cursor_key(state: &State) -> usize {
         View::Home if state.feed_filter == crate::model::FeedFilter::ForYou => tag(&state.for_you),
         View::Home => tag(&state.feed) + 10 * state.feed_filter as usize,
         View::Results => match state.search_options.kind {
-            crate::innertube::SearchKind::Videos => tag(&state.results),
-            crate::innertube::SearchKind::Channels => tag(&state.results_channels),
-            crate::innertube::SearchKind::Playlists => tag(&state.results_playlists),
+            crate::youtube::innertube::SearchKind::Videos => tag(&state.results),
+            crate::youtube::innertube::SearchKind::Channels => tag(&state.results_channels),
+            crate::youtube::innertube::SearchKind::Playlists => tag(&state.results_playlists),
         },
         View::Subscriptions => tag(&state.account_subscriptions) + source,
         View::History => tag(&state.account_history) + source,
@@ -625,9 +627,11 @@ fn cursor_count(state: &State) -> usize {
     match state.view {
         View::Home => state.visible_feed().len(),
         View::Results => match state.search_options.kind {
-            crate::innertube::SearchKind::Videos => state.results.items().len(),
-            crate::innertube::SearchKind::Channels => state.results_channels.items().len(),
-            crate::innertube::SearchKind::Playlists => state.results_playlists.items().len(),
+            crate::youtube::innertube::SearchKind::Videos => state.results.items().len(),
+            crate::youtube::innertube::SearchKind::Channels => state.results_channels.items().len(),
+            crate::youtube::innertube::SearchKind::Playlists => {
+                state.results_playlists.items().len()
+            }
         },
         View::Subscriptions => match state.source() {
             crate::model::Source::Account => state.account_subscriptions.items().len(),
@@ -665,14 +669,14 @@ fn open_at(state: &State, index: usize) -> Option<Action> {
             .get(index)
             .map(|video| Action::Open((*video).clone())),
         View::Results => match state.search_options.kind {
-            crate::innertube::SearchKind::Videos => video(state.results.items()),
-            crate::innertube::SearchKind::Channels => state
+            crate::youtube::innertube::SearchKind::Videos => video(state.results.items()),
+            crate::youtube::innertube::SearchKind::Channels => state
                 .results_channels
                 .items()
                 .get(index)
                 .cloned()
                 .map(Action::OpenChannel),
-            crate::innertube::SearchKind::Playlists => state
+            crate::youtube::innertube::SearchKind::Playlists => state
                 .results_playlists
                 .items()
                 .get(index)
@@ -911,11 +915,11 @@ mod tests {
     #[test]
     fn the_watch_page_rail_yields_to_the_toggle() {
         let ctx = egui::Context::default();
-        crate::theme::install_fonts(&ctx);
+        crate::appearance::theme::install_fonts(&ctx);
         let mut state = State {
             view: View::Watch,
             watching: Some(Video::from_id("aaaaaaaaaaa".into())),
-            settings: crate::settings::Settings {
+            settings: crate::storage::settings::Settings {
                 sidebar_collapsed: true,
                 ..Default::default()
             },
@@ -947,7 +951,7 @@ mod tests {
         assert!(label.is_some(), "the sidebar opens on the watch page");
 
         let restart_ctx = egui::Context::default();
-        crate::theme::install_fonts(&restart_ctx);
+        crate::appearance::theme::install_fonts(&restart_ctx);
         let mut restarted = State {
             view: View::Watch,
             settings: state.settings.clone(),
@@ -1003,7 +1007,7 @@ mod tests {
     #[test]
     fn the_first_toggle_on_wide_home_folds_and_the_next_opens() {
         let ctx = egui::Context::default();
-        crate::theme::install_fonts(&ctx);
+        crate::appearance::theme::install_fonts(&ctx);
         let mut state = State::default();
         let mut actions = Vec::new();
 
@@ -1034,7 +1038,7 @@ mod tests {
     #[test]
     fn first_sidebar_toggle_opens_the_automatic_rail_in_a_narrow_window() {
         let ctx = egui::Context::default();
-        crate::theme::install_fonts(&ctx);
+        crate::appearance::theme::install_fonts(&ctx);
         let mut state = State::default();
         let mut actions = Vec::new();
 

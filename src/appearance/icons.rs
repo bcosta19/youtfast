@@ -6,7 +6,7 @@ fastframe_icons::icons! {
     /// Every icon the interface draws.
     pub enum Icon {
         prefix: "youtfast-icon-",
-        directory: "../assets/icons/",
+        directory: "../../assets/icons/",
         Back => lucide "arrow-left",
         Play => lucide "play",
         Pause => lucide "pause",
