@@ -20,7 +20,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_BUILD_JOBS: 2
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
