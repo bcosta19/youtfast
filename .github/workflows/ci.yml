@@ -34,14 +34,34 @@ jobs:
         run: |
           toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
           rustup toolchain install "$toolchain" --profile minimal --component rustfmt --component clippy
-      # Only what the build needs: Recommends pull in some 140 MB (ffmpeg,
-      # speech models, yt-dlp), and a slow mirror once took 55 minutes over
-      # them. A stuck mirror fails here instead of eating the job's budget.
+      # Ubuntu's packages come from Actions' cache once downloaded:
+      # libmpv-dev alone pulls in some 115 MB (ffmpeg's development stack),
+      # and the runners' mirror has served it at 43 kB/s. apt checks each
+      # cached .deb against the signed index and fetches only what changed.
+      # Recommends stay out; a stuck mirror fails here, not in Clippy.
+      - name: Restore Ubuntu packages
+        id: apt-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/apt-archives
+          key: apt-ubuntu-24.04-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: apt-ubuntu-24.04-
       - name: System dependencies
-        timeout-minutes: 15
+        timeout-minutes: 30
         run: |
+          archives="$HOME/apt-archives"
+          sudo mkdir -p "$archives/partial"
           sudo apt-get -o Acquire::Retries=3 update
-          sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 build-essential pkg-config libmpv-dev libxkbcommon-dev libwayland-dev libgl1-mesa-dev libfontconfig1-dev libssl-dev desktop-file-utils appstream
+          sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 -o Dir::Cache::Archives="$archives" build-essential pkg-config libmpv-dev libxkbcommon-dev libwayland-dev libgl1-mesa-dev libfontconfig1-dev libssl-dev desktop-file-utils appstream
+          sudo apt-get autoclean -o Dir::Cache::Archives="$archives"
+          sudo rm -rf "$archives/partial" "$archives/lock"
+          sudo chown -R "$(id -u):$(id -g)" "$archives"
+      - name: Save Ubuntu packages
+        if: steps.apt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/apt-archives
+          key: ${{ steps.apt-cache.outputs.cache-primary-key }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
           shared-key: linux-quality
