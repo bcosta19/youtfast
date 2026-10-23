@@ -61,12 +61,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Install pinned compiler and dependencies
+      - name: Install pinned compiler
         run: |
           toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
           rustup toolchain install "$toolchain" --profile minimal
-          sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libmpv-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libgl1-mesa-dev libfontconfig1-dev libssl-dev xvfb xdotool imagemagick dbus-x11 libgl1-mesa-dri
+      # As in CI: no Recommends, and a stuck mirror fails here. No package
+      # cache: release builds restore nothing.
+      - name: System dependencies
+        timeout-minutes: 30
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 build-essential pkg-config libmpv-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libgl1-mesa-dev libfontconfig1-dev libssl-dev xvfb xdotool imagemagick dbus-x11 libgl1-mesa-dri
       - name: Build without restored compiler output
         run: cargo build --release --locked
       - name: Verify and package Linux executable
@@ -183,8 +188,8 @@ jobs:
           path: dist
       - name: Install builder and runtime
         run: |
-          sudo apt-get update
-          sudo apt-get install -y flatpak flatpak-builder
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get install -y -o Acquire::Retries=3 flatpak flatpak-builder
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08
       - name: Build restricted bundle and native corresponding sources
