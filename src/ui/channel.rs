@@ -65,6 +65,13 @@ fn same_kind(a: &ChannelTab, b: &ChannelTab) -> bool {
     )
 }
 
+/// Centred object-fit: cover, preserving the source image's aspect ratio.
+fn banner_uv(image: egui::Vec2, target: egui::Vec2) -> egui::Rect {
+    let scale = (target.x / image.x).max(target.y / image.y);
+    let visible = target / (image * scale);
+    egui::Rect::from_center_size(egui::pos2(0.5, 0.5), visible)
+}
+
 pub fn show(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
 
@@ -80,7 +87,13 @@ pub fn show(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Act
                     let width = ui.available_width();
                     let height = (width / 6.0).clamp(80.0, 200.0);
                     let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
-                    super::images::remote(ui, url)
+                    let mut image = super::images::remote(ui, url);
+                    if let Ok(texture) = image.load_for_size(ui.ctx(), rect.size())
+                        && let Some(size) = texture.size()
+                    {
+                        image = image.uv(banner_uv(size, rect.size()));
+                    }
+                    image
                         .fit_to_exact_size(rect.size())
                         .corner_radius(egui::CornerRadius::same(theme::RADIUS))
                         .paint_at(ui, rect);
@@ -554,6 +567,21 @@ fn about_cards(ui: &mut Ui, state: &State, about: &ChannelAbout, actions: &mut V
 mod tests {
     use super::*;
     use crate::model::Video;
+
+    #[test]
+    fn banner_cover_crops_the_centre_without_stretching() {
+        for (image, target, expected) in [
+            (vec2(1200.0, 200.0), vec2(600.0, 100.0), vec2(1.0, 1.0)),
+            (vec2(1200.0, 200.0), vec2(600.0, 200.0), vec2(0.5, 1.0)),
+            (vec2(600.0, 400.0), vec2(600.0, 100.0), vec2(1.0, 0.25)),
+        ] {
+            let uv = banner_uv(image, target);
+            assert_eq!(uv.center(), egui::pos2(0.5, 0.5));
+            assert_eq!(uv.size(), expected);
+            let cropped = image * uv.size();
+            assert!((cropped.x / cropped.y - target.x / target.y).abs() < 0.001);
+        }
+    }
 
     /// A channel with a Shorts tab but no Live tab.
     fn header() -> ChannelHeader {

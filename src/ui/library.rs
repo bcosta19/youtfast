@@ -716,7 +716,8 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     let selected = index == state.cursor;
                     ui.push_id(&video.id, |ui| {
                         ui.horizontal(|ui| {
-                            let width = (ui.available_width() - 44.0).max(0.0);
+                            let width = (ui.available_width() - 32.0 - ui.spacing().item_spacing.x)
+                                .max(0.0);
                             ui.allocate_ui_with_layout(
                                 egui::vec2(width, 106.0),
                                 egui::Layout::top_down(egui::Align::Min),
@@ -741,7 +742,7 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                             if widgets::icon_button(
                                 ui,
                                 crate::appearance::icons::Icon::Close,
-                                32.0,
+                                16.0,
                                 tr(locale, "Remove from this device's history").as_ref(),
                             )
                             .clicked()
@@ -1027,6 +1028,45 @@ pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn history_remove_buttons_stay_aligned_and_inside_the_page() {
+        use crate::storage::library::Watched;
+        for width in [480.0, 960.0, 1280.0] {
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            crate::appearance::theme::install_fonts(&ctx);
+            let mut state = State::default();
+            state.library.history = (0..5)
+                .map(|index| Watched {
+                    video: Video::from_id(format!("history{index:04}")),
+                    at: 0,
+                    position: 0.0,
+                })
+                .collect();
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(width, 900.0))),
+                    ..Default::default()
+                },
+                |ui| history(ui, &state, &mut Vec::new()),
+            );
+            output.textures_delta.clear();
+            let tree = output.platform_output.accesskit_update.unwrap();
+            let buttons: Vec<_> = tree
+                .nodes
+                .iter()
+                .filter(|(_, node)| node.label() == Some("Remove from this device's history"))
+                .map(|(_, node)| node.bounds().unwrap())
+                .collect();
+            assert_eq!(buttons.len(), 5);
+            for button in &buttons {
+                assert!((button.x0 - buttons[0].x0).abs() < 0.1, "{buttons:?}");
+                assert!(button.x1 <= f64::from(width), "{button:?}");
+                assert_eq!(button.width(), 32.0);
+            }
+        }
+    }
 
     #[test]
     fn empty_account_subscriptions_and_watch_later_use_the_explicit_locale() {

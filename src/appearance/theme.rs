@@ -57,10 +57,10 @@ impl Palette {
             panel: Color32::from_rgb(0x0f, 0x0f, 0x0f),
             surface: Color32::from_rgb(0x27, 0x27, 0x27),
             surface_hover: Color32::from_rgb(0x3f, 0x3f, 0x3f),
-            surface_active: Color32::from_rgb(0x4d, 0x4d, 0x4d),
+            surface_active: Color32::from_rgb(0x45, 0x45, 0x45),
             outline: Color32::from_rgb(0x30, 0x30, 0x30),
             text: Color32::from_rgb(0xf1, 0xf1, 0xf1),
-            secondary: Color32::from_rgb(0xaa, 0xaa, 0xaa),
+            secondary: Color32::from_rgb(0xb5, 0xb5, 0xb5),
             dim: Color32::from_rgb(0x71, 0x71, 0x71),
             accent: Color32::from_rgb(0xff, 0x00, 0x33),
             accent_hover: Color32::from_rgb(0xff, 0x33, 0x55),
@@ -86,7 +86,7 @@ impl Palette {
             panel: Color32::from_rgb(0xff, 0xff, 0xff),
             surface: Color32::from_rgb(0xf2, 0xf2, 0xf2),
             surface_hover: Color32::from_rgb(0xe5, 0xe5, 0xe5),
-            surface_active: Color32::from_rgb(0xd9, 0xd9, 0xd9),
+            surface_active: Color32::from_rgb(0xdb, 0xdb, 0xdb),
             outline: Color32::from_rgb(0xe5, 0xe5, 0xe5),
             text: Color32::from_rgb(0x0f, 0x0f, 0x0f),
             secondary: Color32::from_rgb(0x60, 0x60, 0x60),
@@ -431,6 +431,47 @@ pub fn apply(ctx: &egui::Context, palette: &Palette) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn luminance(color: Color32) -> f64 {
+        let linear = |value: u8| {
+            let value = f64::from(value) / 255.0;
+            if value <= 0.04045 {
+                value / 12.92
+            } else {
+                ((value + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * linear(color.r()) + 0.7152 * linear(color.g()) + 0.0722 * linear(color.b())
+    }
+
+    #[test]
+    fn built_in_text_and_letter_avatars_meet_wcag_aa() {
+        for palette in [Palette::dark(), Palette::light()] {
+            for foreground in [palette.text, palette.secondary] {
+                for background in [palette.window, palette.surface, palette.surface_active] {
+                    let a = luminance(foreground);
+                    let b = luminance(background);
+                    let contrast = (a.max(b) + 0.05) / (a.min(b) + 0.05);
+                    assert!(
+                        contrast >= 4.5,
+                        "{foreground:?} on {background:?}: {contrast}"
+                    );
+                }
+            }
+            // Window/surface steps stay ordered: hover, then selected.
+            let steps = [
+                palette.surface,
+                palette.surface_hover,
+                palette.surface_active,
+            ]
+            .map(luminance);
+            assert!(if palette.dark {
+                steps[0] < steps[1] && steps[1] < steps[2]
+            } else {
+                steps[0] > steps[1] && steps[1] > steps[2]
+            });
+        }
+    }
 
     #[test]
     fn a_palette_file_overrides_its_base() {

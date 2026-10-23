@@ -329,7 +329,7 @@ fn add_account(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 } else {
                     (
                         tr(locale, "Leave blank to use the profile name"),
-                        palette.dim,
+                        palette.secondary,
                     )
                 };
                 ui.label(RichText::new(text).font(theme::regular(13.0)).color(color));
@@ -435,7 +435,7 @@ fn profile_row(
                 ui.label(
                     RichText::new(tr(locale, "Added"))
                         .font(theme::medium(13.0))
-                        .color(palette.dim),
+                        .color(palette.secondary),
                 );
             } else if ui
                 .add_enabled_ui(!busy, |ui| {

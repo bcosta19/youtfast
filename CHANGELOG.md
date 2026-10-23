@@ -10,7 +10,10 @@ are the distribution record.
 
 ### Fixed
 
-
+- History row controls stay aligned; selected text, helper text and counts
+  have readable contrast, and letter avatars remain visible on selected rows.
+- Channel banners crop without stretching, back/forward use matching arrows,
+  and watched thumbnails show only the played portion of their progress bar.
 - The sidebar toggle (`b`, or the top bar's button) overrides the automatic
   rail on watch and narrow layouts on its first press. Its choice then rules
   every page for that run; the collapsed preference continues to be saved.

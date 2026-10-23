@@ -26,7 +26,7 @@ pub fn panel(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) {
         .show(ui, |ui| add_contents(ui));
 }
 
-/// A page's own title in bold 24, with a dim count after it.
+/// A page's own title in bold 24, with a secondary count after it.
 pub fn title(ui: &mut Ui, state: &State, title: &str, count: Option<usize>) {
     ui.horizontal(|ui| {
         ui.label(
@@ -38,7 +38,7 @@ pub fn title(ui: &mut Ui, state: &State, title: &str, count: Option<usize>) {
             ui.label(
                 RichText::new(crate::util::thousands(count as u64))
                     .font(theme::regular(14.0))
-                    .color(state.palette.dim),
+                    .color(state.palette.secondary),
             );
         }
     });
