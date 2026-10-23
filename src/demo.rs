@@ -1,7 +1,7 @@
 //! Deliberately isolated UI harness. No backend, keyring, user files, network,
 //! media controls or single-instance channel are created here.
 use crate::{
-    app::{Page, State},
+    app::{Page, State, apply_sidebar_action},
     i18n::{Locale, gettext as tr},
     model::*,
     mpv::Status,
@@ -241,7 +241,11 @@ impl eframe::App for Demo {
                 Action::ReturnToWatch => self.state.view = View::Watch,
                 Action::CloseMiniPlayer => self.state.mini_closed = true,
                 Action::ToggleSidebar => {
-                    self.state.settings.sidebar_collapsed = !self.state.settings.sidebar_collapsed
+                    apply_sidebar_action(
+                        &mut self.state,
+                        Action::ToggleSidebar,
+                        ui.ctx().content_rect().width(),
+                    );
                 }
                 Action::TogglePause => self.status.paused = !self.status.paused,
                 Action::ToggleMute => self.status.muted = !self.status.muted,

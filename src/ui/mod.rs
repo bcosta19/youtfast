@@ -362,9 +362,11 @@ const SIDEBAR_RAIL: f32 = 72.0;
 /// Collapsed (`b`), it is a rail of the views' icons and the channels'
 /// avatars, each named on hover.
 fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
-    let collapsed = state.settings.sidebar_collapsed
-        || state.view == View::Watch
-        || ui.ctx().content_rect().width() < 900.0;
+    // The watch page and narrow windows start folded to the rail; from the
+    // toggle's first press the saved choice rules every page (#25).
+    let automatic_rail =
+        crate::app::sidebar_uses_automatic_rail(state, ui.ctx().content_rect().width());
+    let collapsed = state.settings.sidebar_collapsed || (!state.sidebar_toggled && automatic_rail);
     let palette = &state.palette;
     egui::Panel::left("sidebar")
         .exact_size(if collapsed {
@@ -840,4 +842,216 @@ fn key_pill(ui: &mut egui::Ui, palette: &theme::Palette, key: &str) {
     );
     ui.painter()
         .galley(rect.center() - galley.size() / 2.0, galley, palette.text);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::Video;
+
+    /// Draws one frame and reports the left edge of the sidebar's nav label:
+    /// `Some` only when the sidebar is open, `None` on the rail.
+    fn sidebar_label_x(
+        ctx: &egui::Context,
+        state: &mut State,
+        frame: usize,
+        events: Vec<egui::Event>,
+        actions: &mut Vec<Action>,
+    ) -> Option<f32> {
+        sidebar_label_x_at_width(ctx, state, frame, 1512.0, events, actions)
+    }
+
+    fn sidebar_label_x_at_width(
+        ctx: &egui::Context,
+        state: &mut State,
+        frame: usize,
+        width: f32,
+        events: Vec<egui::Event>,
+        actions: &mut Vec<Action>,
+    ) -> Option<f32> {
+        let mut found = None;
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(width, 906.0),
+                )),
+                time: Some(frame as f64 / 10.0),
+                events,
+                ..Default::default()
+            },
+            |ui| show(ui, state, None, None, actions),
+        );
+        output.textures_delta.clear();
+        for shape in &output.shapes {
+            let egui::Shape::Text(text) = &shape.shape else {
+                continue;
+            };
+            if text.galley.text() == "Subscriptions" && text.pos.x < 240.0 {
+                found = Some(text.pos.x);
+            }
+        }
+        found
+    }
+
+    /// The frame's events for pressing `b`.
+    fn toggle_press() -> Vec<egui::Event> {
+        vec![
+            egui::Event::ModifiersChanged(egui::Modifiers::NONE),
+            egui::Event::Key {
+                key: egui::Key::B,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            },
+        ]
+    }
+
+    #[test]
+    fn the_watch_page_rail_yields_to_the_toggle() {
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let mut state = State {
+            view: View::Watch,
+            watching: Some(Video::from_id("aaaaaaaaaaa".into())),
+            settings: crate::settings::Settings {
+                sidebar_collapsed: true,
+                ..Default::default()
+            },
+            ..State::default()
+        };
+        let mut actions = Vec::new();
+
+        // Untouched, the watch page folds the sidebar to its rail.
+        let mut label = None;
+        for frame in 0..3 {
+            label = sidebar_label_x(&ctx, &mut state, frame, Vec::new(), &mut actions);
+        }
+        assert_eq!(label, None, "the watch page starts on the rail");
+
+        // The toggle's first press there opens it (#25).
+        assert!(sidebar_label_x(&ctx, &mut state, 3, toggle_press(), &mut actions).is_none());
+        let action = actions.pop().expect("the `b` key emits the toggle action");
+        assert!(
+            state.settings.sidebar_collapsed,
+            "the flag waits for the action to apply"
+        );
+        assert!(crate::app::apply_sidebar_action(&mut state, action, 1512.0));
+        assert!(!state.settings.sidebar_collapsed);
+        assert!(state.sidebar_toggled);
+        let mut label = None;
+        for frame in 4..7 {
+            label = sidebar_label_x(&ctx, &mut state, frame, Vec::new(), &mut actions);
+        }
+        assert!(label.is_some(), "the sidebar opens on the watch page");
+
+        let restart_ctx = egui::Context::default();
+        crate::theme::install_fonts(&restart_ctx);
+        let mut restarted = State {
+            view: View::Watch,
+            settings: state.settings.clone(),
+            ..State::default()
+        };
+        let mut restart_actions = Vec::new();
+        assert_eq!(
+            sidebar_label_x(
+                &restart_ctx,
+                &mut restarted,
+                0,
+                Vec::new(),
+                &mut restart_actions
+            ),
+            None,
+            "the automatic Watch rail returns on a new run"
+        );
+
+        state.view = View::Home;
+        assert!(
+            sidebar_label_x_at_width(&ctx, &mut state, 7, 800.0, Vec::new(), &mut actions)
+                .is_some(),
+            "the open choice overrides Home's narrow-window rail"
+        );
+        state.view = View::Watch;
+        assert!(
+            sidebar_label_x(&ctx, &mut state, 8, Vec::new(), &mut actions).is_some(),
+            "the open choice persists when returning to watch"
+        );
+
+        // The next press folds it back; it applies after the frame, so the
+        // visuals are read on the frames that follow. The choice then rules
+        // every page.
+        sidebar_label_x(&ctx, &mut state, 9, toggle_press(), &mut actions);
+        let action = actions
+            .pop()
+            .expect("the second `b` emits the toggle action");
+        assert!(crate::app::apply_sidebar_action(&mut state, action, 1512.0));
+        assert!(state.settings.sidebar_collapsed);
+        let mut label = Some(0.0);
+        for frame in 10..12 {
+            label = sidebar_label_x(&ctx, &mut state, frame, Vec::new(), &mut actions);
+        }
+        assert_eq!(label, None, "the next press folds it back");
+        state.view = View::Home;
+        assert_eq!(
+            sidebar_label_x(&ctx, &mut state, 12, Vec::new(), &mut actions),
+            None,
+            "the saved fold rules home too"
+        );
+    }
+
+    #[test]
+    fn the_first_toggle_on_wide_home_folds_and_the_next_opens() {
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let mut state = State::default();
+        let mut actions = Vec::new();
+
+        assert!(
+            sidebar_label_x(&ctx, &mut state, 0, Vec::new(), &mut actions).is_some(),
+            "wide Home starts open"
+        );
+        sidebar_label_x(&ctx, &mut state, 1, toggle_press(), &mut actions);
+        let action = actions.pop().expect("the `b` key emits the toggle action");
+        assert!(crate::app::apply_sidebar_action(&mut state, action, 1512.0));
+        assert_eq!(
+            sidebar_label_x(&ctx, &mut state, 2, Vec::new(), &mut actions),
+            None,
+            "the first press folds wide Home"
+        );
+
+        sidebar_label_x(&ctx, &mut state, 3, toggle_press(), &mut actions);
+        let action = actions
+            .pop()
+            .expect("the second `b` emits the toggle action");
+        assert!(crate::app::apply_sidebar_action(&mut state, action, 1512.0));
+        assert!(
+            sidebar_label_x(&ctx, &mut state, 4, Vec::new(), &mut actions).is_some(),
+            "the second press opens it again"
+        );
+    }
+
+    #[test]
+    fn first_sidebar_toggle_opens_the_automatic_rail_in_a_narrow_window() {
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let mut state = State::default();
+        let mut actions = Vec::new();
+
+        assert_eq!(
+            sidebar_label_x_at_width(&ctx, &mut state, 0, 800.0, Vec::new(), &mut actions),
+            None,
+            "a narrow window starts on the rail"
+        );
+        assert!(crate::app::apply_sidebar_action(
+            &mut state,
+            Action::ToggleSidebar,
+            800.0
+        ));
+        assert!(
+            sidebar_label_x_at_width(&ctx, &mut state, 1, 800.0, Vec::new(), &mut actions)
+                .is_some(),
+            "the first toggle opens the rail even while narrow"
+        );
+    }
 }

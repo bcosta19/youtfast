@@ -69,7 +69,9 @@ The video rectangle is always black.
   Number keys still jump to the views (1–9, in that order).
   Collapsed (`b`, or the toggle) it is a 72 px rail of the icons and the
   channels' avatars, each named on hover. Watch and narrow windows use the
-  rail automatically; theater mode hides the sidebar.
+  rail automatically; the first toggle opens it, and the choice then rules
+  every page for that run. The collapsed preference is saved. Theater mode
+  hides the sidebar.
 - **Notices** are toasts at the bottom right (`overlay`, outline, radius 8,
   an icon, the text, a close button); errors stay until closed.
 - **Keys overlay**: `?` toggles a scrollable modal card, including in full
