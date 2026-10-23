@@ -289,6 +289,22 @@ pub fn loading(ui: &mut Ui, state: &State, what: &'static str) {
         });
 }
 
+/// The placeholder content and label of [`loading`], without a scroll area.
+pub fn loading_content(ui: &mut Ui, state: &State, what: &'static str) {
+    let locale = state.settings.language;
+
+    ui.label(
+        RichText::new(trf(
+            locale,
+            "Loading {what}…",
+            &[("what", tr(locale, what).into_owned())],
+        ))
+        .color(state.palette.secondary),
+    );
+    ui.add_space(12.0);
+    loading_placeholders(ui, state);
+}
+
 fn loading_placeholders(ui: &mut Ui, state: &State) -> Vec<egui::Rect> {
     use crate::model::{ChannelTab, View};
     let cards = state.view == View::Home
