@@ -54,6 +54,9 @@ pub struct State {
     pub results_channels: Listing<Channel>,
     pub results_playlists: Listing<PlaylistSummary>,
     pub history_query: String,
+    pub history_filter: crate::logic::history::HistoryFilter,
+    pub history_needs_refresh: bool,
+    pub history_requested_at: Option<i64>,
     pub channel_order: innertube::ChannelOrder,
     pub playlist_details: Option<innertube::PlaylistDetails>,
     pub can_go_back: bool,
@@ -309,6 +312,62 @@ impl State {
         }
     }
 
+    /// History has its own filter in merged modes; other pages keep `source`.
+    pub fn merged_history(&self) -> bool {
+        self.signed_in()
+            && self.settings.history_sync != crate::storage::settings::HistorySync::Separate
+    }
+
+    /// None denotes All, available only to signed-in merged history.
+    pub fn history_source(&self) -> Option<Source> {
+        use crate::logic::history::HistoryFilter;
+        if !self.merged_history() {
+            return Some(self.source());
+        }
+        match self.history_filter {
+            HistoryFilter::All => None,
+            HistoryFilter::Account => Some(Source::Account),
+            HistoryFilter::Device => Some(Source::Device),
+        }
+    }
+
+    pub fn history_rows(&self) -> Vec<crate::logic::history::Row<'_>> {
+        use crate::logic::history;
+        let mut rows = match self.history_source() {
+            None => history::merge(
+                self.account_history.items(),
+                &self.library.history,
+                self.history_requested_at.unwrap_or_else(util::now),
+            ),
+            Some(Source::Device) => self
+                .library
+                .history_matching(&self.history_query)
+                .map(|watched| history::Row {
+                    video: &watched.video,
+                    when: None,
+                    device: Some(watched),
+                })
+                .collect(),
+            Some(Source::Account) if self.merged_history() => {
+                history::account_rows(self.account_history.items(), &self.library.history)
+            }
+            Some(Source::Account) => self
+                .account_history
+                .items()
+                .iter()
+                .map(|row| history::Row {
+                    video: &row.video,
+                    when: row.when.clone(),
+                    device: None,
+                })
+                .collect(),
+        };
+        if self.history_source() != Some(Source::Account) || self.merged_history() {
+            rows.retain(|row| row.matches(&self.history_query));
+        }
+        rows
+    }
+
     /// The feed's videos home shows: For you's, or the first
     /// `feed_shown` of the feed through the chip.
     pub fn visible_feed(&self) -> Vec<&Video> {
@@ -397,6 +456,8 @@ pub struct App {
     /// watched were sent with; a later `open` drops their answers.
     details_generation: u64,
     playing_generation: u64,
+    playback_report: history_sync::PlaybackReport,
+    playback_tick: Instant,
     /// The watch pages seen lately, so going back to one asks YouTube
     /// again only for its comments.
     details_cache: util::Recent<Details>,
@@ -534,6 +595,8 @@ impl App {
             generations: HashMap::new(),
             details_generation: 0,
             playing_generation: 0,
+            playback_report: history_sync::PlaybackReport::default(),
+            playback_tick: Instant::now(),
             details_cache: util::Recent::new(DETAILS_KEPT),
             ratings: util::Recent::new(RATINGS_KEPT),
             more_comments_token: None,
@@ -588,6 +651,9 @@ impl App {
 
     fn handle(&mut self, event: Event) {
         match event {
+            Event::HistoryMarked => {
+                self.state.history_needs_refresh = true;
+            }
             Event::PlayingPlaylist {
                 generation,
                 id,
@@ -819,6 +885,17 @@ impl App {
                 if let Some(video) = self.state.page_videos.items().first().cloned() {
                     self.open(video);
                 }
+            }
+            Action::SetHistorySync(sync) => {
+                self.state.settings.history_sync = sync;
+                self.state.history_filter = crate::logic::history::HistoryFilter::All;
+                self.state.cursor = 0;
+                self.save_settings();
+            }
+            Action::SetHistoryFilter(filter) => {
+                self.state.history_filter = filter;
+                self.state.cursor = 0;
+                self.load(View::History, false);
             }
             Action::SetSource(source) => {
                 self.state.source = source;
@@ -1158,6 +1235,7 @@ fn native_display(cc: &eframe::CreationContext<'_>) -> NativeDisplay {
 }
 
 mod accounts;
+mod history_sync;
 mod loading;
 mod navigation;
 mod notifications;

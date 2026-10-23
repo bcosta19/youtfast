@@ -154,8 +154,27 @@ The video rectangle is always black.
 - Back/forward keeps at most 30 in-memory locations and restores browsing
   state without restoring old account or library data. Each location owns
   its scroll scope. Account changes discard this navigation history.
-- Device history can be searched and individual entries removed. Account
-  history is read-only here; a local removal does not delete Google history.
+- History defaults to separate Account / This device lists. In either merged
+  mode, its own All / Account / This device chips filter the list, with All
+  selected initially; other pages retain their existing source chips. Search
+  matches the displayed history by title or channel. Shared video ids appear
+  once, with the device's metadata, resume bar and watched/left-at note.
+  The remove button appears only on device-backed rows and deletes only that
+  device entry; Google history remains read-only here.
+- The merge preserves account order and its day headings. RustyPipe supplies
+  the heading as text in the default English request language, without a time
+  of day in `HistoryRow`. Only exact Today / Yesterday headings are mapped to
+  dates in UTC, matching the request defaults, anchored to when the first page
+  was requested so a cached Today does not drift at midnight; weekdays, month
+  names and other localized text are not parsed.
+  Device-only entries are sorted by timestamp (video id breaks ties), inserted
+  before the first same-day, older or unknown account section using UTC dates,
+  and labelled
+  with their local ISO date. Same-day times cannot be interleaved precisely.
+  Shared ids retain their account position, since the account may have a later
+  watch; the device timestamp controls the device note. Loading More rebuilds
+  the same deterministic merge over all loaded account pages, retaining that
+  date anchor; a continuation fetched across midnight remains an approximation.
 - `--features demo` provides isolated synthetic states for native light/dark
   captures. It does not start the production backend or a media session.
 
@@ -165,3 +184,17 @@ The video rectangle is always black.
   error, on every list and control.
 - Motion: the theme change's reveal, egui's short hover fades
   (`animation_time` 0.12), the spinner, toasts appearing. Nothing else.
+
+## History setting
+
+Settings → History offers a History sync ComboBox: Separate (the default),
+Merged in YouTFast, and Merged and sent to YouTube. The selected choice's
+explanation stays visible beside the control, with a note that it applies to
+signed-in accounts only. The reporting choice explicitly explains that it sends
+playback reports to Google from the account and that Google may treat it as
+automated access. Selecting the choice is the consent; there is no extra dialog.
+
+History reports wait for two seconds of active playback after decoding starts,
+excluding brief Shorts scroll-by and failed loads. Seeking, quality reloads and
+reopening the mini player retain the same report decision. Switching sessions
+or opting out cancels a pending report; it is never reassigned to another account.

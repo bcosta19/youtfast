@@ -8,6 +8,13 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Added
+
+- History sync settings: keep account and device history separate, merge them
+  in YouTFast with local resume positions, or also send started playback to the
+  signed-in account's YouTube history. Merged history has All, Account and This
+  device filters; removing an entry only changes this device.
+
 ### Fixed
 
 - History row controls stay aligned; selected text, helper text and counts

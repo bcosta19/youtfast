@@ -186,6 +186,11 @@ pub enum CommentsKey {
 }
 
 pub enum Command {
+    /// Report one started playback in this session only.
+    MarkWatched {
+        id: String,
+        session: u64,
+    },
     LoadPlaylistMore {
         generation: u64,
         id: String,
@@ -277,6 +282,7 @@ pub enum SignInMethod {
 }
 
 pub enum Event {
+    HistoryMarked,
     PlayingPlaylist {
         generation: u64,
         id: String,
@@ -373,7 +379,8 @@ impl Command {
         self.changes_session()
             || matches!(
                 self,
-                Self::Rate { .. }
+                Self::MarkWatched { .. }
+                    | Self::Rate { .. }
                     | Self::SetSaved { .. }
                     | Self::RemoveAccount(_)
                     | Self::Load { .. }

@@ -597,7 +597,7 @@ pub fn cursor_key(state: &State) -> usize {
             crate::youtube::innertube::SearchKind::Playlists => tag(&state.results_playlists),
         },
         View::Subscriptions => tag(&state.account_subscriptions) + source,
-        View::History => tag(&state.account_history) + source,
+        View::History => tag(&state.account_history) + 10 * state.history_filter as usize + source,
         View::WatchLater => tag(&state.account_watch_later) + source,
         View::Liked => tag(&state.liked),
         View::Playlists => tag(&state.playlists),
@@ -637,12 +637,7 @@ fn cursor_count(state: &State) -> usize {
             crate::model::Source::Account => state.account_subscriptions.items().len(),
             crate::model::Source::Device => state.library.subscriptions.len(),
         },
-        View::History => match state.source() {
-            crate::model::Source::Account => state.account_history.items().len(),
-            crate::model::Source::Device => {
-                state.library.history_matching(&state.history_query).count()
-            }
-        },
+        View::History => state.history_rows().len(),
         View::WatchLater => match state.source() {
             crate::model::Source::Account => state.account_watch_later.items().len(),
             crate::model::Source::Device => state.library.watch_later.len(),
@@ -699,18 +694,10 @@ fn open_at(state: &State, index: usize) -> Option<Action> {
                 .cloned()
                 .map(Action::OpenChannel),
         },
-        View::History => match state.source() {
-            crate::model::Source::Account => state
-                .account_history
-                .items()
-                .get(index)
-                .map(|row| Action::Open(row.video.clone())),
-            crate::model::Source::Device => state
-                .library
-                .history_matching(&state.history_query)
-                .nth(index)
-                .map(|watched| Action::Open(watched.video.clone())),
-        },
+        View::History => state
+            .history_rows()
+            .get(index)
+            .map(|row| Action::Open(row.video.clone())),
         View::WatchLater => match state.source() {
             crate::model::Source::Account => video(state.account_watch_later.items()),
             crate::model::Source::Device => video(&state.library.watch_later),

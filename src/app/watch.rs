@@ -71,6 +71,8 @@ impl App {
         let Some(player) = &mut self.player else {
             return;
         };
+        let elapsed = self.playback_tick.elapsed();
+        self.playback_tick = Instant::now();
         let events = player.poll();
         // yt-dlp's answer is there once a video has loaded.
         let json = events
@@ -79,6 +81,13 @@ impl App {
             .flatten();
         for event in events {
             match event {
+                mpv::Event::Started => {
+                    self.playback_report.started(
+                        self.backend.session_epoch(),
+                        self.state.signed_in(),
+                        self.state.settings.history_sync,
+                    );
+                }
                 mpv::Event::Loaded => {
                     self.state.player_error = None;
                     self.captions_pending = self.state.settings.captions.is_some();
@@ -101,6 +110,7 @@ impl App {
                     if retried {
                         log::info!("refused signed out ({failure:?}); trying signed in");
                     } else {
+                        self.playback_report.cancel();
                         self.state.player_error = Some(failure_message(failure).into());
                     }
                 }
@@ -115,6 +125,22 @@ impl App {
                         self.start_autoplay();
                     }
                 }
+            }
+        }
+        if let Some(player) = &self.player {
+            let playing = player.is_playing() && self.state.player_error.is_none();
+            if self.playback_report.advance(
+                self.backend.session_epoch(),
+                self.state.signed_in(),
+                self.state.settings.history_sync,
+                playing,
+                elapsed,
+            ) && let Some(video) = &self.state.watching
+            {
+                self.backend.send(Command::MarkWatched {
+                    id: video.id.clone(),
+                    session: self.backend.session_epoch(),
+                });
             }
         }
         if let Some(json) = json {
@@ -137,6 +163,8 @@ impl App {
 
     pub(super) fn open(&mut self, mut video: Video) {
         log::debug!("opening video");
+        self.playback_report = history_sync::PlaybackReport::default();
+        self.playback_tick = Instant::now();
         self.remember_position();
         if self.state.view != View::Watch {
             self.playing_generation += 1;
@@ -430,17 +458,10 @@ impl App {
             View::Channel | View::Playlist => state.page_videos.items().to_vec(),
             View::WatchLater if account => state.account_watch_later.items().to_vec(),
             View::WatchLater => state.library.watch_later.clone(),
-            View::History if account => state
-                .account_history
-                .items()
+            View::History => state
+                .history_rows()
                 .iter()
                 .map(|row| row.video.clone())
-                .collect(),
-            View::History => state
-                .library
-                .history
-                .iter()
-                .map(|watched| watched.video.clone())
                 .collect(),
             _ => Vec::new(),
         }

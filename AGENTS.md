@@ -50,7 +50,8 @@ its job, not at the root:
 - `src/ui/` draws views from `app::State` and the player's `mpv::Status`, and
   pushes `model::Action`s. `src/app.rs` applies them after the frame,
   through its children in `src/app/` (loading, watch, accounts,
-  notifications, themes). A view only changes its own state (search text,
+  notifications, themes). `src/app/history_sync.rs` gates one report per
+  playback on two seconds of active play and the session active at its start. A view only changes its own state (search text,
   the seek bar while dragged).
   Remote images go through `ui::images::remote`, which lets egui forget
   the ones not drawn for a minute; the watch page's details are kept for
@@ -86,11 +87,18 @@ its job, not at the root:
   by `channel_shorts` (each device channel's Shorts tab). rustypipe has no
   posts or podcasts tabs, no write actions and no home recommendations call:
   subscribing acts on the local library. The watch page's rating and the
-  account playlists of `[ save ]` are the only writes to the account
+  account playlists of `[ save ]` are explicit writes to the account
   (`src/youtube/innertube/edit.rs`, through rustypipe's `raw` request to
   InnerTube's `like/*`, `playlist/get_add_to_playlist` and
   `browse/edit_playlist`); ratings are kept 30 minutes (`App::ratings`),
   and each write is shown at once and undone if YouTube refuses it.
+  Opt-in History sync reports started playbacks through
+  `src/youtube/innertube/history_sync.rs`: an authenticated raw `player`
+  request supplies the playback tracking URL, and the vendored client's
+  `history_tracking` transport sends it with the same session, only to
+  HTTPS YouTube hosts and without redirects. This does not change mpv's
+  signed-out extraction. Tracking errors have one fixed local message;
+  URLs, cookies and response bodies never reach the interface or logs.
   rustypipe is a copy in `vendor/rustypipe` (`[patch.crates-io]`): 0.11.4
   with upstream PR #80 (codeberg.org/ThetaDev/rustypipe) applied, for
   comment authors' avatars and the comment count, and with a failed
@@ -104,6 +112,9 @@ its job, not at the root:
   dev-dependency feature only) exposes `client::regression`, the hooks
   `tests/youtube_api.rs` calls. Drop the copy once a release carries these
   changes.
+- `src/logic/history.rs` merges account day sections with device-only history,
+  deduplicates video ids and keeps local resume metadata; History's filters are
+  independent of other pages' `Source` in merged modes.
 - `src/logic/alerts.rs` is the new-upload check's brain: a pure split of a
   feed's videos into unseen (`alerts_seen_at`) and not-yet-notified
   (`alerts_notified_at`) stamps the library keeps. A tokio timer in

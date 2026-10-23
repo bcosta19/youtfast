@@ -177,7 +177,8 @@ impl Write for Rotating {
 pub fn controlled(message: &str) -> bool {
     matches!(
         message,
-        "image: download failed"
+        "history: playback report failed"
+            | "image: download failed"
             | "image: HTTP access denied"
             | "image: unavailable"
             | "image: rate limited"
@@ -239,6 +240,10 @@ mod tests {
     #[test]
     fn diagnostic_codes_never_accept_appended_private_data() {
         assert!(controlled("animation: streaming"));
+        assert!(controlled("history: playback report failed"));
+        assert!(!controlled(
+            "history: playback report failed synthetic-private-url"
+        ));
         assert!(!controlled(
             "animation: streaming https://example.invalid/signed?secret=x"
         ));

@@ -6389,6 +6389,7 @@ dependencies = [
  "keyring-core",
  "log",
  "notify-rust",
+ "rand 0.9.5",
  "raw-window-handle",
  "reqwest",
  "resvg",
@@ -6399,6 +6400,7 @@ dependencies = [
  "sha2",
  "tokio",
  "ureq",
+ "url",
  "windows-native-keyring-store",
  "zbus-secret-service-keyring-store",
 ]

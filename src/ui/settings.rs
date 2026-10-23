@@ -9,7 +9,7 @@ use crate::app::State;
 use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use crate::appearance::theme::{self, Palette};
 use crate::model::Action;
-use crate::storage::settings::ThemeChoice;
+use crate::storage::settings::{HistorySync, ThemeChoice};
 
 /// The widest the settings read well.
 const WIDTH: f32 = 760.0;
@@ -31,6 +31,8 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 appearance(ui, state, actions);
                 ui.add_space(24.0);
                 playback(ui, state, actions);
+                ui.add_space(24.0);
+                history(ui, state, actions);
                 ui.add_space(24.0);
                 notifications(ui, state, actions);
                 ui.add_space(24.0);
@@ -219,6 +221,69 @@ fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     });
 }
 
+/// History keeps the account reporting choice visible beside its control.
+fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+    let palette = &state.palette;
+    widgets::section(ui, palette, &tr(locale, "History"), None, |ui| {
+        widgets::card(ui, palette, |ui| {
+            let choices = [
+                (HistorySync::Separate, "Separate"),
+                (HistorySync::Merged, "Merged in YouTFast"),
+                (HistorySync::SendToYoutube, "Merged and sent to YouTube"),
+            ];
+            let current = state.settings.history_sync;
+            let description = match current {
+                HistorySync::Separate => {
+                    "Keep account and device history separate. Nothing is sent to YouTube."
+                }
+                HistorySync::Merged => {
+                    "Combine account and device history in YouTFast. Nothing is sent to YouTube."
+                }
+                HistorySync::SendToYoutube => {
+                    "Combine history and send playback reports to Google from your account. Google may treat this as automated access."
+                }
+            };
+            setting_row(
+                ui,
+                palette,
+                &tr(locale, "History sync"),
+                &tr(locale, description),
+                CONTROL_WIDTH,
+                |ui| {
+                    egui::ComboBox::from_id_salt("history-sync")
+                        .width(240.0)
+                        .selected_text(tr(
+                            locale,
+                            choices
+                                .iter()
+                                .find(|(choice, _)| *choice == current)
+                                .unwrap()
+                                .1,
+                        ))
+                        .show_ui(ui, |ui| {
+                            for (choice, label) in choices {
+                                if ui
+                                    .selectable_label(current == choice, tr(locale, label))
+                                    .clicked()
+                                {
+                                    actions.push(Action::SetHistorySync(choice));
+                                    ui.close();
+                                }
+                            }
+                        });
+                },
+            );
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new(tr(locale, "Applies to signed-in accounts only."))
+                    .font(theme::regular(13.0))
+                    .color(palette.secondary),
+            );
+        });
+    });
+}
+
 /// The Notifications group: the check, desktop popups, the interval.
 fn notifications(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
@@ -379,6 +444,47 @@ fn switch(ui: &mut Ui, palette: &Palette, on: bool, label: &str) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn history_reporting_disclosure_is_visible_in_both_themes_and_widths() {
+        for light in [false, true] {
+            for width in [360.0, 900.0] {
+                let ctx = egui::Context::default();
+                theme::install_fonts(&ctx);
+                let mut state = State::default();
+                state.settings.history_sync = HistorySync::SendToYoutube;
+                state.palette = if light {
+                    Palette::light()
+                } else {
+                    Palette::dark()
+                };
+                let mut actions = Vec::new();
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            vec2(width, 800.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| history(ui, &state, &mut actions),
+                );
+                let labels: Vec<_> = output
+                    .shapes
+                    .iter()
+                    .filter_map(|shape| match &shape.shape {
+                        egui::Shape::Text(text) => Some(text.galley.text()),
+                        _ => None,
+                    })
+                    .collect();
+                assert!(labels.contains(&"Merged and sent to YouTube"));
+                assert!(labels.contains(&"Combine history and send playback reports to Google from your account. Google may treat this as automated access."));
+                assert!(labels.contains(&"Applies to signed-in accounts only."));
+                assert!(actions.is_empty());
+                output.textures_delta.clear();
+            }
+        }
+    }
 
     #[test]
     fn selecting_a_language_emits_an_action_and_redraws_the_same_settings_page() {

@@ -22,33 +22,64 @@ fn controls(
 ) {
     let locale = state.settings.language;
 
-    ui.horizontal(|ui| {
+    let draw = |ui: &mut Ui| {
         if state.signed_in() {
-            let source = state.source();
+            let merged = state.view == View::History && state.merged_history();
+            let source = if merged {
+                state.history_source()
+            } else {
+                Some(state.source())
+            };
+            if merged
+                && widgets::chip(
+                    ui,
+                    &state.palette,
+                    tr(locale, "All").as_ref(),
+                    source.is_none(),
+                )
+                .clicked()
+            {
+                actions.push(Action::SetHistoryFilter(
+                    crate::logic::history::HistoryFilter::All,
+                ));
+            }
             if widgets::chip(
                 ui,
                 &state.palette,
                 tr(locale, "Account").as_ref(),
-                source == Source::Account,
+                source == Some(Source::Account),
             )
             .clicked()
             {
-                actions.push(Action::SetSource(Source::Account));
+                actions.push(if merged {
+                    Action::SetHistoryFilter(crate::logic::history::HistoryFilter::Account)
+                } else {
+                    Action::SetSource(Source::Account)
+                });
             }
             if widgets::chip(
                 ui,
                 &state.palette,
                 tr(locale, "This device").as_ref(),
-                source == Source::Device,
+                source == Some(Source::Device),
             )
             .clicked()
             {
-                actions.push(Action::SetSource(Source::Device));
+                actions.push(if merged {
+                    Action::SetHistoryFilter(crate::logic::history::HistoryFilter::Device)
+                } else {
+                    Action::SetSource(Source::Device)
+                });
             }
             ui.add_space(8.0);
         }
         extra(ui, actions);
-    });
+    };
+    if state.view == View::History && state.merged_history() {
+        ui.horizontal_wrapped(draw);
+    } else {
+        ui.horizontal(draw);
+    }
     ui.add_space(12.0);
 }
 
@@ -575,17 +606,13 @@ fn channel_row(
 
 pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
-
     results::panel(ui, |ui| {
-        let device = state.source() == Source::Device;
-        let count = if device {
-            state.library.history.len()
-        } else {
-            state.account_history.items().len()
-        };
-        results::title(ui, state, tr(locale, "History").as_ref(), Some(count));
+        let source = state.history_source();
+        let account = source != Some(Source::Device);
+        let rows = state.history_rows();
+        results::title(ui, state, tr(locale, "History").as_ref(), Some(rows.len()));
         controls(ui, state, actions, |ui, actions| {
-            if device
+            if source != Some(Source::Account)
                 && !state.library.history.is_empty()
                 && widgets::button(
                     ui,
@@ -601,132 +628,108 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 actions.push(Action::ClearHistory);
             }
         });
-        if !device {
-            match &state.account_history {
-                Listing::Idle => {}
-                Listing::Loading => results::loading(ui, state, "history"),
-                Listing::Failed(error) => results::failed(ui, state, error, actions),
-                Listing::Ready(rows) if rows.is_empty() => results::nothing(
-                    ui,
-                    state,
-                    tr(locale, "The account's watch history").as_ref(),
-                ),
-                Listing::Ready(rows) => {
-                    egui::ScrollArea::vertical()
-                        .auto_shrink(false)
-                        .show(ui, |ui| {
-                            let mut day = None;
-                            for (index, row) in rows.iter().enumerate() {
-                                // YouTube groups its history by day:
-                                // "Today", "Yesterday", "Monday".
-                                if row.when.is_some() && row.when != day {
-                                    day.clone_from(&row.when);
-                                    if index > 0 {
-                                        ui.add_space(16.0);
-                                    }
-                                    widgets::section(
-                                        ui,
-                                        &state.palette,
-                                        row.when.as_deref().unwrap_or_default(),
-                                        None,
-                                        |_| {},
-                                    );
-                                }
-                                let selected = index == state.cursor;
-                                let video = &row.video;
-                                let watched = widgets::watched(&state.library, video);
-                                let response = widgets::video_row(
-                                    ui,
-                                    &state.palette,
-                                    video,
-                                    None,
-                                    watched,
-                                    selected,
-                                    locale,
-                                );
-                                if selected && state.cursor_moved {
-                                    response.clone().scroll_to_me(None);
-                                }
-                                widgets::video_interactions(ui, &response, state, video, actions);
-                            }
-                        });
-                }
-            }
-            widgets::more_row(
+        if source != Some(Source::Account) || state.merged_history() {
+            let mut query = state.history_query.clone();
+            let hint = if state.merged_history() {
+                "Search history"
+            } else {
+                "Search this device's history"
+            };
+            widgets::search_field(
                 ui,
                 &state.palette,
-                &state.history_more_state,
-                state.history_more.is_some(),
-                actions,
-                locale,
+                &mut query,
+                tr(locale, hint).as_ref(),
+                egui::Id::new("history search"),
+                480.0_f32.min(ui.available_width()),
             );
-            return;
+            if query != state.history_query {
+                actions.push(Action::SetHistoryQuery(query));
+            }
+            ui.add_space(12.0);
         }
-        if state.library.history.is_empty() {
-            results::nothing(
-                ui,
-                state,
-                tr(locale, "Videos you watch appear here").as_ref(),
-            );
-            return;
+        if account {
+            match &state.account_history {
+                Listing::Loading => results::loading(ui, state, "history"),
+                Listing::Failed(error) => results::failed(ui, state, error, actions),
+                _ => {}
+            }
         }
-        let mut query = state.history_query.clone();
-        widgets::search_field(
-            ui,
-            &state.palette,
-            &mut query,
-            tr(locale, "Search this device's history").as_ref(),
-            egui::Id::new("history search"),
-            480.0_f32.min(ui.available_width()),
-        );
-        if query != state.history_query {
-            actions.push(Action::SetHistoryQuery(query));
-        }
-        ui.add_space(12.0);
-        let matching: Vec<_> = state
-            .library
-            .history_matching(&state.history_query)
-            .collect();
-        if matching.is_empty() {
-            results::nothing(ui, state, tr(locale, "No videos found in history").as_ref());
-            return;
+        if rows.is_empty() && (!account || matches!(state.account_history, Listing::Ready(_))) {
+            let text =
+                if !state.history_query.trim().is_empty() && (state.merged_history() || !account) {
+                    "No videos found in history"
+                } else if source == Some(Source::Account) {
+                    "The account's watch history"
+                } else {
+                    "Videos you watch appear here"
+                };
+            results::nothing(ui, state, tr(locale, text).as_ref());
         }
         let now = util::now();
         egui::ScrollArea::vertical()
             .auto_shrink(false)
             .show(ui, |ui| {
-                for (index, watched) in matching.into_iter().enumerate() {
-                    let mut note = trf(
-                        locale,
-                        "Watched {age}",
-                        &[("age", util::ago(watched.at, now, locale))],
-                    );
-                    if watched.position > 0.0 {
-                        note.push_str(&trf(
-                            locale,
-                            " · left at {time}",
-                            &[("time", util::duration(watched.position))],
-                        ));
+                let mut day = None;
+                for (index, row) in rows.into_iter().enumerate() {
+                    if row.when.is_some() && row.when != day {
+                        day.clone_from(&row.when);
+                        if index > 0 {
+                            ui.add_space(16.0);
+                        }
+                        widgets::section(
+                            ui,
+                            &state.palette,
+                            row.when.as_deref().unwrap_or_default(),
+                            None,
+                            |_| {},
+                        );
                     }
-                    let video = &watched.video;
-                    let fraction = video
-                        .duration
-                        .map(|duration| watched.position / duration)
-                        .map(|f| f as f32);
+                    let note = row.device.map(|watched| {
+                        let mut note = trf(
+                            locale,
+                            "Watched {age}",
+                            &[("age", util::ago(watched.at, now, locale))],
+                        );
+                        if watched.position > 0.0 {
+                            note.push_str(&trf(
+                                locale,
+                                " · left at {time}",
+                                &[("time", util::duration(watched.position))],
+                            ));
+                        }
+                        note
+                    });
+                    let video = row.video;
+                    let fraction = row
+                        .device
+                        .and_then(|watched| {
+                            video
+                                .duration
+                                .map(|duration| (watched.position / duration) as f32)
+                        })
+                        .or_else(|| widgets::watched(&state.library, video));
                     let selected = index == state.cursor;
                     ui.push_id(&video.id, |ui| {
                         ui.horizontal(|ui| {
-                            let width = (ui.available_width() - 32.0 - ui.spacing().item_spacing.x)
-                                .max(0.0);
+                            // Reserve the same trailing control space for every merged row.
+                            let controls =
+                                source != Some(Source::Account) || state.merged_history();
+                            let reserve = if controls {
+                                32.0 + ui.spacing().item_spacing.x
+                            } else {
+                                0.0
+                            };
+                            let width = (ui.available_width() - reserve).max(0.0);
                             ui.allocate_ui_with_layout(
-                                egui::vec2(width, 106.0),
+                                vec2(width, 106.0),
                                 egui::Layout::top_down(egui::Align::Min),
                                 |ui| {
                                     let response = widgets::video_row(
                                         ui,
                                         &state.palette,
                                         video,
-                                        Some(&note),
+                                        note.as_deref(),
                                         fraction,
                                         selected,
                                         locale,
@@ -739,20 +742,34 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                                     );
                                 },
                             );
-                            if widgets::icon_button(
-                                ui,
-                                crate::appearance::icons::Icon::Close,
-                                16.0,
-                                tr(locale, "Remove from this device's history").as_ref(),
-                            )
-                            .clicked()
-                            {
-                                actions.push(Action::RemoveHistory(video.id.clone()));
+                            if row.device.is_some() {
+                                if widgets::icon_button(
+                                    ui,
+                                    crate::appearance::icons::Icon::Close,
+                                    16.0,
+                                    tr(locale, "Remove from this device's history").as_ref(),
+                                )
+                                .clicked()
+                                {
+                                    actions.push(Action::RemoveHistory(video.id.clone()));
+                                }
+                            } else if controls {
+                                ui.allocate_space(vec2(32.0, 32.0));
                             }
                         });
                     });
                 }
             });
+        if account {
+            widgets::more_row(
+                ui,
+                &state.palette,
+                &state.history_more_state,
+                state.history_more.is_some(),
+                actions,
+                locale,
+            );
+        }
     });
 }
 
@@ -1028,6 +1045,142 @@ pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn merged_history_controls_fit_narrow_and_wide_dark_and_light_pages() {
+        use crate::model::HistoryRow;
+        use crate::storage::library::Watched;
+        use crate::storage::settings::HistorySync;
+        for width in [360.0, 900.0] {
+            for palette in [theme::Palette::dark(), theme::Palette::light()] {
+                let ctx = egui::Context::default();
+                ctx.enable_accesskit();
+                crate::appearance::theme::install_fonts(&ctx);
+                let mut state = State {
+                    view: View::History,
+                    palette,
+                    account: AccountState::SignedIn(1),
+                    account_history: Listing::Ready(vec![HistoryRow {
+                        video: Video::from_id("account-only".into()),
+                        when: Some("Today".into()),
+                    }]),
+                    ..Default::default()
+                };
+                state.settings.history_sync = HistorySync::Merged;
+                state.library.history = vec![Watched {
+                    video: Video::from_id("device-only".into()),
+                    at: 0,
+                    position: 0.0,
+                }];
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            vec2(width, 900.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| history(ui, &state, &mut Vec::new()),
+                );
+                output.textures_delta.clear();
+                for label in ["All", "Account", "This device"] {
+                    let text = output
+                        .shapes
+                        .iter()
+                        .find_map(|shape| match &shape.shape {
+                            egui::Shape::Text(text) if text.galley.text() == label => Some(text),
+                            _ => None,
+                        })
+                        .unwrap_or_else(|| panic!("missing {label}"));
+                    let rect =
+                        Rect::from_min_size(text.pos, text.galley.size()).expand2(vec2(12.0, 0.0));
+                    assert!(
+                        rect.left() >= 0.0 && rect.right() <= width,
+                        "{width}: {label}: {rect:?}"
+                    );
+                }
+                let tree = output.platform_output.accesskit_update.unwrap();
+                for label in ["Clear history", "Remove from this device's history"] {
+                    let (_, node) = tree
+                        .nodes
+                        .iter()
+                        .find(|(_, node)| node.label() == Some(label))
+                        .unwrap_or_else(|| panic!("missing {label}"));
+                    let rect = node.bounds().unwrap();
+                    assert!(
+                        rect.x0 >= 0.0 && rect.x1 <= f64::from(width),
+                        "{width}: {label}: {rect:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn merged_history_only_offers_local_removal_and_keeps_search_and_keyboard_in_step() {
+        use crate::logic::history::HistoryFilter;
+        use crate::model::HistoryRow;
+        use crate::storage::library::Watched;
+        use crate::storage::settings::HistorySync;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        crate::appearance::theme::install_fonts(&ctx);
+        let mut state = State {
+            view: View::History,
+            account: AccountState::SignedIn(1),
+            account_history: Listing::Ready(vec![
+                HistoryRow {
+                    video: Video::from_id("shared".into()),
+                    when: Some("Today".into()),
+                },
+                HistoryRow {
+                    video: Video::from_id("account-only".into()),
+                    when: Some("Today".into()),
+                },
+            ]),
+            ..Default::default()
+        };
+        state.settings.history_sync = HistorySync::Merged;
+        let mut local = Video::from_id("shared".into());
+        local.title = "Local title".into();
+        local.duration = Some(100.0);
+        state.library.history = vec![Watched {
+            video: local,
+            at: 0,
+            position: 42.0,
+        }];
+        assert_eq!(state.history_source(), None);
+        assert_eq!(state.source(), Source::Account);
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(960.0, 900.0))),
+                ..Default::default()
+            },
+            |ui| history(ui, &state, &mut Vec::new()),
+        );
+        output.textures_delta.clear();
+        let tree = output.platform_output.accesskit_update.unwrap();
+        assert_eq!(
+            tree.nodes
+                .iter()
+                .filter(|(_, node)| node.label() == Some("Remove from this device's history"))
+                .count(),
+            1
+        );
+        assert!(output.shapes.iter().any(|shape| matches!(&shape.shape, egui::Shape::Text(text) if text.galley.text().contains("left at 0:42"))));
+        state.history_query = "local".into();
+        assert_eq!(super::super::cursor_count(&state), 1);
+        assert!(
+            matches!(super::super::open_at(&state, 0), Some(Action::Open(video)) if video.id == "shared")
+        );
+        state.history_filter = HistoryFilter::Device;
+        assert_eq!(state.history_source(), Some(Source::Device));
+        assert_eq!(state.source(), Source::Account);
+        state.account = AccountState::SignedOut;
+        state.history_filter = HistoryFilter::All;
+        assert_eq!(state.history_source(), Some(Source::Device));
+        assert_eq!(state.history_rows().len(), 1);
+    }
 
     #[test]
     fn history_remove_buttons_stay_aligned_and_inside_the_page() {
