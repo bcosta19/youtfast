@@ -103,8 +103,9 @@ its job, not at the root:
   with upstream PR #80 (codeberg.org/ThetaDev/rustypipe) applied, for
   comment authors' avatars and the comment count, and with a failed
   visitor-data fetch returned as an error instead of unwrapped (a panic
-  aborts the release build), and reqwest errors kept with their causes (the
-  only place a refused certificate shows up). Channel pages follow YouTube's
+  aborts the release build), reqwest errors kept with their causes (the
+  only place a refused certificate shows up), and history reports sent through
+  the shared client. Channel pages follow YouTube's
   October 2026 layout: `order_ctoken` builds the sort chips' token (`{1: target, 3:
   order}` under field 8, 7 on Shorts), Shorts items read their
   `thumbnailViewModel`, the Playlists tab sends its new `params`, podcast
@@ -120,7 +121,8 @@ its job, not at the root:
   a browser had reached Google. Thumbnails, SponsorBlock and the updater go
   through ureq, which bundles Mozilla's roots.
 - `packaging/icons/youtfast.ico` (embedded in the Windows executable by
-  `build.rs`) and `youtfast.icns` (the macOS bundle's) are generated from the
+  `build.rs` through windres, called directly: the runners' build-script host
+  is MSVC while the target is GNU) and `youtfast.icns` (the macOS bundle's) are generated from the
   SVGs by `tools/icons.py`; regenerate them when the mark changes.
 - `src/logic/history.rs` merges account day sections with device-only history,
   deduplicates video ids and keeps local resume metadata; History's filters are
