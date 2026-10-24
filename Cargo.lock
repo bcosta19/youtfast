@@ -6456,7 +6456,7 @@ dependencies = [
  "keyring-core",
  "log",
  "notify-rust",
- "rand 0.9.5",
+ "rand 0.10.3",
  "raw-window-handle",
  "reqwest",
  "resvg",
