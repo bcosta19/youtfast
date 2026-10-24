@@ -1400,3 +1400,12 @@ msgstr "Mini-lecteur pendant le défilement"
 
 msgid "Keep the video visible when scrolling down to the comments."
 msgstr "Gardez la vidéo visible lorsque vous faites défiler la page vers les commentaires."
+
+msgid "Audio only"
+msgstr "Audio seul"
+
+msgid "Audio-only mode"
+msgstr "Mode audio seul"
+
+msgid "Video mode"
+msgstr "Mode vidéo"

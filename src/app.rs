@@ -128,6 +128,9 @@ pub struct State {
     /// Shown over the video in place of the picture.
     pub player_error: Option<String>,
     pub fullscreen: bool,
+    /// Whether only audio is being streamed and decoded. Kept only for the
+    /// current playback, not between runs.
+    pub audio_only: bool,
     /// The sidebar toggle has been pressed this run: since then the saved
     /// choice rules every page, over the watch page's automatic rail.
     pub sidebar_toggled: bool,
@@ -969,6 +972,7 @@ impl App {
                 );
                 self.save_settings();
             }
+            Action::ToggleAudioOnly => self.toggle_audio_only(),
             Action::SetQuality(quality) => self.set_quality(quality),
             Action::SetTheme(choice) => self.set_theme(choice),
             Action::SetLanguage(language) => {

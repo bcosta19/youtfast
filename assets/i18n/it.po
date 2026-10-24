@@ -1400,3 +1400,12 @@ msgstr "Miniplayer durante lo scorrimento"
 
 msgid "Keep the video visible when scrolling down to the comments."
 msgstr "Mantieni il video visibile mentre scorri verso i commenti."
+
+msgid "Audio only"
+msgstr "Solo audio"
+
+msgid "Audio-only mode"
+msgstr "Modalità solo audio"
+
+msgid "Video mode"
+msgstr "Modalità video"

@@ -200,6 +200,14 @@ impl App {
         self.state.player_menu = crate::app::PlayerMenu::Closed;
         self.state.segments.clear();
         self.state.skipped.clear();
+        if self.state.audio_only || self.player.as_ref().is_some_and(|p| p.audio_only()) {
+            self.state.audio_only = false;
+            if let Some(player) = &mut self.player
+                && let Err(error) = player.set_audio_only(false)
+            {
+                log::warn!("mpv: {error}");
+            }
+        }
         self.captions_pending = false;
         // A video opened from a link knows only its id; the history may know
         // more until yt-dlp answers.
@@ -493,18 +501,66 @@ impl App {
         player.set_cookies_from_browser(browser);
     }
 
-    /// Bounds the streams from now on, and reloads the video being watched
-    /// where it was, so the new quality shows at once.
-    pub(super) fn set_quality(&mut self, quality: Quality) {
-        if quality == self.state.settings.quality {
+    pub(super) fn toggle_audio_only(&mut self) {
+        self.set_audio_only(!self.state.audio_only);
+    }
+
+    /// Toggles streaming and decoding only audio, reloading the video being
+    /// watched where it was so the change takes effect immediately.
+    pub(super) fn set_audio_only(&mut self, audio_only: bool) {
+        if audio_only == self.state.audio_only {
             return;
         }
-        log::info!("quality set to {quality:?}");
-        self.state.settings.quality = quality;
-        self.save_settings();
+        log::info!("audio only set to {audio_only}");
+        self.state.audio_only = audio_only;
+        let locale = self.state.settings.language;
+        let osd = if audio_only {
+            crate::appearance::i18n::gettext(locale, "Audio only")
+        } else {
+            crate::appearance::i18n::gettext(locale, "Video mode")
+        };
+        self.show_osd(osd.into_owned());
         let Some(player) = &mut self.player else {
             return;
         };
+        if let Err(error) = player.set_audio_only(audio_only) {
+            log::warn!("mpv: {error}");
+            return;
+        }
+        let (idle, position, paused) = {
+            let status = player.status();
+            (status.idle, status.position, status.paused)
+        };
+        if let Some(video) = &self.state.watching
+            && !idle
+            && let Err(error) = player.reload(&video.url(), position, paused)
+        {
+            log::warn!("mpv: {error}");
+        }
+    }
+
+    /// Bounds the streams from now on, and reloads the video being watched
+    /// where it was, so the new quality shows at once.
+    pub(super) fn set_quality(&mut self, quality: Quality) {
+        let changed_quality = quality != self.state.settings.quality;
+        let was_audio_only = self.state.audio_only;
+        if !changed_quality && !was_audio_only {
+            return;
+        }
+        if was_audio_only {
+            self.state.audio_only = false;
+        }
+        if changed_quality {
+            log::info!("quality set to {quality:?}");
+            self.state.settings.quality = quality;
+            self.save_settings();
+        }
+        let Some(player) = &mut self.player else {
+            return;
+        };
+        if was_audio_only && let Err(error) = player.set_audio_only(false) {
+            log::warn!("mpv: {error}");
+        }
         if let Err(error) = player.set_max_resolution(quality.limit()) {
             log::warn!("mpv: {error}");
             return;

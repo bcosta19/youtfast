@@ -261,6 +261,9 @@ impl eframe::App for Demo {
                 Action::ToggleTranscript => {
                     self.state.transcript_open = !self.state.transcript_open
                 }
+                Action::ToggleAudioOnly => {
+                    self.state.audio_only = !self.state.audio_only;
+                }
                 Action::ToggleTheater => self.state.settings.theater = !self.state.settings.theater,
                 Action::ToggleFullscreen => self.state.fullscreen = !self.state.fullscreen,
                 Action::ExitFullscreen => self.state.fullscreen = false,

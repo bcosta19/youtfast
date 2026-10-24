@@ -19,6 +19,9 @@ pub use render::{NativeDisplay, VideoSurface};
 /// the best single file when a video has no separate streams. "Best" is
 /// bounded by the format sort [`Mpv::set_max_resolution`] sets.
 const FORMAT: &str = "bv*+ba/b";
+/// What yt-dlp is asked for in audio-only mode: best audio, falling back to
+/// best combined stream.
+const AUDIO_FORMAT: &str = "ba/b";
 
 /// Observed properties, by the id mpv hands back with each change.
 const TIME_POS: u64 = 1;
@@ -309,6 +312,8 @@ pub struct Mpv {
     signed_in: bool,
     /// mpv sits at the end of the video (`eof-reached`).
     at_end: bool,
+    /// Only audio streams are requested and decoded.
+    audio_only: bool,
 }
 
 impl Mpv {
@@ -450,6 +455,7 @@ impl Mpv {
             current: None,
             signed_in: false,
             at_end: false,
+            audio_only: false,
         })
     }
 
@@ -541,6 +547,20 @@ impl Mpv {
             .get_property("playlist/0/id")
             .and_then(|id| id.parse().ok());
         Ok(())
+    }
+
+    /// Whether only audio streams are requested and decoded.
+    pub fn audio_only(&self) -> bool {
+        self.audio_only
+    }
+
+    /// Sets whether to stream and decode only audio (`ba/b` and `vid=no`).
+    pub fn set_audio_only(&mut self, audio_only: bool) -> Result<(), Error> {
+        self.audio_only = audio_only;
+        let format = if audio_only { AUDIO_FORMAT } else { FORMAT };
+        let vid = if audio_only { "no" } else { "auto" };
+        self.set_property("ytdl-format", format)?;
+        self.set_property("vid", vid)
     }
 
     /// Bounds the streams of the next video loaded to `resolution` (720 for
@@ -958,11 +978,22 @@ mod tests {
 
     use super::*;
 
+    /// Tests that open an mpv instance take turns: one of them counts the
+    /// process's Lua script threads, and every live instance adds its own.
+    static INSTANCE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn instance_turn() -> std::sync::MutexGuard<'static, ()> {
+        INSTANCE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     /// Scripts start on threads of their own during initialize, and Linux
     /// lists threads by name.
     #[cfg(target_os = "linux")]
     #[test]
     fn of_mpvs_own_scripts_only_the_ytdl_hook_runs() {
+        let _turn = instance_turn();
         let player = Mpv::new(&egui::Context::default(), 1080, 0.0, Vec::new()).unwrap();
         let scripts: Vec<String> = std::fs::read_dir("/proc/self/task")
             .unwrap()
@@ -1104,5 +1135,16 @@ mod tests {
         let quoted = serde_json::to_string(json).unwrap();
         assert_eq!(unquoted(quoted), json);
         assert_eq!(unquoted(json.to_owned()), json);
+    }
+
+    #[test]
+    fn audio_only_mode_toggles_properties() {
+        let _turn = instance_turn();
+        let mut player = Mpv::new(&egui::Context::default(), 1080, 0.0, Vec::new()).unwrap();
+        assert!(!player.audio_only());
+        player.set_audio_only(true).unwrap();
+        assert!(player.audio_only());
+        player.set_audio_only(false).unwrap();
+        assert!(!player.audio_only());
     }
 }
