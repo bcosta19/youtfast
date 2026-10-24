@@ -248,6 +248,8 @@ pub struct State {
     pub playing_more: Option<innertube::More>,
     pub playing_more_state: Fetch<()>,
     pub playing_waiting: Option<PlaylistAdvance>,
+    /// The wheel step, touchpad scale and glide, and axis lock for scrolling.
+    pub scrolling: fastframe_scroll::Scrolling,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

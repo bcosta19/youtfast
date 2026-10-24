@@ -57,6 +57,9 @@ fastframe-theme = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
 fastframe-instance = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
 # The desktop's media controls: MPRIS on Linux, media keys and panels.
 fastframe-now-playing = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
+# The wheel step, the Linux touchpad scale and glide, and the axis a scroll
+# gesture holds.
+fastframe-scroll = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1" }
 # YouTube's own API (InnerTube): the signed-in account's feed, history,
 # subscriptions, playlists, liked videos and Watch later (`userdata`), and
 # channel RSS for the feed without an account (`rss`). rustls, as in the
