@@ -57,24 +57,34 @@ pub fn show(
     if !(state.view == View::Watch && state.settings.theater) {
         sidebar(ui, state, actions);
     }
-    ui.push_id(state.navigation_key(), |ui| match state.view {
-        View::Home => library::home(ui, state, actions),
-        View::Results => results::show(ui, state, actions),
-        View::Watch => watch::show(ui, state, status, surface, actions),
-        View::Subscriptions => library::subscriptions(ui, state, actions),
-        View::History => library::history(ui, state, actions),
-        View::WatchLater => library::watch_later(ui, state, actions),
-        View::Liked => library::liked(ui, state, actions),
-        View::Playlists => library::playlists(ui, state, actions),
-        View::Playlist => library::page(ui, state, actions),
-        View::Notifications => notifications::show(ui, state, actions),
-        View::Channel => {
-            if let Some(crate::app::Page::Channel(channel)) = &state.page {
-                channel::show(ui, state, channel, actions);
-            }
+    ui.push_id(state.navigation_key(), |ui| {
+        let page_scroll = std::mem::take(&mut state.page_scroll);
+        if page_scroll != 0.0 {
+            ui.scroll_with_delta_animation(
+                vec2(0.0, page_scroll),
+                egui::style::ScrollAnimation::none(),
+            );
+            ui.ctx().request_discard("key scroll");
         }
-        View::Account => account::show(ui, state, actions),
-        View::Settings => settings::show(ui, state, actions),
+        match state.view {
+            View::Home => library::home(ui, state, actions),
+            View::Results => results::show(ui, state, actions),
+            View::Watch => watch::show(ui, state, status, surface, actions),
+            View::Subscriptions => library::subscriptions(ui, state, actions),
+            View::History => library::history(ui, state, actions),
+            View::WatchLater => library::watch_later(ui, state, actions),
+            View::Liked => library::liked(ui, state, actions),
+            View::Playlists => library::playlists(ui, state, actions),
+            View::Playlist => library::page(ui, state, actions),
+            View::Notifications => notifications::show(ui, state, actions),
+            View::Channel => {
+                if let Some(crate::app::Page::Channel(channel)) = &state.page {
+                    channel::show(ui, state, channel, actions);
+                }
+            }
+            View::Account => account::show(ui, state, actions),
+            View::Settings => settings::show(ui, state, actions),
+        }
     });
     // The video goes on in the corner while other pages show.
     if state.view != View::Watch && !state.mini_closed {
@@ -760,8 +770,9 @@ fn keys_overlay(ctx: &egui::Context, state: &mut State) {
             ("Alt+← / →", "Back / forward"),
             ("Space", "Play/pause in miniplayer"),
             ("r", "Refresh page"),
-            ("j / ↓", "Next item"),
-            ("k / ↑", "Previous item"),
+            ("↑ / ↓", "Scroll page"),
+            ("j", "Next item"),
+            ("k", "Previous item"),
             ("g / G", "First / last item"),
             ("Enter", "Open item"),
             ("h / l", "Channel tabs"),
@@ -1045,5 +1056,112 @@ mod tests {
                 .is_some(),
             "the first toggle opens the rail even while narrow"
         );
+    }
+
+    #[test]
+    fn arrow_keys_scroll_the_active_page_vertically_without_moving_the_card_cursor() {
+        let ctx = egui::Context::default();
+        crate::appearance::theme::install_fonts(&ctx);
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1280.0, 600.0));
+        let videos: Vec<Video> = (0..40)
+            .map(|i| Video {
+                title: format!("Video card {i}"),
+                ..Video::from_id(format!("{i:011}"))
+            })
+            .collect();
+        let mut state = State {
+            view: View::Home,
+            for_you: Listing::Ready(videos.clone()),
+            feed: Listing::Ready(videos),
+            feed_shown: 40,
+            ..State::default()
+        };
+        state.library.subscriptions.push(crate::model::Channel {
+            id: "UC123".into(),
+            name: "Channel".into(),
+            avatar: None,
+        });
+        let mut actions = Vec::new();
+        let card_top = |output: &egui::FullOutput| {
+            output.shapes.iter().find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.text() == "Video card 0" => Some(text.pos.y),
+                _ => None,
+            })
+        };
+
+        let mut initial = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(screen),
+                time: Some(0.0),
+                ..Default::default()
+            },
+            |ui| show(ui, &mut state, None, None, &mut actions),
+        );
+        initial.textures_delta.clear();
+        let y0 = card_top(&initial).expect("first card rendered on frame 0");
+
+        let mut after_down = initial;
+        for (frame, events) in [
+            (
+                1,
+                vec![egui::Event::Key {
+                    key: Key::ArrowDown,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            ),
+            (2, Vec::new()),
+        ] {
+            after_down = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    time: Some(frame as f64 / 10.0),
+                    events,
+                    ..Default::default()
+                },
+                |ui| show(ui, &mut state, None, None, &mut actions),
+            );
+            after_down.textures_delta.clear();
+        }
+        let y_down = card_top(&after_down).expect("first card still visible after scrolling down");
+        assert!(
+            y_down < y0,
+            "ArrowDown must scroll the page vertically down: y0={y0}, y_down={y_down}"
+        );
+        assert_eq!(state.cursor, 0, "ArrowDown must not move the card cursor");
+
+        let mut after_up = after_down;
+        for (frame, events) in [
+            (
+                3,
+                vec![egui::Event::Key {
+                    key: Key::ArrowUp,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            ),
+            (4, Vec::new()),
+        ] {
+            after_up = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    time: Some(frame as f64 / 10.0),
+                    events,
+                    ..Default::default()
+                },
+                |ui| show(ui, &mut state, None, None, &mut actions),
+            );
+            after_up.textures_delta.clear();
+        }
+        let y_up = card_top(&after_up).expect("first card visible after scrolling back up");
+        assert!(
+            y_up > y_down && (y_up - y0).abs() < 1.0,
+            "ArrowUp must scroll the page back up: y0={y0}, y_down={y_down}, y_up={y_up}"
+        );
+        assert_eq!(state.cursor, 0, "ArrowUp must not move the card cursor");
     }
 }

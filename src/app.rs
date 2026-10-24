@@ -122,6 +122,8 @@ pub struct State {
     /// Set on the frame the cursor moved, so only that frame scrolls
     /// the row into view — asking every frame glues the page to it.
     pub cursor_moved: bool,
+    /// Vertical page scroll requested by the arrow keys this frame, in points.
+    pub page_scroll: f32,
     pub watching: Option<Video>,
     /// The list the video being watched was opened from.
     pub up_next: Vec<Video>,

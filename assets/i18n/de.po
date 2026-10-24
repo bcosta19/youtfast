@@ -797,6 +797,9 @@ msgstr "Nach einem Kanal suchen"
 msgid "Search for a playlist"
 msgstr "Nach einer Playlist suchen"
 
+msgid "Scroll page"
+msgstr "Seite scrollen"
+
 msgid "Search for a video, channel or playlist"
 msgstr "Nach Video, Kanal oder Playlist suchen"
 

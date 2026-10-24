@@ -21,6 +21,9 @@ are the distribution record.
 
 ### Fixed
 
+- `↑` and `↓` outside the player now scroll the active page vertically instead
+  of stepping sideways through grid selections; `j` and `k` keep item cursor
+  navigation.
 - History row controls stay aligned; selected text, helper text and counts
   have readable contrast, and letter avatars remain visible on selected rows.
 - Channel banners crop without stretching, back/forward use matching arrows,
