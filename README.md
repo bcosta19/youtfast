@@ -15,9 +15,16 @@ Search, watch and keep your library in a desktop interface, with hardware video
 decoding where supported. No browser engine, telemetry or YouTFast-operated
 backend. Start signed out; accounts are optional.
 
-![YouTFast showing search results for Blender open movies, full screen](assets/screenshots/search.png)
+<picture>
+  <source type="image/avif" srcset="assets/demo/youtfast-demo.avif">
+  <img src="assets/demo/youtfast-demo.webp" alt="One minute with YouTFast: search, playback, theater and full screen, the mini player, six languages and the Omarchy theme followed live">
+</picture>
 
-*YouTFast 0.1.0 on Linux, signed out, searching for Blender's open movies.*
+*One minute with YouTFast on Linux (Omarchy), signed out: a real screen
+recording, cut for length. [Download it in full quality](assets/demo/youtfast-demo.mp4)
+(MP4, 1080p, 6 MB).
+The film is [Spring](https://studio.blender.org/films/spring/) by Blender
+Studio (CC BY 4.0); the other thumbnails are Blender Studio's too.*
 
 > [!NOTE]
 > **YouTFast is young and still needs work.** It has a single maintainer and
