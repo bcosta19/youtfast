@@ -281,7 +281,7 @@ fn shorts(
         });
     // Throttle wheel navigation: one gesture must not consume an entire
     // source list, and scrolling the details panel never changes video.
-    if ui.rect_contains_pointer(video) {
+    if ui.rect_contains_pointer(video) && !state.scrolling.gliding() {
         let delta = ui.input(|input| input.smooth_scroll_delta.y);
         let now = ui.input(|input| input.time);
         let wheel_id = ui.id().with("short-wheel-at");

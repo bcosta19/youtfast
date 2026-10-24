@@ -45,6 +45,7 @@ pub fn show(
     surface: Option<&VideoSurface>,
     actions: &mut Vec<Action>,
 ) {
+    state.scrolling.apply(ui.ctx());
     keys::handle(ui.ctx(), state, status, actions);
     if state.view == View::Watch && state.fullscreen {
         watch::fullscreen(ui, state, status, surface, actions);
@@ -1044,6 +1045,31 @@ mod tests {
             sidebar_label_x_at_width(&ctx, &mut state, 1, 800.0, Vec::new(), &mut actions)
                 .is_some(),
             "the first toggle opens the rail even while narrow"
+        );
+    }
+
+    #[test]
+    fn wheel_notches_scroll_at_the_platform_step() {
+        let ctx = egui::Context::default();
+        crate::appearance::theme::install_fonts(&ctx);
+        let mut state = State::default();
+        let mut actions = Vec::new();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(1280.0, 800.0),
+                )),
+                time: Some(0.0),
+                ..Default::default()
+            },
+            |ui| show(ui, &mut state, None, None, &mut actions),
+        );
+        output.textures_delta.clear();
+        assert_eq!(
+            ctx.options(|options| options.input_options.line_scroll_speed),
+            fastframe_scroll::WHEEL_STEP,
+            "ui::show must apply fastframe_scroll's 120-point wheel step"
         );
     }
 }
