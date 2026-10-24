@@ -1412,3 +1412,18 @@ msgstr "Mode audio seul"
 
 msgid "Video mode"
 msgstr "Mode vidéo"
+
+msgid "Video buffer"
+msgstr "Tampon vidéo"
+
+msgid "Large — 150 MiB / 50 MiB (mpv default)"
+msgstr "Grand — 150 Mio / 50 Mio (défaut mpv)"
+
+msgid "Small — 50 MiB / 20 MiB (less RAM)"
+msgstr "Petit — 50 Mio / 20 Mio (moins de RAM)"
+
+msgid "Large (150 MiB ahead, 50 MiB back) buffers several minutes ahead for unstable connections and instant seeking, using more RAM (~300–650 MB) and bandwidth if you skip videos early. Small (50 MiB / 20 MiB) uses less RAM (~200 MB) and data, but holds only ~15–90s ahead."
+msgstr "Grand (150 Mio d'avance, 50 Mio en arrière) met plusieurs minutes en mémoire tampon pour les connexions instables et la navigation instantanée, en utilisant plus de RAM (~300–650 Mo) et de données si vous changez vite de vidéo. Petit (50 Mio / 20 Mio) utilise moins de RAM (~200 Mo) et de données, mais ne garde que ~15–90 s d'avance."
+
+msgid "Small (50 MiB ahead, 20 MiB back) keeps RAM usage low (~200 MB) and wastes less data when skipping videos, but holds only ~15–90s ahead and re-downloads when seeking far back. Large (150 MiB / 50 MiB) buffers several minutes ahead using more RAM (~300–650 MB)."
+msgstr "Petit (50 Mio d'avance, 20 Mio en arrière) limite l'utilisation de la RAM (~200 Mo) et économise des données en passant d'une vidéo à l'autre, mais ne garde que ~15–90 s d'avance et retélécharge lors d'un grand retour en arrière. Grand (150 Mio / 50 Mio) met plusieurs minutes en tampon en utilisant plus de RAM (~300–650 Mo)."

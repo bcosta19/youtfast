@@ -581,6 +581,7 @@ pub enum Action {
     ToggleTheater,
     ToggleMiniPlayer,
     SetScrollMiniplayer(bool),
+    SetPlaybackBuffer(crate::storage::settings::PlaybackBuffer),
     SetHistorySync(crate::storage::settings::HistorySync),
     SeekChapter(bool),
     RetryPlayback,

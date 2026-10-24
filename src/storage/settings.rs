@@ -46,6 +46,27 @@ pub enum HistorySync {
     SendToYoutube,
 }
 
+/// How much video mpv buffers in memory around the playback point.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaybackBuffer {
+    /// mpv's default: 150 MiB ahead and 50 MiB behind.
+    #[default]
+    Standard,
+    /// Reduced cache: 50 MiB ahead and 20 MiB behind.
+    Compact,
+}
+
+impl PlaybackBuffer {
+    /// `demuxer-max-bytes` and `demuxer-max-back-bytes` for mpv.
+    pub fn limits(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Standard => ("150MiB", "50MiB"),
+            Self::Compact => ("50MiB", "20MiB"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
     /// The interface language; older settings start in English too.
@@ -54,6 +75,10 @@ pub struct Settings {
     /// Applies only while signed in; older files keep separate histories.
     #[serde(default)]
     pub history_sync: HistorySync,
+    /// How much video mpv keeps buffered in memory; older files use mpv's
+    /// default (150 MiB ahead, 50 MiB behind).
+    #[serde(default)]
+    pub playback_buffer: PlaybackBuffer,
     /// The most a video may stream at.
     #[serde(default)]
     pub quality: Quality,
@@ -134,6 +159,7 @@ impl Default for Settings {
         Self {
             language: crate::appearance::i18n::Locale::default(),
             history_sync: HistorySync::default(),
+            playback_buffer: PlaybackBuffer::default(),
             quality: Quality::default(),
             volume: default_volume(),
             theme: ThemeChoice::default(),
@@ -224,6 +250,7 @@ mod tests {
     fn history_sync_defaults_for_old_files_and_round_trips_every_choice() {
         let old: Settings = serde_json::from_str(r#"{"volume": 40.0}"#).unwrap();
         assert_eq!(old.history_sync, HistorySync::Separate);
+        assert_eq!(old.playback_buffer, PlaybackBuffer::Standard);
         for history_sync in [
             HistorySync::Separate,
             HistorySync::Merged,
@@ -231,6 +258,14 @@ mod tests {
         ] {
             let settings = Settings {
                 history_sync,
+                ..Settings::default()
+            };
+            let json = serde_json::to_string(&settings).unwrap();
+            assert_eq!(serde_json::from_str::<Settings>(&json).unwrap(), settings);
+        }
+        for playback_buffer in [PlaybackBuffer::Standard, PlaybackBuffer::Compact] {
+            let settings = Settings {
+                playback_buffer,
                 ..Settings::default()
             };
             let json = serde_json::to_string(&settings).unwrap();
