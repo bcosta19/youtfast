@@ -701,6 +701,15 @@ impl RustyPipeBuilder {
 
     /// Create a new, configured RustyPipe instance using a Reqwest [`ClientBuilder`].
     pub fn build_with_client(self, mut client_builder: ClientBuilder) -> Result<RustyPipe, Error> {
+        // YouTFast: reqwest 0.13's `rustls-no-provider` panics on a client
+        // built without a process-wide crypto provider. Installing ring
+        // fails only when one is already set, which is fine.
+        #[cfg(any(
+            feature = "rustls-tls-native-roots",
+            feature = "rustls-tls-webpki-roots"
+        ))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let user_agent = self
             .user_agent
             .map(Cow::Owned)
