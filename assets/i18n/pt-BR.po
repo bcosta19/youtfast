@@ -797,6 +797,9 @@ msgstr "Pesquise um canal"
 msgid "Search for a playlist"
 msgstr "Pesquise uma playlist"
 
+msgid "Scroll page"
+msgstr "Rolar página"
+
 msgid "Search for a video, channel or playlist"
 msgstr "Pesquise um vídeo, canal ou playlist"
 

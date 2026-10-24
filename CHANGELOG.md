@@ -21,6 +21,9 @@ are the distribution record.
 
 ### Fixed
 
+- `↑` and `↓` outside the player now scroll the active page vertically instead
+  of stepping sideways through grid selections; `j` and `k` keep item cursor
+  navigation.
 - Page scrolling now uses `fastframe-scroll`: mouse wheel notches scroll 120
   points instead of egui's 40-point default, and Linux touchpad gestures are
   scaled with momentum glide and axis locking.

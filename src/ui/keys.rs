@@ -1,13 +1,18 @@
 //! Focus-aware shortcuts. Text fields and open menus own their keystrokes.
 use super::*;
 
+/// Points a single `ArrowUp` or `ArrowDown` press scrolls the page.
+pub(super) const KEY_SCROLL_STEP: f32 = fastframe_scroll::WHEEL_STEP;
+
 pub(super) fn handle(
     ctx: &egui::Context,
     state: &mut State,
     status: Option<&Status>,
     actions: &mut Vec<Action>,
 ) {
-    state.cursor_moved = false;
+    if ctx.current_pass_index() == 0 {
+        state.cursor_moved = false;
+    }
     if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Extra1)) {
         actions.push(Action::Back);
     }
@@ -151,13 +156,20 @@ pub(super) fn handle(
                     actions.push(Action::Navigate(view));
                 }
             }
+            if !focused {
+                let down = input.count_and_consume_key(egui::Modifiers::NONE, Key::ArrowDown);
+                let up = input.count_and_consume_key(egui::Modifiers::NONE, Key::ArrowUp);
+                if down > 0 || up > 0 {
+                    state.page_scroll += (up as f32 - down as f32) * KEY_SCROLL_STEP;
+                }
+            }
             let count = cursor_count(state);
             if count > 0 {
-                if input.key_pressed(Key::J) || (!focused && input.key_pressed(Key::ArrowDown)) {
+                if input.key_pressed(Key::J) {
                     state.cursor = (state.cursor + 1).min(count - 1);
                     state.cursor_moved = true;
                 }
-                if input.key_pressed(Key::K) || (!focused && input.key_pressed(Key::ArrowUp)) {
+                if input.key_pressed(Key::K) {
                     state.cursor = state.cursor.saturating_sub(1);
                     state.cursor_moved = true;
                 }
@@ -473,5 +485,37 @@ mod tests {
             press(&mut state, Key::A, egui::Modifiers::SHIFT),
             vec![Action::ToggleAudioOnly]
         );
+    }
+    #[test]
+    fn arrow_up_and_down_request_vertical_page_scroll_while_j_and_k_move_the_cursor() {
+        let videos = vec![
+            crate::model::Video::from_id("aaaaaaaaaaa".into()),
+            crate::model::Video::from_id("bbbbbbbbbbb".into()),
+        ];
+        let mut state = State {
+            for_you: Listing::Ready(videos),
+            ..State::default()
+        };
+        assert!(press(&mut state, Key::ArrowDown, egui::Modifiers::NONE).is_empty());
+        assert_eq!(state.cursor, 0);
+        assert!(!state.cursor_moved);
+        assert_eq!(state.page_scroll, -KEY_SCROLL_STEP);
+
+        state.page_scroll = 0.0;
+        assert!(press(&mut state, Key::ArrowUp, egui::Modifiers::NONE).is_empty());
+        assert_eq!(state.cursor, 0);
+        assert!(!state.cursor_moved);
+        assert_eq!(state.page_scroll, KEY_SCROLL_STEP);
+
+        state.page_scroll = 0.0;
+        assert!(press(&mut state, Key::J, egui::Modifiers::NONE).is_empty());
+        assert_eq!(state.cursor, 1);
+        assert!(state.cursor_moved);
+        assert_eq!(state.page_scroll, 0.0);
+
+        assert!(press(&mut state, Key::K, egui::Modifiers::NONE).is_empty());
+        assert_eq!(state.cursor, 0);
+        assert!(state.cursor_moved);
+        assert_eq!(state.page_scroll, 0.0);
     }
 }
