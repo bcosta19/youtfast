@@ -30,12 +30,12 @@ backend. Start signed out; accounts are optional.
 
 | Feature | In YouTFast |
 |---|---|
-| Watch | In-window video, full screen, theater mode and a movable mini player |
+| Watch | In-window video, full screen, theater mode, audio-only mode and a compact mini player |
 | Discover | Search filters, channel tabs, playlists, Shorts and paginated feeds |
-| Stay in control | Captions, chapters, queue editing, keyboard shortcuts and desktop media controls |
-| Keep a library | Device subscriptions, Watch later, history/resume and Google Takeout import |
+| Stay in control | Captions, chapters, queue editing, configurable video buffer, keyboard shortcuts and desktop media controls |
+| Keep a library | Device subscriptions, Watch later, history/resume, History sync and Google Takeout import |
 | Read and explore | Descriptions, comments and attachments; optional transcripts and timeline previews |
-| Make it yours | English or Português (Brasil), light/dark themes, palettes and native Linux Omarchy integration |
+| Make it yours | Six interface languages (EN, PT-BR, ES, FR, DE, IT), light/dark themes, palettes and native Linux Omarchy integration |
 
 Optional accounts use the system credential store. Account ratings and playlist
 edits affect the selected account; device subscriptions and device Watch later
@@ -59,19 +59,23 @@ been compared yet; numbers from other machines are welcome.
 
 ## Installation
 
-**0.1.0 is a pre-release.** Packages are built and tested headlessly on
-GitHub-hosted runners; interactive checks on clean Windows and macOS machines
-are still in progress. Download from
+**0.1.0 is published as a pre-release; 0.2.0 is the current release candidate.**
+Packages are built and tested headlessly on GitHub-hosted runners; interactive
+checks on clean Windows and macOS machines are still in progress. Download from
 [GitHub Releases](https://github.com/bcosta19/youtfast/releases).
 
 | Platform | Package | Requirements |
 |---|---|---|
 | Linux x86_64 | Flatpak bundle | Flatpak, Freedesktop 25.08 runtime and desktop drivers/portals |
-| Linux x86_64 | Native archive | glibc 2.39+, system libmpv and current yt-dlp/Deno |
-| Windows x86_64 | ZIP with libmpv and DLLs | Current yt-dlp/Deno on PATH; no installer or publisher signature |
-| macOS 15+ Apple Silicon | ZIP with app and dylibs | Current yt-dlp/Deno; ad-hoc signed, not notarized |
+| Linux x86_64 | Native archive | glibc 2.39+, system libmpv and current yt-dlp/Deno; supports in-app updates |
+| Windows x86_64 | ZIP with libmpv and DLLs | Current yt-dlp/Deno on PATH; supports in-app updates; no MSI/MSIX or publisher signature |
+| macOS 15+ Apple Silicon | ZIP with app and dylibs | Current yt-dlp/Deno; supports in-app updates; ad-hoc signed, not notarized |
 | Arch Linux x86_64 | Pacman package and source PKGBUILD | Built and installed in a clean Arch container by CI; AUR submission pending |
 
+Native archives/bundles include an in-app updater in **Settings → About**
+(SHA-256 verified against `checksums.txt`, with optional automatic minor/patch
+updates and 1-click manual major updates). Release builds also generate
+rendered Flathub, Winget and Homebrew Cask manifests (`channels.tar.gz`).
 The Flatpak bundles its playback/extraction tools and targets compatible Linux
 distributions at x86_64. It is not yet a Flathub listing or an app update remote.
 The Arch recipe is not yet an AUR entry or an official pacman package.

@@ -6,7 +6,7 @@ browser engine, telemetry, a hosted backend or alternate video sources.
 
 ## Getting started
 
-The source repository is public; the 0.1.0 binaries are still being qualified.
+The source repository is public; the 0.1.0 and 0.2.0 binaries are still being qualified.
 AUR and Flathub submissions are separate work; neither listing is claimed here.
 
 Use Rust from `rust-toolchain.toml`; rustup selects it automatically. On Ubuntu
@@ -64,7 +64,7 @@ RUSTDOCFLAGS='-D warnings' cargo doc --locked --no-deps --all-features
 
 CI runs automatically on pull requests and pushes to `main`; Release runs on
 `v*` tags and manual dry runs. See [Actions policy](docs/actions.md).
-0.1.0 targets Linux x86_64, Windows x86_64 and macOS Apple Silicon; hosted
+0.1.0 and 0.2.0 target Linux x86_64, Windows x86_64 and macOS Apple Silicon; hosted
 packaging/headless tests do not certify interactive playback, optional accounts
 or clean-machine installation. Complete [platform QA](docs/distribution.md).
 Do not run ignored network tests as part of default CI. Tests must not access

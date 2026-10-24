@@ -32,7 +32,7 @@ cargo run --locked --release -- "rust egui"                      # or search
 | J, L | Back or forward 10 s |
 | Ctrl+← / → (Option on macOS) | Previous / next chapter |
 | Home, End; 0–9 | Beginning / end; position in tens of percent |
-| ↑, ↓; M | Volume ±5%; mute (Shorts use ↑/↓ for videos) |
+| ↑, ↓; M | Scroll page vertically outside the player; volume ±5% inside the player; mute (Shorts use ↑/↓ for videos) |
 | C; <, >; comma, period | Captions; speed; previous / next paused frame |
 | Shift+N, Shift+P | Next / previous in the playback source |
 | I; T; Shift+A | Mini player; theater mode; audio-only mode |
@@ -42,23 +42,33 @@ cargo run --locked --release -- "rust egui"                      # or search
 | Esc | Dismiss a menu/help/countdown, leave full screen, or go back |
 
 Text inputs and menus keep their own keys. Focused buttons own Space, and a
-focused volume slider keeps its arrow keys. In lists, J/K move selection rather
-than seek. Hold the video to temporarily play at 2×; releasing restores the
-previous speed. The player menu also offers repeat, caption size/background,
-copying a timestamped link, and opening the video in a browser.
+focused volume slider keeps its arrow keys. Outside the player, ↑/↓ scroll the
+active page vertically and J/K move item selection (`g`/`G` jump to the top or
+bottom). Hold the video to temporarily play at 2×; releasing restores the
+previous speed. The player menu also offers repeat, audio-only mode, caption
+size/background, copying a timestamped link, and opening the video in a browser.
 
 Search uses RustyPipe directly, with separate video, channel and playlist
 results. Video filters include date, duration, live status and ordering.
 Back/forward restores the page, query, filters, selection and scroll position.
 Cards have channel links, a menu and quick Watch later/queue actions. The queue
-can be reordered or trimmed; the mini player can be moved and resized inside
-the application. Playlist playback continues beyond the initially loaded page.
-Device history supports filtering and removing individual entries.
+can be reordered or trimmed; the mini player is a compact frameless 16:9 video
+box in the bottom-right corner (click to return to the watch page, or hover for
+play/pause and close controls). Playlist playback continues beyond the initially
+loaded page. Device history supports filtering and removing individual entries.
 
-Settings → Playback → Miniplayer while scrolling keeps a video visible in a
-floating player when you scroll past it to read comments. It is off by default.
+Settings → Playback → Miniplayer while scrolling keeps a video visible in the
+corner miniplayer when you scroll past it to read comments. It is off by default.
 Scrolling back reveals the inline player again; clicking the miniplayer returns
 to the video at the top of the page. Closing the miniplayer pauses playback.
+
+Settings → Playback → Video buffer chooses between mpv's standard demuxer cache
+(**Large — 150 MiB / 50 MiB**, the default, buffering several minutes ahead for
+unstable connections and instant seeking) and **Small — 50 MiB / 20 MiB** (to
+keep RAM usage around ~200 MB and use less data when skipping videos early).
+Audio-only mode (`Shift+A` or the player's Quality menu) streams and decodes
+only the audio track (`ba/b` and `vid=no`) for the current video, resetting to
+standard video when opening another video or restarting the app.
 
 The watch page also shows the description (timestamps seek), chapters
 and comments, loaded through rustypipe. Comments and replies also display
@@ -71,10 +81,11 @@ videos.
 Channel pages include a banner and video ordering. Playlists show their cover,
 metadata and the currently playing item. Shorts use a portrait stage with
 next/previous controls and wheel navigation. The interface starts in English.
-Choose English or Português (Brasil) under Settings → Appearance → Language;
-the change applies immediately and is kept between runs, including for desktop
-notifications. Older settings also default to English. Video titles, comments,
-and caption preferences keep their own languages.
+Choose English, Português (Brasil), Español, Français, Deutsch or Italiano under
+Settings → Appearance → Language; the change applies immediately and is kept
+between runs, including for desktop notifications. Older settings also default
+to English. Video titles, comments, and caption preferences keep their own
+languages.
 
 The watch page can show a searchable, synchronized transcript and timeline
 thumbnail previews when YouTube supplies the required public metadata. These
@@ -245,6 +256,21 @@ not activate the Omarchy hook (`contrib/omarchy/youtfast-theme`). Native Linux
 packages include it for optional installation. Flatpak does not activate host
 hooks or implicitly read host themes. Native theme following also works without
 the hook where theme files are accessible.
+
+## About and updates
+
+Settings → About shows the installed YouTFast version, license, and bundled
+changelog, and checks GitHub Releases for newer stable versions:
+
+- **Notify about new versions** (on by default) sends a system desktop
+  notification when a new release is published and highlights Settings in the
+  sidebar, with quick actions in the notification toast to update or open About.
+- **Automatic updates (minor and patch)** (off by default) automatically
+  downloads, verifies (SHA-256 against the release's `checksums.txt`), and
+  installs minor (`0.x.0`) and patch (`0.0.x`) updates in the background, then
+  displays the changelog of what changed in Settings → About.
+- **Major versions (`x.0.0`)** never install automatically; they require
+  clicking the **Update** button in the app to confirm and install the release.
 
 ## Help
 
