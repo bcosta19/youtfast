@@ -109,7 +109,7 @@ def render_homebrew_cask(version: str, macos_sha256: str, archive_url: str | Non
         '  homepage "https://github.com/bcosta19/youtfast"\n'
         "\n"
         "  depends_on arch: :arm64\n"
-        '  depends_on macos: ">= :sequoia"\n'
+        "  depends_on macos: :sequoia\n"
         '  depends_on formula: "deno"\n'
         '  depends_on formula: "yt-dlp"\n'
         "\n"

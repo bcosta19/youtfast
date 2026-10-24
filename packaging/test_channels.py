@@ -56,6 +56,7 @@ class ChannelsTests(unittest.TestCase):
         self.assertIn('cask "youtfast" do', cask)
         self.assertIn('version "0.2.0"', cask)
         self.assertIn(f'sha256 "{digest.lower()}"', cask)
+        self.assertIn("depends_on macos: :sequoia", cask)
         self.assertIn('depends_on formula: "deno"', cask)
         self.assertIn('depends_on formula: "yt-dlp"', cask)
         self.assertIn('app "youtfast-v#{version}-aarch64-apple-darwin/YouTFast.app"', cask)

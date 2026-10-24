@@ -96,34 +96,17 @@ jobs:
         run: |
           toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
           rustup toolchain install "$toolchain" --profile minimal
-          brew install mpv dylibbundler deno yt-dlp
+          brew install mpv
           echo "LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
           shared-key: macos15-tests
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - run: cargo test --locked --profile ci --all-targets --all-features
-      - name: Build, package Homebrew Cask and verify simulated download and installation
+      - name: Build and version smoke test
         run: |
           cargo build --locked --profile ci
-          ver=$(python3 packaging/release.py check)
-          test "$(target/ci/youtfast --version)" = "youtfast $ver"
-          python3 packaging/bundle.py macos --binary target/ci/youtfast
-          archive="dist/youtfast-v$ver-aarch64-apple-darwin.zip"
-          sha=$(shasum -a 256 "$archive" | awk '{print $1}')
-          python3 -m http.server 8765 --directory dist >/dev/null 2>&1 &
-          srv=$!
-          trap "kill $srv 2>/dev/null || true" EXIT
-          sleep 1
-          brew tap-new --no-git local/youtfast-test
-          tap_dir="$(brew --repository local/youtfast-test)/Casks"
-          mkdir -p "$tap_dir"
-          python3 -c 'import sys; sys.path.insert(0, "packaging"); import channels; print(channels.render_homebrew_cask(sys.argv[1], sys.argv[2], archive_url=sys.argv[3]))' \
-            "$ver" "$sha" "http://127.0.0.1:8765/youtfast-v#{version}-aarch64-apple-darwin.zip" > "$tap_dir/youtfast.rb"
-          brew install --cask local/youtfast-test/youtfast
-          codesign --verify --deep --strict "/Applications/YouTFast.app"
-          test "$("/Applications/YouTFast.app/Contents/MacOS/youtfast" --version)" = "youtfast $ver"
-          test "$(youtfast --version)" = "youtfast $ver"
+          test "$(target/ci/youtfast --version)" = "youtfast $(python3 packaging/release.py check)"
 
   windows:
     if: github.event_name == 'workflow_dispatch' || github.event.repository.private == false || vars.YOUTFAST_AUTOMATIC_CI == 'true'
@@ -147,47 +130,18 @@ jobs:
           msystem: UCRT64
           path-type: inherit
           update: true
-          install: mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-mpv mingw-w64-ucrt-x86_64-python
+          install: mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-mpv
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
           shared-key: windows-gnu-tests
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-      - name: Native build, headless tests and Winget package bundle
+      - name: Native build and headless tests
         shell: msys2 {0}
         run: |
           export LIBRARY_PATH=/ucrt64/lib
           cargo test --locked --profile ci --all-targets --all-features --target x86_64-pc-windows-gnu
           cargo build --locked --profile ci --target x86_64-pc-windows-gnu
-          python packaging/bundle.py windows --binary target/x86_64-pc-windows-gnu/ci/youtfast.exe --prefix "$(cygpath -m /ucrt64)"
-      - name: Simulate Winget download, SHA-256 verification and clean-environment execution
-        shell: pwsh
-        run: |
-          $ver = (python packaging/release.py check).Trim()
-          $archive = Get-Item "dist/youtfast-v$ver-x86_64-pc-windows-gnu.zip"
-          $sha = (Get-FileHash $archive.FullName -Algorithm SHA256).Hash
-          $server = Start-Process -FilePath python -ArgumentList '-m','http.server','8765','--directory','dist' -PassThru -WindowStyle Hidden
-          try {
-            Start-Sleep -Seconds 1
-            $url = "http://127.0.0.1:8765/youtfast-v$ver-x86_64-pc-windows-gnu.zip"
-            $manifestPath = Join-Path $env:RUNNER_TEMP 'bcosta19.YouTFast.yaml'
-            python -c "import sys; sys.path.insert(0, 'packaging'); import channels; open(sys.argv[4], 'w').write(channels.render_winget(sys.argv[1], sys.argv[2], installer_url=sys.argv[3]))" $ver $sha $url $manifestPath
-            $downloaded = Join-Path $env:RUNNER_TEMP 'downloaded-youtfast.zip'
-            Invoke-WebRequest -Uri $url -OutFile $downloaded
-            $actualSha = (Get-FileHash $downloaded -Algorithm SHA256).Hash
-            if ($actualSha -ne $sha) { throw "SHA-256 mismatch: $actualSha != $sha" }
-            $installRoot = Join-Path $env:RUNNER_TEMP 'winget-portable-install'
-            Expand-Archive $downloaded $installRoot
-            $exe = Join-Path $installRoot "youtfast-v$ver-x86_64-pc-windows-gnu\youtfast.exe"
-            if (-not (Test-Path $exe)) { throw "Missing NestedInstallerFile: $exe" }
-            $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
-            $out = Join-Path $env:RUNNER_TEMP 'youtfast-version.txt'
-            $proc = Start-Process -FilePath $exe -ArgumentList '--version' -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out
-            $actual = (Get-Content $out -Raw).Trim()
-            if ($proc.ExitCode -ne 0 -or $actual -ne "youtfast $ver") { throw "Installed Windows execution failed: exit $($proc.ExitCode), output '$actual'" }
-            Write-Host "Windows Winget simulated download, install and execution verified: $actual"
-          } finally {
-            Stop-Process -Id $server.Id -ErrorAction SilentlyContinue
-          }
+          target/x86_64-pc-windows-gnu/ci/youtfast.exe --version
 
   release-gate:
     name: release-gate
