@@ -784,6 +784,7 @@ fn keys_overlay(ctx: &egui::Context, state: &mut State) {
             ("↑ / ↓", "Volume: 5%; switch Shorts"),
             ("f", "Full screen"),
             ("t", "Theater mode"),
+            ("Shift+A", "Audio-only mode"),
         ];
         let column = |ui: &mut egui::Ui, id: &str, bindings: &[(&'static str, &'static str)]| {
             egui::Grid::new(id)

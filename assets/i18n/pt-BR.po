@@ -1426,3 +1426,12 @@ msgstr "Aplica-se apenas a contas conectadas."
 
 msgid "Search history"
 msgstr "Buscar no histórico"
+
+msgid "Audio only"
+msgstr "Apenas áudio"
+
+msgid "Audio-only mode"
+msgstr "Modo apenas áudio"
+
+msgid "Video mode"
+msgstr "Modo de vídeo"

@@ -35,7 +35,7 @@ cargo run --locked --release -- "rust egui"                      # or search
 | ↑, ↓; M | Volume ±5%; mute (Shorts use ↑/↓ for videos) |
 | C; <, >; comma, period | Captions; speed; previous / next paused frame |
 | Shift+N, Shift+P | Next / previous in the playback source |
-| I; T | Mini player; theater mode |
+| I; T; Shift+A | Mini player; theater mode; audio-only mode |
 | F, double click | Full screen |
 | /; ? | Focus search; open shortcut help |
 | Alt+← / →; mouse back / forward | Browse back / forward (Alt keys on Linux/Windows) |

@@ -593,6 +593,7 @@ pub enum Action {
     SetCaptionBackground(bool),
     LoadExtras,
     ToggleTranscript,
+    ToggleAudioOnly,
     SetQuality(Quality),
     SetTheme(crate::storage::settings::ThemeChoice),
     SetLanguage(crate::appearance::i18n::Locale),

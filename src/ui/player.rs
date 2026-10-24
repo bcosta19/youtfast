@@ -318,19 +318,49 @@ fn picture(
     let locale: Locale = state.settings.language;
     ui.painter()
         .rect_filled(rect, CornerRadius::ZERO, Color32::BLACK);
-    if let Some(surface) = surface {
-        surface.paint(ui, rect);
-    }
-    #[cfg(feature = "demo")]
-    if surface.is_none()
-        && ui
-            .ctx()
-            .data(|d| d.get_temp::<bool>(egui::Id::new("synthetic-images")))
-            .unwrap_or(false)
-    {
-        super::images::remote(ui, "demo")
-            .fit_to_exact_size(rect.size())
-            .paint_at(ui, rect);
+    if state.audio_only {
+        if let Some(video) = &state.watching {
+            super::images::remote(ui, &video.thumbnail())
+                .fit_to_exact_size(rect.size())
+                .paint_at(ui, rect);
+            ui.painter()
+                .rect_filled(rect, CornerRadius::ZERO, Color32::from_black_alpha(150));
+            let badge_width = 130.0_f32.min(rect.width() - 16.0);
+            if badge_width > 40.0 && rect.height() >= 40.0 {
+                let badge_rect = Rect::from_center_size(rect.center(), vec2(badge_width, 32.0));
+                ui.painter().rect_filled(
+                    badge_rect,
+                    CornerRadius::same(16),
+                    Color32::from_black_alpha(180),
+                );
+                let text = tr(locale, "Audio only");
+                let galley = ui.painter().layout_no_wrap(
+                    text.into_owned(),
+                    theme::medium(13.0),
+                    Color32::WHITE,
+                );
+                ui.painter().galley(
+                    badge_rect.center() - galley.size() / 2.0,
+                    galley,
+                    Color32::WHITE,
+                );
+            }
+        }
+    } else {
+        if let Some(surface) = surface {
+            surface.paint(ui, rect);
+        }
+        #[cfg(feature = "demo")]
+        if surface.is_none()
+            && ui
+                .ctx()
+                .data(|d| d.get_temp::<bool>(egui::Id::new("synthetic-images")))
+                .unwrap_or(false)
+        {
+            super::images::remote(ui, "demo")
+                .fit_to_exact_size(rect.size())
+                .paint_at(ui, rect);
+        }
     }
     if let Some(error) = &state.player_error {
         let galley = ui.painter().layout(
@@ -1067,7 +1097,11 @@ fn menu(
                                 "Auto (up to {resolution}p)",
                                 &[("resolution", Quality::AUTO.to_string())],
                             );
-                            if pick_row(ui, &auto, state.settings.quality == Quality::Auto) {
+                            if pick_row(
+                                ui,
+                                &auto,
+                                state.settings.quality == Quality::Auto && !state.audio_only,
+                            ) {
                                 actions.push(Action::SetQuality(Quality::Auto));
                                 state.player_menu = PlayerMenu::Closed;
                             }
@@ -1076,11 +1110,15 @@ fn menu(
                                 if pick_row(
                                     ui,
                                     &resolution.label(),
-                                    state.settings.quality == quality,
+                                    state.settings.quality == quality && !state.audio_only,
                                 ) {
                                     actions.push(Action::SetQuality(quality));
                                     state.player_menu = PlayerMenu::Closed;
                                 }
+                            }
+                            if pick_row(ui, &tr(locale, "Audio only"), state.audio_only) {
+                                actions.push(Action::ToggleAudioOnly);
+                                state.player_menu = PlayerMenu::Closed;
                             }
                         }
                         PlayerMenu::Captions => {
@@ -1135,7 +1173,7 @@ fn menu_rows(state: &State, status: &Status, live: bool) -> usize {
         PlayerMenu::Closed => 0,
         PlayerMenu::Main => 4 + usize::from(!live) + usize::from(!status.subtitles.is_empty()),
         PlayerMenu::Speed => 1 + SPEEDS.len(),
-        PlayerMenu::Quality => 2 + offered(state).len(),
+        PlayerMenu::Quality => 3 + offered(state).len(),
         PlayerMenu::Captions => 3 + status.subtitles.len(),
         PlayerMenu::CaptionStyle => 4,
     }
@@ -1232,15 +1270,19 @@ fn main_menu(
             status.fps.round() as u32,
         )
     });
-    let quality = match (state.settings.quality, playing) {
-        (Quality::Auto, Some(playing)) => trf(
-            locale,
-            "Auto · {resolution}",
-            &[("resolution", playing.label())],
-        ),
-        (Quality::Auto, None) => tr(locale, "Auto").into_owned(),
-        (_, Some(playing)) => playing.label(),
-        (Quality::Max(lines), None) => format!("{lines}p"),
+    let quality = if state.audio_only {
+        tr(locale, "Audio only").into_owned()
+    } else {
+        match (state.settings.quality, playing) {
+            (Quality::Auto, Some(playing)) => trf(
+                locale,
+                "Auto · {resolution}",
+                &[("resolution", playing.label())],
+            ),
+            (Quality::Auto, None) => tr(locale, "Auto").into_owned(),
+            (_, Some(playing)) => playing.label(),
+            (Quality::Max(lines), None) => format!("{lines}p"),
+        }
     };
     if value_row(ui, &tr(locale, "Quality"), &quality)
         .on_hover_text(playback_details(status, locale))
@@ -1863,58 +1905,61 @@ mod tests {
         crate::appearance::theme::install_fonts(&ctx);
         for size in [vec2(1600.0, 900.0), vec2(320.0, 180.0)] {
             for live in [false, true] {
-                for (menu, autoplay) in menus
-                    .iter()
-                    .flat_map(|menu| [(*menu, false), (*menu, true)])
-                {
-                    let mut watching = video.clone();
-                    watching.live = live;
-                    let mut state = State {
-                        watching: Some(watching),
-                        up_next: vec![video.clone(), next.clone()],
-                        player_menu: menu,
-                        autoplay: autoplay.then(|| (next.clone(), Instant::now())),
-                        osd: Some(("+10 s".to_owned(), Instant::now())),
-                        segments: vec![Segment {
-                            category: "intro".to_owned(),
-                            start: 20.0,
-                            end: 40.0,
-                        }],
-                        details: Fetch::Ready(Details {
-                            chapters: vec![
-                                Chapter {
-                                    name: "Intro".to_owned(),
-                                    seconds: 0,
-                                },
-                                Chapter {
-                                    name: "Middle".to_owned(),
-                                    seconds: 300,
-                                },
-                            ],
+                for audio_only in [false, true] {
+                    for (menu, autoplay) in menus
+                        .iter()
+                        .flat_map(|menu| [(*menu, false), (*menu, true)])
+                    {
+                        let mut watching = video.clone();
+                        watching.live = live;
+                        let mut state = State {
+                            watching: Some(watching),
+                            up_next: vec![video.clone(), next.clone()],
+                            player_menu: menu,
+                            audio_only,
+                            autoplay: autoplay.then(|| (next.clone(), Instant::now())),
+                            osd: Some(("+10 s".to_owned(), Instant::now())),
+                            segments: vec![Segment {
+                                category: "intro".to_owned(),
+                                start: 20.0,
+                                end: 40.0,
+                            }],
+                            details: Fetch::Ready(Details {
+                                chapters: vec![
+                                    Chapter {
+                                        name: "Intro".to_owned(),
+                                        seconds: 0,
+                                    },
+                                    Chapter {
+                                        name: "Middle".to_owned(),
+                                        seconds: 300,
+                                    },
+                                ],
+                                ..Default::default()
+                            }),
+                            ..State::default()
+                        };
+                        let input = egui::RawInput {
+                            screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), size)),
                             ..Default::default()
-                        }),
-                        ..State::default()
-                    };
-                    let input = egui::RawInput {
-                        screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), size)),
-                        ..Default::default()
-                    };
-                    for mode in [Mode::Page, Mode::Fullscreen, Mode::Short] {
-                        let mut output = ctx.run_ui(input.clone(), |ui| {
-                            let mut actions = Vec::new();
-                            let rect = ui.max_rect();
-                            player(
-                                ui,
-                                rect,
-                                &mut state,
-                                Some(&status),
-                                None,
-                                mode,
-                                &mut actions,
-                            );
-                            mini(ui.ctx(), &state, Some(&status), None, &mut actions);
-                        });
-                        output.textures_delta.clear();
+                        };
+                        for mode in [Mode::Page, Mode::Fullscreen, Mode::Short] {
+                            let mut output = ctx.run_ui(input.clone(), |ui| {
+                                let mut actions = Vec::new();
+                                let rect = ui.max_rect();
+                                player(
+                                    ui,
+                                    rect,
+                                    &mut state,
+                                    Some(&status),
+                                    None,
+                                    mode,
+                                    &mut actions,
+                                );
+                                mini(ui.ctx(), &state, Some(&status), None, &mut actions);
+                            });
+                            output.textures_delta.clear();
+                        }
                     }
                 }
             }

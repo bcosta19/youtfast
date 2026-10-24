@@ -10,6 +10,10 @@ are the distribution record.
 
 ### Added
 
+- Audio-only mode: stream and decode only the audio track (`ba/b` and `vid=no`)
+  for the current video, reducing bandwidth and CPU/GPU usage during background
+  listening. Accessible via the player Quality menu or `Shift+A`. Resets to
+  standard video when opening another video or restarting the app.
 - History sync settings: keep account and device history separate, merge them
   in YouTFast with local resume positions, or also send started playback to the
   signed-in account's YouTube history. Merged history has All, Account and This

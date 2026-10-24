@@ -1400,3 +1400,12 @@ msgstr "Minirreproductor al desplazarse"
 
 msgid "Keep the video visible when scrolling down to the comments."
 msgstr "Mantén el vídeo visible al desplazarte hacia los comentarios."
+
+msgid "Audio only"
+msgstr "Solo audio"
+
+msgid "Audio-only mode"
+msgstr "Modo solo audio"
+
+msgid "Video mode"
+msgstr "Modo de vídeo"

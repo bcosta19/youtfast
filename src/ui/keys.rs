@@ -118,6 +118,9 @@ pub(super) fn handle(
             if input.modifiers.shift && input.key_pressed(Key::P) {
                 actions.push(Action::PlayPrevious);
             }
+            if input.modifiers.shift && input.key_pressed(Key::A) {
+                actions.push(Action::ToggleAudioOnly);
+            }
         }
         if state.view != View::Watch {
             let views = [
@@ -186,7 +189,10 @@ pub(super) fn handle(
                     )));
                 }
             }
-            if input.key_pressed(Key::A) && state.library.accounts.len() > 1 {
+            if !input.modifiers.shift
+                && input.key_pressed(Key::A)
+                && state.library.accounts.len() > 1
+            {
                 let accounts = &state.library.accounts;
                 let at = accounts
                     .iter()
@@ -434,5 +440,38 @@ mod tests {
             vec![Action::ToggleMiniPlayer]
         );
         assert!(press(&mut state, Key::K, egui::Modifiers::NONE).is_empty());
+    }
+    #[test]
+    fn shift_a_toggles_audio_only_while_playing() {
+        let mut state = State {
+            watching: Some(crate::model::Video::from_id("aaaaaaaaaaa".into())),
+            ..State::default()
+        };
+        assert_eq!(
+            press(&mut state, Key::A, egui::Modifiers::SHIFT),
+            vec![Action::ToggleAudioOnly]
+        );
+    }
+    #[test]
+    fn shift_a_does_not_also_switch_accounts_while_browsing() {
+        let mut state = State {
+            watching: Some(crate::model::Video::from_id("aaaaaaaaaaa".into())),
+            ..State::default()
+        };
+        for id in [1, 2] {
+            state
+                .library
+                .accounts
+                .push(crate::storage::library::Account {
+                    id,
+                    name: format!("account {id}"),
+                    source: crate::model::AccountSource::Browser("chromium".to_owned()),
+                });
+        }
+        state.library.active_account = Some(1);
+        assert_eq!(
+            press(&mut state, Key::A, egui::Modifiers::SHIFT),
+            vec![Action::ToggleAudioOnly]
+        );
     }
 }
