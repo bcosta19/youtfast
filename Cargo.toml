@@ -70,7 +70,7 @@ directories = "6"
 # Google Takeout's RFC 3339 times.
 jiff = "0.2"
 # History playback reports use yt-dlp's random client playback nonce.
-rand = "0.9"
+rand = "0.10"
 url = "2"
 # Desktop notifications for new uploads (zbus for the D-Bus, no glib).
 # Desktop notifications for new uploads; "z" is zbus for the D-Bus.
