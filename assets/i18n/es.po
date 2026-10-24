@@ -239,6 +239,9 @@ msgstr "No se pudieron comprobar nuevos vídeos: {error}"
 msgid "Could not complete the YouTube request. Retry."
 msgstr "No se pudo completar la solicitud de YouTube. Reintentar."
 
+msgid "Could not verify YouTube's certificate. Check the system date and any proxy or antivirus inspecting HTTPS, then retry."
+msgstr "No se pudo verificar el certificado de YouTube. Comprueba la fecha del sistema y cualquier proxy o antivirus que inspeccione HTTPS y vuelve a intentarlo."
+
 msgid "Could not import this Takeout file."
 msgstr "No se pudo importar este archivo de Takeout."
 
@@ -1154,6 +1157,9 @@ msgstr "Ayer"
 msgid "YouTFast — demo"
 msgstr "YouTFast — demo"
 
+msgid "YouTFast needs OpenGL 2.0 or newer to draw its window. Update the graphics driver; in a virtual machine, turn on 3D acceleration."
+msgstr "YouTFast necesita OpenGL 2.0 o posterior para dibujar su ventana. Actualiza el controlador gráfico; en una máquina virtual, activa la aceleración 3D."
+
 msgid "YouTube did not accept this session. Sign in again on youtube.com and retry."
 msgstr "YouTube no aceptó esta sesión. Inicia sesión de nuevo en youtube.com y reinténtalo."
 
@@ -1427,3 +1433,108 @@ msgstr "Grande (150 MiB delante, 50 MiB detrás) almacena varios minutos por ade
 
 msgid "Small (50 MiB ahead, 20 MiB back) keeps RAM usage low (~200 MB) and wastes less data when skipping videos, but holds only ~15–90s ahead and re-downloads when seeking far back. Large (150 MiB / 50 MiB) buffers several minutes ahead using more RAM (~300–650 MB)."
 msgstr "Pequeño (50 MiB delante, 20 MiB detrás) mantiene bajo el uso de RAM (~200 MB) y ahorra datos al saltar vídeos, pero guarda solo ~15–90 s por delante y vuelve a descargar al retroceder mucho. Grande (150 MiB / 50 MiB) almacena varios minutos por adelantado usando más RAM (~300–650 MB)."
+
+msgid "YouTFast {version}"
+msgstr "YouTFast {version}"
+
+msgid "Small native YouTube client built with Rust, egui, and libmpv (GPL-3.0-only)."
+msgstr "Cliente nativo ligero de YouTube creado con Rust, egui y libmpv (GPL-3.0-only)."
+
+msgid "Checking for updates…"
+msgstr "Buscando actualizaciones…"
+
+msgid "YouTFast is up to date."
+msgstr "YouTFast está actualizado."
+
+msgid "Major version v{version} is available. Major updates require manual installation."
+msgstr "La versión mayor v{version} está disponible. Las actualizaciones mayores requieren instalación manual."
+
+msgid "Version v{version} is available."
+msgstr "La versión v{version} está disponible."
+
+msgid "Downloading and installing YouTFast v{version}…"
+msgstr "Descargando e instalando YouTFast v{version}…"
+
+msgid "Automatically updated to v{version}. Restart YouTFast to use the new version."
+msgstr "Actualizado automáticamente a v{version}. Reinicia YouTFast para usar la nueva versión."
+
+msgid "Updated to v{version}. Restart YouTFast to use the new version."
+msgstr "Actualizado a v{version}. Reinicia YouTFast para usar la nueva versión."
+
+msgid "Update to v{version}"
+msgstr "Actualizar a v{version}"
+
+msgid "Update now"
+msgstr "Actualizar ahora"
+
+msgid "Check for updates"
+msgstr "Buscar actualizaciones"
+
+msgid "Notify about new versions"
+msgstr "Notificar sobre nuevas versiones"
+
+msgid "Show a system notification when a new version is available and ask if you want to update."
+msgstr "Muestra una notificación del sistema cuando hay una nueva versión disponible y pregunta si deseas actualizar."
+
+msgid "Automatic updates (minor and patch)"
+msgstr "Actualizaciones automáticas (minor y patch)"
+
+msgid "Automatically download and install minor (0.x.0) and patch (0.0.x) updates and display the changelog of what changed. Major versions (x.0.0) always require clicking Update manually."
+msgstr "Descarga e instala automáticamente actualizaciones minor (0.x.0) y patch (0.0.x) y muestra el registro de cambios. Las versiones mayores (x.0.0) siempre requieren pulsar Actualizar manualmente."
+
+msgid "What's new in v{version}"
+msgstr "Novedades en v{version}"
+
+msgid "What changed in v{version} (Changelog)"
+msgstr "Qué cambió en v{version} (Changelog)"
+
+msgid "Hide changelog"
+msgstr "Ocultar cambios"
+
+msgid "View changelog"
+msgstr "Ver cambios"
+
+msgid "Releases on GitHub"
+msgstr "Versiones en GitHub"
+
+msgid "YouTFast updated to v{version}"
+msgstr "YouTFast actualizado a v{version}"
+
+msgid "A minor or patch update was installed automatically. See what changed in Settings → About."
+msgstr "Se instaló automáticamente una actualización minor o patch. Consulta los cambios en Configuración → Información."
+
+msgid "New major version: YouTFast v{version}"
+msgstr "Nueva versión mayor: YouTFast v{version}"
+
+msgid "Major updates require manual confirmation. Open Settings → About to review the changelog and install."
+msgstr "Las actualizaciones mayores requieren confirmación manual. Abre Configuración → Información para revisar los cambios e instalar."
+
+msgid "YouTFast v{version} is available"
+msgstr "YouTFast v{version} está disponible"
+
+msgid "A new version is ready to install. Open Settings → About to see what changed and update."
+msgstr "Hay una nueva versión lista para instalar. Abre Configuración → Información para ver los cambios y actualizar."
+
+msgid "A new major version of YouTFast is available."
+msgstr "Hay una nueva versión mayor de YouTFast disponible."
+
+msgid "A new version of YouTFast is available."
+msgstr "Hay una nueva versión de YouTFast disponible."
+
+msgid "Update installed. Restart YouTFast to use the new version."
+msgstr "Actualización instalada. Reinicia YouTFast para usar la nueva versión."
+
+msgid "Could not check for updates. Retry later."
+msgstr "No se pudieron buscar actualizaciones. Inténtalo más tarde."
+
+msgid "Could not download the update. Retry later."
+msgstr "No se pudo descargar la actualización. Inténtalo más tarde."
+
+msgid "The downloaded update failed integrity verification."
+msgstr "La actualización descargada no superó la verificación de integridad."
+
+msgid "Could not install the update on this system."
+msgstr "No se pudo instalar la actualización en este sistema."
+
+msgid "Automatic installation is not supported for this package format."
+msgstr "La instalación automática no es compatible con este formato de paquete."

@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes target the latest release on the `0.1.x` line and current `main`.
+Security fixes target the latest release on the `0.x` line and current `main`.
 YouTFast is an early-stage unofficial client. Native packages do not certify
 interactive/account support on every platform; see [platform coverage](docs/distribution.md).
 

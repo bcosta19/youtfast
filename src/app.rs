@@ -252,6 +252,10 @@ pub struct State {
     pub playing_waiting: Option<PlaylistAdvance>,
     /// The wheel step, touchpad scale and glide, and axis lock for scrolling.
     pub scrolling: fastframe_scroll::Scrolling,
+    /// Status of checking for or installing a YouTFast release update.
+    pub update: crate::desktop::updater::UpdateState,
+    /// Whether the full installed changelog is expanded in Settings → About.
+    pub full_changelog_open: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -631,6 +635,19 @@ impl App {
         };
         app.set_alerts_timer();
         app.refresh_theme_list();
+        if let (Some(version), Some(changelog)) = (
+            &app.state.settings.last_updated_version,
+            &app.state.settings.last_updated_changelog,
+        ) && !changelog.is_empty()
+            && crate::desktop::updater::Version::parse(version)
+                >= crate::desktop::updater::Version::parse(crate::desktop::updater::CURRENT_VERSION)
+        {
+            app.state.full_changelog_open = true;
+        }
+        if app.state.settings.update_notifications || app.state.settings.auto_update {
+            app.state.update = crate::desktop::updater::UpdateState::Checking;
+            app.backend.send(Command::CheckForUpdates { manual: false });
+        }
         if let Some(active) = app.state.library.active_account
             && let Some(account) = app.state.library.account(active).cloned()
         {
@@ -772,6 +789,12 @@ impl App {
                 }
             }
             Event::Notice(notice) => self.state.notice = Some(notice),
+            Event::UpdateChecked { result, manual } => self.on_update_checked(result, manual),
+            Event::UpdateInstalled {
+                release,
+                auto,
+                result,
+            } => self.on_update_installed(release, auto, result),
         }
     }
 
@@ -1114,6 +1137,163 @@ impl App {
             Action::SkipSegment => self.skip_segment(),
             Action::ReturnToWatch => self.return_to_watch(),
             Action::CloseMiniPlayer => self.close_mini_player(),
+            Action::CheckForUpdates => {
+                if !matches!(
+                    self.state.update,
+                    crate::desktop::updater::UpdateState::Checking
+                        | crate::desktop::updater::UpdateState::Installing(_)
+                ) {
+                    self.state.update = crate::desktop::updater::UpdateState::Checking;
+                    self.backend.send(Command::CheckForUpdates { manual: true });
+                }
+            }
+            Action::InstallUpdate => {
+                if let crate::desktop::updater::UpdateState::Available(release) =
+                    self.state.update.clone()
+                {
+                    if release.can_self_update() {
+                        self.state.update =
+                            crate::desktop::updater::UpdateState::Installing(release.clone());
+                        self.backend.send(Command::InstallUpdate {
+                            release,
+                            auto: false,
+                        });
+                    } else {
+                        self.apply(ctx, Action::OpenUrl(release.html_url));
+                    }
+                }
+            }
+            Action::SetUpdateNotifications(on) => {
+                self.state.settings.update_notifications = on;
+                self.save_settings();
+                if on
+                    && matches!(
+                        self.state.update,
+                        crate::desktop::updater::UpdateState::Idle
+                    )
+                {
+                    self.state.update = crate::desktop::updater::UpdateState::Checking;
+                    self.backend
+                        .send(Command::CheckForUpdates { manual: false });
+                }
+            }
+            Action::SetAutoUpdate(on) => {
+                self.state.settings.auto_update = on;
+                self.save_settings();
+                if on {
+                    if let crate::desktop::updater::UpdateState::Available(release) =
+                        self.state.update.clone()
+                        && crate::desktop::updater::should_auto_update(true, release.kind)
+                        && release.can_self_update()
+                    {
+                        self.state.update =
+                            crate::desktop::updater::UpdateState::Installing(release.clone());
+                        self.backend.send(Command::InstallUpdate {
+                            release,
+                            auto: true,
+                        });
+                    } else if matches!(
+                        self.state.update,
+                        crate::desktop::updater::UpdateState::Idle
+                    ) {
+                        self.state.update = crate::desktop::updater::UpdateState::Checking;
+                        self.backend
+                            .send(Command::CheckForUpdates { manual: false });
+                    }
+                }
+            }
+            Action::ToggleFullChangelog => {
+                self.state.full_changelog_open = !self.state.full_changelog_open;
+            }
+        }
+    }
+
+    fn on_update_checked(
+        &mut self,
+        result: Result<Option<crate::desktop::updater::ReleaseInfo>, String>,
+        manual: bool,
+    ) {
+        use crate::desktop::updater::{UpdateState, should_auto_update};
+        match result {
+            Ok(Some(release)) => {
+                if should_auto_update(self.state.settings.auto_update, release.kind)
+                    && release.can_self_update()
+                {
+                    self.state.update = UpdateState::Installing(release.clone());
+                    self.backend.send(Command::InstallUpdate {
+                        release,
+                        auto: true,
+                    });
+                } else {
+                    let already_notified = self.state.settings.last_notified_version.as_deref()
+                        == Some(release.version.as_str());
+                    if self.state.settings.update_notifications && (!already_notified || manual) {
+                        self.state.settings.last_notified_version = Some(release.version.clone());
+                        self.save_settings();
+                        self.backend.send(Command::NotifyUpdate {
+                            version: release.version.clone(),
+                            kind: release.kind,
+                            auto_installed: false,
+                            language: self.state.settings.language,
+                        });
+                    }
+                    self.state.notice = Some(if release.kind.is_major() {
+                        "A new major version of YouTFast is available.".to_owned()
+                    } else {
+                        "A new version of YouTFast is available.".to_owned()
+                    });
+                    self.state.update = UpdateState::Available(release);
+                }
+            }
+            Ok(None) => {
+                self.state.update = UpdateState::UpToDate;
+                if manual {
+                    self.state.notice = Some("YouTFast is up to date.".to_owned());
+                }
+            }
+            Err(error) => {
+                self.state.update = UpdateState::Failed(error.clone());
+                if manual {
+                    self.state.notice = Some(error);
+                }
+            }
+        }
+    }
+
+    fn on_update_installed(
+        &mut self,
+        release: crate::desktop::updater::ReleaseInfo,
+        auto: bool,
+        result: Result<(), String>,
+    ) {
+        use crate::desktop::updater::UpdateState;
+        match result {
+            Ok(()) => {
+                self.state.settings.last_updated_version = Some(release.version.clone());
+                self.state.settings.last_updated_changelog = Some(release.changelog.clone());
+                self.state.full_changelog_open = true;
+                self.save_settings();
+                if auto && self.state.settings.update_notifications {
+                    self.backend.send(Command::NotifyUpdate {
+                        version: release.version.clone(),
+                        kind: release.kind,
+                        auto_installed: true,
+                        language: self.state.settings.language,
+                    });
+                }
+                self.state.notice =
+                    Some("Update installed. Restart YouTFast to use the new version.".to_owned());
+                self.state.update = UpdateState::Installed {
+                    version: release.version,
+                    kind: release.kind,
+                    changelog: release.changelog,
+                    auto,
+                };
+            }
+            Err(error) => {
+                self.state.notice = Some(error.clone());
+                self.state.update = UpdateState::Failed(error);
+            }
         }
     }
 

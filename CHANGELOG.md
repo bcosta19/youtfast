@@ -8,8 +8,31 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Fixed
+
+- Search, feeds and the account work on a freshly installed Windows. YouTube's
+  certificates are now checked by the operating system, which downloads the
+  root certificates it does not have yet; before, every request failed until
+  another program (a browser) had made Windows fetch Google's root. A
+  certificate that still cannot be verified is reported as such instead of a
+  generic request failure.
+- Without OpenGL 2.0 (an outdated graphics driver, or a virtual machine without
+  3D acceleration) YouTFast now explains why its window cannot open instead of
+  closing silently.
+- The Windows executable carries the YouTFast icon, so Explorer, shortcuts, the
+  Start menu and the taskbar no longer show a generic one. The macOS bundle has
+  its icon too, for Finder, Launchpad and the Dock before launch.
+
+## [0.3.0] - 2026-10-24
+
 ### Added
 
+- About section and built-in updater in Settings → About (`src/desktop/updater.rs`):
+  shows the installed version and bundled changelog, checks GitHub Releases for new
+  versions with optional system desktop notifications, supports automatic SHA-256-verified
+  updates for minor (`0.x.0`) and patch (`0.0.x`) releases with changelog notes of what
+  changed, and requires manual confirmation via the in-app Update button for major
+  (`x.0.0`) releases.
 - Distribution channel manifest generator (`packaging/channels.py`): produces a
   Flathub source-build manifest (`io.github.bcosta19.YouTFast.json`), a Windows
   Winget singleton manifest (`bcosta19.YouTFast.yaml`), and a macOS Homebrew
@@ -44,7 +67,6 @@ are the distribution record.
 - The sidebar toggle (`b`, or the top bar's button) overrides the automatic
   rail on watch and narrow layouts on its first press. Its choice then rules
   every page for that run; the collapsed preference continues to be saved.
-  
 - Scrolling a channel page works from anywhere on the view (including over
   the banner, header, tab bar, and chips), scrolling the whole page rather
   than restricting scroll interaction to the video grid box.
@@ -141,6 +163,7 @@ macOS Apple Silicon. Interactive Windows/macOS qualification is still pending.
 These exclusions are scope decisions, not completed features promised for a
 specific next version. See [ROADMAP.md](ROADMAP.md) for follow-up gates.
 
-[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/bcosta19/youtfast/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/bcosta19/youtfast/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/bcosta19/youtfast/releases/tag/v0.1.0

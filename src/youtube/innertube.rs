@@ -61,7 +61,34 @@ pub fn client(dirs: &Dirs) -> Result<RustyPipe, Error> {
         .storage_dir(dirs.cache.clone())
         .no_reporter()
         .no_botguard()
-        .build()
+        .build_with_client(http())
+}
+
+/// The HTTP client under rustypipe. Certificates are checked by the
+/// operating system's verifier rather than against its roots read once: a
+/// fresh Windows keeps a few roots and downloads the others only when its
+/// own verifier needs them, so until something else (a browser) had
+/// reached Google, every request failed. Without the platform verifier,
+/// reqwest's own (the native roots) is kept.
+fn http() -> reqwest::ClientBuilder {
+    let builder = reqwest::ClientBuilder::new();
+    match platform_tls() {
+        Some(config) => builder.use_preconfigured_tls(config),
+        None => builder,
+    }
+}
+
+fn platform_tls() -> Option<rustls::ClientConfig> {
+    use rustls_platform_verifier::BuilderVerifierExt;
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    Some(
+        rustls::ClientConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .ok()?
+            .with_platform_verifier()
+            .ok()?
+            .with_no_client_auth(),
+    )
 }
 
 /// Whether the failure means the session is gone (signed out elsewhere,
@@ -796,6 +823,42 @@ mod tests {
             .build_with_client(client)
             .unwrap();
         assert!(rp.query().get_visitor_data(true).await.is_err());
+    }
+
+    #[test]
+    fn certificates_are_checked_by_the_platform_verifier() {
+        assert!(platform_tls().is_some());
+    }
+
+    #[tokio::test]
+    #[ignore = "manual public network check of a refused certificate"]
+    async fn a_self_signed_certificate_is_named_as_such() {
+        let error = http()
+            .build()
+            .unwrap()
+            .get("https://self-signed.badssl.com/")
+            .send()
+            .await
+            .unwrap_err();
+        assert_eq!(text(Error::from(error)), crate::UNTRUSTED_CERTIFICATE);
+    }
+
+    #[tokio::test]
+    #[ignore = "manual public network check through the platform verifier"]
+    async fn youtube_answers_through_the_platform_verifier() {
+        let rp = RustyPipe::builder()
+            .no_storage()
+            .no_reporter()
+            .no_botguard()
+            .build_with_client(http())
+            .unwrap();
+        assert!(
+            !rp.query()
+                .search_suggestion("rust")
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 
     /// TextComponent is non_exhaustive, so tests build it from JSON.

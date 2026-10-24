@@ -1,5 +1,7 @@
 import hashlib
+import importlib.util
 import shutil
+import struct
 import subprocess
 import tempfile
 import unittest
@@ -71,6 +73,31 @@ class BundleTests(unittest.TestCase):
         self.assertEqual(path.name, directory.name + ".zip")
         with zipfile.ZipFile(path) as archive:
             self.assertEqual(archive.read(f"{directory.name}/youtfast.exe"), b"synthetic executable")
+
+    def test_platform_icons_are_the_mark_at_every_size_the_systems_ask_for(self):
+        spec = importlib.util.spec_from_file_location("icons", ROOT / "tools/icons.py")
+        icons = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(icons)
+        ico = (ROOT / "packaging/icons/youtfast.ico").read_bytes()
+        reserved, kind, count = struct.unpack_from("<HHH", ico)
+        self.assertEqual((reserved, kind, count), (0, 1, len(icons.ICO_SIZES)))
+        sizes = [struct.unpack_from("<B", ico, 6 + 16 * index)[0] or 256 for index in range(count)]
+        self.assertEqual(sizes, icons.ICO_SIZES)
+        icns = (ROOT / "packaging/icons/youtfast.icns").read_bytes()
+        self.assertEqual(icns[:4], b"icns")
+        self.assertEqual(struct.unpack_from(">I", icns, 4)[0], len(icns))
+        kinds, offset = [], 8
+        while offset < len(icns):
+            kinds.append(icns[offset:offset + 4])
+            offset += struct.unpack_from(">I", icns, offset + 4)[0]
+        self.assertEqual(kinds, [kind for kind, _ in icons.ICNS_TYPES])
+        if shutil.which("rsvg-convert"):
+            # Regenerated from the SVGs (locally; CI has no rsvg-convert),
+            # they are what is committed.
+            pngs = {size: icons.render(size)
+                    for size in {*icons.ICO_SIZES, *(size for _, size in icons.ICNS_TYPES)}}
+            self.assertEqual(icons.ico([(size, pngs[size]) for size in icons.ICO_SIZES]), ico)
+            self.assertEqual(icons.icns([(kind, pngs[size]) for kind, size in icons.ICNS_TYPES]), icns)
 
     def test_package_keeps_readme_installation_links_and_dependency_notices(self):
         directory = self.root / "package"

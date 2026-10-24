@@ -6,8 +6,8 @@ describe exactly what each version includes and excludes.
 
 ## Open release gates
 
-0.1.0 is published as a pre-release; 0.2.0 is being prepared as a candidate.
-Before publishing 0.2.0 or promoting a release to latest:
+0.1.0 (pre-release) and 0.2.0 are published; 0.3.0 is being prepared as a
+candidate. Before publishing 0.3.0 or promoting a release to latest:
 
 - Validate the exact candidate with the hosted Release dry run, inspect every
   package and its checksums, and review the matching Windows and macOS native
@@ -23,10 +23,10 @@ Before publishing 0.2.0 or promoting a release to latest:
 | Channel | Work remaining | Completion evidence |
 |---|---|---|
 | Arch AUR `youtfast` | Generate recipe from final source asset, clean-chroot build, maintainer/name review, submit to AUR | Public AUR entry and successful clean install with `yay` |
-| Flathub | Source-build manifest instead of the prebuilt application module; metadata/screenshots, lint and submission review | Accepted listing, install and update through the remote |
+| Flathub | Submit generated source-build manifest (`channels.tar.gz`), metadata/screenshots, lint and submission review | Accepted listing, install and update through the remote |
 | Signed pacman repository | Signing-key ownership, package builds, repository database, hosting and update policy | Verified `pacman -S` install/update from configured repository |
-| Windows | Publisher signing, installer and update channel | Clean-machine install/update/uninstall and signature verification |
-| macOS | Developer ID, hardened runtime/notarization, installer and Intel/universal support | Clean-machine Gatekeeper/playback tests on each architecture |
+| Windows | Publisher signing, MSI/MSIX installer and Winget repository submission (`channels.tar.gz`) | Clean-machine install/update/uninstall and signature verification |
+| macOS | Developer ID, hardened runtime/notarization, DMG installer, Homebrew tap publication (`channels.tar.gz`) and Intel/universal support | Clean-machine Gatekeeper/playback tests on each architecture |
 | Linux ARM64 | Native and Flatpak builds plus GPU validation | Published architecture-specific packages and tested playback |
 
 ## Product follow-ups

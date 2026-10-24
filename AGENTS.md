@@ -43,7 +43,7 @@ its job, not at the root:
 | `storage/` | what stays on this computer: library, settings, sessions (`account`), Takeout, file paths |
 | `logic/` | pure decisions over video lists: new-upload alerts, local recommendations |
 | `mpv/` | the player |
-| `desktop/` | single instance, media controls, local logs |
+| `desktop/` | single instance, media controls, local logs, release updater |
 | `appearance/` | palette, icons, interface languages |
 | `model.rs`, `util.rs` | the shared types and formatting helpers |
 
@@ -103,8 +103,10 @@ its job, not at the root:
   with upstream PR #80 (codeberg.org/ThetaDev/rustypipe) applied, for
   comment authors' avatars and the comment count, and with a failed
   visitor-data fetch returned as an error instead of unwrapped (a panic
-  aborts the release build). Channel pages follow YouTube's October 2026
-  layout: `order_ctoken` builds the sort chips' token (`{1: target, 3:
+  aborts the release build), reqwest errors kept with their causes (the
+  only place a refused certificate shows up), and history reports sent through
+  the shared client. Channel pages follow YouTube's
+  October 2026 layout: `order_ctoken` builds the sort chips' token (`{1: target, 3:
   order}` under field 8, 7 on Shorts), Shorts items read their
   `thumbnailViewModel`, the Playlists tab sends its new `params`, podcast
   lockups count as playlists, and header metadata parts are told apart by
@@ -112,6 +114,16 @@ its job, not at the root:
   dev-dependency feature only) exposes `client::regression`, the hooks
   `tests/youtube_api.rs` calls. Drop the copy once a release carries these
   changes.
+- rustypipe's reqwest client checks certificates through the operating
+  system (`innertube::http`, rustls-platform-verifier). Do not go back to a
+  root list read at startup: a fresh Windows holds few roots and downloads
+  the rest only when its own verifier asks, so rustypipe failed there until
+  a browser had reached Google. Thumbnails, SponsorBlock and the updater go
+  through ureq, which bundles Mozilla's roots.
+- `packaging/icons/youtfast.ico` (embedded in the Windows executable by
+  `build.rs` through windres, called directly: the runners' build-script host
+  is MSVC while the target is GNU) and `youtfast.icns` (the macOS bundle's) are generated from the
+  SVGs by `tools/icons.py`; regenerate them when the mark changes.
 - `src/logic/history.rs` merges account day sections with device-only history,
   deduplicates video ids and keeps local resume metadata; History's filters are
   independent of other pages' `Source` in merged modes.
@@ -219,13 +231,20 @@ its job, not at the root:
   (fastframe-now-playing; MPRIS on Linux): it maps their commands onto
   `Action`s and reports what mpv plays; the units differ (`SeekBy` is
   milliseconds, `SetVolume` is 0..1).
+- `src/desktop/updater.rs` checks GitHub Releases for newer stable versions,
+  classifies them by SemVer (`UpdateKind::{Patch, Minor, Major}`), verifies
+  release archives against `checksums.txt` (SHA-256), and installs them
+  atomically. Settings → About exposes system update notifications, opt-in
+  automatic updates for minor/patch versions with persisted changelog notes,
+  and manual 1-click installation for major versions (`should_auto_update`
+  never auto-installs `UpdateKind::Major`).
 
 ## Roadmap
 
 See `ROADMAP.md` for pending work and `CHANGELOG.md` for implemented features.
 RustyPipe search, i18n, persistence and the offline demo are in the tree.
-0.1.0 targets Linux x86_64, Windows x86_64 and macOS Apple Silicon; candidate
-packaging is not completed interactive platform qualification.
+0.1.0, 0.2.0 and 0.3.0 target Linux x86_64, Windows x86_64 and macOS Apple
+Silicon; candidate packaging is not completed interactive platform qualification.
 
 ## YouTube response formats
 

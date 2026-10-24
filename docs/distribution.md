@@ -1,6 +1,6 @@
 # Distribution and platform qualification
 
-0.1.0 targets Linux x86_64, Windows x86_64 and macOS Apple Silicon. Workflows
+0.x releases target Linux x86_64, Windows x86_64 and macOS Apple Silicon. Workflows
 prepare candidates; new platform packaging is not certified by interactive
 testing just because these files exist. See [ROADMAP.md](../ROADMAP.md) for
 outstanding gates.
@@ -9,11 +9,11 @@ outstanding gates.
 
 | Target | Candidate artifact | Runtime requirements | Updates |
 |---|---|---|---|
-| Linux x86_64 native | `*-x86_64-unknown-linux-gnu.tar.gz` | glibc 2.39+, system libmpv/Lua, graphics libraries, current yt-dlp and JS runtime | Replace archive; update system dependencies separately |
-| Linux x86_64 Flatpak | `*-x86_64.flatpak` | Flatpak, Freedesktop 25.08 runtime, graphics drivers and portals | Install next bundle; no app update remote yet |
+| Linux x86_64 native | `*-x86_64-unknown-linux-gnu.tar.gz` | glibc 2.39+, system libmpv/Lua, graphics libraries, current yt-dlp and JS runtime | In-app updater (`Settings → About`, SHA-256 verified) or replace archive; update system dependencies separately |
+| Linux x86_64 Flatpak | `*-x86_64.flatpak` and Flathub source manifest (`channels.tar.gz`) | Flatpak, Freedesktop 25.08 runtime, graphics drivers and portals | Install next bundle; no Flathub update remote until listing submission is accepted |
 | Arch Linux x86_64 | `.pkg.tar.zst` and `*-aur.tar.gz` recipe | System dependencies installed by pacman; AUR source builds also need Rust/Cargo | Local pacman package; AUR helper after entry acceptance |
-| Windows x86_64 | `*-x86_64-pc-windows-gnu.zip` and Winget manifest (`channels.tar.gz`) | Bundled libmpv/imported DLLs; current yt-dlp and Deno on PATH | Replace complete extracted directory or update via Winget |
-| macOS 15+ Apple Silicon | `*-aarch64-apple-darwin.zip` with `.app` and Homebrew Cask (`channels.tar.gz`) | Bundled libmpv/dylibs; current yt-dlp and Deno | Replace app or update via Homebrew tap; update extraction tools separately |
+| Windows x86_64 | `*-x86_64-pc-windows-gnu.zip` and Winget manifest (`channels.tar.gz`) | Bundled libmpv/imported DLLs; current yt-dlp and Deno on PATH | In-app updater (`Settings → About`), replace extracted directory, or update via Winget |
+| macOS 15+ Apple Silicon | `*-aarch64-apple-darwin.zip` with `.app` and Homebrew Cask (`channels.tar.gz`) | Bundled libmpv/dylibs; current yt-dlp and Deno | In-app updater (`Settings → About`), replace `.app`, or update via Homebrew tap; update extraction tools separately |
 
 Windows/macOS candidates include a native dependency inventory and collected
 notices. These are inputs to review, **not corresponding source archives**.
@@ -49,7 +49,7 @@ After installing Flatpak using the distribution's supported instructions:
 
 ```sh
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-flatpak install --user ./youtfast-v0.1.0-x86_64.flatpak
+flatpak install --user ./youtfast-v0.3.0-x86_64.flatpak
 flatpak run io.github.bcosta19.YouTFast
 ```
 
@@ -61,9 +61,11 @@ to make a smoke test pass.
 
 A bundle is not a Flathub listing or automatic-update channel. A repository is
 the preferred Flatpak distribution channel for updates; see [single-file bundles](https://docs.flatpak.org/en/latest/single-file-bundles.html).
-The existing manifest installs a prebuilt YouTFast binary. Flathub needs a
-reviewed source-build manifest, metadata/screenshots, lint, runtime tests and
-submission review. Follow [Flathub's submission procedure](https://docs.flathub.org/docs/for-app-authors/submission)
+The bundle manifest (`packaging/flatpak/io.github.bcosta19.YouTFast.json`) installs
+a prebuilt YouTFast binary, while `packaging/channels.py` renders the corresponding
+Flathub source-build manifest into `channels.tar.gz`. Flathub submission still needs
+metadata/screenshots, lint, runtime tests and submission review. Follow
+[Flathub's submission procedure](https://docs.flathub.org/docs/for-app-authors/submission)
 and its linked requirements/policies at submission time.
 
 ## Arch
@@ -87,7 +89,7 @@ keyring or library to debug packaging.
 | Startup | Desktop/Finder/Explorer launch and correct version without build-toolchain libraries on PATH |
 | Playback | Signed-out search, public video audio/picture, seek, captions, full screen and mini player |
 | Graphics | OpenGL rendering; record GPU/driver and actual hardware-decoding result |
-| Integration | File chooser/portal, media controls, notifications, keyboard, English/Portuguese, light/dark and HiDPI |
+| Integration | File chooser/portal, media controls, notifications, keyboard, all six interface languages, light/dark and HiDPI |
 | Persistence | New-profile settings/library survive restart; writes stay in documented paths |
 | Credentials | Native store unavailable/locked behaviour; login only with a deliberately approved disposable account |
 | Packaging | No missing DLL/dylib; notices, native sources and digests match shipped artifacts |

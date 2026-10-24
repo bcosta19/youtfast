@@ -62,14 +62,16 @@ The video rectangle is always black.
   allows, back/forward arrows, centred search field, explicit search button,
   shortcut help, notifications and account. Enter searches or opens a link;
   `/` focuses the field. English is the default interface language. Settings
-  offers English and Português (Brasil), applied immediately and saved. Bundled
+  offers English, Português (Brasil), Español, Français, Deutsch and Italiano,
+  applied immediately and saved. Bundled
   gettext catalogs localize app controls and messages without translating
   video content or changing caption preferences.
 - **Sidebar** (`panel`, 240 px): the `YouTFast` wordmark and the collapse
   toggle, then nav items (icon + label, 40 px, rounded `surface` fill when
   current, `surface_hover` on hover): Home, Subscriptions, History, Watch
   later, Liked and Playlists (signed in), Notifications (with its count as
-  an `accent` pill), then the account and Settings. Under them, a
+  an `accent` pill), then the account and Settings (with an `accent` `!` badge
+  when a release update is available). Under them, a
   `Subscriptions` section lists the channels followed (round avatar, name).
   Number keys still jump to the views (1–9, in that order).
   Collapsed (`b`, or the toggle) it is a 72 px rail of the icons and the
@@ -78,7 +80,8 @@ The video rectangle is always black.
   every page for that run. The collapsed preference is saved. Theater mode
   hides the sidebar.
 - **Notices** are toasts at the bottom right (`overlay`, outline, radius 8,
-  an icon, the text, a close button); errors stay until closed.
+  an icon, the text, optional update action buttons, and a close button);
+  errors stay until closed.
 - **Keys overlay**: `?` toggles a scrollable modal card, including in full
   screen. Keys and actions use two columns when space allows. Esc closes.
 
@@ -96,9 +99,12 @@ The video rectangle is always black.
   the title, the channel and `views · age`. The duration sits in the
   thumbnail's corner on a dark badge (LIVE on `red`); a watched video shows
   a red bar along the thumbnail's bottom edge.
-- Keyboard: `j`/`k` or ↓/↑ move the selected row or card (a
-  `surface_active` fill; it scrolls into view), Enter opens it, `g`/`G` go
-  to the top or bottom. Hover is `surface_hover`; a click opens.
+- Keyboard: `j`/`k` move the selected row or card (a
+  `surface_active` fill; it scrolls into view), `↓`/`↑` scroll the active page
+  vertically, Enter opens the selected item, and `g`/`G` go to the top or
+  bottom. Page scrolling uses `fastframe-scroll` (120 pt per wheel notch and
+  scaled touchpad gestures with momentum glide and axis locking). Hover is
+  `surface_hover`; a click opens.
 - Lists of channels are rows with a round avatar, the name, and the
   controls at the end.
 - Loading: egui's spinner and `Loading <what>…` in `secondary`. Empty: a
@@ -141,7 +147,10 @@ The video rectangle is always black.
   indented under it with smaller avatars.
 - **Up next** and **Related** to the right in a wide window (under in a
   narrow one), as rows. Queue entries offer drag reordering and explicit
-  move/remove controls. The mini player is a movable, resizable in-app window.
+  move/remove controls. The mini player is a compact frameless 16:9 rounded
+  video box (`280×157.5`) anchored to the bottom-right corner, showing
+  Play/Pause and Close controls on hover and returning to the watch page when
+  clicked.
 - **Shorts**: a portrait stage, an action rail and next/previous navigation;
   wheel events are throttled to avoid skipping multiple videos at once.
 
