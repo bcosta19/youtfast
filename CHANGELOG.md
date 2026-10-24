@@ -10,6 +10,10 @@ are the distribution record.
 
 ### Added
 
+- Distribution channel manifest generator (`packaging/channels.py`): produces a
+  Flathub source-build manifest (`io.github.bcosta19.YouTFast.json`), a Windows
+  Winget singleton manifest (`bcosta19.YouTFast.yaml`), and a macOS Homebrew
+  Cask (`youtfast.rb`) with exact release asset SHA-256 digests.
 - Configurable video buffer in Settings → Playback (`PlaybackBuffer`): defaults
   to mpv's standard 150 MiB ahead / 50 MiB behind for smoother playback on
   unstable connections and faster seeking, with a compact 50 MiB / 20 MiB option

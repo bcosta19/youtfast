@@ -298,11 +298,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           path: dist
           merge-multiple: true
-      - name: Require every platform and checksum candidates, including dry runs
+      - name: Require every platform, generate channel manifests and checksum candidates
         run: |
           test -s "dist/youtfast-$RELEASE_TAG-x86_64-unknown-linux-gnu.tar.gz"
           test -s "dist/youtfast-$RELEASE_TAG-source-with-dependencies.tar.gz"
@@ -315,11 +318,16 @@ jobs:
           test -s "dist/youtfast-$RELEASE_TAG-aarch64-apple-darwin.zip"
           test -s "dist/youtfast-$RELEASE_TAG-windows-native-sources.tar.gz"
           test -s "dist/youtfast-$RELEASE_TAG-macos-native-sources.tar.gz"
+          python3 packaging/channels.py dist
+          test -s "dist/youtfast-$RELEASE_TAG-channels.tar.gz"
+          rm -rf dist/channels
           (cd dist && sha256sum *.tar.gz *.flatpak *.png *.zip *.pkg.tar.zst > checksums.txt && sha256sum --check checksums.txt)
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: checksums
-          path: dist/checksums.txt
+          path: |
+            dist/checksums.txt
+            dist/*-channels.tar.gz
           if-no-files-found: error
           retention-days: 7
 
