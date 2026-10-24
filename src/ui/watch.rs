@@ -1721,7 +1721,10 @@ mod tests {
     fn scrolling_miniplayer_is_optional_and_returning_reveals_the_video() {
         fn contains_miniplayer(shape: &egui::Shape) -> bool {
             match shape {
-                egui::Shape::Text(text) => text.galley.text() == "Miniplayer",
+                egui::Shape::Rect(rect) => {
+                    rect.stroke.width == 3.5
+                        && rect.corner_radius == CornerRadius::same(theme::RADIUS)
+                }
                 egui::Shape::Vec(shapes) => shapes.iter().any(contains_miniplayer),
                 _ => false,
             }

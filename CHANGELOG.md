@@ -21,6 +21,8 @@ are the distribution record.
 
 ### Fixed
 
+- The miniplayer is now a compact frameless video box with rounded corners,
+  without an outer window title bar or bottom metadata bar.
 - `↑` and `↓` outside the player now scroll the active page vertically instead
   of stepping sideways through grid selections; `j` and `k` keep item cursor
   navigation.
