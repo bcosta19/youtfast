@@ -1,6 +1,6 @@
 # Distribution and platform qualification
 
-0.1.0 and 0.2.0 target Linux x86_64, Windows x86_64 and macOS Apple Silicon. Workflows
+0.x releases target Linux x86_64, Windows x86_64 and macOS Apple Silicon. Workflows
 prepare candidates; new platform packaging is not certified by interactive
 testing just because these files exist. See [ROADMAP.md](../ROADMAP.md) for
 outstanding gates.
@@ -49,7 +49,7 @@ After installing Flatpak using the distribution's supported instructions:
 
 ```sh
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-flatpak install --user ./youtfast-v0.2.0-x86_64.flatpak
+flatpak install --user ./youtfast-v0.3.0-x86_64.flatpak
 flatpak run io.github.bcosta19.YouTFast
 ```
 

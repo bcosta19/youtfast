@@ -59,7 +59,7 @@ been compared yet; numbers from other machines are welcome.
 
 ## Installation
 
-**0.1.0 is published as a pre-release; 0.2.0 is the current release candidate.**
+**0.2.0 is published; 0.3.0 is the current release candidate.**
 Packages are built and tested headlessly on GitHub-hosted runners; interactive
 checks on clean Windows and macOS machines are still in progress. Download from
 [GitHub Releases](https://github.com/bcosta19/youtfast/releases).
