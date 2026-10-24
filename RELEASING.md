@@ -2,11 +2,12 @@
 
 ## Current state and release policy
 
-0.1.0 was published on 2026-10-17 as a pre-release. Its remaining gates, and
-those of later releases, are tracked in [ROADMAP.md](ROADMAP.md).
+0.1.0 was published on 2026-10-17 as a pre-release, and 0.2.0 was published on
+2026-10-22. Their remaining gates, and those of later releases, are tracked in
+[ROADMAP.md](ROADMAP.md).
 
-0.2.0 is the next release. Its changelog and AppStream dates are frozen at
-2026-10-22, so it can be tagged from `main`.
+0.3.0 is the next release. Its changelog and AppStream dates are frozen at
+2026-10-24, so it can be tagged from `main`.
 
 Use stable SemVer tags `vMAJOR.MINOR.PATCH`. During 0.x, use patches for
 compatible fixes and minor versions for features or incompatible changes;
@@ -53,8 +54,8 @@ a patch release instead of replacing downloads.
 For a future authorized tag operation, with the validated commit selected:
 
 ```sh
-git tag -a v0.2.0 -m 'YouTFast 0.2.0'
-git push origin v0.2.0
+git tag -a v0.3.0 -m 'YouTFast 0.3.0'
+git push origin v0.3.0
 ```
 
 ## Draft, review and publication
@@ -77,11 +78,11 @@ completeness certification.
 Once approved, publish the reviewed draft in GitHub's release UI, or explicitly:
 
 ```sh
-gh release edit v0.2.0 --draft=false --latest
+gh release edit v0.3.0 --draft=false --latest
 ```
 
 Verify notes, release date and downloads as an anonymous reader after
-publication. `gh release download v0.2.0` retrieves a draft's assets for
+publication. `gh release download v0.3.0` retrieves a draft's assets for
 review. Run `sha256sum --check checksums.txt` in the download directory.
 Checksums detect corruption; they are not publisher signatures. Never claim
 code signing/notarization or interactive coverage that has not been performed.

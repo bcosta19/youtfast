@@ -6,8 +6,8 @@ describe exactly what each version includes and excludes.
 
 ## Open release gates
 
-0.1.0 is published as a pre-release; 0.2.0 is being prepared as a candidate.
-Before publishing 0.2.0 or promoting a release to latest:
+0.1.0 (pre-release) and 0.2.0 are published; 0.3.0 is being prepared as a
+candidate. Before publishing 0.3.0 or promoting a release to latest:
 
 - Validate the exact candidate with the hosted Release dry run, inspect every
   package and its checksums, and review the matching Windows and macOS native
