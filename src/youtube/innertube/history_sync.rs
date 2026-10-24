@@ -1,7 +1,7 @@
 //! Opt-in playback reports, following yt-dlp's YouTube `_mark_watched`.
 //! The player response and tracking URL remain only on the backend thread.
 
-use rand::Rng;
+use rand::RngExt;
 use rustypipe::client::{ClientType, RustyPipe};
 use serde_json::{Value, json};
 use url::Url;
