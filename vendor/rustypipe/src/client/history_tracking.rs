@@ -1,6 +1,6 @@
 //! YouTFast's opt-in history report transport. Cookies never leave RustyPipe.
 
-use super::{Client, ClientType, Duration, Error, RustyPipe, RustyPipeQuery, header};
+use super::{ClientType, Duration, Error, RustyPipe, RustyPipeQuery, header};
 
 fn failed() -> Error {
     Error::Other("history report failed".into())
@@ -24,20 +24,19 @@ impl RustyPipe {
     }
 
     /// GET a validated playback-tracking URL with this client's session.
-    /// A dedicated client disables redirects before attaching credentials;
-    /// response bodies and raw dependency errors are never retained/reported.
+    /// The shared client never follows redirects (`build_with_client`) and
+    /// checks certificates as the caller configured it; response bodies and
+    /// raw dependency errors are never retained/reported.
     pub async fn history_tracking_get(&self, url: &str) -> Result<(), Error> {
         if !Self::history_tracking_url_allowed(url) {
             return Err(failed());
         }
         let auth = self.user_auth_cookie().map_err(|_| failed())?;
-        let client = Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .timeout(Duration::from_secs(20))
-            .build()
-            .map_err(|_| failed())?;
-        let mut request = client
+        let mut request = self
+            .inner
+            .http
             .get(url)
+            .timeout(Duration::from_secs(20))
             .header(
                 header::USER_AGENT,
                 self.query().user_agent(ClientType::Desktop).as_ref(),

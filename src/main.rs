@@ -134,8 +134,12 @@ fn redact_log(record: &log::Record<'_>, message: &str) -> Option<std::borrow::Co
     Some(std::borrow::Cow::Borrowed(category))
 }
 
+/// TLS refused YouTube's certificate.
+pub(crate) const UNTRUSTED_CERTIFICATE: &str = "Could not verify YouTube's certificate. Check the system date and any proxy or antivirus inspecting HTTPS, then retry.";
+
 pub(crate) fn safe_error(error: &str) -> String {
     if [
+        UNTRUSTED_CERTIFICATE,
         "The system keyring could not complete the request. Unlock it and retry.",
         "The system keyring is locked. Unlock it to stay signed in.",
         "The system keyring is unavailable, so the session cannot be kept.",
@@ -161,7 +165,10 @@ pub(crate) fn safe_error(error: &str) -> String {
         return error.to_owned();
     }
     let error = error.to_ascii_lowercase();
-    if error.contains("python-secretstorage") {
+    // rustls refused the certificate (see `rustypipe::error`'s reqwest causes).
+    if error.contains("invalid peer certificate") {
+        UNTRUSTED_CERTIFICATE
+    } else if error.contains("python-secretstorage") {
         "Install python-secretstorage, unlock the desktop keyring, and retry browser sign-in."
     } else if error.contains("keyring") {
         "The system keyring could not complete the request. Unlock it and retry."
@@ -244,11 +251,54 @@ fn main() -> eframe::Result {
     // dropped as soon as it returns, so it cannot keep it.
     let guard = Arc::new(guard);
     let open = cli.open;
-    eframe::run_native(
+    // eframe makes the app once its OpenGL painter works; an OpenGL error
+    // after that (a lost context) is not a missing OpenGL 2.0.
+    let created = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let creating = created.clone();
+    let result = eframe::run_native(
         "YouTFast",
         options,
-        Box::new(move |cc| Ok(Box::new(app::App::new(cc, open, guard, fonts)?))),
+        Box::new(move |cc| {
+            creating.store(true, std::sync::atomic::Ordering::Relaxed);
+            Ok(Box::new(app::App::new(cc, open, guard, fonts)?))
+        }),
+    );
+    if let Err(error) = &result
+        && !created.load(std::sync::atomic::Ordering::Relaxed)
+        && needs_opengl(error)
+    {
+        // A release build has no console on Windows, nor from the Dock on
+        // macOS: without this the window just never appears.
+        rfd::MessageDialog::new()
+            .set_level(rfd::MessageLevel::Error)
+            .set_title("YouTFast")
+            .set_description(appearance::i18n::message(saved_language(), NEEDS_OPENGL))
+            .set_buttons(rfd::MessageButtons::Ok)
+            .show();
+    }
+    result
+}
+
+const NEEDS_OPENGL: &str = "YouTFast needs OpenGL 2.0 or newer to draw its window. Update the graphics driver; in a virtual machine, turn on 3D acceleration.";
+
+/// Whether the window could not get the OpenGL it draws with: no driver
+/// (a virtual machine without 3D acceleration offers Windows' OpenGL 1.1)
+/// or no usable configuration.
+fn needs_opengl(error: &eframe::Error) -> bool {
+    matches!(
+        error,
+        eframe::Error::OpenGL(_) | eframe::Error::Glutin(_) | eframe::Error::NoGlutinConfigs(..)
     )
+}
+
+/// The interface language for a message shown before any window: read from
+/// the settings without moving or writing them, English otherwise.
+fn saved_language() -> appearance::i18n::Locale {
+    storage::paths::Dirs::locate()
+        .and_then(|dirs| std::fs::read(dirs.settings()).ok())
+        .and_then(|bytes| serde_json::from_slice::<storage::settings::Settings>(&bytes).ok())
+        .map(|settings| settings.language)
+        .unwrap_or_default()
 }
 
 /// The app's mark, the one the desktop entry names: the full drawing, or
@@ -377,6 +427,38 @@ mod tests {
                 && !error.contains("private-profile")
                 && !error.contains("https://")
         );
+    }
+
+    #[test]
+    fn startup_and_certificate_messages_are_kept_and_translated() {
+        assert_eq!(safe_error(UNTRUSTED_CERTIFICATE), UNTRUSTED_CERTIFICATE);
+        // rustypipe's message for a reqwest error, causes included.
+        assert_eq!(
+            safe_error(
+                "http error: error sending request for url (https://www.youtube.com/youtubei/v1/search?prettyPrint=false): client error (Connect): invalid peer certificate: UnknownIssuer"
+            ),
+            UNTRUSTED_CERTIFICATE
+        );
+        for message in [UNTRUSTED_CERTIFICATE, NEEDS_OPENGL] {
+            for locale in appearance::i18n::Locale::ALL {
+                let translated = appearance::i18n::message(*locale, message);
+                assert_eq!(
+                    translated == message,
+                    *locale == appearance::i18n::Locale::English,
+                    "{locale:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn only_a_missing_opengl_explains_itself_at_startup() {
+        assert!(needs_opengl(&eframe::Error::OpenGL(
+            eframe::egui_glow::PainterError::from("egui_glow requires opengl 2.0+. ".to_owned())
+        )));
+        assert!(!needs_opengl(&eframe::Error::AppCreation(
+            "could not safely load the settings".into()
+        )));
     }
 
     #[test]

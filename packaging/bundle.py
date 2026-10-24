@@ -149,8 +149,12 @@ def macos(binary, dist):
             "CFBundleExecutable": "youtfast", "CFBundlePackageType": "APPL",
             "CFBundleShortVersionString": current, "CFBundleVersion": current,
             "LSMinimumSystemVersion": "15.0", "NSHighResolutionCapable": True,
+            # Finder, Launchpad and the Dock before launch show the bundle's icon.
+            "CFBundleIconFile": "youtfast.icns",
             "LSEnvironment": {"PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"},
         }, output)
+    (app / "Resources").mkdir()
+    shutil.copy2(ROOT / "packaging/icons/youtfast.icns", app / "Resources/youtfast.icns")
     subprocess.run(["dylibbundler", "-b", "-cd", "-x", str(executable),
                     "-d", str(app / "Frameworks"),
                     "-p", "@executable_path/../Frameworks/"], check=True)

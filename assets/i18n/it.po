@@ -239,6 +239,9 @@ msgstr "Impossibile verificare nuovi video: {error}"
 msgid "Could not complete the YouTube request. Retry."
 msgstr "Impossibile completare la richiesta a YouTube. Riprova."
 
+msgid "Could not verify YouTube's certificate. Check the system date and any proxy or antivirus inspecting HTTPS, then retry."
+msgstr "Impossibile verificare il certificato di YouTube. Controlla la data di sistema ed eventuali proxy o antivirus che ispezionano HTTPS, poi riprova."
+
 msgid "Could not import this Takeout file."
 msgstr "Impossibile importare questo file di Takeout."
 
@@ -1153,6 +1156,9 @@ msgstr "Ieri"
 
 msgid "YouTFast — demo"
 msgstr "YouTFast — demo"
+
+msgid "YouTFast needs OpenGL 2.0 or newer to draw its window. Update the graphics driver; in a virtual machine, turn on 3D acceleration."
+msgstr "YouTFast richiede OpenGL 2.0 o successivo per disegnare la finestra. Aggiorna il driver grafico; in una macchina virtuale, attiva l'accelerazione 3D."
 
 msgid "YouTube did not accept this session. Sign in again on youtube.com and retry."
 msgstr "YouTube non ha accettato questa sessione. Accedi nuovamente su youtube.com e riprova."

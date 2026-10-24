@@ -208,7 +208,16 @@ impl From<reqwest::Error> for Error {
                 return Self::HttpStatus(status.as_u16(), Cow::default());
             }
         }
-        Self::Http(value.to_string().into())
+        // YouTFast: with its causes, which reqwest's own message leaves out
+        // (rustls's "invalid peer certificate" is one).
+        let mut message = value.to_string();
+        let mut cause = std::error::Error::source(&value);
+        while let Some(error) = cause {
+            message.push_str(": ");
+            message.push_str(&error.to_string());
+            cause = error.source();
+        }
+        Self::Http(message.into())
     }
 }
 

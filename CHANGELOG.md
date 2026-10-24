@@ -8,6 +8,21 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Fixed
+
+- Search, feeds and the account work on a freshly installed Windows. YouTube's
+  certificates are now checked by the operating system, which downloads the
+  root certificates it does not have yet; before, every request failed until
+  another program (a browser) had made Windows fetch Google's root. A
+  certificate that still cannot be verified is reported as such instead of a
+  generic request failure.
+- Without OpenGL 2.0 (an outdated graphics driver, or a virtual machine without
+  3D acceleration) YouTFast now explains why its window cannot open instead of
+  closing silently.
+- The Windows executable carries the YouTFast icon, so Explorer, shortcuts, the
+  Start menu and the taskbar no longer show a generic one. The macOS bundle has
+  its icon too, for Finder, Launchpad and the Dock before launch.
+
 ## [0.3.0] - 2026-10-24
 
 ### Added
