@@ -22,6 +22,9 @@ are the distribution record.
 - The Windows executable carries the YouTFast icon, so Explorer, shortcuts, the
   Start menu and the taskbar no longer show a generic one. The macOS bundle has
   its icon too, for Finder, Launchpad and the Dock before launch.
+- In Settings, the Video buffer and History sync descriptions no longer run
+  underneath their menus: the row leaves room for the widest choice in every
+  interface language.
 
 ## [0.3.0] - 2026-10-24
 

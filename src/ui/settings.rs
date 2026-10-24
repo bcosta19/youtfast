@@ -222,15 +222,19 @@ fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     "Small (50 MiB ahead, 20 MiB back) keeps RAM usage low (~200 MB) and wastes less data when skipping videos, but holds only ~15–90s ahead and re-downloads when seeking far back. Large (150 MiB / 50 MiB) buffers several minutes ahead using more RAM (~300–650 MB)."
                 }
             };
+            let buffer_width = combo_width(
+                ui,
+                buffer_choices.iter().map(|(_, label)| tr(locale, label)),
+            );
             setting_row(
                 ui,
                 palette,
                 &tr(locale, "Video buffer"),
                 &tr(locale, buffer_description),
-                CONTROL_WIDTH,
+                buffer_width.max(CONTROL_WIDTH),
                 |ui| {
                     egui::ComboBox::from_id_salt("playback-buffer")
-                        .width(240.0)
+                        .width(buffer_width)
                         .selected_text(tr(
                             locale,
                             buffer_choices
@@ -296,15 +300,16 @@ fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     "Combine history and send playback reports to Google from your account. Google may treat this as automated access."
                 }
             };
+            let sync_width = combo_width(ui, choices.iter().map(|(_, label)| tr(locale, label)));
             setting_row(
                 ui,
                 palette,
                 &tr(locale, "History sync"),
                 &tr(locale, description),
-                CONTROL_WIDTH,
+                sync_width.max(CONTROL_WIDTH),
                 |ui| {
                     egui::ComboBox::from_id_salt("history-sync")
-                        .width(240.0)
+                        .width(sync_width)
                         .selected_text(tr(
                             locale,
                             choices
@@ -721,6 +726,31 @@ fn setting_row(
     }
 }
 
+/// How wide a row's combo box is: at least 240, and enough for its widest
+/// choice, so the button never outgrows the room `setting_row` keeps for it
+/// and runs over the description. Mirrors egui's combo button: the text,
+/// then the arrow, inside the button padding.
+fn combo_width(ui: &Ui, labels: impl IntoIterator<Item = impl Into<String>>) -> f32 {
+    let spacing = ui.spacing();
+    let chrome = spacing.icon_spacing + spacing.icon_width + 2.0 * spacing.button_padding.x;
+    labels
+        .into_iter()
+        .map(|label| {
+            egui::WidgetText::from(label.into())
+                .into_galley(
+                    ui,
+                    Some(egui::TextWrapMode::Extend),
+                    f32::INFINITY,
+                    egui::TextStyle::Button,
+                )
+                .size()
+                .x
+                + chrome
+        })
+        .fold(240.0, f32::max)
+        .ceil()
+}
+
 /// An on/off switch: a pill, `accent` when on, its round knob sliding to
 /// the side that is on. Dimmed while disabled. The caller reads the click.
 fn switch(ui: &mut Ui, palette: &Palette, on: bool, label: &str) -> Response {
@@ -927,6 +957,79 @@ mod tests {
             assert!(labels.contains(&expected_tradeoff));
             assert!(actions.is_empty());
             output.textures_delta.clear();
+        }
+    }
+
+    #[test]
+    fn combo_rows_keep_their_description_clear_of_the_combo_in_every_language() {
+        fn assert_clear(ctx: &egui::Context, selected: &str, view: impl FnMut(&mut Ui)) {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        vec2(900.0, 800.0),
+                    )),
+                    ..Default::default()
+                },
+                view,
+            );
+            let texts: Vec<_> = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) => Some((
+                        text.galley.text().to_owned(),
+                        text.galley.rect.translate(text.pos.to_vec2()),
+                    )),
+                    _ => None,
+                })
+                .collect();
+            let combo = texts
+                .iter()
+                .find(|(text, _)| text == selected)
+                .map(|(_, rect)| *rect)
+                .unwrap_or_else(|| panic!("{selected:?} is drawn"));
+            for (text, rect) in &texts {
+                if text != selected && rect.y_range().intersects(combo.y_range()) {
+                    assert!(
+                        rect.right() <= combo.left(),
+                        "{text:?} runs under the combo showing {selected:?}"
+                    );
+                }
+            }
+            output.textures_delta.clear();
+        }
+
+        for &locale in Locale::ALL {
+            let ctx = egui::Context::default();
+            theme::install_fonts(&ctx);
+            let mut state = State::default();
+            state.settings.language = locale;
+            for (buffer, label) in [
+                (
+                    PlaybackBuffer::Standard,
+                    "Large — 150 MiB / 50 MiB (mpv default)",
+                ),
+                (
+                    PlaybackBuffer::Compact,
+                    "Small — 50 MiB / 20 MiB (less RAM)",
+                ),
+            ] {
+                state.settings.playback_buffer = buffer;
+                assert_clear(&ctx, &tr(locale, label), |ui| {
+                    playback(ui, &state, &mut Vec::new())
+                });
+            }
+            for (sync, label) in [
+                (HistorySync::Separate, "Separate"),
+                (HistorySync::Merged, "Merged in YouTFast"),
+                (HistorySync::SendToYoutube, "Merged and sent to YouTube"),
+            ] {
+                state.settings.history_sync = sync;
+                assert_clear(&ctx, &tr(locale, label), |ui| {
+                    history(ui, &state, &mut Vec::new())
+                });
+            }
         }
     }
 
