@@ -121,6 +121,9 @@ fn redact_log(record: &log::Record<'_>, message: &str) -> Option<std::borrow::Co
             "could not read yt-dlp's answer",
             "a feed task failed",
             "a shorts task failed",
+            "update check failed",
+            "update installation failed",
+            "updated youtfast",
         ]
         .into_iter()
         .find(|prefix| message.starts_with(prefix))
@@ -147,6 +150,11 @@ pub(crate) fn safe_error(error: &str) -> String {
         "The request timed out. Retry.",
         "YouTube returned an unreadable response. Retry.",
         "Could not complete the YouTube request. Retry.",
+        "Could not check for updates. Retry later.",
+        "Could not download the update. Retry later.",
+        "The downloaded update failed integrity verification.",
+        "Could not install the update on this system.",
+        "Automatic installation is not supported for this package format.",
     ]
     .contains(&error)
     {

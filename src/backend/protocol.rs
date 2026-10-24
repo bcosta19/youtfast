@@ -270,6 +270,22 @@ pub enum Command {
     Suggest(String),
     /// The SponsorBlock segments of a video, by its id.
     LoadSegments(String),
+    /// Check GitHub Releases for a newer version of YouTFast.
+    CheckForUpdates {
+        manual: bool,
+    },
+    /// Download, verify SHA-256 and install `release`.
+    InstallUpdate {
+        release: crate::desktop::updater::ReleaseInfo,
+        auto: bool,
+    },
+    /// Show a desktop notification about a new or automatically installed version.
+    NotifyUpdate {
+        version: String,
+        kind: crate::desktop::updater::UpdateKind,
+        auto_installed: bool,
+        language: crate::appearance::i18n::Locale,
+    },
 }
 
 /// How a new account proves itself.
@@ -365,6 +381,15 @@ pub enum Event {
         id: String,
         segments: Vec<crate::model::Segment>,
     },
+    UpdateChecked {
+        result: Result<Option<crate::desktop::updater::ReleaseInfo>, String>,
+        manual: bool,
+    },
+    UpdateInstalled {
+        release: crate::desktop::updater::ReleaseInfo,
+        auto: bool,
+        result: Result<(), String>,
+    },
 }
 
 impl Command {
@@ -437,6 +462,8 @@ impl Event {
                     | Self::Thumbnail { .. }
                     | Self::Suggestions { .. }
                     | Self::Segments { .. }
+                    | Self::UpdateChecked { .. }
+                    | Self::UpdateInstalled { .. }
             )
     }
 }

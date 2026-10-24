@@ -717,6 +717,16 @@ pub enum Action {
     ReturnToWatch,
     /// The mini player's close: pauses and hides it.
     CloseMiniPlayer,
+    /// Check GitHub Releases for a newer version of YouTFast.
+    CheckForUpdates,
+    /// Download, verify and install the available update.
+    InstallUpdate,
+    /// Toggle desktop notifications when a new version is available.
+    SetUpdateNotifications(bool),
+    /// Toggle automatic installation of minor and patch updates.
+    SetAutoUpdate(bool),
+    /// Show or hide the full bundled changelog in the About section.
+    ToggleFullChangelog,
 }
 
 #[cfg(test)]

@@ -138,6 +138,24 @@ pub struct Settings {
     /// asked by a prefix of the id's hash so the video is not named.
     #[serde(default)]
     pub sponsorblock: bool,
+    /// Check for new YouTFast releases and show a system notification when
+    /// an update is available.
+    #[serde(default = "on")]
+    pub update_notifications: bool,
+    /// Automatically download and install minor and patch updates in the
+    /// background; major versions still require manual confirmation.
+    #[serde(default)]
+    pub auto_update: bool,
+    /// The release version most recently notified on the desktop.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_notified_version: Option<String>,
+    /// The version most recently installed by the built-in updater, kept so
+    /// its changelog stays visible after restarting into the new release.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_updated_version: Option<String>,
+    /// The changelog notes of `last_updated_version`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_updated_changelog: Option<String>,
 }
 
 fn default_alerts_every() -> u32 {
@@ -176,6 +194,11 @@ impl Default for Settings {
             caption_scale: 1.0,
             caption_background: false,
             sponsorblock: false,
+            update_notifications: on(),
+            auto_update: false,
+            last_notified_version: None,
+            last_updated_version: None,
+            last_updated_changelog: None,
         }
     }
 }
@@ -271,6 +294,11 @@ mod tests {
             let json = serde_json::to_string(&settings).unwrap();
             assert_eq!(serde_json::from_str::<Settings>(&json).unwrap(), settings);
         }
+        assert!(old.update_notifications);
+        assert!(!old.auto_update);
+        assert!(old.last_notified_version.is_none());
+        assert!(old.last_updated_version.is_none());
+        assert!(old.last_updated_changelog.is_none());
     }
 
     #[test]
