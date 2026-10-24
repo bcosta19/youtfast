@@ -2,7 +2,7 @@
 use super::*;
 
 /// Points a single `ArrowUp` or `ArrowDown` press scrolls the page.
-pub(super) const KEY_SCROLL_STEP: f32 = 120.0;
+pub(super) const KEY_SCROLL_STEP: f32 = fastframe_scroll::WHEEL_STEP;
 
 pub(super) fn handle(
     ctx: &egui::Context,

@@ -24,6 +24,9 @@ are the distribution record.
 - `↑` and `↓` outside the player now scroll the active page vertically instead
   of stepping sideways through grid selections; `j` and `k` keep item cursor
   navigation.
+- Page scrolling now uses `fastframe-scroll`: mouse wheel notches scroll 120
+  points instead of egui's 40-point default, and Linux touchpad gestures are
+  scaled with momentum glide and axis locking.
 - History row controls stay aligned; selected text, helper text and counts
   have readable contrast, and letter avatars remain visible on selected rows.
 - Channel banners crop without stretching, back/forward use matching arrows,
