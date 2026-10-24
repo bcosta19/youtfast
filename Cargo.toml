@@ -92,7 +92,7 @@ sha2 = "0.11"
 # (`innertube::http`): a fresh Windows keeps few roots and fetches the rest
 # only when its own verifier asks. reqwest is the version rustypipe locks;
 # rustls and its ring provider are the ones reqwest already builds.
-reqwest = { version = "0.12", default-features = false }
+reqwest = { version = "0.13", default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 rustls-platform-verifier = "0.6"
 
@@ -159,8 +159,9 @@ epaint = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce
 # 2026 layout: the sort chips' continuation token, the Shorts items'
 # `thumbnailViewModel` (without which every Short was dropped), the Playlists
 # tab's new `params`, podcasts kept as playlists, header counts read past an
-# `accessibilityLabel`, and abbreviated video counts. Drop the copy once a
-# release carries these changes.
+# `accessibilityLabel`, and abbreviated video counts. It is also moved to
+# reqwest 0.13, with rustls and ring as the process crypto provider. Drop the
+# copy once a release carries these changes.
 rustypipe = { path = "vendor/rustypipe" }
 epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
 winit = { git = "https://github.com/crmne/winit", rev = "ed7caa9023f10b397f5b6ec8284a840cbd8a6f65" }

@@ -55,12 +55,14 @@ rustdoc-args = [
 [features]
 default = ["default-tls"]
 default-tls = ["reqwest/default-tls"]
-native-tls = ["reqwest/native-tls"]
-native-tls-alpn = ["reqwest/native-tls-alpn"]
-native-tls-vendored = ["reqwest/native-tls-vendored"]
+native-tls = ["reqwest/native-tls-no-alpn"]
+native-tls-alpn = ["reqwest/native-tls"]
+native-tls-vendored = ["reqwest/native-tls-vendored-no-alpn"]
 rss = ["dep:quick-xml"]
-rustls-tls-native-roots = ["reqwest/rustls-tls-native-roots"]
-rustls-tls-webpki-roots = ["reqwest/rustls-tls-webpki-roots"]
+# YouTFast: reqwest 0.13 verifies through the platform with rustls; ring is
+# installed as the process provider in `build_with_client`.
+rustls-tls-native-roots = ["reqwest/rustls-no-provider", "dep:rustls"]
+rustls-tls-webpki-roots = ["reqwest/rustls-no-provider", "dep:rustls"]
 userdata = []
 # YouTFast: exposes `client::regression` to its response-format regression
 # tests (tests/youtube_api.rs). Enabled only as a dev-dependency feature.
@@ -97,12 +99,21 @@ version = "0.9.0"
 version = "1.6.0"
 
 [dependencies.reqwest]
-version = "0.12.0"
+version = "0.13.0"
 features = [
     "json",
     "gzip",
     "brotli",
 ]
+default-features = false
+
+[dependencies.rustls]
+version = "0.23"
+features = [
+    "ring",
+    "std",
+]
+optional = true
 default-features = false
 
 [dependencies.ress]
