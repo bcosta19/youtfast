@@ -12,8 +12,8 @@ outstanding gates.
 | Linux x86_64 native | `*-x86_64-unknown-linux-gnu.tar.gz` | glibc 2.39+, system libmpv/Lua, graphics libraries, current yt-dlp and JS runtime | Replace archive; update system dependencies separately |
 | Linux x86_64 Flatpak | `*-x86_64.flatpak` | Flatpak, Freedesktop 25.08 runtime, graphics drivers and portals | Install next bundle; no app update remote yet |
 | Arch Linux x86_64 | `.pkg.tar.zst` and `*-aur.tar.gz` recipe | System dependencies installed by pacman; AUR source builds also need Rust/Cargo | Local pacman package; AUR helper after entry acceptance |
-| Windows x86_64 | `*-x86_64-pc-windows-gnu.zip` | Bundled libmpv/imported DLLs; current yt-dlp and Deno on PATH | Replace complete extracted directory |
-| macOS 15+ Apple Silicon | `*-aarch64-apple-darwin.zip` with `.app` | Bundled libmpv/dylibs; current yt-dlp and Deno | Replace app; update extraction tools separately |
+| Windows x86_64 | `*-x86_64-pc-windows-gnu.zip` and Winget manifest (`channels.tar.gz`) | Bundled libmpv/imported DLLs; current yt-dlp and Deno on PATH | Replace complete extracted directory or update via Winget |
+| macOS 15+ Apple Silicon | `*-aarch64-apple-darwin.zip` with `.app` and Homebrew Cask (`channels.tar.gz`) | Bundled libmpv/dylibs; current yt-dlp and Deno | Replace app or update via Homebrew tap; update extraction tools separately |
 
 Windows/macOS candidates include a native dependency inventory and collected
 notices. These are inputs to review, **not corresponding source archives**.

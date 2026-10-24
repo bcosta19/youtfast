@@ -109,6 +109,7 @@ package (`youtfast-X.Y.Z-1-x86_64.pkg.tar.zst`) and `checksums.txt`.
 | Arch `.pkg.tar.zst` | Candidate built/installed in a clean Arch container; install locally with `pacman -U` |
 | `windows-native-sources.tar.gz` | Matching full MSYS2 source packages, metadata/notices and manifest |
 | `macos-native-sources.tar.gz` | Matching Homebrew recipes, source/resource/patch downloads, notices and manifest |
+| `channels.tar.gz` | Rendered Flathub source manifest, Winget manifest and Homebrew Cask with exact asset SHA-256 digests |
 | `linux.png` | Fresh signed-out profile preview from CI |
 
 `checksums.txt` covers assembled candidates. Final publication must also contain
