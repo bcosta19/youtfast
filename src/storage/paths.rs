@@ -19,13 +19,8 @@ pub struct Dirs {
 
 impl Dirs {
     pub fn new() -> anyhow::Result<Self> {
-        let project = directories::ProjectDirs::from("", "", "youtfast")
+        let dirs = Self::locate()
             .ok_or_else(|| anyhow::anyhow!("no home directory to keep the library in"))?;
-        let dirs = Self {
-            data: project.data_dir().to_owned(),
-            config: project.config_dir().to_owned(),
-            cache: project.cache_dir().to_owned(),
-        };
         std::fs::create_dir_all(&dirs.data)?;
         std::fs::create_dir_all(&dirs.config)?;
         std::fs::create_dir_all(&dirs.cache)?;
@@ -33,6 +28,16 @@ impl Dirs {
         only_the_owner(&dirs.config);
         only_the_owner(&dirs.cache);
         Ok(dirs)
+    }
+
+    /// Where the directories are, without creating them.
+    pub fn locate() -> Option<Self> {
+        let project = directories::ProjectDirs::from("", "", "youtfast")?;
+        Some(Self {
+            data: project.data_dir().to_owned(),
+            config: project.config_dir().to_owned(),
+            cache: project.cache_dir().to_owned(),
+        })
     }
 
     pub fn library(&self) -> PathBuf {

@@ -251,12 +251,20 @@ fn main() -> eframe::Result {
     // dropped as soon as it returns, so it cannot keep it.
     let guard = Arc::new(guard);
     let open = cli.open;
+    // eframe makes the app once its OpenGL painter works; an OpenGL error
+    // after that (a lost context) is not a missing OpenGL 2.0.
+    let created = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let creating = created.clone();
     let result = eframe::run_native(
         "YouTFast",
         options,
-        Box::new(move |cc| Ok(Box::new(app::App::new(cc, open, guard, fonts)?))),
+        Box::new(move |cc| {
+            creating.store(true, std::sync::atomic::Ordering::Relaxed);
+            Ok(Box::new(app::App::new(cc, open, guard, fonts)?))
+        }),
     );
     if let Err(error) = &result
+        && !created.load(std::sync::atomic::Ordering::Relaxed)
         && needs_opengl(error)
     {
         // A release build has no console on Windows, nor from the Dock on
@@ -286,8 +294,7 @@ fn needs_opengl(error: &eframe::Error) -> bool {
 /// The interface language for a message shown before any window: read from
 /// the settings without moving or writing them, English otherwise.
 fn saved_language() -> appearance::i18n::Locale {
-    storage::paths::Dirs::new()
-        .ok()
+    storage::paths::Dirs::locate()
         .and_then(|dirs| std::fs::read(dirs.settings()).ok())
         .and_then(|bytes| serde_json::from_slice::<storage::settings::Settings>(&bytes).ok())
         .map(|settings| settings.language)

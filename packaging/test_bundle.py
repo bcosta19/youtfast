@@ -92,9 +92,12 @@ class BundleTests(unittest.TestCase):
             offset += struct.unpack_from(">I", icns, offset + 4)[0]
         self.assertEqual(kinds, [kind for kind, _ in icons.ICNS_TYPES])
         if shutil.which("rsvg-convert"):
-            # Regenerated from the SVGs, they are what is committed.
-            pngs = {size: icons.render(size) for size in icons.ICO_SIZES}
+            # Regenerated from the SVGs (locally; CI has no rsvg-convert),
+            # they are what is committed.
+            pngs = {size: icons.render(size)
+                    for size in {*icons.ICO_SIZES, *(size for _, size in icons.ICNS_TYPES)}}
             self.assertEqual(icons.ico([(size, pngs[size]) for size in icons.ICO_SIZES]), ico)
+            self.assertEqual(icons.icns([(kind, pngs[size]) for kind, size in icons.ICNS_TYPES]), icns)
 
     def test_package_keeps_readme_installation_links_and_dependency_notices(self):
         directory = self.root / "package"
