@@ -50,7 +50,6 @@ are the distribution record.
 - The sidebar toggle (`b`, or the top bar's button) overrides the automatic
   rail on watch and narrow layouts on its first press. Its choice then rules
   every page for that run; the collapsed preference continues to be saved.
-  
 - Scrolling a channel page works from anywhere on the view (including over
   the banner, header, tab bar, and chips), scrolling the whole page rather
   than restricting scroll interaction to the video grid box.

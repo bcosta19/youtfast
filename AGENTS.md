@@ -43,7 +43,7 @@ its job, not at the root:
 | `storage/` | what stays on this computer: library, settings, sessions (`account`), Takeout, file paths |
 | `logic/` | pure decisions over video lists: new-upload alerts, local recommendations |
 | `mpv/` | the player |
-| `desktop/` | single instance, media controls, local logs |
+| `desktop/` | single instance, media controls, local logs, release updater |
 | `appearance/` | palette, icons, interface languages |
 | `model.rs`, `util.rs` | the shared types and formatting helpers |
 
@@ -219,13 +219,20 @@ its job, not at the root:
   (fastframe-now-playing; MPRIS on Linux): it maps their commands onto
   `Action`s and reports what mpv plays; the units differ (`SeekBy` is
   milliseconds, `SetVolume` is 0..1).
+- `src/desktop/updater.rs` checks GitHub Releases for newer stable versions,
+  classifies them by SemVer (`UpdateKind::{Patch, Minor, Major}`), verifies
+  release archives against `checksums.txt` (SHA-256), and installs them
+  atomically. Settings → About exposes system update notifications, opt-in
+  automatic updates for minor/patch versions with persisted changelog notes,
+  and manual 1-click installation for major versions (`should_auto_update`
+  never auto-installs `UpdateKind::Major`).
 
 ## Roadmap
 
 See `ROADMAP.md` for pending work and `CHANGELOG.md` for implemented features.
 RustyPipe search, i18n, persistence and the offline demo are in the tree.
-0.1.0 targets Linux x86_64, Windows x86_64 and macOS Apple Silicon; candidate
-packaging is not completed interactive platform qualification.
+0.1.0 and 0.2.0 target Linux x86_64, Windows x86_64 and macOS Apple Silicon;
+candidate packaging is not completed interactive platform qualification.
 
 ## YouTube response formats
 

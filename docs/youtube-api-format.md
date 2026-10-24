@@ -61,7 +61,7 @@ request shows a new format.
   4/2/5 (Videos, Shorts), 12/14/13 (Live).
 - **Fix:** `order_ctoken` in `vendor/rustypipe/src/client/channel.rs`.
 - **Tests:** `yt1_sort_tokens_match_the_chips_youtube_sends`,
-  `yt1_sort_tokens_are_not_the_refused_layout`,
+  `yt1_sort_tokens_use_the_envelope_not_the_refused_fields`,
   `yt1_each_order_of_each_tab_has_its_own_token`.
 
 ### YT-2: Shorts items without `thumbnail` (2026-10-19)
