@@ -10,6 +10,12 @@ are the distribution record.
 
 ### Added
 
+- About section and built-in updater in Settings → About (`src/desktop/updater.rs`):
+  shows the installed version and bundled changelog, checks GitHub Releases for new
+  versions with optional system desktop notifications, supports automatic SHA-256-verified
+  updates for minor (`0.x.0`) and patch (`0.0.x`) releases with changelog notes of what
+  changed, and requires manual confirmation via the in-app Update button for major
+  (`x.0.0`) releases.
 - Distribution channel manifest generator (`packaging/channels.py`): produces a
   Flathub source-build manifest (`io.github.bcosta19.YouTFast.json`), a Windows
   Winget singleton manifest (`bcosta19.YouTFast.yaml`), and a macOS Homebrew

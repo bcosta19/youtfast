@@ -608,6 +608,58 @@ async fn handle(command: Command, context: Context) {
         Command::SaveSettings(settings) => {
             context.settings_saves.send_replace(Some(settings));
         }
+        Command::CheckForUpdates { manual } => {
+            let result = tokio::task::spawn_blocking(crate::desktop::updater::check_latest)
+                .await
+                .unwrap_or_else(|_| Err("Could not check for updates. Retry later.".to_owned()));
+            if result.is_err() {
+                log::warn!("update check failed");
+            }
+            context.send(Event::UpdateChecked { result, manual });
+        }
+        Command::InstallUpdate { release, auto } => {
+            let cache_dir = context.dirs.cache.clone();
+            let to_install = release.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                crate::desktop::updater::install_release(&to_install, &cache_dir)
+            })
+            .await
+            .unwrap_or_else(|_| Err("Could not install the update on this system.".to_owned()));
+            if result.is_err() {
+                log::warn!("update installation failed");
+            } else {
+                log::info!("updated youtfast");
+            }
+            context.send(Event::UpdateInstalled {
+                release,
+                auto,
+                result,
+            });
+        }
+        Command::NotifyUpdate {
+            version,
+            kind,
+            auto_installed,
+            language,
+        } => {
+            tokio::task::spawn_blocking(move || {
+                let (summary, body) = crate::desktop::updater::notify_update_text(
+                    &version,
+                    kind,
+                    auto_installed,
+                    language,
+                );
+                if let Err(error) = notify_rust::Notification::new()
+                    .appname("YouTFast")
+                    .summary(&summary)
+                    .body(&body)
+                    .icon("youtfast")
+                    .show()
+                {
+                    log::warn!("the desktop notification failed: {error}");
+                }
+            });
+        }
         Command::CacheThumbnails(urls) => {
             let dir = context.dirs.cache.join("thumbnails");
             let _ = std::fs::create_dir_all(&dir);

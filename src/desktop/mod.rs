@@ -4,3 +4,4 @@
 pub mod diagnostics;
 pub mod instance;
 pub mod now_playing;
+pub mod updater;

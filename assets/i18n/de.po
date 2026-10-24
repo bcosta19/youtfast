@@ -1427,3 +1427,108 @@ msgstr "Groß (150 MiB voraus, 50 MiB zurück) puffert mehrere Minuten im Voraus
 
 msgid "Small (50 MiB ahead, 20 MiB back) keeps RAM usage low (~200 MB) and wastes less data when skipping videos, but holds only ~15–90s ahead and re-downloads when seeking far back. Large (150 MiB / 50 MiB) buffers several minutes ahead using more RAM (~300–650 MB)."
 msgstr "Klein (50 MiB voraus, 20 MiB zurück) hält den RAM-Verbrauch niedrig (~200 MB) und spart Daten beim Überspringen, hält aber nur ~15–90 s im Voraus und lädt beim weiten Zurückspulen neu. Groß (150 MiB / 50 MiB) puffert mehrere Minuten im Voraus mit mehr RAM (~300–650 MB)."
+
+msgid "YouTFast {version}"
+msgstr "YouTFast {version}"
+
+msgid "Small native YouTube client built with Rust, egui, and libmpv (GPL-3.0-only)."
+msgstr "Schlanker nativer YouTube-Client, entwickelt mit Rust, egui und libmpv (GPL-3.0-only)."
+
+msgid "Checking for updates…"
+msgstr "Suche nach Updates…"
+
+msgid "YouTFast is up to date."
+msgstr "YouTFast ist auf dem neuesten Stand."
+
+msgid "Major version v{version} is available. Major updates require manual installation."
+msgstr "Hauptversion v{version} ist verfügbar. Hauptversionen erfordern eine manuelle Installation."
+
+msgid "Version v{version} is available."
+msgstr "Version v{version} ist verfügbar."
+
+msgid "Downloading and installing YouTFast v{version}…"
+msgstr "YouTFast v{version} wird heruntergeladen und installiert…"
+
+msgid "Automatically updated to v{version}. Restart YouTFast to use the new version."
+msgstr "Automatisch auf v{version} aktualisiert. Starten Sie YouTFast neu, um die neue Version zu nutzen."
+
+msgid "Updated to v{version}. Restart YouTFast to use the new version."
+msgstr "Auf v{version} aktualisiert. Starten Sie YouTFast neu, um die neue Version zu nutzen."
+
+msgid "Update to v{version}"
+msgstr "Auf v{version} aktualisieren"
+
+msgid "Update now"
+msgstr "Jetzt aktualisieren"
+
+msgid "Check for updates"
+msgstr "Nach Updates suchen"
+
+msgid "Notify about new versions"
+msgstr "Über neue Versionen benachrichtigen"
+
+msgid "Show a system notification when a new version is available and ask if you want to update."
+msgstr "Zeigt eine Systembenachrichtigung an, wenn eine neue Version verfügbar ist, und fragt, ob Sie aktualisieren möchten."
+
+msgid "Automatic updates (minor and patch)"
+msgstr "Automatische Updates (Minor und Patch)"
+
+msgid "Automatically download and install minor (0.x.0) and patch (0.0.x) updates and display the changelog of what changed. Major versions (x.0.0) always require clicking Update manually."
+msgstr "Lädt Minor- (0.x.0) und Patch-Updates (0.0.x) automatisch herunter, installiert sie und zeigt das Changelog an. Hauptversionen (x.0.0) erfordern immer ein manuelles Klicken auf Aktualisieren."
+
+msgid "What's new in v{version}"
+msgstr "Neu in v{version}"
+
+msgid "What changed in v{version} (Changelog)"
+msgstr "Änderungen in v{version} (Changelog)"
+
+msgid "Hide changelog"
+msgstr "Changelog ausblenden"
+
+msgid "View changelog"
+msgstr "Changelog anzeigen"
+
+msgid "Releases on GitHub"
+msgstr "Releases auf GitHub"
+
+msgid "YouTFast updated to v{version}"
+msgstr "YouTFast auf v{version} aktualisiert"
+
+msgid "A minor or patch update was installed automatically. See what changed in Settings → About."
+msgstr "Ein Minor- oder Patch-Update wurde automatisch installiert. Änderungen finden Sie unter Einstellungen → Kanalinfo."
+
+msgid "New major version: YouTFast v{version}"
+msgstr "Neue Hauptversion: YouTFast v{version}"
+
+msgid "Major updates require manual confirmation. Open Settings → About to review the changelog and install."
+msgstr "Hauptversionen erfordern eine manuelle Bestätigung. Öffnen Sie Einstellungen → Kanalinfo, um das Changelog zu prüfen und zu installieren."
+
+msgid "YouTFast v{version} is available"
+msgstr "YouTFast v{version} ist verfügbar"
+
+msgid "A new version is ready to install. Open Settings → About to see what changed and update."
+msgstr "Eine neue Version ist bereit zur Installation. Öffnen Sie Einstellungen → Kanalinfo, um die Änderungen zu sehen und zu aktualisieren."
+
+msgid "A new major version of YouTFast is available."
+msgstr "Eine neue Hauptversion von YouTFast ist verfügbar."
+
+msgid "A new version of YouTFast is available."
+msgstr "Eine neue Version von YouTFast ist verfügbar."
+
+msgid "Update installed. Restart YouTFast to use the new version."
+msgstr "Update installiert. Starten Sie YouTFast neu, um die neue Version zu nutzen."
+
+msgid "Could not check for updates. Retry later."
+msgstr "Updates konnten nicht geprüft werden. Bitte später erneut versuchen."
+
+msgid "Could not download the update. Retry later."
+msgstr "Das Update konnte nicht heruntergeladen werden. Bitte später erneut versuchen."
+
+msgid "The downloaded update failed integrity verification."
+msgstr "Die Integritätsprüfung des heruntergeladenen Updates ist fehlgeschlagen."
+
+msgid "Could not install the update on this system."
+msgstr "Das Update konnte auf diesem System nicht installiert werden."
+
+msgid "Automatic installation is not supported for this package format."
+msgstr "Die automatische Installation wird für dieses Paketformat nicht unterstützt."

@@ -470,11 +470,16 @@ fn sidebar_items(state: &State) -> Vec<(Icon, View, String, Option<usize>)> {
             _ => tr(locale, "Sign in").into_owned(),
         });
     items.push((Icon::User, View::Account, account, None));
+    let update_badge = matches!(
+        state.update,
+        crate::desktop::updater::UpdateState::Available(_)
+    )
+    .then_some(1);
     items.push((
         Icon::Settings,
         View::Settings,
         tr(locale, "Settings").into_owned(),
-        None,
+        update_badge,
     ));
     items
 }
@@ -576,6 +581,37 @@ fn notice_toast(ctx: &egui::Context, state: &State, actions: &mut Vec<Action>) {
                                 .wrap(),
                             );
                         });
+                        if matches!(
+                            notice.as_str(),
+                            "A new version of YouTFast is available."
+                                | "A new major version of YouTFast is available."
+                        ) && matches!(
+                            state.update,
+                            crate::desktop::updater::UpdateState::Available(_)
+                        ) {
+                            let raised = widgets::on_card(palette);
+                            if widgets::button(
+                                ui,
+                                &raised,
+                                tr(locale, "Update now").as_ref(),
+                                widgets::ButtonStyle::Primary,
+                            )
+                            .clicked()
+                            {
+                                actions.push(Action::InstallUpdate);
+                            }
+                            if state.view != View::Settings
+                                && widgets::button(
+                                    ui,
+                                    &raised,
+                                    tr(locale, "About").as_ref(),
+                                    widgets::ButtonStyle::Normal,
+                                )
+                                .clicked()
+                            {
+                                actions.push(Action::Navigate(View::Settings));
+                            }
+                        }
                         if widgets::icon_button(ui, Icon::Close, 16.0, tr(locale, "Close").as_ref())
                             .clicked()
                         {
