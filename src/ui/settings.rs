@@ -583,19 +583,25 @@ fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     ),
                     changelog.clone(),
                 )),
-                _ => match (
+                _ if state.full_changelog_open => match (
                     &state.settings.last_updated_version,
                     &state.settings.last_updated_changelog,
                 ) {
-                    (Some(version), Some(changelog)) if !changelog.is_empty() => Some((
-                        trf(
-                            locale,
-                            "What changed in v{version} (Changelog)",
-                            &[("version", version.clone())],
-                        ),
-                        changelog.clone(),
-                    )),
-                    _ if state.full_changelog_open => {
+                    (Some(version), Some(changelog))
+                        if !changelog.is_empty()
+                            && updater::Version::parse(version)
+                                >= updater::Version::parse(updater::CURRENT_VERSION) =>
+                    {
+                        Some((
+                            trf(
+                                locale,
+                                "What changed in v{version} (Changelog)",
+                                &[("version", version.clone())],
+                            ),
+                            changelog.clone(),
+                        ))
+                    }
+                    _ => {
                         let notes = updater::bundled_changelog_for(updater::CURRENT_VERSION);
                         (!notes.is_empty()).then(|| {
                             (
@@ -608,8 +614,8 @@ fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                             )
                         })
                     }
-                    _ => None,
                 },
+                _ => None,
             };
 
             if let Some((heading, notes)) = active_changelog {

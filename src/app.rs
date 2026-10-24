@@ -635,6 +635,15 @@ impl App {
         };
         app.set_alerts_timer();
         app.refresh_theme_list();
+        if let (Some(version), Some(changelog)) = (
+            &app.state.settings.last_updated_version,
+            &app.state.settings.last_updated_changelog,
+        ) && !changelog.is_empty()
+            && crate::desktop::updater::Version::parse(version)
+                >= crate::desktop::updater::Version::parse(crate::desktop::updater::CURRENT_VERSION)
+        {
+            app.state.full_changelog_open = true;
+        }
         if app.state.settings.update_notifications || app.state.settings.auto_update {
             app.state.update = crate::desktop::updater::UpdateState::Checking;
             app.backend.send(Command::CheckForUpdates { manual: false });
@@ -1142,12 +1151,16 @@ impl App {
                 if let crate::desktop::updater::UpdateState::Available(release) =
                     self.state.update.clone()
                 {
-                    self.state.update =
-                        crate::desktop::updater::UpdateState::Installing(release.clone());
-                    self.backend.send(Command::InstallUpdate {
-                        release,
-                        auto: false,
-                    });
+                    if release.can_self_update() {
+                        self.state.update =
+                            crate::desktop::updater::UpdateState::Installing(release.clone());
+                        self.backend.send(Command::InstallUpdate {
+                            release,
+                            auto: false,
+                        });
+                    } else {
+                        self.apply(ctx, Action::OpenUrl(release.html_url));
+                    }
                 }
             }
             Action::SetUpdateNotifications(on) => {
@@ -1171,6 +1184,7 @@ impl App {
                     if let crate::desktop::updater::UpdateState::Available(release) =
                         self.state.update.clone()
                         && crate::desktop::updater::should_auto_update(true, release.kind)
+                        && release.can_self_update()
                     {
                         self.state.update =
                             crate::desktop::updater::UpdateState::Installing(release.clone());
@@ -1202,7 +1216,9 @@ impl App {
         use crate::desktop::updater::{UpdateState, should_auto_update};
         match result {
             Ok(Some(release)) => {
-                if should_auto_update(self.state.settings.auto_update, release.kind) {
+                if should_auto_update(self.state.settings.auto_update, release.kind)
+                    && release.can_self_update()
+                {
                     self.state.update = UpdateState::Installing(release.clone());
                     self.backend.send(Command::InstallUpdate {
                         release,
@@ -1255,6 +1271,7 @@ impl App {
             Ok(()) => {
                 self.state.settings.last_updated_version = Some(release.version.clone());
                 self.state.settings.last_updated_changelog = Some(release.changelog.clone());
+                self.state.full_changelog_open = true;
                 self.save_settings();
                 if auto && self.state.settings.update_notifications {
                     self.backend.send(Command::NotifyUpdate {

@@ -5,8 +5,9 @@
 //! when the user opts in; major (`x.0.0`) updates always require explicit
 //! user confirmation via the update button in the interface.
 
-use std::io::Read;
-use std::path::Path;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -33,7 +34,11 @@ pub struct Version {
 impl Version {
     pub fn parse(raw: &str) -> Option<Self> {
         let trimmed = raw.trim().strip_prefix('v').unwrap_or(raw.trim());
-        let core = trimmed.split(['-', '+']).next()?;
+        // Pre-release tags (e.g. "0.3.0-rc.1") are not stable releases.
+        if trimmed.contains('-') {
+            return None;
+        }
+        let core = trimmed.split('+').next()?;
         let mut parts = core.split('.');
         let major = parts.next()?.parse().ok()?;
         let minor = parts.next()?.parse().ok()?;
@@ -96,6 +101,14 @@ pub struct ReleaseInfo {
     pub asset_name: Option<String>,
     pub asset_url: Option<String>,
     pub checksums_url: Option<String>,
+}
+
+impl ReleaseInfo {
+    /// Whether this release carries both a platform archive and a checksums
+    /// manifest for verified in-app installation.
+    pub fn can_self_update(&self) -> bool {
+        self.asset_name.is_some() && self.asset_url.is_some() && self.checksums_url.is_some()
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -207,12 +220,15 @@ fn strip_markdown_links(text: &str) -> String {
     while let Some(open) = rest.find('[') {
         result.push_str(&rest[..open]);
         let after_open = &rest[open + 1..];
-        if let Some(close) = after_open.find("](") {
+        if let Some(close) = after_open.find(']') {
             let label = &after_open[..close];
-            let after_close = &after_open[close + 2..];
-            if let Some(end_paren) = after_close.find(')') {
+            let after_close = &after_open[close + 1..];
+            if !label.contains('[')
+                && let Some(inside_paren) = after_close.strip_prefix('(')
+                && let Some(end_paren) = inside_paren.find(')')
+            {
                 result.push_str(label);
-                rest = &after_close[end_paren + 1..];
+                rest = &inside_paren[end_paren + 1..];
                 continue;
             }
         }
@@ -301,7 +317,7 @@ pub fn parse_release_json(
 ) -> Result<Option<ReleaseInfo>, String> {
     let value: serde_json::Value = serde_json::from_str(json)
         .map_err(|_| "Could not check for updates. Retry later.".to_owned())?;
-    if value["draft"].as_bool() == Some(true) {
+    if value["draft"].as_bool() == Some(true) || value["prerelease"].as_bool() == Some(true) {
         return Ok(None);
     }
     let tag = value["tag_name"]
@@ -364,8 +380,9 @@ pub fn parse_release_json(
 pub fn parse_checksum_for(checksums_text: &str, asset_name: &str) -> Option<String> {
     for line in checksums_text.lines() {
         let mut parts = line.split_whitespace();
-        let digest = parts.next()?;
-        let name = parts.next()?;
+        let (Some(digest), Some(name)) = (parts.next(), parts.next()) else {
+            continue;
+        };
         let clean_name = name.strip_prefix('*').unwrap_or(name);
         if clean_name == asset_name
             && digest.len() == 64
@@ -482,20 +499,17 @@ fn install_in_staging(
         extract_zip(&archive_path, staging)?;
         let stem = asset_name.trim_end_matches(".zip");
         let bundle_root = staging.join(stem);
-        let macos_bin = bundle_root.join("YouTFast.app/Contents/MacOS/youtfast");
+        let macos_app = bundle_root.join("YouTFast.app");
+        let macos_bin = macos_app.join("Contents/MacOS/youtfast");
         let windows_bin = bundle_root.join("youtfast.exe");
         if macos_bin.is_file() {
             #[cfg(target_os = "macos")]
             {
                 let _ = std::process::Command::new("/usr/bin/xattr")
-                    .args([
-                        "-dr",
-                        "com.apple.quarantine",
-                        &bundle_root.join("YouTFast.app").to_string_lossy(),
-                    ])
+                    .args(["-dr", "com.apple.quarantine", &macos_app.to_string_lossy()])
                     .status();
             }
-            replace_unix_binary(&macos_bin, target_exe)
+            replace_macos_or_unix_bundle(&macos_app, &macos_bin, target_exe)
         } else if windows_bin.is_file() {
             replace_windows_bundle(&bundle_root, target_exe)
         } else {
@@ -531,6 +545,72 @@ fn extract_zip(archive_path: &Path, staging: &Path) -> Result<(), String> {
     }
 }
 
+/// Strips the `" (deleted)"` suffix Linux's `/proc/self/exe` appends when the
+/// running binary has already been replaced once during the current session.
+fn clean_exe_path(path: &Path) -> PathBuf {
+    let raw = path.to_string_lossy();
+    match raw.strip_suffix(" (deleted)") {
+        Some(clean) => PathBuf::from(clean),
+        None => path.to_path_buf(),
+    }
+}
+
+fn replace_macos_or_unix_bundle(
+    new_app: &Path,
+    new_bin: &Path,
+    target_exe: &Path,
+) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(new_bin, std::fs::Permissions::from_mode(0o755))
+            .map_err(|_| "Could not install the update on this system.".to_owned())?;
+    }
+    let resolved = clean_exe_path(
+        &std::fs::canonicalize(target_exe).unwrap_or_else(|_| target_exe.to_path_buf()),
+    );
+    // When running from inside a macOS `.app` bundle (`.../YouTFast.app/Contents/MacOS/youtfast`),
+    // swap the whole `.app` bundle so `Contents/Info.plist`, `Contents/Frameworks`
+    // and the bundle signature remain coherent.
+    if let Some(existing_app) = resolved
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .filter(|dir| dir.extension().and_then(|e| e.to_str()) == Some("app"))
+        && let Some(apps_dir) = existing_app.parent()
+    {
+        static APP_SWAPS: AtomicU64 = AtomicU64::new(0);
+        let suffix = format!(
+            "{}-{}",
+            std::process::id(),
+            APP_SWAPS.fetch_add(1, Ordering::Relaxed)
+        );
+        let staged_app = apps_dir.join(format!(".YouTFast.app.new-{suffix}"));
+        let backup_app = apps_dir.join(format!(".YouTFast.app.old-{suffix}"));
+        let _ = std::fs::remove_dir_all(&staged_app);
+        let _ = std::fs::remove_dir_all(&backup_app);
+        let copied = std::process::Command::new("cp")
+            .args([
+                "-R",
+                &new_app.to_string_lossy(),
+                &staged_app.to_string_lossy(),
+            ])
+            .status()
+            .is_ok_and(|s| s.success());
+        if copied {
+            if std::fs::rename(existing_app, &backup_app).is_ok() {
+                if std::fs::rename(&staged_app, existing_app).is_ok() {
+                    let _ = std::fs::remove_dir_all(&backup_app);
+                    return Ok(());
+                }
+                let _ = std::fs::rename(&backup_app, existing_app);
+            }
+            let _ = std::fs::remove_dir_all(&staged_app);
+        }
+    }
+    replace_unix_binary(new_bin, &resolved)
+}
+
 fn replace_unix_binary(new_bin: &Path, target_exe: &Path) -> Result<(), String> {
     #[cfg(unix)]
     {
@@ -538,7 +618,9 @@ fn replace_unix_binary(new_bin: &Path, target_exe: &Path) -> Result<(), String> 
         std::fs::set_permissions(new_bin, std::fs::Permissions::from_mode(0o755))
             .map_err(|_| "Could not install the update on this system.".to_owned())?;
     }
-    let resolved = std::fs::canonicalize(target_exe).unwrap_or_else(|_| target_exe.to_path_buf());
+    let resolved = clean_exe_path(
+        &std::fs::canonicalize(target_exe).unwrap_or_else(|_| target_exe.to_path_buf()),
+    );
     if atomic_replace_file(new_bin, &resolved).is_ok() {
         return Ok(());
     }
@@ -557,33 +639,51 @@ fn replace_unix_binary(new_bin: &Path, target_exe: &Path) -> Result<(), String> 
 }
 
 fn atomic_replace_file(source: &Path, destination: &Path) -> std::io::Result<()> {
+    match std::fs::symlink_metadata(destination) {
+        Ok(metadata) if !metadata.is_file() => {
+            return Err(std::io::Error::other(
+                "refusing to replace a non-regular file",
+            ));
+        }
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error),
+        _ => {}
+    }
+    static UPDATES: AtomicU64 = AtomicU64::new(0);
     let parent = destination
         .parent()
         .ok_or_else(|| std::io::Error::other("missing parent directory"))?;
     let tmp = parent.join(format!(
         ".youtfast-update-{}-{}.tmp",
         std::process::id(),
-        crate::util::now()
+        UPDATES.fetch_add(1, Ordering::Relaxed)
     ));
-    std::fs::copy(source, &tmp)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?;
-    }
-    let result = std::fs::rename(&tmp, destination);
-    if result.is_err() {
+    let bytes = std::fs::read(source)?;
+    let written = (|| {
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o755);
+        let mut file = options.open(&tmp)?;
+        file.write_all(&bytes)?;
+        file.sync_all()?;
+        std::fs::rename(&tmp, destination)
+    })();
+    if written.is_err() {
         let _ = std::fs::remove_file(&tmp);
     }
-    result
+    written
 }
 
 fn replace_windows_bundle(bundle_root: &Path, target_exe: &Path) -> Result<(), String> {
+    static WIN_UPDATES: AtomicU64 = AtomicU64::new(0);
     let target_dir = target_exe
         .parent()
         .ok_or_else(|| "Could not install the update on this system.".to_owned())?;
-    let old_exe = target_exe.with_extension("exe.old");
-    let _ = std::fs::remove_file(&old_exe);
+    let old_exe = target_exe.with_extension(format!(
+        "exe.old-{}-{}",
+        std::process::id(),
+        WIN_UPDATES.fetch_add(1, Ordering::Relaxed)
+    ));
     if target_exe.exists() {
         std::fs::rename(target_exe, &old_exe)
             .map_err(|_| "Could not install the update on this system.".to_owned())?;
@@ -820,5 +920,46 @@ mod tests {
         let updated = std::fs::read_to_string(&target_exe).unwrap();
         assert_eq!(updated, "#!/bin/sh\necho youtfast 0.2.1\n");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn checksum_parser_skips_blank_and_comment_lines_and_prereleases_are_ignored() {
+        let checksums = "\n# Release checksums\n\n\
+            aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  other.tar.gz\n\
+            bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb *youtfast-v0.2.1-x86_64-unknown-linux-gnu.tar.gz\n";
+        assert_eq!(
+            parse_checksum_for(checksums, "youtfast-v0.2.1-x86_64-unknown-linux-gnu.tar.gz")
+                .as_deref(),
+            Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        );
+
+        assert!(Version::parse("v0.3.0-rc.1").is_none());
+        let prerelease_json = r####"{
+            "tag_name": "v0.3.0",
+            "draft": false,
+            "prerelease": true,
+            "html_url": "https://github.com/bcosta19/youtfast/releases/tag/v0.3.0",
+            "body": "### Added\n- RC build",
+            "assets": []
+        }"####;
+        assert!(
+            parse_release_json(prerelease_json, "0.2.0", "linux", "x86_64")
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn strip_markdown_links_preserves_bracketed_ui_labels_and_clean_exe_path_strips_deleted() {
+        let line = "- Added `[ save ]` button in [watch page](https://example.com/watch) and `[ load more ]`.";
+        let cleaned = strip_markdown_links(line);
+        assert_eq!(
+            cleaned,
+            "- Added [ save ] button in watch page and [ load more ]."
+        );
+        assert_eq!(
+            clean_exe_path(Path::new("/usr/local/bin/youtfast (deleted)")),
+            PathBuf::from("/usr/local/bin/youtfast")
+        );
     }
 }
