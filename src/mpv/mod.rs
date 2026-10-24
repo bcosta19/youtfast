@@ -352,10 +352,10 @@ impl Mpv {
             (c"terminal", "no"),
             // The name PipeWire and PulseAudio show in their mixers.
             (c"audio-client-name", "YouTFast"),
-            // mpv keeps 150 MiB ahead and 50 MiB behind by default; at
-            // 1080p that is far more than smooth playback needs.
-            (c"demuxer-max-bytes", "50MiB"),
-            (c"demuxer-max-back-bytes", "20MiB"),
+            // mpv's default demuxer cache: 150 MiB ahead and 50 MiB behind;
+            // Settings::playback_buffer can switch this to the compact cap.
+            (c"demuxer-max-bytes", "150MiB"),
+            (c"demuxer-max-back-bytes", "50MiB"),
             (c"volume", &initial_volume),
         ];
         for (name, value) in options {
@@ -561,6 +561,12 @@ impl Mpv {
         let vid = if audio_only { "no" } else { "auto" };
         self.set_property("ytdl-format", format)?;
         self.set_property("vid", vid)
+    }
+
+    /// Sets how much video mpv keeps buffered ahead and behind in memory.
+    pub fn set_buffer_limits(&self, ahead: &str, back: &str) -> Result<(), Error> {
+        self.set_property("demuxer-max-bytes", ahead)?;
+        self.set_property("demuxer-max-back-bytes", back)
     }
 
     /// Bounds the streams of the next video loaded to `resolution` (720 for
@@ -1146,5 +1152,36 @@ mod tests {
         assert!(player.audio_only());
         player.set_audio_only(false).unwrap();
         assert!(!player.audio_only());
+    }
+
+    #[test]
+    fn buffer_limits_default_to_mpv_standard_and_update_at_runtime() {
+        let _turn = instance_turn();
+        let player = Mpv::new(&egui::Context::default(), 1080, 0.0, Vec::new()).unwrap();
+        assert_eq!(
+            player
+                .get_property("demuxer-max-bytes")
+                .and_then(|v| v.parse::<u64>().ok()),
+            Some(150 * 1024 * 1024),
+        );
+        assert_eq!(
+            player
+                .get_property("demuxer-max-back-bytes")
+                .and_then(|v| v.parse::<u64>().ok()),
+            Some(50 * 1024 * 1024),
+        );
+        player.set_buffer_limits("50MiB", "20MiB").unwrap();
+        assert_eq!(
+            player
+                .get_property("demuxer-max-bytes")
+                .and_then(|v| v.parse::<u64>().ok()),
+            Some(50 * 1024 * 1024),
+        );
+        assert_eq!(
+            player
+                .get_property("demuxer-max-back-bytes")
+                .and_then(|v| v.parse::<u64>().ok()),
+            Some(20 * 1024 * 1024),
+        );
     }
 }

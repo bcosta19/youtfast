@@ -572,6 +572,10 @@ impl App {
             player::caption_languages(&state.settings),
         ) {
             Ok(player) => {
+                let (ahead, back) = state.settings.playback_buffer.limits();
+                if let Err(error) = player.set_buffer_limits(ahead, back) {
+                    log::warn!("could not apply playback buffer limits: {error}");
+                }
                 let surface = cc.get_proc_address.clone().map(|get_proc_address| {
                     VideoSurface::new(
                         player.handle(),
@@ -838,6 +842,16 @@ impl App {
             }
             Action::SetScrollMiniplayer(on) => {
                 self.state.settings.scroll_miniplayer = on;
+                self.save_settings();
+            }
+            Action::SetPlaybackBuffer(buffer) => {
+                self.state.settings.playback_buffer = buffer;
+                if let Some(player) = &self.player {
+                    let (ahead, back) = buffer.limits();
+                    if let Err(error) = player.set_buffer_limits(ahead, back) {
+                        log::warn!("could not set playback buffer limits: {error}");
+                    }
+                }
                 self.save_settings();
             }
             Action::Back => self.travel(ctx, false),

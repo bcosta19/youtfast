@@ -9,7 +9,7 @@ use crate::app::State;
 use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use crate::appearance::theme::{self, Palette};
 use crate::model::Action;
-use crate::storage::settings::{HistorySync, ThemeChoice};
+use crate::storage::settings::{HistorySync, PlaybackBuffer, ThemeChoice};
 
 /// The widest the settings read well.
 const WIDTH: f32 = 760.0;
@@ -154,7 +154,7 @@ fn theme_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         });
 }
 
-/// The Playback group: autoplay, scrolling mini player, SponsorBlock.
+/// The Playback group: autoplay, scrolling mini player, video buffer, SponsorBlock.
 fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
     let palette = &state.palette;
@@ -198,6 +198,56 @@ fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     {
                         actions.push(Action::SetScrollMiniplayer(!scroll_miniplayer));
                     }
+                },
+            );
+            ui.add_space(12.0);
+            let buffer_choices = [
+                (
+                    PlaybackBuffer::Standard,
+                    "Large — 150 MiB / 50 MiB (mpv default)",
+                ),
+                (
+                    PlaybackBuffer::Compact,
+                    "Small — 50 MiB / 20 MiB (less RAM)",
+                ),
+            ];
+            let current_buffer = state.settings.playback_buffer;
+            let buffer_description = match current_buffer {
+                PlaybackBuffer::Standard => {
+                    "Large (150 MiB ahead, 50 MiB back) buffers several minutes ahead for unstable connections and instant seeking, using more RAM (~300–650 MB) and bandwidth if you skip videos early. Small (50 MiB / 20 MiB) uses less RAM (~200 MB) and data, but holds only ~15–90s ahead."
+                }
+                PlaybackBuffer::Compact => {
+                    "Small (50 MiB ahead, 20 MiB back) keeps RAM usage low (~200 MB) and wastes less data when skipping videos, but holds only ~15–90s ahead and re-downloads when seeking far back. Large (150 MiB / 50 MiB) buffers several minutes ahead using more RAM (~300–650 MB)."
+                }
+            };
+            setting_row(
+                ui,
+                palette,
+                &tr(locale, "Video buffer"),
+                &tr(locale, buffer_description),
+                CONTROL_WIDTH,
+                |ui| {
+                    egui::ComboBox::from_id_salt("playback-buffer")
+                        .width(240.0)
+                        .selected_text(tr(
+                            locale,
+                            buffer_choices
+                                .iter()
+                                .find(|(choice, _)| *choice == current_buffer)
+                                .unwrap()
+                                .1,
+                        ))
+                        .show_ui(ui, |ui| {
+                            for (choice, label) in buffer_choices {
+                                if ui
+                                    .selectable_label(current_buffer == choice, tr(locale, label))
+                                    .clicked()
+                                {
+                                    actions.push(Action::SetPlaybackBuffer(choice));
+                                    ui.close();
+                                }
+                            }
+                        });
                 },
             );
             ui.add_space(12.0);
@@ -568,6 +618,51 @@ mod tests {
             state.settings.language = locale;
             let labels = render(&ctx, &state, Vec::new(), &mut actions);
             assert!(labels.iter().any(|(label, _)| label == expected_title));
+        }
+    }
+
+    #[test]
+    fn playback_buffer_shows_tradeoffs_and_emits_action_on_change() {
+        for (buffer, expected_selected, expected_tradeoff) in [
+            (
+                PlaybackBuffer::Standard,
+                "Large — 150 MiB / 50 MiB (mpv default)",
+                "Large (150 MiB ahead, 50 MiB back) buffers several minutes ahead for unstable connections and instant seeking, using more RAM (~300–650 MB) and bandwidth if you skip videos early. Small (50 MiB / 20 MiB) uses less RAM (~200 MB) and data, but holds only ~15–90s ahead.",
+            ),
+            (
+                PlaybackBuffer::Compact,
+                "Small — 50 MiB / 20 MiB (less RAM)",
+                "Small (50 MiB ahead, 20 MiB back) keeps RAM usage low (~200 MB) and wastes less data when skipping videos, but holds only ~15–90s ahead and re-downloads when seeking far back. Large (150 MiB / 50 MiB) buffers several minutes ahead using more RAM (~300–650 MB).",
+            ),
+        ] {
+            let ctx = egui::Context::default();
+            theme::install_fonts(&ctx);
+            let mut state = State::default();
+            state.settings.playback_buffer = buffer;
+            let mut actions = Vec::new();
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        vec2(900.0, 800.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| playback(ui, &state, &mut actions),
+            );
+            let labels: Vec<_> = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) => Some(text.galley.text()),
+                    _ => None,
+                })
+                .collect();
+            assert!(labels.contains(&"Video buffer"));
+            assert!(labels.contains(&expected_selected));
+            assert!(labels.contains(&expected_tradeoff));
+            assert!(actions.is_empty());
+            output.textures_delta.clear();
         }
     }
 }

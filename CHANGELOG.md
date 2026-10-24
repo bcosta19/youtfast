@@ -10,6 +10,10 @@ are the distribution record.
 
 ### Added
 
+- Configurable video buffer in Settings → Playback (`PlaybackBuffer`): defaults
+  to mpv's standard 150 MiB ahead / 50 MiB behind for smoother playback on
+  unstable connections and faster seeking, with a compact 50 MiB / 20 MiB option
+  for lower RAM and data usage.
 - Audio-only mode: stream and decode only the audio track (`ba/b` and `vid=no`)
   for the current video, reducing bandwidth and CPU/GPU usage during background
   listening. Accessible via the player Quality menu or `Shift+A`. Resets to

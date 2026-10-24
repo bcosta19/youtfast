@@ -1412,3 +1412,18 @@ msgstr "Modo solo audio"
 
 msgid "Video mode"
 msgstr "Modo de vídeo"
+
+msgid "Video buffer"
+msgstr "Búfer de vídeo"
+
+msgid "Large — 150 MiB / 50 MiB (mpv default)"
+msgstr "Grande — 150 MiB / 50 MiB (predeterminado de mpv)"
+
+msgid "Small — 50 MiB / 20 MiB (less RAM)"
+msgstr "Pequeño — 50 MiB / 20 MiB (menos RAM)"
+
+msgid "Large (150 MiB ahead, 50 MiB back) buffers several minutes ahead for unstable connections and instant seeking, using more RAM (~300–650 MB) and bandwidth if you skip videos early. Small (50 MiB / 20 MiB) uses less RAM (~200 MB) and data, but holds only ~15–90s ahead."
+msgstr "Grande (150 MiB delante, 50 MiB detrás) almacena varios minutos por adelantado para conexiones inestables y búsquedas instantáneas, usando más RAM (~300–650 MB) y datos si cambias de vídeo pronto. Pequeño (50 MiB / 20 MiB) usa menos RAM (~200 MB) y datos, pero guarda solo ~15–90 s por delante."
+
+msgid "Small (50 MiB ahead, 20 MiB back) keeps RAM usage low (~200 MB) and wastes less data when skipping videos, but holds only ~15–90s ahead and re-downloads when seeking far back. Large (150 MiB / 50 MiB) buffers several minutes ahead using more RAM (~300–650 MB)."
+msgstr "Pequeño (50 MiB delante, 20 MiB detrás) mantiene bajo el uso de RAM (~200 MB) y ahorra datos al saltar vídeos, pero guarda solo ~15–90 s por delante y vuelve a descargar al retroceder mucho. Grande (150 MiB / 50 MiB) almacena varios minutos por adelantado usando más RAM (~300–650 MB)."

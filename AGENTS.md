@@ -153,9 +153,10 @@ its job, not at the root:
   2.x). `src/mpv/mod.rs` wraps them: `Mpv` owns the player, observes the
   properties the interface shows, and is polled once per frame from
   `App::logic`; its wakeup callback only requests a repaint.
-- mpv's network cache (the demuxer cache) is bounded in `Mpv::new`: 50 MiB
-  ahead and 20 MiB behind, against mpv's 150 and 50. That keeps the process
-  near 200 MB on long videos; seeking back further downloads again.
+- mpv's network cache (the demuxer cache) defaults in `Mpv::new` to mpv's
+  standard 150 MiB ahead and 50 MiB behind (`PlaybackBuffer::Standard`), and
+  `Settings::playback_buffer` can switch it to 50 MiB ahead and 20 MiB behind
+  (`PlaybackBuffer::Compact`) to keep the process near 200 MB on long videos.
 - `src/mpv/render.rs` draws the picture inside the egui window. libmpv's
   OpenGL render API draws into a framebuffer of ours, sized to the video's
   rectangle in physical pixels; an `egui_glow::CallbackFn` blits it onto
