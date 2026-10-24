@@ -88,6 +88,13 @@ ureq = "3"
 resvg = { version = "0.45", default-features = false }
 # SponsorBlock's lookups name a prefix of the video id's SHA-256, not the id.
 sha2 = "0.11"
+# rustypipe's HTTP client checks certificates through the operating system
+# (`innertube::http`): a fresh Windows keeps few roots and fetches the rest
+# only when its own verifier asks. reqwest is the version rustypipe locks;
+# rustls and its ring provider are the ones reqwest already builds.
+reqwest = { version = "0.12", default-features = false }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+rustls-platform-verifier = "0.6"
 
 # libmpv is linked from the system (src/mpv/ffi.rs). On Arch it comes with the
 # `mpv` package; Debian and Ubuntu need `libmpv-dev` to build.
@@ -102,14 +109,14 @@ apple-native-keyring-store = { version = "1.0.2", features = ["keychain"] }
 windows-native-keyring-store = { version = "1.1", default-features = false }
 
 [dev-dependencies]
-# rustypipe takes a reqwest ClientBuilder (`build_with_client`); tests point
-# it at a closed proxy. The version rustypipe already locks, no new crate.
-reqwest = { version = "0.12", default-features = false }
 # The vendored copy's `client::regression` hooks, for the response-format
 # regression tests (tests/youtube_api.rs). Only test builds enable it.
 rustypipe = { version = "0.11.4", default-features = false, features = ["regression"] }
 
 [build-dependencies]
+# The Windows executable's icon (build.rs), shown by Explorer, shortcuts and
+# the taskbar.
+embed-resource = "3"
 fastframe-i18n = { git = "https://github.com/crmne/fastframe", tag = "v0.4.1", features = ["build"] }
 
 [profile.release]
