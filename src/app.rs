@@ -672,7 +672,6 @@ impl App {
 
     /// Takes in what the backend and mpv have to say.
     fn poll(&mut self) {
-        self.poll_cast();
         // The themes folder or Omarchy's palette changed on disk.
         if self.custom_themes.needs_reload() {
             self.load_themes();
@@ -796,6 +795,9 @@ impl App {
                 }
             }
             Event::Segments { id, segments } => {
+                if self.state.settings.sponsorblock {
+                    self.state.cast.receive_segments(&id, &segments);
+                }
                 self.state.accept_segments(&id, segments);
             }
             Event::Notice(notice) => self.state.notice = Some(notice),
@@ -1344,6 +1346,7 @@ impl eframe::App for App {
             self.fonts = None;
         }
         self.poll();
+        self.poll_cast(ctx);
         ui::images::forget_unseen(ctx);
         for (url, manual) in ui::images::drain_expired() {
             self.refresh_comment_image(url, manual);

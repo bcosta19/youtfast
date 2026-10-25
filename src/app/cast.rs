@@ -2,7 +2,12 @@
 //! A pending handoff never pauses a different or newly opened local playback.
 
 use crate::desktop::cast::{Action, Control, Device, Error, Reply, Request, Worker};
-use crate::model::Video;
+use crate::model::{Segment, Video};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+use std::time::{Duration, Instant};
 
 #[derive(Default)]
 pub struct State {
@@ -15,6 +20,11 @@ pub struct State {
     pub command_sent: bool,
     pending: Option<Pending>,
     local_handoff: Option<u64>,
+    pub(super) sponsor_enabled: Arc<AtomicBool>,
+    sponsor_pending: bool,
+    sponsor_check_at: Option<Instant>,
+    sponsor_segments: Vec<Segment>,
+    sponsor_skipped: Vec<f64>,
 }
 
 pub struct Session {
@@ -32,6 +42,49 @@ enum Pending {
 }
 
 impl State {
+    pub(super) fn receive_segments(&mut self, id: &str, segments: &[Segment]) {
+        if self
+            .session
+            .as_ref()
+            .is_some_and(|session| session.video.id == id)
+        {
+            self.sponsor_segments = segments.to_vec();
+        }
+    }
+
+    fn sponsor_request(&mut self, enabled: bool, now: Instant) -> Option<Request> {
+        if !enabled
+            || self.busy()
+            || self.sponsor_pending
+            || self.sponsor_check_at.is_some_and(|at| now < at)
+        {
+            return None;
+        }
+        let session = self
+            .session
+            .as_ref()
+            .filter(|session| session.confirmed && !session.video.live)?;
+        let segments: Vec<_> = self
+            .sponsor_segments
+            .iter()
+            .filter(|segment| {
+                segment.skipped_at_once() && !self.sponsor_skipped.contains(&segment.end)
+            })
+            .cloned()
+            .collect();
+        if segments.is_empty() {
+            return None;
+        }
+        self.sponsor_pending = true;
+        self.sponsor_check_at = Some(now + Duration::from_secs(2));
+        Some(Request::CheckSponsor {
+            enabled: self.sponsor_enabled.clone(),
+            device: session.device.clone(),
+            video: session.video.id.clone(),
+            segments,
+        })
+    }
+
     pub fn allows_local_autoplay(&self, generation: u64) -> bool {
         self.local_handoff != Some(generation)
     }
@@ -56,6 +109,12 @@ impl State {
         position: f64,
         generation: u64,
     ) -> Option<Request> {
+        if matches!(
+            action,
+            Action::Disconnect | Action::Control(_) | Action::Start(_)
+        ) {
+            self.sponsor_enabled.store(false, Ordering::Relaxed);
+        }
         if action == Action::Open {
             self.open = true;
             if self.searched || self.busy() || self.session.is_some() {
@@ -74,6 +133,8 @@ impl State {
                 (Request::FindYouTube(host), Pending::Find)
             }
             Action::Start(device) if self.session.is_none() => {
+                self.sponsor_segments.clear();
+                self.sponsor_skipped.clear();
                 let video = watching?.clone();
                 // Only targets returned by this run's explicit discovery.
                 if !self.devices.contains(&device) {
@@ -124,6 +185,15 @@ impl State {
 
     /// Returns the local playback to pause only after the TV confirms it.
     pub fn finish(&mut self, reply: Reply) -> Option<(String, u64)> {
+        if let Reply::SponsorChecked(result) = reply {
+            self.sponsor_pending = false;
+            match result {
+                Ok(Some(end)) => self.sponsor_skipped.push(end),
+                Ok(None) => {}
+                Err(error) => self.error = Some(error),
+            }
+            return None;
+        }
         let pending = self.pending.take();
         match (pending, reply) {
             (Some(Pending::Disconnect), Reply::Disconnected) => {}
@@ -235,14 +305,29 @@ impl super::App {
         }
     }
 
-    pub(super) fn poll_cast(&mut self) {
+    pub(super) fn poll_cast(&mut self, ctx: &egui::Context) {
         let replies: Vec<_> = self
             .cast_worker
             .iter()
             .flat_map(|worker| worker.poll())
             .collect();
         for reply in replies {
-            if let Some((id, generation)) = self.state.cast.finish(reply)
+            let handoff = self.state.cast.finish(reply);
+            if let Some((id, _)) = &handoff
+                && self.state.settings.sponsorblock
+            {
+                if self
+                    .state
+                    .watching
+                    .as_ref()
+                    .is_some_and(|video| video.id == *id)
+                {
+                    self.state.cast.receive_segments(id, &self.state.segments);
+                }
+                self.backend
+                    .send(crate::backend::Command::LoadSegments(id.clone()));
+            }
+            if let Some((id, generation)) = handoff
                 && self
                     .state
                     .accept_cast_handoff(&id, generation, self.local_playback_generation)
@@ -252,6 +337,31 @@ impl super::App {
                 self.state.notice =
                     Some("The TV is playing, but local playback could not be paused.".into());
             }
+        }
+        let enabled = self.state.settings.sponsorblock
+            && !self.state.cast.busy()
+            && self
+                .state
+                .cast
+                .session
+                .as_ref()
+                .is_some_and(|session| session.confirmed && !session.video.live);
+        self.state
+            .cast
+            .sponsor_enabled
+            .store(enabled, Ordering::Relaxed);
+        if enabled {
+            ctx.request_repaint_after(Duration::from_secs(1));
+        }
+        if let Some(request) = self
+            .state
+            .cast
+            .sponsor_request(self.state.settings.sponsorblock, Instant::now())
+            && let Some(worker) = &self.cast_worker
+            && let Err(error) = worker.send(request)
+        {
+            self.state.cast.sponsor_pending = false;
+            self.state.cast.error = Some(error);
         }
     }
 }
@@ -274,6 +384,88 @@ mod tests {
             searched: true,
             ..Default::default()
         }
+    }
+
+    fn monitoring() -> State {
+        let mut state = ready();
+        let video = Video::from_id("abcdefghijk".into());
+        state.prepare(Action::Start(device()), Some(&video), 0.0, 1);
+        state.finish(Reply::Started {
+            device: device(),
+            video: video.id.clone(),
+            result: Ok(()),
+        });
+        state.receive_segments(
+            &video.id,
+            &[Segment {
+                category: "sponsor".into(),
+                start: 10.0,
+                end: 30.0,
+            }],
+        );
+        state
+    }
+
+    #[test]
+    fn sponsor_checks_are_opt_in_bounded_and_do_not_consume_remote_replies() {
+        let mut state = monitoring();
+        let now = Instant::now();
+        assert!(state.sponsor_request(false, now).is_none());
+        assert!(matches!(
+            state.sponsor_request(true, now),
+            Some(Request::CheckSponsor { .. })
+        ));
+        assert!(!state.busy());
+        assert!(
+            state
+                .sponsor_request(true, now + Duration::from_secs(3))
+                .is_none()
+        );
+        assert!(matches!(
+            state.prepare(Action::Control(Control::Pause), None, 0.0, 1),
+            Some(Request::Control { .. })
+        ));
+        state.finish(Reply::SponsorChecked(Ok(None)));
+        assert!(state.busy());
+        state.finish(Reply::Controlled {
+            control: Control::Pause,
+            result: Ok(()),
+        });
+        assert!(!state.busy());
+        assert!(
+            state
+                .sponsor_request(true, now + Duration::from_secs(1))
+                .is_none()
+        );
+        assert!(
+            state
+                .sponsor_request(true, now + Duration::from_secs(3))
+                .is_some()
+        );
+        state.finish(Reply::SponsorChecked(Ok(Some(30.0))));
+        assert!(
+            state
+                .sponsor_request(true, now + Duration::from_secs(10))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn monitoring_ignores_other_videos_live_unconfirmed_and_disconnected_sessions() {
+        let now = Instant::now();
+        let mut state = monitoring();
+        state.receive_segments("another_one", &[]);
+        assert_eq!(state.sponsor_segments.len(), 1);
+        state.session.as_mut().unwrap().confirmed = false;
+        assert!(state.sponsor_request(true, now).is_none());
+        state.session.as_mut().unwrap().confirmed = true;
+        state.session.as_mut().unwrap().video.live = true;
+        assert!(state.sponsor_request(true, now).is_none());
+        state.session.as_mut().unwrap().video.live = false;
+        state.prepare(Action::Disconnect, None, 0.0, 1);
+        assert!(state.sponsor_request(true, now).is_none());
+        state.finish(Reply::Disconnected);
+        assert!(state.sponsor_request(true, now).is_none());
     }
 
     #[test]

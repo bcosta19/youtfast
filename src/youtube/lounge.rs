@@ -18,6 +18,16 @@ struct Status {
     state: Option<i64>,
     seconds: Option<f64>,
     volume: Option<f64>,
+    ad: bool,
+}
+
+impl Status {
+    fn sponsor_target(&self, video: &str, segments: &[crate::model::Segment]) -> Option<f64> {
+        if self.video.as_deref() != Some(video) || self.state != Some(1) || self.ad {
+            return None;
+        }
+        crate::desktop::cast::sponsor_target(self.seconds?, segments)
+    }
 }
 
 pub struct Session {
@@ -105,9 +115,11 @@ impl Session {
 
     async fn command(&mut self, command: &str, values: &[(&str, String)]) -> Result<(), Error> {
         self.rid += 1;
+        // Reserve the offset before awaiting: cancellation must not reuse it.
+        self.offset += 1;
         let mut form = vec![
             ("count".into(), "1".into()),
-            ("ofs".into(), (self.offset + 1).to_string()),
+            ("ofs".into(), self.offset.to_string()),
             ("req0__sc".into(), command.into()),
         ];
         form.extend(
@@ -122,7 +134,6 @@ impl Session {
                 .form(&form),
         )
         .await?;
-        self.offset += 1;
         self.read(&data)
     }
 
@@ -173,6 +184,39 @@ impl Session {
             }
         }
         Err(Error::Unconfirmed)
+    }
+
+    /// Always request fresh telemetry; a cached position must never trigger a seek.
+    pub async fn skip_sponsor(
+        &mut self,
+        video: &str,
+        segments: &[crate::model::Segment],
+        enabled: &std::sync::atomic::AtomicBool,
+    ) -> Result<Option<f64>, Error> {
+        self.status.video = None;
+        self.status.state = None;
+        self.status.seconds = None;
+        self.command("getNowPlaying", &[]).await?;
+        for _ in 0..3 {
+            if self.status.video.is_some()
+                && self.status.state.is_some()
+                && self.status.seconds.is_some()
+            {
+                break;
+            }
+            self.poll().await?;
+        }
+        let Some(end) = self.status.sponsor_target(video, segments) else {
+            return Ok(None);
+        };
+        if !enabled.load(std::sync::atomic::Ordering::Relaxed) {
+            return Ok(None);
+        }
+        self.command("seekTo", &[("newTime", end.to_string())])
+            .await?;
+        // Do not reuse the pre-seek position while waiting for a TV event.
+        self.status.seconds = None;
+        Ok(Some(end))
     }
 
     pub async fn control(&mut self, control: Control) -> Result<(), Error> {
@@ -260,6 +304,10 @@ impl Session {
                     "S" => self.gsid = data.as_str().unwrap_or_default().to_owned(),
                     "nowPlaying" | "onStateChange" => {
                         if let Some(video) = data["videoId"].as_str() {
+                            if self.status.video.as_deref() != Some(video) {
+                                self.status.seconds = None;
+                                self.status.state = None;
+                            }
                             self.status.video = Some(video.into());
                         }
                         if let Some(state) = number(&data["state"]) {
@@ -268,6 +316,11 @@ impl Session {
                         if let Some(time) = number(&data["currentTime"]).filter(|v| *v >= 0.0) {
                             self.status.seconds = Some(time);
                         }
+                    }
+                    "adPlaying" | "onAdStateChange" => {
+                        // Only an explicit end/skip event clears an observed ad.
+                        self.status.ad =
+                            !matches!(number(&data["adState"]), Some(-1.0 | 0.0 | 1082.0));
                     }
                     "onVolumeChanged" => {
                         if let Some(volume) =
@@ -378,6 +431,45 @@ mod tests {
     }
 
     #[test]
+    fn sponsor_target_requires_content_playback_and_suppresses_advertisements() {
+        let segment = crate::model::Segment {
+            category: "sponsor".into(),
+            start: 10.0,
+            end: 30.0,
+        };
+        let mut status = Status {
+            video: Some("abcdefghijk".into()),
+            state: Some(1),
+            seconds: Some(12.0),
+            ..Default::default()
+        };
+        assert_eq!(
+            status.sponsor_target("abcdefghijk", std::slice::from_ref(&segment)),
+            Some(30.0)
+        );
+        for state in [-1, 0, 2, 3, 1081, 1082] {
+            status.state = Some(state);
+            assert_eq!(
+                status.sponsor_target("abcdefghijk", std::slice::from_ref(&segment)),
+                None
+            );
+        }
+        status.state = Some(1);
+        status.ad = true;
+        assert_eq!(
+            status.sponsor_target("abcdefghijk", std::slice::from_ref(&segment)),
+            None
+        );
+        status.ad = false;
+        assert_eq!(
+            status.sponsor_target("another_one", std::slice::from_ref(&segment)),
+            None
+        );
+        status.seconds = None;
+        assert_eq!(status.sponsor_target("abcdefghijk", &[segment]), None);
+    }
+
+    #[test]
     fn playback_confirmation_requires_an_actual_tv_event_not_just_a_successful_post() {
         let client = super::super::innertube::http().build().unwrap();
         let mut session = Session {
@@ -400,7 +492,21 @@ mod tests {
         assert_eq!(session.status.state, Some(1));
         assert_eq!(session.status.seconds, Some(12.5));
         assert_eq!(session.status.volume, Some(65.0));
-        assert_eq!(session.aid, 4);
+        session
+            .read(br#"[[5,["adPlaying",{"adState":"1081","currentTime":"1"}]]]"#)
+            .unwrap();
+        assert!(session.status.ad);
+        assert_eq!(session.status.seconds, Some(12.5));
+        session
+            .read(br#"[[6,["onAdStateChange",{"adState":"1082"}]]]"#)
+            .unwrap();
+        assert!(!session.status.ad);
+        session
+            .read(br#"[[7,["nowPlaying",{"videoId":"another_one"}]]]"#)
+            .unwrap();
+        assert!(session.status.seconds.is_none());
+        assert!(session.status.state.is_none());
+        assert_eq!(session.aid, 7);
         assert_eq!(number(&serde_json::json!("NaN")), None);
     }
 }

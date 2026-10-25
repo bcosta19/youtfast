@@ -177,8 +177,21 @@ YouTFast; its protocol references are the ytcast and casttube projects.
 
 The TV's YouTube application and account handle playback, including ads and
 access restrictions. YouTFast does not transfer its account session, browser
-cookies or local library. SponsorBlock skips, local captions settings, local
-autoplay/queue and account history-sync rules are not transferred to the TV;
+cookies or local library. With **Skip sponsors (SponsorBlock)** enabled, YouTFast
+also checks the sent video's TV position and sends remote seeks over DIAL/Lounge
+or Google Cast (`catt`). It uses the same automatic categories as local playback:
+sponsors, self-promotion and interaction reminders. Keep YouTFast running and
+connected; disconnecting or disabling SponsorBlock stops further automatic seeks.
+This applies to the video explicitly sent, not subsequent videos chosen by the
+TV's autoplay. Live streams, paused playback and missing seek telemetry are not
+skipped. TV position polling and helper startup can delay a skip; the last two
+seconds of a segment are left alone. Lounge advertisement events suppress sponsor
+seeks; `catt` does not expose a reliable separate ad flag, so Cast relies on the
+receiver's play state and seek capability. This does not block YouTube ads.
+Physical TV/Chromecast and native platform qualification remain pending.
+
+Local captions settings, local autoplay/queue and account history-sync rules are
+not transferred to the TV;
 YouTube on the TV may record its own history. Discovery results and the selected
 TV are kept only in memory. Raw helper output and errors are never displayed
 or logged, including with verbose logging.

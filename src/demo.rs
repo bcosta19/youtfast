@@ -264,6 +264,7 @@ impl eframe::App for Demo {
                         0,
                     ) {
                         let reply = match request {
+                            Request::CheckSponsor { .. } => Reply::SponsorChecked(Ok(None)),
                             Request::Disconnect => Reply::Disconnected,
                             Request::FindYouTube(host) => Reply::Devices(Ok(vec![Device {
                                 host,
