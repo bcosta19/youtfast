@@ -10,6 +10,11 @@ are the distribution record.
 
 ### Added
 
+- Opt-in SponsorBlock remote skips for the video sent to a YouTube DIAL TV or
+  Google Cast receiver. YouTFast checks TV telemetry independently of local
+  playback and stops monitoring on disconnect; keep the app running. Subsequent
+  TV autoplay videos and YouTube ads are not covered. Physical-device and native
+  platform qualification remain pending.
 - Native YouTube TV support through DIAL/Lounge, alongside Google Cast.
   Discovery combines SSDP and AirPlay announcements (used only to locate and
   verify a YouTube DIAL endpoint), with manual local-IP lookup for compatible

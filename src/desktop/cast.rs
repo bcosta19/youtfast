@@ -83,6 +83,12 @@ impl Error {
 }
 
 pub enum Request {
+    CheckSponsor {
+        enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        device: Device,
+        video: String,
+        segments: Vec<crate::model::Segment>,
+    },
     Scan,
     Disconnect,
     FindYouTube(IpAddr),
@@ -98,6 +104,7 @@ pub enum Request {
 }
 
 pub enum Reply {
+    SponsorChecked(Result<Option<f64>, Error>),
     Disconnected,
     Devices(Result<Vec<Device>, Error>),
     Started {
@@ -132,7 +139,7 @@ impl Worker {
             .enable_all()
             .build()
             .map_err(|_| Error::Unavailable)?;
-        let (commands, mut incoming) = tokio::sync::mpsc::channel(1);
+        let (commands, mut incoming) = tokio::sync::mpsc::channel(2);
         let (outgoing, replies) = mpsc::channel();
         let (shutdown, stopping) = tokio::sync::oneshot::channel();
         let thread = std::thread::Builder::new()
@@ -143,8 +150,31 @@ impl Worker {
                         _ = stopping => {},
                         _ = async {
                             let mut lounge = None;
-                            while let Some(request) = incoming.recv().await {
-                                let reply = execute_with_session(&program, request, &mut lounge, native_discovery).await;
+                            let mut next = None;
+                            loop {
+                                let request = match next.take() {
+                                    Some(request) => request,
+                                    None => match incoming.recv().await {
+                                        Some(request) => request,
+                                        None => break,
+                                    },
+                                };
+                                let monitoring = matches!(request, Request::CheckSponsor { .. });
+                                let reply = if monitoring {
+                                    tokio::select! {
+                                        biased;
+                                        request = incoming.recv() => {
+                                            let _ = outgoing.send(Reply::SponsorChecked(Ok(None)));
+                                            ctx.request_repaint();
+                                            let Some(request) = request else { break; };
+                                            next = Some(request);
+                                            continue;
+                                        }
+                                        reply = execute_with_session(&program, request, &mut lounge, native_discovery) => reply,
+                                    }
+                                } else {
+                                    execute_with_session(&program, request, &mut lounge, native_discovery).await
+                                };
                                 if outgoing.send(reply).is_err() {
                                     break;
                                 }
@@ -201,6 +231,37 @@ async fn execute_with_session(
     native_discovery: bool,
 ) -> Reply {
     match request {
+        Request::CheckSponsor {
+            enabled,
+            device,
+            video,
+            segments,
+        } => {
+            let result = tokio::time::timeout(Duration::from_secs(15), async {
+                start_args(&device, &video, 0)?;
+                if matches!(device.protocol, Protocol::YouTube { .. }) {
+                    let (_, session) = lounge
+                        .as_mut()
+                        .filter(|(target, _)| target == &device)
+                        .ok_or(Error::ConnectionExpired)?;
+                    return session.skip_sponsor(&video, &segments, &enabled).await;
+                }
+                let info = run(program, &target_args(&device, &["info", "--json-output"])).await?;
+                let Some(end) = cast_sponsor_target(&info, &video, &segments)? else {
+                    return Ok(None);
+                };
+                if !enabled.load(std::sync::atomic::Ordering::Relaxed) {
+                    return Ok(None);
+                }
+                let mut args = target_args(&device, &["seek"]);
+                args.push(end.ceil().to_string());
+                run(program, &args).await?;
+                Ok(Some(end))
+            })
+            .await
+            .unwrap_or(Err(Error::TimedOut));
+            Reply::SponsorChecked(result)
+        }
         Request::Disconnect => {
             *lounge = None;
             Reply::Disconnected
@@ -292,6 +353,47 @@ async fn execute_with_session(
             Reply::Controlled { control, result }
         }
     }
+}
+
+/// Fail closed on another video, live streams, pause or missing seek telemetry.
+/// catt does not expose a reliable separate advertisement flag.
+fn cast_sponsor_target(
+    json: &[u8],
+    video: &str,
+    segments: &[crate::model::Segment],
+) -> Result<Option<f64>, Error> {
+    let info: serde_json::Value =
+        serde_json::from_slice(json).map_err(|_| Error::InvalidResponse)?;
+    if !confirmed(json, video)?
+        || info["stream_type"] != "BUFFERED"
+        || info["supported_media_commands"]
+            .as_u64()
+            .is_none_or(|commands| commands & 2 == 0)
+    {
+        return Ok(None);
+    }
+    Ok(info["current_time"]
+        .as_f64()
+        .and_then(|position| sponsor_target(position, segments)))
+}
+
+pub(crate) fn sponsor_target(position: f64, segments: &[crate::model::Segment]) -> Option<f64> {
+    if !position.is_finite() || position < 0.0 {
+        return None;
+    }
+    segments
+        .iter()
+        .filter(|segment| {
+            segment.skipped_at_once()
+                && segment.start.is_finite()
+                && segment.end.is_finite()
+                && segment.start >= 0.0
+                && segment.end > segment.start
+                && position >= segment.start
+                && position + 2.0 < segment.end
+        })
+        .map(|segment| segment.end)
+        .max_by(f64::total_cmp)
 }
 
 fn merge_discovery(
@@ -460,6 +562,60 @@ mod tests {
             // Never used as a command, argument or shell expression.
             name: "TV; $(untrusted name)".into(),
         }
+    }
+
+    fn sponsor() -> crate::model::Segment {
+        crate::model::Segment {
+            category: "sponsor".into(),
+            start: 10.0,
+            end: 30.25,
+        }
+    }
+
+    #[test]
+    fn automatic_skips_require_a_valid_matching_segment_and_tv_telemetry() {
+        let segments = [sponsor()];
+        let base = serde_json::json!({"content_id":"abcdefghijk", "player_state":"PLAYING",
+            "current_time":12.0, "stream_type":"BUFFERED", "supported_media_commands":2});
+        let target = |info: &serde_json::Value| {
+            cast_sponsor_target(&serde_json::to_vec(info).unwrap(), "abcdefghijk", &segments)
+                .unwrap()
+        };
+        assert_eq!(target(&base), Some(30.25));
+        for (key, value) in [
+            ("content_id", serde_json::json!("another_one")),
+            ("player_state", serde_json::json!("PAUSED")),
+            ("player_state", serde_json::json!("BUFFERING")),
+            ("current_time", serde_json::Value::Null),
+            ("current_time", serde_json::json!(-1)),
+            ("current_time", serde_json::json!(30.25)),
+            ("stream_type", serde_json::json!("LIVE")),
+            ("supported_media_commands", serde_json::json!(0)),
+        ] {
+            let mut info = base.clone();
+            info[key] = value;
+            assert_eq!(target(&info), None, "unexpected seek for {key}");
+        }
+        for key in [
+            "content_id",
+            "player_state",
+            "current_time",
+            "stream_type",
+            "supported_media_commands",
+        ] {
+            let mut info = base.clone();
+            info.as_object_mut().unwrap().remove(key);
+            assert_eq!(target(&info), None);
+        }
+        let mut segment = sponsor();
+        segment.category = "intro".into();
+        assert_eq!(sponsor_target(12.0, &[segment]), None);
+        for position in [f64::NAN, f64::INFINITY, -1.0, 9.0, 29.0, 30.25] {
+            assert_eq!(sponsor_target(position, &segments), None);
+        }
+        let mut invalid = sponsor();
+        invalid.end = f64::INFINITY;
+        assert_eq!(sponsor_target(12.0, &[invalid]), None);
     }
 
     #[test]
@@ -635,6 +791,99 @@ else:
             )
             .await;
             assert!(matches!(reply, Reply::Controlled { result: Ok(()), .. }));
+        }
+
+        #[tokio::test]
+        async fn sponsor_monitor_reads_tv_position_and_uses_an_absolute_seek() {
+            let fixture = Fixture::new(
+                r#"
+import sys, json
+args = sys.argv[1:]
+assert args[:2] == ['--device', '192.168.1.20']
+if args[2:] == ['info', '--json-output']:
+    print(json.dumps({'content_id':'abcdefghijk', 'player_state':'PLAYING', 'current_time':12,
+        'stream_type':'BUFFERED', 'supported_media_commands':2}))
+else:
+    assert args[2:] == ['seek', '31']
+    from pathlib import Path
+    Path(__file__).with_name('sought').touch()
+"#,
+            );
+            for enabled in [false, true] {
+                let reply = execute(
+                    &fixture.helper(),
+                    Request::CheckSponsor {
+                        device: device(),
+                        video: "abcdefghijk".into(),
+                        segments: vec![sponsor()],
+                        enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(enabled)),
+                    },
+                )
+                .await;
+                let Reply::SponsorChecked(result) = reply else {
+                    panic!("wrong reply")
+                };
+                assert_eq!(result.unwrap(), enabled.then_some(30.25));
+                assert_eq!(fixture.0.join("sought").exists(), enabled);
+            }
+        }
+
+        #[test]
+        fn interactive_commands_cancel_slow_sponsor_checks() {
+            let fixture = Fixture::new(
+                r#"
+import sys, json, time
+from pathlib import Path
+args = sys.argv[1:]
+if args[2:] == ['info', '--json-output']:
+    Path(__file__).with_name('checking').touch()
+    time.sleep(30)
+    print('{}')
+elif args[2:] == ['stop']:
+    pass
+else:
+    raise AssertionError('unexpected command')
+"#,
+            );
+            let worker =
+                Worker::start_program(egui::Context::default(), fixture.helper(), false).unwrap();
+            worker
+                .send(Request::CheckSponsor {
+                    device: device(),
+                    video: "abcdefghijk".into(),
+                    segments: vec![sponsor()],
+                    enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+                })
+                .unwrap();
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while !fixture.0.join("checking").exists() {
+                assert!(std::time::Instant::now() < deadline, "helper did not start");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            worker
+                .send(Request::Control {
+                    device: device(),
+                    control: Control::Stop,
+                })
+                .unwrap();
+            loop {
+                if worker.poll().any(|reply| {
+                    matches!(
+                        reply,
+                        Reply::Controlled {
+                            control: Control::Stop,
+                            result: Ok(())
+                        }
+                    )
+                }) {
+                    break;
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "stop waited for background telemetry"
+                );
+                std::thread::sleep(Duration::from_millis(10));
+            }
         }
 
         #[tokio::test]

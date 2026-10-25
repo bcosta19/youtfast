@@ -362,7 +362,18 @@ impl App {
 
     pub(super) fn set_sponsorblock(&mut self, on: bool) {
         self.state.settings.sponsorblock = on;
+        self.state
+            .cast
+            .sponsor_enabled
+            .store(on, std::sync::atomic::Ordering::Relaxed);
         self.save_settings();
+        if on
+            && let Some(session) = &self.state.cast.session
+            && !session.video.live
+        {
+            self.backend
+                .send(Command::LoadSegments(session.video.id.clone()));
+        }
         if !on {
             self.state.segments.clear();
         } else if let Some(video) = &self.state.watching
