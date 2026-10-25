@@ -443,11 +443,15 @@ fn buttons(
     let fullscreen_button = mode != Mode::Short || row.width() >= 152.0;
     let captions_button =
         !status.subtitles.is_empty() && (mode != Mode::Short || row.width() >= 188.0);
+    // Shorts stay a picture-first bar; the switch is for a page or full screen.
+    // A narrow page bar keeps the mode on its shortcut instead.
+    let audio_only_button = mode != Mode::Short && row.width() >= 340.0;
     let mute_button = mode != Mode::Short || row.width() >= 112.0;
     let right_count = 1
         + usize::from(fullscreen_button)
         + usize::from(page_controls) * 2
-        + usize::from(captions_button);
+        + usize::from(captions_button)
+        + usize::from(audio_only_button);
     let speed =
         (!live && status.speed != 1.0 && row.width() >= 900.0).then(|| speed_label(status.speed));
     let speed_width = speed.as_ref().map_or(0.0, |label| {
@@ -570,16 +574,24 @@ fn buttons(
             let on = status.subtitles.iter().any(|subtitle| subtitle.selected);
             let response = control_button(ui, Icon::Captions, 18.0, &tr(locale, "Captions (c)"));
             if on {
-                // YouTube's red line under the button while they show.
-                let line = Rect::from_center_size(
-                    pos2(response.rect.center().x, response.rect.bottom() - 4.0),
-                    vec2(18.0, 2.5),
-                );
-                ui.painter()
-                    .rect_filled(line, CornerRadius::same(1), state.palette.accent);
+                accent_line(ui, &response, state.palette.accent);
             }
             if response.clicked() {
                 actions.push(Action::ToggleCaptions);
+            }
+        }
+        if audio_only_button {
+            let response = control_button(
+                ui,
+                Icon::AudioOnly,
+                18.0,
+                &tr(locale, "Audio only (Shift+A)"),
+            );
+            if state.audio_only {
+                accent_line(ui, &response, state.palette.accent);
+            }
+            if response.clicked() {
+                actions.push(Action::ToggleAudioOnly);
             }
         }
         if let Some(speed) = speed {
@@ -591,6 +603,16 @@ fn buttons(
         }
     });
     (left.min_rect(), right.min_rect())
+}
+
+/// YouTube's red line under a control while its feature is on.
+fn accent_line(ui: &Ui, response: &egui::Response, accent: Color32) {
+    let line = Rect::from_center_size(
+        pos2(response.rect.center().x, response.rect.bottom() - 4.0),
+        vec2(18.0, 2.5),
+    );
+    ui.painter()
+        .rect_filled(line, CornerRadius::same(1), accent);
 }
 
 /// `Next: <title> (N)` for the next button's hover.
@@ -1128,10 +1150,6 @@ fn menu(
                                     state.player_menu = PlayerMenu::Closed;
                                 }
                             }
-                            if pick_row(ui, &tr(locale, "Audio only"), state.audio_only) {
-                                actions.push(Action::ToggleAudioOnly);
-                                state.player_menu = PlayerMenu::Closed;
-                            }
                         }
                         PlayerMenu::Captions => {
                             if back_row(ui, &tr(locale, "Captions")) {
@@ -1185,7 +1203,7 @@ fn menu_rows(state: &State, status: &Status, live: bool) -> usize {
         PlayerMenu::Closed => 0,
         PlayerMenu::Main => 4 + usize::from(!live) + usize::from(!status.subtitles.is_empty()),
         PlayerMenu::Speed => 1 + SPEEDS.len(),
-        PlayerMenu::Quality => 3 + offered(state).len(),
+        PlayerMenu::Quality => 2 + offered(state).len(),
         PlayerMenu::Captions => 3 + status.subtitles.len(),
         PlayerMenu::CaptionStyle => 4,
     }

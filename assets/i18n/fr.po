@@ -1413,6 +1413,9 @@ msgstr "Gardez la vidéo visible lorsque vous faites défiler la page vers les c
 msgid "Audio only"
 msgstr "Audio seul"
 
+msgid "Audio only (Shift+A)"
+msgstr "Audio seul (Shift+A)"
+
 msgid "Audio-only mode"
 msgstr "Mode audio seul"
 

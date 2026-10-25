@@ -50,6 +50,7 @@ fastframe_icons::icons! {
         BookmarkFilled => "bookmark-filled",
         SkipForward => "skip-forward",
         Captions => "captions",
+        AudioOnly => "headphones",
         Speed => "gauge",
         Queue => "list-plus",
         MiniPlayer => "picture-in-picture-2",

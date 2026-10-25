@@ -1439,6 +1439,9 @@ msgstr "Buscar no histórico"
 msgid "Audio only"
 msgstr "Apenas áudio"
 
+msgid "Audio only (Shift+A)"
+msgstr "Apenas áudio (Shift+A)"
+
 msgid "Audio-only mode"
 msgstr "Modo apenas áudio"
 

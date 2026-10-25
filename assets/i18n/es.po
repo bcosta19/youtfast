@@ -1413,6 +1413,9 @@ msgstr "Mantén el vídeo visible al desplazarte hacia los comentarios."
 msgid "Audio only"
 msgstr "Solo audio"
 
+msgid "Audio only (Shift+A)"
+msgstr "Solo audio (Shift+A)"
+
 msgid "Audio-only mode"
 msgstr "Modo solo audio"
 

@@ -8,6 +8,12 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Changed
+
+- Audio-only mode has its own headphones button in the player controls, with the
+  accent line under it while the mode is on, instead of a row inside the Quality
+  menu.
+
 ### Fixed
 
 - Search, feeds and the account work on a freshly installed Windows. YouTube's

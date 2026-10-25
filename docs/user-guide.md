@@ -45,8 +45,8 @@ Text inputs and menus keep their own keys. Focused buttons own Space, and a
 focused volume slider keeps its arrow keys. Outside the player, ↑/↓ scroll the
 active page vertically and J/K move item selection (`g`/`G` jump to the top or
 bottom). Hold the video to temporarily play at 2×; releasing restores the
-previous speed. The player menu also offers repeat, audio-only mode, caption
-size/background, copying a timestamped link, and opening the video in a browser.
+previous speed. The player menu also offers repeat, caption size/background,
+copying a timestamped link, and opening the video in a browser.
 
 Search uses RustyPipe directly, with separate video, channel and playlist
 results. Video filters include date, duration, live status and ordering.
@@ -66,7 +66,8 @@ Settings → Playback → Video buffer chooses between mpv's standard demuxer ca
 (**Large — 150 MiB / 50 MiB**, the default, buffering several minutes ahead for
 unstable connections and instant seeking) and **Small — 50 MiB / 20 MiB** (to
 keep RAM usage around ~200 MB and use less data when skipping videos early).
-Audio-only mode (`Shift+A` or the player's Quality menu) streams and decodes
+Audio-only mode (`Shift+A` or the headphones button in the player's controls)
+streams and decodes
 only the audio track (`ba/b` and `vid=no`) for the current video, resetting to
 standard video when opening another video or restarting the app.
 
