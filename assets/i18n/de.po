@@ -1413,6 +1413,9 @@ msgstr "Das Video bleibt beim Scrollen zu den Kommentaren sichtbar."
 msgid "Audio only"
 msgstr "Nur Audio"
 
+msgid "Audio only (Shift+A)"
+msgstr "Nur Audio (Shift+A)"
+
 msgid "Audio-only mode"
 msgstr "Nur-Audio-Modus"
 
