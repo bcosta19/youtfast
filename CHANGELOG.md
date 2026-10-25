@@ -8,6 +8,11 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Added
+
+- A bilingual project landing page with a local product demo, platform download
+  links and automatic GitHub Pages publication after merging website changes.
+
 ### Changed
 
 - Audio-only mode has its own headphones button in the player controls, with the

@@ -5,6 +5,7 @@
 <p align="center"><strong>YouTube, native and fast.</strong></p>
 <p align="center">
   <a href="https://github.com/bcosta19/youtfast/releases">Releases</a> ·
+  <a href="https://bcosta19.github.io/youtfast/">Website</a> ·
   <a href="docs/user-guide.md">User guide</a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
   <a href="CONTRIBUTING.md">Contribute</a>

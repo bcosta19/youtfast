@@ -45,6 +45,8 @@ inferring them from files in Git.
 - Allowed Actions: GitHub-owned, `msys2/setup-msys2` and `Swatinem/rust-cache`,
   with SHA pinning required. Adding an Action means updating that list.
 - Keep the default token read-only. Only draft creation gets `contents: write`.
+  The website deployment job gets `pages: write` and `id-token: write` for
+  GitHub Pages; PR builds remain read-only.
 - Require approval for workflows from outside contributors as appropriate;
   never run their code through `pull_request_target` with secrets.
 - Use GitHub-hosted ephemeral runners for untrusted contributions.
@@ -55,3 +57,17 @@ inferring them from files in Git.
 - Private vulnerability reporting, Dependabot alerts/security updates, secret
   scanning and push protection are enabled.
 - Review artifact/cache usage. Do not use larger runners as an implicit upgrade.
+
+## Project website
+
+The Website workflow (`.github/workflows/pages.yml`) builds a small, allowlisted
+static artifact with `python3 tools/build_site.py`. PRs and merge queues validate
+the build without deployment. Site-related pushes to `main` deploy automatically
+through the `github-pages` environment; manual dispatch on `main` also deploys.
+Only the deployment job can write Pages or request an OIDC token. All Actions
+are GitHub-owned and SHA-pinned. The uploaded artifact expires after one day.
+
+The repository's Pages source must be GitHub Actions (`build_type: workflow`).
+The `github-pages` environment should allow only `main`, without required manual
+review, for merge-to-publication automation. These are repository settings, not
+guarantees provided by the workflow file. See [website maintenance](../website/README.md).
