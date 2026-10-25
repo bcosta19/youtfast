@@ -543,6 +543,7 @@ pub enum View {
 /// applies them after the frame.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action {
+    Cast(crate::desktop::cast::Action),
     SetSearchOptions(crate::youtube::innertube::SearchOptions),
     SetChannelOrder(crate::youtube::innertube::ChannelOrder),
     SetHistoryQuery(String),

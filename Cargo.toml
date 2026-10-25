@@ -40,7 +40,10 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 raw-window-handle = "0.6"
 # The backend runtime: yt-dlp runs as a child process off the UI thread.
 # `time` bounds credential-store calls; a locked keyring must not hang.
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "process", "io-util", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "process", "io-util", "time", "net"] }
+# Native discovery of YouTube DIAL TVs, including Samsung AirPlay adverts.
+mdns-sd = { version = "0.21.6", default-features = false, features = ["async"] }
+quick-xml = "0.41"
 # The icons! table and the Lucide icons shared with the sibling apps.
 fastframe-icons = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
 # Inter at its four weights (or the platform's interface face), with the
@@ -92,7 +95,7 @@ sha2 = "0.11"
 # (`innertube::http`): a fresh Windows keeps few roots and fetches the rest
 # only when its own verifier asks. reqwest is the version rustypipe locks;
 # rustls and its ring provider are the ones reqwest already builds.
-reqwest = { version = "0.13", default-features = false }
+reqwest = { version = "0.13", default-features = false, features = ["form", "query"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 rustls-platform-verifier = "0.6"
 

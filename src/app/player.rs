@@ -145,6 +145,7 @@ impl App {
     /// Retry the same video without making a second history entry or
     /// replacing its queue/source list.
     pub(super) fn retry_playback(&mut self) {
+        self.local_playback_generation += 1;
         let Some(video) = &self.state.watching else {
             return;
         };
@@ -324,6 +325,13 @@ impl App {
     /// autoplay is off or nothing comes next. A queued video plays even
     /// with autoplay off, as YouTube's queue does.
     pub(super) fn start_autoplay(&mut self) {
+        if !self
+            .state
+            .cast
+            .allows_local_autoplay(self.local_playback_generation)
+        {
+            return;
+        }
         if self.state.watching_live() || self.state.watching_short() || self.state.playback_loop {
             return;
         }

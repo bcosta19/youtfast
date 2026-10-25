@@ -45,6 +45,7 @@ pub enum Page {
 /// What the views draw from.
 #[derive(Default)]
 pub struct State {
+    pub cast: cast::State,
     pub view: View,
     /// The search field's text.
     pub query: String,
@@ -456,6 +457,8 @@ const RATINGS_KEPT: usize = 200;
 const RATING_FRESH: i64 = 30 * 60;
 
 pub struct App {
+    cast_worker: Option<crate::desktop::cast::Worker>,
+    local_playback_generation: u64,
     state: State,
     backend: Backend,
     dirs: Dirs,
@@ -610,6 +613,8 @@ impl App {
             player,
             surface,
             generation: 0,
+            cast_worker: None,
+            local_playback_generation: 0,
             generations: HashMap::new(),
             details_generation: 0,
             playing_generation: 0,
@@ -667,6 +672,7 @@ impl App {
 
     /// Takes in what the backend and mpv have to say.
     fn poll(&mut self) {
+        self.poll_cast();
         // The themes folder or Omarchy's palette changed on disk.
         if self.custom_themes.needs_reload() {
             self.load_themes();
@@ -804,6 +810,7 @@ impl App {
 
     fn apply(&mut self, ctx: &egui::Context, action: Action) {
         match action {
+            Action::Cast(action) => self.cast_action(ctx, action),
             Action::Search(text) => {
                 let text = text.trim();
                 if text.is_empty() {
@@ -954,6 +961,7 @@ impl App {
                     // Unpausing shows the video: in the mini player, or back
                     // on its page once that was closed.
                     if paused {
+                        self.state.cast.resume_local_playback();
                         self.show_playing();
                     }
                     self.with_player(|player| player.set_paused(!paused));
@@ -961,6 +969,7 @@ impl App {
             }
             Action::SetPaused(paused) => {
                 if !paused {
+                    self.state.cast.resume_local_playback();
                     self.show_playing();
                 }
                 self.with_player(|player| player.set_paused(paused));
@@ -1414,6 +1423,8 @@ impl eframe::App for App {
     }
 
     fn on_exit(&mut self, gl: Option<&glow::Context>) {
+        // Finish cancelling any pending TV helper before the process can exit.
+        self.cast_worker.take();
         // The position of the video playing, written here and now: the
         // backend may not get to a queued save before the process ends.
         if let (Some(video), Some(player)) = (&self.state.watching, &self.player)
@@ -1457,6 +1468,7 @@ fn native_display(cc: &eframe::CreationContext<'_>) -> NativeDisplay {
 }
 
 mod accounts;
+pub mod cast;
 mod history_sync;
 mod loading;
 mod navigation;

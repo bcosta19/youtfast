@@ -1567,3 +1567,108 @@ msgstr "Não foi possível instalar a atualização neste sistema."
 
 msgid "Automatic installation is not supported for this package format."
 msgstr "A instalação automática não é suportada para este formato de pacote."
+
+msgid "Cast to TV"
+msgstr "Transmitir para TV"
+
+msgid "Google Cast devices on your local network."
+msgstr "Dispositivos Google Cast na sua rede local."
+
+msgid "Install catt"
+msgstr "Instalar catt"
+
+msgid "Searching for TVs…"
+msgstr "Buscando TVs…"
+
+msgid "Waiting for the TV…"
+msgstr "Aguardando a TV…"
+
+msgid "Playback confirmed on TV."
+msgstr "Reprodução confirmada na TV."
+
+msgid "Video requested; playback is not confirmed."
+msgstr "Vídeo solicitado; reprodução ainda não confirmada."
+
+msgid "−10 s on TV"
+msgstr "−10 s na TV"
+
+msgid "+10 s on TV"
+msgstr "+10 s na TV"
+
+msgid "TV volume −"
+msgstr "Volume da TV −"
+
+msgid "TV volume +"
+msgstr "Volume da TV +"
+
+msgid "Command sent to TV."
+msgstr "Comando enviado à TV."
+
+msgid "Use these controls for the TV. Player controls and media keys control this computer."
+msgstr "Use estes controles para a TV. Os controles do player e as teclas de mídia controlam este computador."
+
+msgid "Stop on TV"
+msgstr "Parar na TV"
+
+msgid "Disconnect; keep TV playing"
+msgstr "Desconectar e manter na TV"
+
+msgid "Send the current video:"
+msgstr "Enviar o vídeo atual:"
+
+msgid "Open a video to send it to a TV."
+msgstr "Abra um vídeo para enviar à TV."
+
+msgid "No devices found. Turn on Google Cast and check that both devices are on the same network."
+msgstr "Nenhum dispositivo encontrado. Ative o Google Cast e confira se os dois aparelhos estão na mesma rede."
+
+msgid "Search for TVs"
+msgstr "Buscar TVs"
+
+msgid "The TV uses its YouTube app and account. Local playback pauses only after confirmation."
+msgstr "A TV usa seu próprio aplicativo e conta do YouTube. A reprodução local só pausa após a confirmação."
+
+msgid "Install catt to use Google Cast, then search again."
+msgstr "Instale o catt para usar o Google Cast e busque novamente."
+
+msgid "Could not start the TV connection. Try again."
+msgstr "Não foi possível iniciar a conexão com a TV. Tente novamente."
+
+msgid "The TV command failed. Check the TV and your network, then retry."
+msgstr "O comando para a TV falhou. Confira a TV e a rede e tente novamente."
+
+msgid "The TV did not respond in time. Check the TV before retrying."
+msgstr "A TV não respondeu a tempo. Confira a TV antes de tentar novamente."
+
+msgid "Could not read the TV response. Update catt and retry."
+msgstr "Não foi possível ler a resposta da TV. Atualize o catt e tente novamente."
+
+msgid "Playback on TV was not confirmed. Check the TV before retrying."
+msgstr "A reprodução na TV não foi confirmada. Confira a TV antes de tentar novamente."
+
+msgid "This video or device cannot be sent to the TV."
+msgstr "Não é possível transmitir este vídeo ou usar este dispositivo."
+
+msgid "The TV is playing, but local playback could not be paused."
+msgstr "A TV está reproduzindo, mas não foi possível pausar a reprodução local."
+
+msgid "Google Cast and YouTube TVs on your network."
+msgstr "TVs com Google Cast ou YouTube na sua rede."
+
+msgid "No TVs found. Open YouTube on your TV, check the network, or enter its IP address below."
+msgstr "Nenhuma TV encontrada. Abra o YouTube na TV, confira a rede ou informe o IP abaixo."
+
+msgid "Find a YouTube TV by IP address"
+msgstr "Buscar uma TV com YouTube pelo IP"
+
+msgid "Find TV"
+msgstr "Buscar TV"
+
+msgid "No compatible YouTube app was found at this TV address."
+msgstr "Nenhum aplicativo YouTube compatível foi encontrado neste endereço."
+
+msgid "The TV connection expired. Disconnect and send the video again."
+msgstr "A conexão com a TV expirou. Desconecte e envie o vídeo novamente."
+
+msgid "Could not read the TV response. Try again."
+msgstr "Não foi possível ler a resposta da TV. Tente novamente."
