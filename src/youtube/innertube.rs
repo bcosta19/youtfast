@@ -70,7 +70,7 @@ pub fn client(dirs: &Dirs) -> Result<RustyPipe, Error> {
 /// own verifier needs them, so until something else (a browser) had
 /// reached Google, every request failed. Without the platform verifier,
 /// reqwest's own (the native roots) is kept.
-fn http() -> reqwest::ClientBuilder {
+pub(crate) fn http() -> reqwest::ClientBuilder {
     let builder = reqwest::ClientBuilder::new();
     match platform_tls() {
         Some(config) => builder.use_preconfigured_tls(config),

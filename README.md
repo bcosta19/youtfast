@@ -105,6 +105,13 @@ Playback needs libmpv with Lua support, current yt-dlp and its matching EJS/JS
 runtime. Optional browser-session import also needs `python3` with the `yt_dlp`
 module. See the [requirements](docs/user-guide.md#requirements).
 
+**Cast to TV** supports YouTube TVs through native DIAL/Lounge, including
+compatible Samsung TVs without Chromecast. Google Cast support additionally
+uses a separately installed [`catt`](https://github.com/skorokithakis/catt)
+executable on `PATH`. The button beside Audio only in the player, or in the top
+bar, opens the TV picker and remote. A TV can also be found by its local IP. See
+[TV casting](docs/user-guide.md#cast-to-tv) for setup, supported targets and limits.
+
 ## Help wanted
 
 YouTFast gets better with every bug report, test run and pull request, and you

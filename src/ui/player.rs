@@ -444,14 +444,15 @@ fn buttons(
     let captions_button =
         !status.subtitles.is_empty() && (mode != Mode::Short || row.width() >= 188.0);
     // Shorts stay a picture-first bar; the switch is for a page or full screen.
-    // A narrow page bar keeps the mode on its shortcut instead.
-    let audio_only_button = mode != Mode::Short && row.width() >= 340.0;
+    // Reserve two adjacent slots for audio-only and Cast. A narrow page bar
+    // keeps audio-only on its shortcut and Cast available from the top bar.
+    let audio_only_button = mode != Mode::Short && row.width() >= 376.0;
     let mute_button = mode != Mode::Short || row.width() >= 112.0;
     let right_count = 1
         + usize::from(fullscreen_button)
         + usize::from(page_controls) * 2
         + usize::from(captions_button)
-        + usize::from(audio_only_button);
+        + usize::from(audio_only_button) * 2;
     let speed =
         (!live && status.speed != 1.0 && row.width() >= 900.0).then(|| speed_label(status.speed));
     let speed_width = speed.as_ref().map_or(0.0, |label| {
@@ -592,6 +593,13 @@ fn buttons(
             }
             if response.clicked() {
                 actions.push(Action::ToggleAudioOnly);
+            }
+            let cast = control_button(ui, Icon::Cast, 18.0, &tr(locale, "Cast to TV"));
+            if state.cast.session.is_some() {
+                accent_line(ui, &cast, state.palette.accent);
+            }
+            if cast.clicked() {
+                actions.push(Action::Cast(crate::desktop::cast::Action::Open));
             }
         }
         if let Some(speed) = speed {

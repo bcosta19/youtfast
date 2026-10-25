@@ -119,7 +119,11 @@ impl App {
                         self.state.library.mark_finished(&video.id);
                         self.save_library();
                     }
-                    if (self.state.settings.autoplay || !self.state.queue.is_empty())
+                    if self
+                        .state
+                        .cast
+                        .allows_local_autoplay(self.local_playback_generation)
+                        && (self.state.settings.autoplay || !self.state.queue.is_empty())
                         && !self.await_playlist_page(PlaylistAdvance::Autoplay)
                     {
                         self.start_autoplay();
@@ -162,6 +166,7 @@ impl App {
     }
 
     pub(super) fn open(&mut self, mut video: Video) {
+        self.local_playback_generation += 1;
         log::debug!("opening video");
         self.playback_report = history_sync::PlaybackReport::default();
         self.playback_tick = Instant::now();

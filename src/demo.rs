@@ -149,7 +149,8 @@ pub(crate) fn fixture(page: &str) -> State {
     state.comments = Fetch::Ready(Vec::new());
     state.mini_closed = true;
     state.view = match page {
-        "watch" | "transcript" | "shorts" | "fullscreen" => View::Watch,
+        "watch" | "transcript" | "shorts" | "fullscreen" | "cast" | "cast-connected"
+        | "cast-missing" => View::Watch,
         "results" => View::Results,
         "channel" => View::Channel,
         "playlist" => View::Playlist,
@@ -187,6 +188,33 @@ pub(crate) fn fixture(page: &str) -> State {
     if page == "mini" {
         state.mini_closed = false;
     }
+    if matches!(page, "cast" | "cast-connected" | "cast-missing") {
+        use crate::desktop::cast::{Action, Device, Error, Reply};
+        let device = Device {
+            protocol: crate::desktop::cast::Protocol::GoogleCast,
+            host: "192.168.1.20".parse().unwrap(),
+            name: "Demo TV — Google Cast".into(),
+        };
+        state.cast.prepare(Action::Open, None, 0.0, 0);
+        state.cast.finish(Reply::Devices(if page == "cast-missing" {
+            Err(Error::MissingHelper)
+        } else {
+            Ok(vec![device.clone()])
+        }));
+        if page == "cast-connected" {
+            state.cast.prepare(
+                Action::Start(device.clone()),
+                state.watching.as_ref(),
+                84.0,
+                0,
+            );
+            state.cast.finish(Reply::Started {
+                device,
+                video: state.watching.as_ref().unwrap().id.clone(),
+                result: Ok(()),
+            });
+        }
+    }
     state
 }
 
@@ -215,6 +243,48 @@ impl eframe::App for Demo {
         ui::release_speed_hold(ui.ctx(), &self.state, &mut actions);
         for action in actions {
             match action {
+                Action::Cast(action) => {
+                    // Keep the demo entirely offline: no helper, discovery or
+                    // YouTube request is ever started from this harness.
+                    use crate::desktop::cast::{Device, Reply, Request};
+                    if let Some(request) = self.state.cast.prepare(
+                        action,
+                        self.state.watching.as_ref(),
+                        self.status.position,
+                        0,
+                    ) {
+                        let reply = match request {
+                            Request::Disconnect => Reply::Disconnected,
+                            Request::FindYouTube(host) => Reply::Devices(Ok(vec![Device {
+                                host,
+                                name: "Demo Samsung TV".into(),
+                                protocol: crate::desktop::cast::Protocol::YouTube {
+                                    endpoint: url::Url::parse(&format!(
+                                        "http://{host}:8080/ws/apps/YouTube"
+                                    ))
+                                    .unwrap(),
+                                },
+                            }])),
+                            Request::Scan => Reply::Devices(Ok(vec![Device {
+                                protocol: crate::desktop::cast::Protocol::GoogleCast,
+                                host: "192.168.1.20".parse().unwrap(),
+                                name: "Demo TV — Google Cast".into(),
+                            }])),
+                            Request::Start { device, video, .. } => Reply::Started {
+                                device,
+                                video,
+                                result: Ok(()),
+                            },
+                            Request::Control { control, .. } => Reply::Controlled {
+                                control,
+                                result: Ok(()),
+                            },
+                        };
+                        if self.state.cast.finish(reply).is_some() {
+                            self.status.paused = true;
+                        }
+                    }
+                }
                 Action::SetLanguage(locale) => {
                     self.state.settings.language = locale;
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(

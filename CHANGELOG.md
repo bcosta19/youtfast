@@ -8,6 +8,20 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Added
+
+- Native YouTube TV support through DIAL/Lounge, alongside Google Cast.
+  Discovery combines SSDP and AirPlay announcements (used only to locate and
+  verify a YouTube DIAL endpoint), with manual local-IP lookup for compatible
+  Samsung TVs when multicast discovery is blocked. TV control identifiers
+  remain in memory and do not use the YouTFast account session.
+- Optional Google Cast TV picker and remote through `catt`: discover local
+  devices, send the current YouTube video with its starting position, play,
+  pause, skip ten seconds, adjust TV volume, stop or disconnect while leaving
+  the TV playing. The local player pauses only after the TV confirms the
+  requested video. `catt` must be installed separately; physical-device and
+  native Windows/macOS qualification remain pending.
+
 ### Changed
 
 - Audio-only mode has its own headphones button in the player controls, with the

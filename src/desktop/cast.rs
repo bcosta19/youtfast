@@ -1,0 +1,685 @@
+//! Optional Google Cast adapter. `catt` owns discovery and the YouTube TV
+//! protocol; no account cookies, raw helper output or TV addresses are saved.
+//! A lazy worker serializes commands outside the UI and YouTube session runtime.
+
+use std::collections::BTreeMap;
+use std::net::IpAddr;
+use std::path::Path;
+use std::process::Stdio;
+use std::sync::mpsc;
+use std::time::Duration;
+
+use serde::Deserialize;
+use tokio::io::AsyncReadExt;
+
+const OUTPUT_LIMIT: u64 = 256 * 1024;
+const DEADLINE: Duration = Duration::from_secs(75);
+
+mod dial;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Protocol {
+    GoogleCast,
+    YouTube { endpoint: url::Url },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Device {
+    pub host: IpAddr,
+    pub name: String,
+    pub protocol: Protocol,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Action {
+    Open,
+    Scan,
+    FindYouTube(String),
+    Start(Device),
+    Control(Control),
+    Disconnect,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Control {
+    Play,
+    Pause,
+    Rewind,
+    Forward,
+    VolumeDown,
+    VolumeUp,
+    Stop,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Error {
+    MissingHelper,
+    Unavailable,
+    Failed,
+    TimedOut,
+    InvalidResponse,
+    Unconfirmed,
+    InvalidRequest,
+    NoYouTube,
+    ConnectionExpired,
+}
+
+impl Error {
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::MissingHelper => "Install catt to use Google Cast, then search again.",
+            Self::Unavailable => "Could not start the TV connection. Try again.",
+            Self::Failed => "The TV command failed. Check the TV and your network, then retry.",
+            Self::TimedOut => "The TV did not respond in time. Check the TV before retrying.",
+            Self::InvalidResponse => "Could not read the TV response. Try again.",
+            Self::Unconfirmed => "Playback on TV was not confirmed. Check the TV before retrying.",
+            Self::InvalidRequest => "This video or device cannot be sent to the TV.",
+            Self::NoYouTube => "No compatible YouTube app was found at this TV address.",
+            Self::ConnectionExpired => {
+                "The TV connection expired. Disconnect and send the video again."
+            }
+        }
+    }
+}
+
+pub enum Request {
+    Scan,
+    Disconnect,
+    FindYouTube(IpAddr),
+    Start {
+        device: Device,
+        video: String,
+        seconds: u32,
+    },
+    Control {
+        device: Device,
+        control: Control,
+    },
+}
+
+pub enum Reply {
+    Disconnected,
+    Devices(Result<Vec<Device>, Error>),
+    Started {
+        device: Device,
+        video: String,
+        result: Result<(), Error>,
+    },
+    Controlled {
+        control: Control,
+        result: Result<(), Error>,
+    },
+}
+
+pub struct Worker {
+    commands: tokio::sync::mpsc::Sender<Request>,
+    replies: mpsc::Receiver<Reply>,
+    shutdown: Option<tokio::sync::oneshot::Sender<()>>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Worker {
+    pub fn start(ctx: egui::Context) -> Result<Self, Error> {
+        Self::start_program(ctx, "catt".into(), true)
+    }
+
+    fn start_program(
+        ctx: egui::Context,
+        program: std::path::PathBuf,
+        native_discovery: bool,
+    ) -> Result<Self, Error> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|_| Error::Unavailable)?;
+        let (commands, mut incoming) = tokio::sync::mpsc::channel(1);
+        let (outgoing, replies) = mpsc::channel();
+        let (shutdown, stopping) = tokio::sync::oneshot::channel();
+        let thread = std::thread::Builder::new()
+            .name("youtfast-cast".into())
+            .spawn(move || {
+                runtime.block_on(async move {
+                    tokio::select! {
+                        _ = stopping => {},
+                        _ = async {
+                            let mut lounge = None;
+                            while let Some(request) = incoming.recv().await {
+                                let reply = execute_with_session(&program, request, &mut lounge, native_discovery).await;
+                                if outgoing.send(reply).is_err() {
+                                    break;
+                                }
+                                ctx.request_repaint();
+                            }
+                        } => {},
+                    }
+                });
+            })
+            .map_err(|_| Error::Unavailable)?;
+        Ok(Self {
+            commands,
+            replies,
+            shutdown: Some(shutdown),
+            thread: Some(thread),
+        })
+    }
+
+    pub fn send(&self, request: Request) -> Result<(), Error> {
+        self.commands
+            .try_send(request)
+            .map_err(|_| Error::Unavailable)
+    }
+
+    pub fn poll(&self) -> impl Iterator<Item = Reply> + '_ {
+        self.replies.try_iter()
+    }
+}
+
+impl Drop for Worker {
+    fn drop(&mut self) {
+        if let Some(shutdown) = self.shutdown.take() {
+            let _ = shutdown.send(());
+        }
+        // Do not let process exit race the runtime's cancellation of a helper.
+        // This cancels pending commands; it never stops playback on the TV.
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+/// Each operation has one deadline, including send plus confirmation. Dropping
+/// a timed-out/cancelled future kills its helper through `kill_on_drop`.
+#[cfg(test)]
+async fn execute(program: &Path, request: Request) -> Reply {
+    execute_with_session(program, request, &mut None, false).await
+}
+
+async fn execute_with_session(
+    program: &Path,
+    request: Request,
+    lounge: &mut Option<(Device, crate::youtube::lounge::Session)>,
+    native_discovery: bool,
+) -> Reply {
+    match request {
+        Request::Disconnect => {
+            *lounge = None;
+            Reply::Disconnected
+        }
+        Request::Scan => Reply::Devices(
+            tokio::time::timeout(DEADLINE, async {
+                let (cast, native) = tokio::join!(
+                    async {
+                        tokio::time::timeout(Duration::from_secs(20), async {
+                            devices(&run(program, &["scan".into(), "--json-output".into()]).await?)
+                        })
+                        .await
+                        .unwrap_or(Err(Error::TimedOut))
+                    },
+                    async {
+                        if native_discovery {
+                            dial::discover().await
+                        } else {
+                            Ok(Vec::new())
+                        }
+                    },
+                );
+                merge_discovery(cast, native)
+            })
+            .await
+            .unwrap_or(Err(Error::TimedOut)),
+        ),
+        Request::FindYouTube(host) => {
+            Reply::Devices(dial::find(host).await.map(|device| vec![device]))
+        }
+        Request::Start {
+            device,
+            video,
+            seconds,
+        } => {
+            let result = tokio::time::timeout(DEADLINE, async {
+                if let Protocol::YouTube { endpoint } = &device.protocol {
+                    start_args(&device, &video, seconds)?;
+                    *lounge = None;
+                    let screen = dial::launch(endpoint, device.host).await?;
+                    let session = crate::youtube::lounge::Session::connect(&screen).await?;
+                    *lounge = Some((device.clone(), session));
+                    return lounge.as_mut().unwrap().1.play(&video, seconds).await;
+                }
+                let args = start_args(&device, &video, seconds)?;
+                run(program, &args).await?;
+                // A successful `catt cast` alone is not evidence of playback.
+                // Confirm the requested video, never an older TV session.
+                for _ in 0..4 {
+                    let info =
+                        run(program, &target_args(&device, &["info", "--json-output"])).await?;
+                    if confirmed(&info, &video)? {
+                        return Ok(());
+                    }
+                    tokio::time::sleep(Duration::from_millis(750)).await;
+                }
+                Err(Error::Unconfirmed)
+            })
+            .await
+            .unwrap_or(Err(Error::TimedOut));
+            Reply::Started {
+                device,
+                video,
+                result,
+            }
+        }
+        Request::Control { device, control } => {
+            let result = tokio::time::timeout(DEADLINE, async {
+                if !local_address(device.host) {
+                    return Err(Error::InvalidRequest);
+                }
+                if let Protocol::YouTube { endpoint } = &device.protocol {
+                    if control == Control::Stop {
+                        dial::stop(endpoint, device.host).await?;
+                        *lounge = None;
+                        return Ok(());
+                    }
+                    let (_, session) = lounge
+                        .as_mut()
+                        .filter(|(target, _)| target == &device)
+                        .ok_or(Error::ConnectionExpired)?;
+                    return session.control(control).await;
+                }
+                run(program, &control_args(&device, control)).await?;
+                Ok(())
+            })
+            .await
+            .unwrap_or(Err(Error::TimedOut));
+            Reply::Controlled { control, result }
+        }
+    }
+}
+
+fn merge_discovery(
+    cast: Result<Vec<Device>, Error>,
+    native: Result<Vec<Device>, Error>,
+) -> Result<Vec<Device>, Error> {
+    let cast_error = cast.as_ref().err().copied();
+    let mut found = cast.unwrap_or_default();
+    for device in native.unwrap_or_default() {
+        if !found.iter().any(|known| known.host == device.host) {
+            found.push(device);
+        }
+    }
+    found.sort_by(|a, b| a.name.cmp(&b.name).then(a.host.cmp(&b.host)));
+    if found.is_empty()
+        && let Some(error) = cast_error
+    {
+        return Err(error);
+    }
+    Ok(found)
+}
+
+async fn run(program: &Path, args: &[String]) -> Result<Vec<u8>, Error> {
+    let mut command = tokio::process::Command::new(program);
+    command
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        // Helper errors can contain tokens, URLs and platform data. Never
+        // inherit stderr, even with --verbose, and never log stdout.
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    let mut child = command.spawn().map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            Error::MissingHelper
+        } else {
+            Error::Unavailable
+        }
+    })?;
+    let stdout = child.stdout.take().ok_or(Error::Failed)?;
+    let mut output = Vec::new();
+    stdout
+        .take(OUTPUT_LIMIT + 1)
+        .read_to_end(&mut output)
+        .await
+        .map_err(|_| Error::Failed)?;
+    if output.len() as u64 > OUTPUT_LIMIT {
+        let _ = child.kill().await;
+        return Err(Error::InvalidResponse);
+    }
+    if !child.wait().await.map_err(|_| Error::Failed)?.success() {
+        return Err(Error::Failed);
+    }
+    Ok(output)
+}
+
+fn local_address(host: IpAddr) -> bool {
+    match host {
+        IpAddr::V4(host) => host.is_private() || host.is_link_local(),
+        IpAddr::V6(host) => host.is_unique_local() || host.is_unicast_link_local(),
+    }
+}
+
+#[derive(Deserialize)]
+struct Discovered {
+    host: IpAddr,
+    friendly_name: String,
+    port: u16,
+}
+
+fn devices(json: &[u8]) -> Result<Vec<Device>, Error> {
+    let discovered: BTreeMap<String, Discovered> =
+        serde_json::from_slice(json).map_err(|_| Error::InvalidResponse)?;
+    let mut devices = Vec::new();
+    for device in discovered.into_values() {
+        if !local_address(device.host)
+            || device.port != 8009
+            || devices
+                .iter()
+                .any(|known: &Device| known.host == device.host)
+        {
+            continue;
+        }
+        let name: String = device
+            .friendly_name
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(100)
+            .collect();
+        let name = name.trim();
+        devices.push(Device {
+            host: device.host,
+            protocol: Protocol::GoogleCast,
+            name: if name.is_empty() {
+                "Google Cast".into()
+            } else {
+                name.into()
+            },
+        });
+        if devices.len() == 128 {
+            break;
+        }
+    }
+    devices.sort_by(|a, b| a.name.cmp(&b.name).then(a.host.cmp(&b.host)));
+    Ok(devices)
+}
+
+fn target_args(device: &Device, command: &[&str]) -> Vec<String> {
+    ["--device".into(), device.host.to_string()]
+        .into_iter()
+        .chain(command.iter().map(|arg| (*arg).into()))
+        .collect()
+}
+
+fn start_args(device: &Device, video: &str, seconds: u32) -> Result<Vec<String>, Error> {
+    if !local_address(device.host)
+        || video.len() != 11
+        || !video
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-'))
+    {
+        return Err(Error::InvalidRequest);
+    }
+    let mut args = target_args(device, &["cast", "--no-playlist", "--no-subs", "--seek-to"]);
+    args.push(seconds.to_string());
+    args.push(format!("https://www.youtube.com/watch?v={video}"));
+    Ok(args)
+}
+
+fn control_args(device: &Device, control: Control) -> Vec<String> {
+    let command: &[&str] = match control {
+        Control::Play => &["play"],
+        Control::Pause => &["pause"],
+        Control::Rewind => &["rewind", "10"],
+        Control::Forward => &["ffwd", "10"],
+        Control::VolumeDown => &["volumedown", "10"],
+        Control::VolumeUp => &["volumeup", "10"],
+        Control::Stop => &["stop"],
+    };
+    target_args(device, command)
+}
+
+fn confirmed(json: &[u8], video: &str) -> Result<bool, Error> {
+    #[derive(Deserialize)]
+    struct Info {
+        content_id: Option<String>,
+        player_state: Option<String>,
+    }
+    let info: Info = serde_json::from_slice(json).map_err(|_| Error::InvalidResponse)?;
+    let same = info.content_id.as_deref().is_some_and(|id| {
+        id == video || crate::youtube::ytdlp::video_id_from_link(id).as_deref() == Some(video)
+    });
+    Ok(same && info.player_state.as_deref() == Some("PLAYING"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn device() -> Device {
+        Device {
+            protocol: Protocol::GoogleCast,
+            host: "192.168.1.20".parse().unwrap(),
+            // Never used as a command, argument or shell expression.
+            name: "TV; $(untrusted name)".into(),
+        }
+    }
+
+    #[test]
+    fn discovery_is_bounded_deduplicated_and_limited_to_local_cast_targets() {
+        let json = br#"{
+            "a": {"host":"192.168.1.20","port":8009,"friendly_name":"  Living\nroom  "},
+            "b": {"host":"192.168.1.20","port":8009,"friendly_name":"Duplicate"},
+            "c": {"host":"8.8.8.8","port":8009,"friendly_name":"Public"},
+            "d": {"host":"127.0.0.1","port":8009,"friendly_name":"Loopback"},
+            "e": {"host":"192.168.1.30","port":80,"friendly_name":"Other port"},
+            "f": {"host":"fd00::1","port":8009,"friendly_name":"Bedroom"}
+        }"#;
+        let found = devices(json).unwrap();
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[0].name, "Bedroom");
+        assert_eq!(found[1].name, "Livingroom");
+        let entries: BTreeMap<_, _> = (1..=200)
+            .map(|i| {
+                (
+                    i.to_string(),
+                    serde_json::json!({"host":format!("192.168.1.{i}"), "port":8009, "friendly_name":"X".repeat(500)}),
+                )
+            })
+            .collect();
+        let found = devices(&serde_json::to_vec(&entries).unwrap()).unwrap();
+        assert_eq!(found.len(), 128);
+        assert!(found.iter().all(|d| d.name.len() == 100));
+    }
+
+    #[test]
+    fn discovery_never_turns_a_host_name_or_broken_json_into_a_command() {
+        for json in [
+            b"not json".as_slice(),
+            br#"{"TV":{"host":"--help","port":8009,"friendly_name":"TV"}}"#,
+            br#"{"TV":{"host":"example.com","port":8009,"friendly_name":"TV"}}"#,
+        ] {
+            assert_eq!(devices(json), Err(Error::InvalidResponse));
+        }
+        assert_eq!(devices(b"{}"), Ok(Vec::new()));
+    }
+
+    #[test]
+    fn sending_builds_only_a_canonical_youtube_url_without_credentials_or_playlists() {
+        let args = start_args(&device(), "abcdefghijk", 84).unwrap();
+        assert_eq!(
+            args,
+            [
+                "--device",
+                "192.168.1.20",
+                "cast",
+                "--no-playlist",
+                "--no-subs",
+                "--seek-to",
+                "84",
+                "https://www.youtube.com/watch?v=abcdefghijk"
+            ]
+        );
+        for id in ["--help", "abcdefghij&", "https://example.com", "../../file"] {
+            assert_eq!(start_args(&device(), id, 0), Err(Error::InvalidRequest));
+        }
+        let mut public = device();
+        public.host = "8.8.8.8".parse().unwrap();
+        assert_eq!(
+            start_args(&public, "abcdefghijk", 0),
+            Err(Error::InvalidRequest)
+        );
+        assert_eq!(
+            control_args(&device(), Control::Forward),
+            ["--device", "192.168.1.20", "ffwd", "10"]
+        );
+    }
+
+    #[test]
+    fn confirmation_requires_the_requested_video_and_playing_state() {
+        for content in ["abcdefghijk", "https://www.youtube.com/watch?v=abcdefghijk"] {
+            let json = serde_json::json!({"content_id":content,"player_state":"PLAYING", "ignored":"private helper data"});
+            assert!(confirmed(&serde_json::to_vec(&json).unwrap(), "abcdefghijk").unwrap());
+        }
+        for json in [
+            br#"{}"#.as_slice(),
+            br#"{"content_id":"abcdefghijk","player_state":"BUFFERING"}"#,
+            br#"{"content_id":"abcdefghijk","player_state":"PAUSED"}"#,
+            br#"{"content_id":"another_one","player_state":"PLAYING"}"#,
+        ] {
+            assert!(!confirmed(json, "abcdefghijk").unwrap());
+        }
+        assert_eq!(
+            confirmed(b"private helper error", "abcdefghijk"),
+            Err(Error::InvalidResponse)
+        );
+    }
+
+    #[tokio::test]
+    async fn missing_helper_is_an_actionable_fixed_error() {
+        let result = run(Path::new("target/nonexistent-catt-test/helper"), &[]).await;
+        assert_eq!(result, Err(Error::MissingHelper));
+        assert!(Error::MissingHelper.message().contains("Install catt"));
+    }
+
+    #[cfg(unix)]
+    mod process {
+        use super::*;
+        use std::os::unix::fs::PermissionsExt;
+        use std::path::PathBuf;
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        struct Fixture(PathBuf);
+
+        impl Fixture {
+            fn new(body: &str) -> Self {
+                static NEXT: AtomicU64 = AtomicU64::new(0);
+                let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
+                    "target/cast-test-{}-{}",
+                    std::process::id(),
+                    NEXT.fetch_add(1, Ordering::Relaxed)
+                ));
+                std::fs::create_dir_all(&dir).unwrap();
+                let helper = dir.join("catt");
+                std::fs::write(&helper, format!("#!/usr/bin/env python3\n{body}\n")).unwrap();
+                std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o700)).unwrap();
+                Self(dir)
+            }
+
+            fn helper(&self) -> PathBuf {
+                self.0.join("catt")
+            }
+        }
+
+        impl Drop for Fixture {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+
+        #[tokio::test]
+        async fn helper_contract_covers_discovery_send_confirmation_and_control() {
+            let fixture = Fixture::new(
+                r#"
+import sys, json
+args = sys.argv[1:]
+if args == ['scan', '--json-output']:
+    print(json.dumps({'TV': {'host':'192.168.1.20', 'port':8009, 'friendly_name':'TV'}}))
+else:
+    assert args[:2] == ['--device', '192.168.1.20']
+    if args[2] == 'cast':
+        assert args[3:] == ['--no-playlist', '--no-subs', '--seek-to', '84', 'https://www.youtube.com/watch?v=abcdefghijk']
+    elif args[2:] == ['info', '--json-output']:
+        print(json.dumps({'content_id':'abcdefghijk', 'player_state':'PLAYING'}))
+    else:
+        assert args[2:] == ['pause']
+"#,
+            );
+            let Reply::Devices(Ok(found)) = execute(&fixture.helper(), Request::Scan).await else {
+                panic!("discovery failed")
+            };
+            assert_eq!(found.len(), 1);
+            let reply = execute(
+                &fixture.helper(),
+                Request::Start {
+                    device: found[0].clone(),
+                    video: "abcdefghijk".into(),
+                    seconds: 84,
+                },
+            )
+            .await;
+            assert!(matches!(reply, Reply::Started { result: Ok(()), .. }));
+            let reply = execute(
+                &fixture.helper(),
+                Request::Control {
+                    device: found[0].clone(),
+                    control: Control::Pause,
+                },
+            )
+            .await;
+            assert!(matches!(reply, Reply::Controlled { result: Ok(()), .. }));
+        }
+
+        #[tokio::test]
+        async fn helper_failures_and_excess_output_never_escape_as_raw_diagnostics() {
+            let fixture = Fixture::new(
+                "import sys\nprint('synthetic private diagnostic', file=sys.stderr)\nsys.exit(1)",
+            );
+            assert_eq!(run(&fixture.helper(), &[]).await, Err(Error::Failed));
+            let fixture = Fixture::new("print('x' * 300000)");
+            assert_eq!(
+                run(&fixture.helper(), &[]).await,
+                Err(Error::InvalidResponse)
+            );
+        }
+
+        #[tokio::test]
+        async fn cancelling_a_stalled_helper_kills_it_before_late_side_effects() {
+            let fixture = Fixture::new(
+                "import pathlib, time\ntime.sleep(0.5)\npathlib.Path(__file__).with_name('late').touch()",
+            );
+            assert!(
+                tokio::time::timeout(Duration::from_millis(50), run(&fixture.helper(), &[]))
+                    .await
+                    .is_err()
+            );
+            tokio::time::sleep(Duration::from_millis(650)).await;
+            assert!(!fixture.0.join("late").exists());
+        }
+
+        #[test]
+        fn closing_worker_waits_for_pending_helper_cancellation() {
+            let fixture = Fixture::new(
+                "import pathlib, time\npathlib.Path(__file__).with_name('started').touch()\ntime.sleep(0.5)\npathlib.Path(__file__).with_name('late').touch()",
+            );
+            let worker =
+                Worker::start_program(egui::Context::default(), fixture.helper(), false).unwrap();
+            assert!(worker.send(Request::Scan).is_ok());
+            let deadline = std::time::Instant::now() + Duration::from_secs(2);
+            while !fixture.0.join("started").exists() {
+                assert!(std::time::Instant::now() < deadline);
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            drop(worker);
+            std::thread::sleep(Duration::from_millis(650));
+            assert!(!fixture.0.join("late").exists());
+        }
+    }
+}
