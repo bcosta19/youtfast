@@ -11,6 +11,10 @@ OUTPUT = ROOT / "dist" / "site"
 FILES = {
     "index.html": ROOT / "website/index.html",
     "styles.css": ROOT / "website/styles.css",
+    "cinema.css": ROOT / "website/cinema.css",
+    "assets/fonts/NotoSans-Regular.ttf": ROOT / "website/assets/fonts/NotoSans-Regular.ttf",
+    "assets/fonts/NotoSans-Bold.ttf": ROOT / "website/assets/fonts/NotoSans-Bold.ttf",
+    "assets/fonts/OFL.txt": ROOT / "website/assets/fonts/OFL.txt",
     "site.js": ROOT / "website/site.js",
     "assets/player.webp": ROOT / "website/assets/player.webp",
     "assets/youtfast.svg": ROOT / "packaging/icons/youtfast.svg",

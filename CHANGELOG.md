@@ -15,12 +15,18 @@ are the distribution record.
 
 ### Changed
 
+- The project landing page uses the Cinema design with bundled Noto Sans,
+  light/dark/system themes and more space around the frequently asked questions.
+
 - Audio-only mode has its own headphones button in the player controls, with the
   accent line under it while the mode is on, instead of a row inside the Quality
   menu.
 
 ### Fixed
 
+- The project website keeps its navigation and theme/language controls within
+  narrow screens, uses larger controls, translates the footer navigation label,
+  and clarifies that platform links open the release packages page.
 - Search, feeds and the account work on a freshly installed Windows. YouTube's
   certificates are now checked by the operating system, which downloads the
   root certificates it does not have yet; before, every request failed until

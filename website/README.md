@@ -15,7 +15,13 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory dist/site
 
 Open `http://127.0.0.1:8765/`, or add `?lang=pt` for Portuguese. The language
 switch works without storing anything; all content and links remain usable
-in English without JavaScript. The demo MP4 loads only on user interaction.
+in English without JavaScript. The theme selector offers System, Light and
+Dark. System follows `prefers-color-scheme`; a manual choice is stored only in
+this browser's local storage. The demo MP4 loads only on user
+interaction. The Cinema layout centers the introduction above a large product
+image. Noto Sans is bundled locally, with its SIL Open Font License in
+`assets/fonts/OFL.txt`; the page makes no font requests to external services.
+The short entrance animation respects `prefers-reduced-motion`.
 
 The build copies an explicit allowlist of public assets into `dist/site/`.
 It checks local references, section anchors, image alternatives, paired
