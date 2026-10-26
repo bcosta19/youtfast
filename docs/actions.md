@@ -45,8 +45,7 @@ inferring them from files in Git.
 - Allowed Actions: GitHub-owned, `msys2/setup-msys2` and `Swatinem/rust-cache`,
   with SHA pinning required. Adding an Action means updating that list.
 - Keep the default token read-only. Only draft creation gets `contents: write`.
-  The website deployment job gets `pages: write` and `id-token: write` for
-  GitHub Pages; PR builds remain read-only.
+  Website validation stays read-only and receives no deployment credentials.
 - Require approval for workflows from outside contributors as appropriate;
   never run their code through `pull_request_target` with secrets.
 - Use GitHub-hosted ephemeral runners for untrusted contributions.
@@ -60,14 +59,15 @@ inferring them from files in Git.
 
 ## Project website
 
-The Website workflow (`.github/workflows/pages.yml`) builds a small, allowlisted
-static artifact with `python3 tools/build_site.py`. PRs and merge queues validate
-the build without deployment. Site-related pushes to `main` deploy automatically
-through the `github-pages` environment; manual dispatch on `main` also deploys.
-Only the deployment job can write Pages or request an OIDC token. All Actions
-are GitHub-owned and SHA-pinned. The uploaded artifact expires after one day.
+The Website workflow (`.github/workflows/pages.yml`) validates the bilingual
+static site with the focused Python tests and `python3 tools/build_site.py`.
+PRs, merge queues and site-related pushes to `main` run the same validation.
+The workflow has read-only permissions and does not publish to GitHub Pages
+or Cloudflare. Its only Action is GitHub-owned and SHA-pinned.
 
-The repository's Pages source must be GitHub Actions (`build_type: workflow`).
-The `github-pages` environment should allow only `main`, without required manual
-review, for merge-to-publication automation. These are repository settings, not
-guarantees provided by the workflow file. See [website maintenance](../website/README.md).
+Production is https://youtfast.pages.dev/, with Portuguese at `/pt/`.
+Cloudflare Pages uses Direct Upload of the explicit `dist/site` allowlist.
+Publishing requires an authenticated maintainer running the documented command;
+merging a PR does not automatically deploy. No Cloudflare credentials are
+stored in the repository or passed to contributor jobs. See
+[website maintenance](../website/README.md).

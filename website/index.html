@@ -5,19 +5,85 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f9f7ff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#1c1727" media="(prefers-color-scheme: dark)">
-  <meta name="description" content="YouTFast is an open-source, native YouTube client for Linux, Windows and macOS. Native playback, a local library and no telemetry.">
+  <meta name="description" content="YouTFast is a free, open-source YouTube client for Linux, Windows and macOS. Native playback, a local library and no telemetry.">
+  <meta name="robots" content="index,follow,max-image-preview:large">
+  <meta property="og:site_name" content="YouTFast">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="pt_BR">
   <meta property="og:type" content="website">
   <meta property="og:title" content="YouTFast — Native YouTube client for desktop">
-  <meta property="og:description" content="An open-source YouTube client for Linux, Windows and macOS, built with Rust, egui and libmpv.">
-  <meta property="og:url" content="https://bcosta19.github.io/youtfast/">
-  <meta property="og:image" content="https://bcosta19.github.io/youtfast/assets/player.webp">
+  <meta property="og:description" content="YouTFast is a free, open-source YouTube client for Linux, Windows and macOS. Native playback, a local library and no telemetry.">
+  <meta property="og:url" content="https://youtfast.pages.dev/">
+  <meta property="og:image" content="https://youtfast.pages.dev/assets/player.webp">
+  <meta property="og:image:alt" content="YouTFast desktop application playing a video with its local library and recommendations.">
+  <meta name="twitter:title" content="YouTFast — Native YouTube client for desktop">
+  <meta name="twitter:description" content="YouTFast is a free, open-source YouTube client for Linux, Windows and macOS. Native playback, a local library and no telemetry.">
+  <meta name="twitter:image" content="https://youtfast.pages.dev/assets/player.webp">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="canonical" href="https://bcosta19.github.io/youtfast/">
+  <link rel="canonical" href="https://youtfast.pages.dev/">
+  <link rel="alternate" hreflang="en" href="https://youtfast.pages.dev/">
+  <link rel="alternate" hreflang="pt-BR" href="https://youtfast.pages.dev/pt/">
+  <link rel="alternate" hreflang="x-default" href="https://youtfast.pages.dev/">
   <link rel="icon" href="assets/youtfast.svg" type="image/svg+xml">
   <script>try{const theme=localStorage.getItem('youtfast-theme');if(theme==='light'||theme==='dark')document.documentElement.dataset.theme=theme}catch{}</script>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="cinema.css">
   <script src="site.js" defer></script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://youtfast.pages.dev/#website",
+      "url": "https://youtfast.pages.dev/",
+      "name": "YouTFast",
+      "inLanguage": [
+        "en",
+        "pt-BR"
+      ]
+    },
+    {
+      "@type": "WebPage",
+      "@id": "https://youtfast.pages.dev/#webpage",
+      "url": "https://youtfast.pages.dev/",
+      "name": "YouTFast — Native YouTube client for desktop",
+      "inLanguage": "en",
+      "isPartOf": {
+        "@id": "https://youtfast.pages.dev/#website"
+      },
+      "mainEntity": {
+        "@id": "https://youtfast.pages.dev/#app"
+      }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://youtfast.pages.dev/#app",
+      "name": "YouTFast",
+      "url": "https://youtfast.pages.dev/",
+      "description": "YouTFast is a free, open-source YouTube client for Linux, Windows and macOS. Native playback, a local library and no telemetry.",
+      "applicationCategory": "MultimediaApplication",
+      "operatingSystem": "Linux x86_64, Windows x86_64, macOS 15+ Apple Silicon",
+      "isAccessibleForFree": true,
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "license": "https://github.com/bcosta19/youtfast/blob/main/LICENSE",
+      "downloadUrl": "https://github.com/bcosta19/youtfast/releases/latest",
+      "screenshot": "https://youtfast.pages.dev/assets/player.webp",
+      "featureList": [
+        "Native video playback with libmpv",
+        "Local subscriptions, history and Watch later",
+        "Captions, chapters and mini player",
+        "No telemetry",
+        "Optional account"
+      ]
+    }
+  ]
+}
+  </script>
   <title>YouTFast — Native YouTube client for desktop</title>
 </head>
 <body>
@@ -30,7 +96,7 @@
       <a href="https://github.com/bcosta19/youtfast">GitHub <span aria-hidden="true">↗</span></a>
     </nav>
     <label class="theme-control" id="theme-control" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg><select id="theme" aria-label="Theme"><option value="system" data-en="System" data-pt="Sistema">System</option><option value="light" data-en="Light" data-pt="Claro">Light</option><option value="dark" data-en="Dark" data-pt="Escuro">Dark</option></select></label>
-    <button class="language" id="language" type="button" aria-label="Mudar idioma para português" lang="pt-BR" hidden>PT-BR</button>
+    <a class="language" id="language" href="pt/" aria-label="Mudar idioma para português" lang="pt-BR">PT-BR</a>
   </header>
 
   <main id="main">

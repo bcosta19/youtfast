@@ -10,8 +10,14 @@ are the distribution record.
 
 ### Added
 
+- Website navigation transitions, section and FAQ reveals, and button feedback,
+  respecting the system preference for reduced motion.
+
+- Crawlable English and Portuguese website pages, application structured data,
+  localized search/share descriptions and a sitemap for the Cloudflare Pages site.
+
 - A bilingual project landing page with a local product demo, platform download
-  links and automatic GitHub Pages publication after merging website changes.
+  links, Cloudflare Pages hosting and read-only website validation in CI.
 
 ### Changed
 

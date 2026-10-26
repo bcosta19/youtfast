@@ -13,36 +13,52 @@ python3 tools/build_site.py
 python3 -m http.server 8765 --bind 127.0.0.1 --directory dist/site
 ```
 
-Open `http://127.0.0.1:8765/`, or add `?lang=pt` for Portuguese. The language
+Open `http://127.0.0.1:8765/`, or open `/pt/` for Portuguese. The language
 switch works without storing anything; all content and links remain usable
-in English without JavaScript. The theme selector offers System, Light and
+in both languages without JavaScript. The theme selector offers System, Light and
 Dark. System follows `prefers-color-scheme`; a manual choice is stored only in
 this browser's local storage. The demo MP4 loads only on user
 interaction. The Cinema layout centers the introduction above a large product
 image. Noto Sans is bundled locally, with its SIL Open Font License in
 `assets/fonts/OFL.txt`; the page makes no font requests to external services.
-The short entrance animation respects `prefers-reduced-motion`.
+Language navigation uses native cross-document View Transitions where supported.
+Section navigation, FAQ answers and buttons have brief motion feedback. All
+animations respect `prefers-reduced-motion`; links also work without animations.
 
 The build copies an explicit allowlist of public assets into `dist/site/`.
 It checks local references, section anchors, image alternatives, paired
 translations and relative asset URLs. Relative URLs support both local
-preview and the `/youtfast/` GitHub Pages project path.
+preview and static hosting. The build also renders the Portuguese page,
+`robots.txt`, a bilingual sitemap and a 404 page.
 
 ## Publication
 
-`.github/workflows/pages.yml` validates the site on pull requests and merge
-queues. Only pushes to `main` affecting site inputs (or manual dispatch on
-`main`) upload and deploy the Pages artifact. PRs have read-only permissions
-and cannot publish. Deployment uses GitHub-owned, SHA-pinned Actions with
-`pages: write` and `id-token: write` scoped to the deploy job.
+The production address is https://youtfast.pages.dev/ (English) and
+https://youtfast.pages.dev/pt/ (Brazilian Portuguese). Publish only `dist/site`,
+which contains the explicit public allowlist; previews in `dist/designs` are
+never uploaded.
 
-The repository must have GitHub Pages enabled with **Source: GitHub Actions**
-(`build_type: workflow` in the REST API). The `github-pages` environment must
-allow deployments from `main` without a manual approval if publication should
-happen automatically after merge. No personal token or additional secret is
-needed in the workflow. Expected public address:
+After authenticating with Wrangler, build and deploy:
 
-https://bcosta19.github.io/youtfast/
+```sh
+python3 tools/build_site.py
+npm exec --yes --package=wrangler@4.152.0 -- wrangler pages deploy dist/site --project-name youtfast --branch main
+```
+
+The Cloudflare project uses Direct Upload. These commands deploy an already
+built site; they do not enable automatic Git-based deployment. The Website workflow validates PRs, merge queues and site changes on `main`;
+it never deploys. The former GitHub Pages deployment has been removed.
+
+## Search visibility
+
+Both language pages contain visible product descriptions, canonical and
+reciprocal hreflang links, Open Graph/Twitter metadata, and WebSite, WebPage
+and SoftwareApplication JSON-LD. No ratings or reviews are invented.
+`robots.txt` allows crawling and references the bilingual sitemap.
+Search Console ownership verification and sitemap submission require the
+site owner's Google account; they are not performed by the site build.
+Google decides whether to index the pages and which snippets or AI summaries
+to show. Metadata and structured data do not control that text verbatim.
 
 To update the hero poster, extract the application window from the existing
 public demonstration (not a user's desktop or account data):

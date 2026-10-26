@@ -174,3 +174,82 @@ h1 {
     --button-hover:#7e48c9;
   }
 }
+
+/* Navigation stays native; browsers without View Transitions keep normal links. */
+@media(prefers-reduced-motion:no-preference) {
+  @view-transition {
+    navigation:auto;
+  }
+
+  ::view-transition-old(root) {
+    animation:navigation-out 140ms ease-in both;
+  }
+
+  ::view-transition-new(root) {
+    animation:navigation-in 240ms ease-out both;
+  }
+
+  .hero-copy {
+    animation:content-reveal 360ms ease-out both;
+  }
+
+  .hero-visual {
+    animation:scene-enter 420ms ease-out both;
+  }
+
+  html:active-view-transition .hero-copy,
+  html:active-view-transition .hero-visual {
+    animation:none;
+  }
+
+  .section:target .section-heading h2,
+  .section:target>h2,
+  .demo-section:target h2,
+  .faq-list details[open] p {
+    animation:content-reveal 280ms ease-out both;
+  }
+
+  .button,.language,.header nav a {
+    transition:background-color 160ms ease,color 160ms ease,
+      border-color 160ms ease,transform 160ms ease;
+  }
+
+  @media(hover:hover) {
+    .button:hover,.language:hover {
+      transform:translateY(-2px);
+    }
+  }
+
+  .button:active,.language:active {
+    transform:translateY(0);
+  }
+}
+
+@keyframes content-reveal {
+  from {
+    opacity:0;
+    transform:translateY(8px);
+  }
+  to {
+    opacity:1;
+    transform:translateY(0);
+  }
+}
+
+@keyframes navigation-out {
+  to {
+    opacity:0;
+    transform:translateY(-6px);
+  }
+}
+
+@keyframes navigation-in {
+  from {
+    opacity:0;
+    transform:translateY(6px);
+  }
+  to {
+    opacity:1;
+    transform:translateY(0);
+  }
+}

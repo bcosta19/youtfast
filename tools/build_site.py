@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Build and validate the dependency-free GitHub Pages site into dist/site."""
+"""Build and validate the dependency-free public site into dist/site."""
 
 from html.parser import HTMLParser
 from pathlib import Path
+from posixpath import normpath
 from shutil import copyfile
 from urllib.parse import unquote, urlsplit
+from site_locale import portuguese_page
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "dist" / "site"
+ORIGIN = "https://youtfast.pages.dev"
 FILES = {
     "index.html": ROOT / "website/index.html",
     "styles.css": ROOT / "website/styles.css",
@@ -23,11 +26,12 @@ FILES = {
 
 
 class Page(HTMLParser):
-    def __init__(self):
+    def __init__(self, path="index.html"):
         super().__init__(convert_charrefs=True)
         self.ids = set()
         self.references = []
         self.headings = 0
+        self.path = path
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
@@ -54,18 +58,47 @@ class Page(HTMLParser):
                     raise ValueError(f"Unexpected external URL scheme: {reference}")
                 continue
             if url.path:
-                if url.path.startswith("/") or ".." in Path(unquote(url.path)).parts:
+                target = normpath(str(Path(self.path).parent / unquote(url.path)))
+                if url.path.endswith("/"):
+                    target = normpath(target + "/index.html")
+                if url.path.startswith("/") or target.startswith("../"):
                     raise ValueError(f"Path is not project-Pages safe: {reference}")
-                if unquote(url.path) not in FILES:
+                if target not in set(FILES) | {"pt/index.html"}:
                     raise ValueError(f"Asset missing from publication allowlist: {reference}")
             if url.fragment and url.fragment not in self.ids:
                 raise ValueError(f"Missing section: {reference}")
 
 
 def build():
-    page = Page()
-    page.feed(FILES["index.html"].read_text())
-    page.validate()
+    source = FILES["index.html"].read_text()
+    localized = portuguese_page(source, ORIGIN)
+    for name, html in [("index.html", source), ("pt/index.html", localized)]:
+        page = Page(name)
+        page.feed(html)
+        page.validate()
+    generated = {
+        "pt/index.html": localized,
+        "404.html": ('<!doctype html><html lang="en"><meta charset="utf-8">'
+                     '<meta name="viewport" content="width=device-width,initial-scale=1">'
+                     '<meta name="robots" content="noindex">'
+                     '<title>Page not found — YouTFast</title>'
+                     '<body><main><h1>Page not found / Página não encontrada</h1>'
+                     '<p><a href="/">YouTFast in English</a> · '
+                     '<a href="/pt/">YouTFast em português</a></p></main></body></html>'),
+        "robots.txt": f"User-agent: *\nAllow: /\n\nSitemap: {ORIGIN}/sitemap.xml\n",
+        "sitemap.xml": (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+            'xmlns:xhtml="http://www.w3.org/1999/xhtml">\n'
+            + "".join(
+                f"  <url><loc>{ORIGIN}{path}</loc>"
+                f'<xhtml:link rel="alternate" hreflang="en" href="{ORIGIN}/"/>'
+                f'<xhtml:link rel="alternate" hreflang="pt-BR" href="{ORIGIN}/pt/"/>'
+                f'<xhtml:link rel="alternate" hreflang="x-default" href="{ORIGIN}/"/>'
+                "</url>\n" for path in ["/", "/pt/"]
+            ) + "</urlset>\n"
+        ),
+    }
     # Publish only the explicit public assets above, never the repository root.
     for name, source in FILES.items():
         if not source.is_file() or source.is_symlink():
@@ -76,7 +109,13 @@ def build():
                 raise ValueError("Refusing a symbolic output path")
         target.parent.mkdir(parents=True, exist_ok=True)
         copyfile(source, target)
-    expected = set(FILES) | {".nojekyll"}
+    for name, content in generated.items():
+        target = OUTPUT / name
+        if any(path.is_symlink() for path in [target.parent, target]):
+            raise ValueError("Refusing a symbolic generated output path")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    expected = set(FILES) | set(generated) | {".nojekyll"}
     nojekyll = OUTPUT / ".nojekyll"
     if nojekyll.is_symlink():
         raise ValueError("Refusing a symbolic .nojekyll output")
@@ -84,8 +123,8 @@ def build():
     actual = {str(path.relative_to(OUTPUT)) for path in OUTPUT.rglob("*") if path.is_file()}
     if actual != expected or any(path.is_symlink() for path in OUTPUT.rglob("*")):
         raise ValueError("Unexpected files in dist/site; publish only the site allowlist")
-    size = sum((OUTPUT / name).stat().st_size for name in FILES)
-    print(f"Validated {len(FILES)} public files ({size / 1024 / 1024:.1f} MiB): {OUTPUT}")
+    size = sum((OUTPUT / name).stat().st_size for name in expected)
+    print(f"Validated {len(expected)} public files ({size / 1024 / 1024:.1f} MiB): {OUTPUT}")
 
 
 if __name__ == "__main__":

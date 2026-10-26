@@ -3,7 +3,7 @@ const languageButton = document.querySelector('#language');
 const themeControl = document.querySelector('#theme-control');
 const themeSelect = document.querySelector('#theme');
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
-let language = 'en';
+let language = document.documentElement.lang === 'pt-BR' ? 'pt' : 'en';
 let themePreference = document.documentElement.dataset.theme || 'system';
 
 function applyTheme(preference, persist = true) {
@@ -31,6 +31,7 @@ function setLanguage(next) {
     element.textContent = element.dataset[next].replaceAll('\\n', '\n');
   }
   languageButton.textContent = next === 'en' ? 'PT-BR' : 'EN';
+  languageButton.href = next === 'en' ? 'pt/' : (window.location.pathname.includes('/pt/') ? '../' : './');
   languageButton.lang = next === 'en' ? 'pt-BR' : 'en';
   languageButton.setAttribute('aria-label', next === 'en' ? 'Mudar idioma para português' : 'Switch language to English');
   document.querySelector('nav[aria-label]').setAttribute('aria-label', next === 'en' ? 'Main navigation' : 'Navegação principal');
@@ -48,5 +49,4 @@ themeSelect.addEventListener('change', () => applyTheme(themeSelect.value));
 systemTheme.addEventListener('change', () => {
   if (themePreference === 'system') applyTheme('system', false);
 });
-languageButton.addEventListener('click', () => setLanguage(language === 'en' ? 'pt' : 'en'));
-setLanguage(new URLSearchParams(window.location.search).get('lang') === 'pt' ? 'pt' : 'en');
+setLanguage(new URLSearchParams(window.location.search).get('lang') === 'pt' ? 'pt' : language);
