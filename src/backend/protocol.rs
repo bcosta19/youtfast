@@ -259,6 +259,8 @@ pub enum Command {
     Switch(Account),
     /// Leave the current account; its session stays in the keyring.
     SignOut,
+    /// Reset a failed session without clearing the user's selected account.
+    ResetSession,
     /// Forget an account: its keyring entry is deleted too.
     RemoveAccount(u32),
     SaveLibrary(Library),
@@ -339,6 +341,10 @@ pub enum Event {
         previous: Rating,
         error: String,
     },
+    RateSucceeded {
+        id: String,
+        rating: Rating,
+    },
     SaveTargets {
         id: String,
         result: Result<Vec<SaveTarget>, String>,
@@ -349,6 +355,11 @@ pub enum Event {
         playlist: String,
         saved: bool,
         error: String,
+    },
+    SaveSucceeded {
+        id: String,
+        playlist: String,
+        saved: bool,
     },
     SigningIn,
     /// The account signed in, by its library id.
@@ -364,6 +375,11 @@ pub enum Event {
     SignInFailed(String),
     /// The kept session no longer works, and could not be renewed.
     SessionExpired(String),
+    /// The kept session could not be checked; retry the selected account.
+    SessionUnavailable {
+        id: u32,
+        error: String,
+    },
     SignedOut,
     /// Something the user should know that belongs to no page.
     Notice(String),
@@ -393,10 +409,17 @@ pub enum Event {
 }
 
 impl Command {
+    pub(super) fn account_write(&self) -> bool {
+        matches!(
+            self,
+            Self::MarkWatched { .. } | Self::Rate { .. } | Self::SetSaved { .. }
+        )
+    }
+
     pub(super) fn changes_session(&self) -> bool {
         matches!(
             self,
-            Self::AddAccount { .. } | Self::Switch(_) | Self::SignOut
+            Self::AddAccount { .. } | Self::Switch(_) | Self::SignOut | Self::ResetSession
         )
     }
 
@@ -404,10 +427,7 @@ impl Command {
         self.changes_session()
             || matches!(
                 self,
-                Self::MarkWatched { .. }
-                    | Self::Rate { .. }
-                    | Self::SetSaved { .. }
-                    | Self::RemoveAccount(_)
+                Self::RemoveAccount(_)
                     | Self::Load { .. }
                     | Self::SaveLibrary(_)
                     | Self::SaveSettings(_)
@@ -440,7 +460,8 @@ impl Event {
             | Self::RateFailed { error, .. }
             | Self::SaveFailed { error, .. }
             | Self::SignInFailed(error)
-            | Self::SessionExpired(error) => *error = crate::safe_error(error),
+            | Self::SessionExpired(error)
+            | Self::SessionUnavailable { error, .. } => *error = crate::safe_error(error),
             Self::Details { result, .. } => {
                 if let Err(error) = result.as_mut() {
                     *error = crate::safe_error(error);

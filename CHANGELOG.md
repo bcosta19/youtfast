@@ -30,6 +30,14 @@ are the distribution record.
 
 ### Fixed
 
+- Account sessions can be retried after temporary network or keyring failures;
+  browser profile discovery now follows Windows and macOS locations as well.
+  Timed-out credential writes attempt to restore the previous entry.
+- Account rating and playlist changes wait for confirmation before accepting
+  another change to the same item; slow writes no longer hold up unrelated loads.
+- The next-video countdown follows queue edits, disabling SponsorBlock discards
+  late segments, and editing a search clears suggestions for the previous text.
+- Takeout subscriptions with quoted, multiline channel names now import correctly.
 - The project website keeps its navigation and theme/language controls within
   narrow screens, uses larger controls, translates the footer navigation label,
   and clarifies that platform links open the release packages page.

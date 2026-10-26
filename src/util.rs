@@ -165,6 +165,10 @@ impl<T> Recent<T> {
             self.entries.pop_front();
         }
     }
+
+    pub fn remove(&mut self, key: &str) {
+        self.entries.retain(|(entry, _, _)| entry != key);
+    }
 }
 
 /// A video's short link, starting `at` seconds in when given.

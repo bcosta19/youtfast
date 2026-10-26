@@ -178,6 +178,9 @@ pub struct State {
     /// The rating the like count was taken with, so a new rating moves the
     /// count shown by one.
     pub rating_base: Rating,
+    /// Account writes in flight, keyed by video or video and playlist.
+    pub rating_pending: HashSet<String>,
+    pub save_pending: HashSet<(String, String)>,
     /// The save menu's account playlists, asked for when it first opens.
     pub save_targets: Fetch<Vec<SaveTarget>>,
     /// The share menu's `Start at` box: links start where the video is.
@@ -739,6 +742,7 @@ impl App {
                 previous,
                 error,
             } => self.on_rate_failed(id, previous, error),
+            Event::RateSucceeded { id, rating } => self.on_rate_succeeded(id, rating),
             Event::SaveTargets { id, result } => self.on_save_targets(id, result),
             Event::SaveFailed {
                 id,
@@ -746,6 +750,11 @@ impl App {
                 saved,
                 error,
             } => self.on_save_failed(id, playlist, saved, error),
+            Event::SaveSucceeded {
+                id,
+                playlist,
+                saved,
+            } => self.on_save_succeeded(id, playlist, saved),
             Event::SigningIn => self.state.account = AccountState::SigningIn,
             Event::AccountAdded(account) => {
                 self.state.library.accounts.push(account);
@@ -766,6 +775,9 @@ impl App {
                 self.state.account =
                     AccountState::Failed(format!("{error} Sign in again to see your account."));
             }
+            Event::SessionUnavailable { id, error } => {
+                self.on_session_unavailable(id, error);
+            }
             Event::SignedOut => self.on_signed_out(),
             Event::CheckAlerts => self.check_alerts(),
             Event::Thumbnail { url, result } => {
@@ -778,15 +790,7 @@ impl App {
                 }
             }
             Event::Segments { id, segments } => {
-                if self
-                    .state
-                    .watching
-                    .as_ref()
-                    .is_some_and(|video| video.id == id)
-                {
-                    self.state.segments = segments;
-                    self.state.skipped.clear();
-                }
+                self.state.accept_segments(&id, segments);
             }
             Event::Notice(notice) => self.state.notice = Some(notice),
             Event::UpdateChecked { result, manual } => self.on_update_checked(result, manual),
@@ -1131,8 +1135,14 @@ impl App {
                 self.save_settings();
             }
             Action::Enqueue { video, next } => self.enqueue(video, next),
-            Action::Dequeue(id) => self.state.queue.retain(|video| video.id != id),
-            Action::ClearQueue => self.state.queue.clear(),
+            Action::Dequeue(id) => {
+                self.state.queue.retain(|video| video.id != id);
+                self.state.refresh_autoplay();
+            }
+            Action::ClearQueue => {
+                self.state.queue.clear();
+                self.state.refresh_autoplay();
+            }
             Action::SetSponsorBlock(on) => self.set_sponsorblock(on),
             Action::SkipSegment => self.skip_segment(),
             Action::ReturnToWatch => self.return_to_watch(),

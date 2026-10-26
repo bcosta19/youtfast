@@ -1,8 +1,38 @@
 //! The watch page's actions on the account: rating the video and saving
-//! it to the account's playlists. Both show the change at once and put it
-//! back if YouTube refuses it.
+//! it to the account's playlists. Both show the change at once and read the
+//! account again if the write fails or its outcome is unknown.
 
 use super::*;
+
+impl State {
+    fn begin_rating(&mut self, id: &str, rating: Rating) -> Option<Rating> {
+        let previous = self.rating.ready().copied()?;
+        if previous == rating || !self.rating_pending.insert(id.to_owned()) {
+            return None;
+        }
+        self.rating = Fetch::Ready(rating);
+        Some(previous)
+    }
+
+    fn begin_save(&mut self, id: &str, playlist: &str, saved: bool) -> bool {
+        let key = (id.to_owned(), playlist.to_owned());
+        if self.save_pending.contains(&key) {
+            return false;
+        }
+        let Fetch::Ready(targets) = &mut self.save_targets else {
+            return false;
+        };
+        let Some(target) = targets.iter_mut().find(|target| target.id == playlist) else {
+            return false;
+        };
+        if target.saved == saved {
+            return false;
+        }
+        target.saved = saved;
+        self.save_pending.insert(key);
+        true
+    }
+}
 
 impl App {
     /// The rating of the video being watched: from the cache while fresh,
@@ -29,6 +59,9 @@ impl App {
     }
 
     pub(super) fn on_rating(&mut self, id: String, result: Result<Rating, String>) {
+        if self.state.rating_pending.contains(&id) {
+            return;
+        }
         if let Ok(rating) = &result {
             self.ratings.put(id.clone(), util::now(), *rating);
         }
@@ -52,11 +85,9 @@ impl App {
         if !self.state.signed_in() {
             return;
         }
-        let previous = self.state.rating.ready().copied().unwrap_or_default();
-        if previous == rating {
+        let Some(previous) = self.state.begin_rating(&id, rating) else {
             return;
-        }
-        self.state.rating = Fetch::Ready(rating);
+        };
         self.ratings.put(id.clone(), util::now(), rating);
         // The Liked list changes with it.
         self.state.liked = Listing::Idle;
@@ -69,12 +100,23 @@ impl App {
         });
     }
 
-    pub(super) fn on_rate_failed(&mut self, id: String, previous: Rating, error: String) {
-        self.ratings.put(id.clone(), util::now(), previous);
+    pub(super) fn on_rate_failed(&mut self, id: String, _previous: Rating, error: String) {
+        self.state.rating_pending.remove(&id);
+        // A timeout can occur after the server applied the write. Read the
+        // actual rating instead of caching an assumed rollback.
+        self.ratings.remove(&id);
         if self.watching_id() == Some(id.as_str()) {
-            self.state.rating = Fetch::Ready(previous);
+            self.load_rating();
         }
         self.state.notice = Some(format!("Could not rate the video: {error}"));
+    }
+
+    pub(super) fn on_rate_succeeded(&mut self, id: String, rating: Rating) {
+        self.state.rating_pending.remove(&id);
+        self.ratings.put(id.clone(), util::now(), rating);
+        if self.watching_id() == Some(id.as_str()) {
+            self.state.rating = Fetch::Ready(rating);
+        }
     }
 
     /// Opening the save menu asks for the account's playlists, once per
@@ -86,6 +128,14 @@ impl App {
         let Some(id) = self.watching_id().map(str::to_owned) else {
             return;
         };
+        if self
+            .state
+            .save_pending
+            .iter()
+            .any(|(video, _)| video == &id)
+        {
+            return;
+        }
         self.state.save_targets = Fetch::Loading;
         self.backend.send(Command::LoadSaveTargets(id));
     }
@@ -105,7 +155,7 @@ impl App {
         let Some(id) = self.watching_id().map(str::to_owned) else {
             return;
         };
-        if !self.mark_saved(&playlist, saved) {
+        if !self.state.begin_save(&id, &playlist, saved) {
             return;
         }
         self.forget_playlist(&playlist);
@@ -120,14 +170,26 @@ impl App {
         &mut self,
         id: String,
         playlist: String,
-        saved: bool,
+        _saved: bool,
         error: String,
     ) {
+        self.state
+            .save_pending
+            .remove(&(id.clone(), playlist.clone()));
         if self.watching_id() == Some(id.as_str()) {
-            self.mark_saved(&playlist, !saved);
+            self.state.save_targets = Fetch::Idle;
         }
         self.forget_playlist(&playlist);
         self.state.notice = Some(format!("Could not change the playlist: {error}"));
+    }
+
+    pub(super) fn on_save_succeeded(&mut self, id: String, playlist: String, saved: bool) {
+        self.state
+            .save_pending
+            .remove(&(id.clone(), playlist.clone()));
+        if self.watching_id() == Some(id.as_str()) {
+            self.mark_saved(&playlist, saved);
+        }
     }
 
     /// Sets a save menu row; false when the menu has no such row.
@@ -168,5 +230,46 @@ impl App {
 
     fn watching_id(&self) -> Option<&str> {
         self.state.watching.as_ref().map(|video| video.id.as_str())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pending_rating_rejects_a_second_change_until_the_first_finishes() {
+        let mut state = State {
+            rating: Fetch::Ready(Rating::None),
+            ..Default::default()
+        };
+        assert_eq!(
+            state.begin_rating("video", Rating::Like),
+            Some(Rating::None)
+        );
+        assert_eq!(state.begin_rating("video", Rating::Dislike), None);
+        assert_eq!(state.rating.ready(), Some(&Rating::Like));
+        state.rating_pending.remove("video");
+        assert_eq!(
+            state.begin_rating("video", Rating::Dislike),
+            Some(Rating::Like)
+        );
+    }
+
+    #[test]
+    fn pending_playlist_change_rejects_a_second_change_on_the_same_row() {
+        let mut state = State {
+            save_targets: Fetch::Ready(vec![SaveTarget {
+                id: "p".into(),
+                name: "List".into(),
+                saved: false,
+            }]),
+            ..Default::default()
+        };
+        assert!(state.begin_save("video", "p", true));
+        assert!(!state.begin_save("video", "p", false));
+        assert!(state.save_targets.ready().unwrap()[0].saved);
+        state.save_pending.remove(&("video".into(), "p".into()));
+        assert!(state.begin_save("video", "p", false));
     }
 }

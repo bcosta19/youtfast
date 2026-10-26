@@ -161,7 +161,12 @@ impl Backend {
                         writer_settings_gate,
                         Settings::save,
                     ));
+                    let mut writes = AccountWrites::default();
                     while let Some((epoch, command)) = incoming.recv().await {
+                        if command.changes_session() || matches!(command, Command::RemoveAccount(_))
+                        {
+                            writes.wait().await;
+                        }
                         if command.changes_session() {
                             context.epoch = epoch;
                             for (_, task) in context.loads.lock().unwrap().drain() {
@@ -171,18 +176,28 @@ impl Backend {
                                 Ok(client) => context.rp = client,
                                 Err(_) => {
                                     innertube::sign_out(&context.rp).await;
-                                    context.send(if matches!(command, Command::SignOut) {
-                                        Event::SignedOut
-                                    } else {
-                                        Event::SignInFailed(
+                                    if matches!(command, Command::ResetSession) {
+                                        continue;
+                                    }
+                                    context.send(match &command {
+                                        Command::SignOut => Event::SignedOut,
+                                        Command::Switch(account) => Event::SessionUnavailable {
+                                            id: account.id,
+                                            error: "Could not start the YouTube session.".into(),
+                                        },
+                                        _ => Event::SignInFailed(
                                             "Could not start the YouTube session.".into(),
-                                        )
+                                        ),
                                     });
                                     continue;
                                 }
                             }
                         }
-                        dispatch(command.ordered(), handle(command, context.clone())).await;
+                        if command.account_write() {
+                            writes.push(handle(command, context.clone()));
+                        } else {
+                            dispatch(command.ordered(), handle(command, context.clone())).await;
+                        }
                     }
                 });
             })?;
@@ -241,7 +256,13 @@ impl Backend {
                 if !event.current(epoch, self.epoch.get()) {
                     return None;
                 }
-                let epoch = if matches!(&event, Event::SignInFailed(_) | Event::SessionExpired(_)) {
+                let epoch = if matches!(&event, Event::SessionUnavailable { .. }) {
+                    // The attempted session is already signed out. Invalidate
+                    // the whole pending batch without issuing a user sign-out,
+                    // which would also forget the selected account.
+                    self.send(Command::ResetSession);
+                    self.epoch.get()
+                } else if matches!(&event, Event::SignInFailed(_) | Event::SessionExpired(_)) {
                     self.send(Command::SignOut);
                     self.epoch.get()
                 } else {
@@ -254,6 +275,31 @@ impl Backend {
             .into_iter()
             .filter_map(|(epoch, event)| event.current(epoch, self.epoch.get()).then_some(event))
             .collect()
+    }
+}
+
+/// Serialize account mutations without holding up unrelated commands. Session
+/// changes wait for the tail before replacing the authenticated client.
+#[derive(Default)]
+struct AccountWrites {
+    tail: Option<tokio::task::JoinHandle<()>>,
+}
+
+impl AccountWrites {
+    fn push(&mut self, task: impl Future<Output = ()> + Send + 'static) {
+        let previous = self.tail.take();
+        self.tail = Some(tokio::spawn(async move {
+            if let Some(previous) = previous {
+                let _ = previous.await;
+            }
+            task.await;
+        }));
+    }
+
+    async fn wait(&mut self) {
+        if let Some(tail) = self.tail.take() {
+            let _ = tail.await;
+        }
     }
 }
 
@@ -456,13 +502,22 @@ async fn handle(command: Command, context: Context) {
         } => {
             // One change at a time, in the order clicked.
             let _turn = context.account_writes.lock().await;
-            if let Err(error) = innertube::rate(&context.rp, &id, rating).await {
-                log::warn!("rating {id} failed: {error}");
-                context.send(Event::RateFailed {
-                    id,
-                    previous,
-                    error,
-                });
+            let result = tokio::time::timeout(
+                std::time::Duration::from_secs(20),
+                innertube::rate(&context.rp, &id, rating),
+            )
+            .await
+            .unwrap_or_else(|_| Err("YouTube did not answer in time.".to_owned()));
+            match result {
+                Ok(()) => context.send(Event::RateSucceeded { id, rating }),
+                Err(error) => {
+                    log::warn!("rating {id} failed: {error}");
+                    context.send(Event::RateFailed {
+                        id,
+                        previous,
+                        error,
+                    });
+                }
             }
         }
         Command::LoadSaveTargets(id) => {
@@ -478,14 +533,27 @@ async fn handle(command: Command, context: Context) {
             saved,
         } => {
             let _turn = context.account_writes.lock().await;
-            if let Err(error) = innertube::set_saved(&context.rp, &id, &playlist, saved).await {
-                log::warn!("saving {id} to {playlist} failed: {error}");
-                context.send(Event::SaveFailed {
+            let result = tokio::time::timeout(
+                std::time::Duration::from_secs(20),
+                innertube::set_saved(&context.rp, &id, &playlist, saved),
+            )
+            .await
+            .unwrap_or_else(|_| Err("YouTube did not answer in time.".to_owned()));
+            match result {
+                Ok(()) => context.send(Event::SaveSucceeded {
                     id,
                     playlist,
                     saved,
-                    error,
-                });
+                }),
+                Err(error) => {
+                    log::warn!("saving {id} to {playlist} failed: {error}");
+                    context.send(Event::SaveFailed {
+                        id,
+                        playlist,
+                        saved,
+                        error,
+                    });
+                }
             }
         }
         Command::ImportTakeout(picked) => {
@@ -557,6 +625,9 @@ async fn handle(command: Command, context: Context) {
         Command::SignOut => {
             innertube::sign_out(&context.rp).await;
             context.send(Event::SignedOut);
+        }
+        Command::ResetSession => {
+            innertube::sign_out(&context.rp).await;
         }
         Command::RemoveAccount(id) => {
             if let Err(error) = account::delete_session(id).await {
@@ -926,6 +997,16 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
 
 /// Checks the session with YouTube, then keeps it in the credential store.
 async fn start_session(context: &Context, cookie: String, id: u32) -> Result<(), String> {
+    start_session_classified(context, cookie, id)
+        .await
+        .map_err(RestoreFailure::message)
+}
+
+async fn start_session_classified(
+    context: &Context,
+    cookie: String,
+    id: u32,
+) -> Result<(), RestoreFailure> {
     sign_in(
         context,
         cookie.clone(),
@@ -936,7 +1017,7 @@ async fn start_session(context: &Context, cookie: String, id: u32) -> Result<(),
     if result.is_err() {
         innertube::sign_out(&context.rp).await;
     }
-    result
+    result.map_err(RestoreFailure::Unavailable)
 }
 
 /// Reads a browser's session and starts it as account `id`.
@@ -947,18 +1028,34 @@ async fn session_from_browser(context: &Context, spec: &str, id: u32) -> Result<
 
 /// Starts using a session; `rejected` is what to say when YouTube does
 /// not accept it.
-async fn sign_in(context: &Context, cookie: String, rejected: &str) -> Result<(), String> {
+#[derive(Debug, PartialEq, Eq)]
+enum RestoreFailure {
+    Expired(String),
+    Unavailable(String),
+}
+
+impl RestoreFailure {
+    fn message(self) -> String {
+        match self {
+            Self::Expired(message) | Self::Unavailable(message) => message,
+        }
+    }
+}
+
+fn sign_in_failure(error: rustypipe::error::Error, rejected: &str) -> RestoreFailure {
+    if innertube::is_signed_out(&error) {
+        RestoreFailure::Expired(rejected.to_owned())
+    } else {
+        RestoreFailure::Unavailable(innertube::text(error))
+    }
+}
+
+async fn sign_in(context: &Context, cookie: String, rejected: &str) -> Result<(), RestoreFailure> {
     let result = innertube::sign_in(&context.rp, cookie).await;
     if result.is_err() {
         innertube::sign_out(&context.rp).await;
     }
-    result.map_err(|error| {
-        if innertube::is_signed_out(&error) {
-            rejected.to_owned()
-        } else {
-            innertube::text(error)
-        }
-    })
+    result.map_err(|error| sign_in_failure(error, rejected))
 }
 
 fn finish_sign_in(context: &Context, account: Account, result: Result<(), String>) {
@@ -987,8 +1084,10 @@ async fn restore(context: &Context, account: &Account) {
     };
     let kept = match stored {
         Ok(Some(cookie)) => sign_in(context, cookie, "Your YouTube session has expired.").await,
-        Ok(None) => Err("No session is kept on this computer any more.".to_owned()),
-        Err(error) => Err(error),
+        Ok(None) => Err(RestoreFailure::Expired(
+            "No session is kept on this computer any more.".to_owned(),
+        )),
+        Err(error) => Err(RestoreFailure::Unavailable(error)),
     };
     let error = match kept {
         Ok(()) => {
@@ -997,15 +1096,39 @@ async fn restore(context: &Context, account: &Account) {
         }
         Err(error) => error,
     };
-    if let AccountSource::Browser(browser) = &account.source {
+    if matches!(error, RestoreFailure::Expired(_))
+        && let AccountSource::Browser(browser) = &account.source
+    {
         log::info!("renewing the session");
-        let renewed = session_from_browser(context, browser, account.id).await;
-        if renewed.is_ok() {
-            signed_in(context, account);
-            return;
+        let renewed = match account::cookies_from_browser(browser).await {
+            Ok(cookie) => start_session_classified(context, cookie, account.id).await,
+            Err(error) => Err(RestoreFailure::Unavailable(error)),
+        };
+        match renewed {
+            Ok(()) => {
+                signed_in(context, account);
+                return;
+            }
+            Err(RestoreFailure::Unavailable(error)) => {
+                context.send(Event::SessionUnavailable {
+                    id: account.id,
+                    error,
+                });
+                return;
+            }
+            Err(RestoreFailure::Expired(error)) => {
+                context.send(Event::SessionExpired(error));
+                return;
+            }
         }
     }
-    context.send(Event::SessionExpired(error));
+    match error {
+        RestoreFailure::Expired(error) => context.send(Event::SessionExpired(error)),
+        RestoreFailure::Unavailable(error) => context.send(Event::SessionUnavailable {
+            id: account.id,
+            error,
+        }),
+    }
 }
 
 /// Says who signed in; for a browser's account, then finds how yt-dlp
@@ -1324,6 +1447,65 @@ mod tests {
     }
 
     #[test]
+    fn temporary_restore_failure_invalidates_batch_without_forgetting_selection() {
+        let (backend, outgoing, mut incoming) = scoped_backend(1);
+        outgoing
+            .send((
+                1,
+                Event::Rating {
+                    id: "stale".into(),
+                    result: Ok(Rating::Like),
+                },
+            ))
+            .unwrap();
+        outgoing
+            .send((
+                1,
+                Event::SessionUnavailable {
+                    id: 7,
+                    error: "offline".into(),
+                },
+            ))
+            .unwrap();
+        outgoing
+            .send((
+                1,
+                Event::Rating {
+                    id: "stale".into(),
+                    result: Ok(Rating::Like),
+                },
+            ))
+            .unwrap();
+        let events = backend.poll();
+        assert!(matches!(
+            events.as_slice(),
+            [Event::SessionUnavailable { id: 7, .. }]
+        ));
+        assert!(matches!(
+            incoming.try_recv(),
+            Ok((2, Command::ResetSession))
+        ));
+        assert!(Command::ResetSession.changes_session());
+    }
+
+    #[test]
+    fn restore_distinguishes_rejected_sessions_from_network_failures() {
+        use rustypipe::error::Error;
+        assert_eq!(
+            sign_in_failure(Error::HttpStatus(401, "unauthorized".into()), "expired"),
+            RestoreFailure::Expired("expired".into())
+        );
+        assert!(matches!(
+            sign_in_failure(Error::Http("offline".into()), "expired"),
+            RestoreFailure::Unavailable(_)
+        ));
+        assert!(matches!(
+            sign_in_failure(Error::HttpStatus(403, "rate limited".into()), "expired"),
+            RestoreFailure::Unavailable(_)
+        ));
+    }
+
+    #[test]
     fn private_external_errors_are_sanitized_before_reaching_the_interface() {
         let error = "https://youtube.com/private Cookie: SAPISID=synthetic-secret";
         let events = [
@@ -1441,32 +1623,34 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn session_changes_wait_for_earlier_writes() {
+    async fn account_writes_are_ordered_without_blocking_independent_work() {
         let steps = Arc::new(std::sync::Mutex::new(Vec::new()));
         let (release, wait) = tokio::sync::oneshot::channel();
         let (started, ready) = tokio::sync::oneshot::channel();
+        let mut writes = AccountWrites::default();
         let history = steps.clone();
-        let worker = tokio::spawn(async move {
-            dispatch(true, async move {
-                history.lock().unwrap().push("write-A");
-                started.send(()).unwrap();
-                wait.await.unwrap();
-                history.lock().unwrap().push("finished-A");
-            })
-            .await;
-            let switched = steps.clone();
-            dispatch(true, async move {
-                switched.lock().unwrap().push("switch-B");
-            })
-            .await;
-            steps
+        writes.push(async move {
+            history.lock().unwrap().push("write-A");
+            started.send(()).unwrap();
+            wait.await.unwrap();
+            history.lock().unwrap().push("finished-A");
         });
         ready.await.unwrap();
+        let second = steps.clone();
+        writes.push(async move { second.lock().unwrap().push("write-B") });
+        let independent = steps.clone();
+        dispatch(
+            true,
+            async move { independent.lock().unwrap().push("load") },
+        )
+        .await;
+        assert_eq!(*steps.lock().unwrap(), ["write-A", "load"]);
         release.send(()).unwrap();
-        let steps = worker.await.unwrap();
+        writes.wait().await;
+        steps.lock().unwrap().push("switch-B");
         assert_eq!(
             *steps.lock().unwrap(),
-            ["write-A", "finished-A", "switch-B"]
+            ["write-A", "load", "finished-A", "write-B", "switch-B"]
         );
         assert!(
             Command::Rate {
@@ -1474,7 +1658,7 @@ mod tests {
                 rating: Rating::Like,
                 previous: Rating::None
             }
-            .ordered()
+            .account_write()
         );
         assert!(
             Command::SetSaved {
@@ -1482,14 +1666,14 @@ mod tests {
                 playlist: "p".into(),
                 saved: true
             }
-            .ordered()
+            .account_write()
         );
         assert!(
             Command::MarkWatched {
                 id: "synthetic".into(),
                 session: 1
             }
-            .ordered()
+            .account_write()
         );
         assert!(!Event::HistoryMarked.current(1, 2));
         assert!(Event::HistoryMarked.current(2, 2));
