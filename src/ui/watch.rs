@@ -244,17 +244,25 @@ fn shorts(
                 (Icon::ThumbsUp, Rating::Like, tr(locale, "Liked")),
                 (Icon::ThumbsDown, Rating::Dislike, tr(locale, "Disliked")),
             ] {
-                rail.add_enabled_ui(state.signed_in() && rating.is_some(), |ui| {
-                    if widgets::icon_button(ui, icon, 24.0, &hint).clicked() {
-                        actions.push(Action::Rate(if rating == Some(wanted) {
-                            Rating::None
-                        } else {
-                            wanted
-                        }));
-                    }
-                })
-                .response
-                .on_disabled_hover_text(tr(locale, "Sign in to rate"));
+                let response = rail
+                    .add_enabled_ui(
+                        state.signed_in()
+                            && rating.is_some()
+                            && !state.rating_pending.contains(&watching.id),
+                        |ui| {
+                            if widgets::icon_button(ui, icon, 24.0, &hint).clicked() {
+                                actions.push(Action::Rate(if rating == Some(wanted) {
+                                    Rating::None
+                                } else {
+                                    wanted
+                                }));
+                            }
+                        },
+                    )
+                    .response;
+                if !state.signed_in() {
+                    response.on_disabled_hover_text(tr(locale, "Sign in to rate"));
+                }
             }
             if widgets::button(
                 rail,
@@ -561,7 +569,12 @@ fn rating_buttons(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             let before = i64::from(state.rating_base == Rating::Like);
             (i64::from(likes) + now - before).max(0) as u64
         });
-    let enabled = state.signed_in() && rating.is_some();
+    let enabled = state.signed_in()
+        && rating.is_some()
+        && state
+            .watching
+            .as_ref()
+            .is_some_and(|video| !state.rating_pending.contains(&video.id));
     let hint = if !state.signed_in() {
         tr(locale, "Sign in to rate videos")
     } else if matches!(state.rating, Fetch::Failed(_)) {
@@ -871,9 +884,14 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
                     for target in targets {
                         let mut saved = target.saved;
                         if ui
-                            .checkbox(
-                                &mut saved,
-                                RichText::new(&target.name).font(theme::regular(14.0)),
+                            .add_enabled(
+                                !state
+                                    .save_pending
+                                    .contains(&(watching.id.clone(), target.id.clone())),
+                                egui::Checkbox::new(
+                                    &mut saved,
+                                    RichText::new(&target.name).font(theme::regular(14.0)),
+                                ),
                             )
                             .changed()
                         {

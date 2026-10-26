@@ -233,6 +233,7 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                         state.suggestions.clear();
                     }
                     if field.changed() {
+                        state.suggestions.clear();
                         state.suggestion_cursor = None;
                     }
                     if field.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
@@ -946,6 +947,36 @@ mod tests {
                 modifiers: egui::Modifiers::NONE,
             },
         ]
+    }
+
+    #[test]
+    fn editing_search_clears_stale_suggestions_before_the_next_response() {
+        let ctx = egui::Context::default();
+        crate::appearance::theme::install_fonts(&ctx);
+        let mut state = State {
+            query: "old".into(),
+            suggestions: vec!["old suggestion".into()],
+            suggestion_cursor: Some(0),
+            ..Default::default()
+        };
+        let mut actions = Vec::new();
+        sidebar_label_x(&ctx, &mut state, 0, Vec::new(), &mut actions);
+        ctx.memory_mut(|memory| memory.request_focus(command_line_id()));
+        sidebar_label_x(
+            &ctx,
+            &mut state,
+            1,
+            vec![egui::Event::Text("x".into())],
+            &mut actions,
+        );
+        assert_ne!(state.query, "old");
+        assert!(state.suggestions.is_empty());
+        assert!(state.suggestion_cursor.is_none());
+        assert!(
+            !actions
+                .iter()
+                .any(|action| matches!(action, Action::Search(_)))
+        );
     }
 
     #[test]

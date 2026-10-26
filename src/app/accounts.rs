@@ -76,6 +76,8 @@ impl State {
         self.comments_open.clear();
         self.rating = Fetch::Idle;
         self.rating_base = Rating::None;
+        self.rating_pending.clear();
+        self.save_pending.clear();
         self.save_targets = Fetch::Idle;
         self.up_next.clear();
         self.queue.clear();
@@ -200,7 +202,8 @@ impl App {
 
     /// Signs in as another kept account.
     pub(super) fn switch_account(&mut self, id: u32) {
-        if self.state.library.active_account != Some(id)
+        if (self.state.library.active_account != Some(id)
+            || self.state.account != AccountState::SignedIn(id))
             && let Some(account) = self.state.library.account(id).cloned()
         {
             self.begin_account_change();
@@ -261,6 +264,15 @@ impl App {
 
     /// Drops the account's lists and leaves its pages.
     pub(super) fn on_signed_out(&mut self) {
+        self.finish_signed_out(None);
+    }
+
+    pub(super) fn on_session_unavailable(&mut self, id: u32, error: String) {
+        self.finish_signed_out(Some(id));
+        self.state.account = AccountState::Failed(error);
+    }
+
+    fn finish_signed_out(&mut self, retry_account: Option<u32>) {
         let account = if matches!(self.state.account, AccountState::Failed(_)) {
             self.state.account.clone()
         } else {
@@ -270,7 +282,7 @@ impl App {
         self.state.account = account;
         // The account stays listed: its session is kept to switch
         // back.
-        self.state.library.active_account = None;
+        self.state.library.active_account = retry_account;
         self.save_library();
         if matches!(self.state.view, View::Liked | View::Playlists) {
             self.state.view = View::Home;

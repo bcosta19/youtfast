@@ -105,7 +105,7 @@ fn account_row(ui: &mut Ui, state: &State, account: &Account, actions: &mut Vec<
     let locale = state.settings.language;
     let palette = &state.palette;
     let raised = widgets::on_card(palette);
-    let active = state.library.active_account == Some(account.id);
+    let active = state.account == AccountState::SignedIn(account.id);
     ui.horizontal(|ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(40.0, 40.0), Sense::hover());
         widgets::avatar(ui, palette, None, &account.name, rect);

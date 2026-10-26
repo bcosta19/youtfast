@@ -139,6 +139,7 @@ fn reorder_queue(queue: &mut Vec<Video>, from: usize, to: usize) {
 impl App {
     pub(super) fn move_queue(&mut self, from: usize, to: usize) {
         reorder_queue(&mut self.state.queue, from, to);
+        self.state.refresh_autoplay();
     }
 
     /// Retry the same video without making a second history entry or
@@ -350,6 +351,7 @@ impl App {
             self.state.queue.push(video);
             self.state.notice = Some("Added to queue".to_owned());
         }
+        self.state.refresh_autoplay();
     }
 
     pub(super) fn set_sponsorblock(&mut self, on: bool) {
@@ -403,11 +405,13 @@ impl App {
                 ctx.request_repaint_after(*at - now);
             }
         }
-        if let Some((video, at)) = &self.state.autoplay {
+        if let Some((_, at)) = &self.state.autoplay {
             if *at <= now {
-                let video = video.clone();
-                self.state.autoplay = None;
-                self.advance(video);
+                // A source may have changed while the countdown was visible.
+                self.state.refresh_autoplay();
+                if let Some((video, _)) = self.state.autoplay.take() {
+                    self.advance(video);
+                }
             } else {
                 // The countdown's seconds tick down on screen.
                 ctx.request_repaint_after(Duration::from_millis(250));
@@ -428,7 +432,8 @@ impl App {
                 self.with_player(|player| player.set_subtitle(Some(id)));
             }
         }
-        if !status.paused
+        if self.state.settings.sponsorblock
+            && !status.paused
             && status.seekable
             && let Some(index) = self.current_segment(status.position)
             && !self.state.skipped.contains(&index)
@@ -480,6 +485,38 @@ impl App {
                 self.query_changed = Some((query, Instant::now()));
                 ctx.request_repaint_after(SUGGEST_AFTER);
             }
+        }
+    }
+}
+
+impl State {
+    /// Keep an active countdown in sync with the queue and current sources.
+    /// Changes to the choice do not restart the countdown.
+    pub(super) fn refresh_autoplay(&mut self) {
+        let Some((_, deadline)) = self.autoplay.take() else {
+            return;
+        };
+        if self.watching_live()
+            || self.watching_short()
+            || self.playback_loop
+            || (!self.settings.autoplay && self.queue.is_empty())
+        {
+            return;
+        }
+        let related = self
+            .details
+            .ready()
+            .map_or(&[][..], |details| details.related.as_slice());
+        self.autoplay = next_video(self.watching.as_ref(), &self.queue, &self.up_next, related)
+            .cloned()
+            .map(|video| (video, deadline));
+    }
+
+    pub(super) fn accept_segments(&mut self, id: &str, segments: Vec<Segment>) {
+        if self.settings.sponsorblock && self.watching.as_ref().is_some_and(|video| video.id == id)
+        {
+            self.segments = segments;
+            self.skipped.clear();
         }
     }
 }
@@ -547,6 +584,75 @@ mod tests {
         reorder_queue(&mut queue, 8, 0);
         reorder_queue(&mut queue, 0, 8);
         assert_eq!(queue, original);
+    }
+
+    #[test]
+    fn countdown_follows_queue_changes_and_cancels_when_autoplay_is_off() {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut state = State {
+            watching: Some(video("current")),
+            queue: vec![video("a"), video("b")],
+            autoplay: Some((video("a"), deadline)),
+            ..Default::default()
+        };
+        state.settings.autoplay = false;
+        reorder_queue(&mut state.queue, 1, 0);
+        state.refresh_autoplay();
+        assert_eq!(
+            state.autoplay.as_ref().map(|(v, at)| (v.id.as_str(), *at)),
+            Some(("b", deadline))
+        );
+
+        state.queue.retain(|v| v.id != "b");
+        state.refresh_autoplay();
+        assert_eq!(
+            state.autoplay.as_ref().map(|(v, _)| v.id.as_str()),
+            Some("a")
+        );
+
+        state.queue.clear();
+        state.refresh_autoplay();
+        assert!(state.autoplay.is_none());
+    }
+
+    #[test]
+    fn countdown_uses_source_when_queue_cleared_and_autoplay_is_on() {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut state = State {
+            watching: Some(video("current")),
+            queue: vec![video("queued")],
+            up_next: vec![video("current"), video("next")],
+            autoplay: Some((video("queued"), deadline)),
+            ..Default::default()
+        };
+        state.settings.autoplay = true;
+        state.queue.clear();
+        state.refresh_autoplay();
+        assert_eq!(
+            state.autoplay.as_ref().map(|(v, at)| (v.id.as_str(), *at)),
+            Some(("next", deadline))
+        );
+    }
+
+    #[test]
+    fn late_segments_are_ignored_after_sponsorblock_is_disabled() {
+        let mut state = State {
+            watching: Some(video("current")),
+            ..Default::default()
+        };
+        let segment = Segment {
+            category: "sponsor".into(),
+            start: 1.0,
+            end: 3.0,
+        };
+        state.settings.sponsorblock = false;
+        state.accept_segments("current", vec![segment.clone()]);
+        assert!(state.segments.is_empty());
+        state.settings.sponsorblock = true;
+        state.accept_segments("other", vec![segment.clone()]);
+        assert!(state.segments.is_empty());
+        state.accept_segments("current", vec![segment.clone()]);
+        assert_eq!(state.segments, vec![segment]);
     }
 
     #[test]

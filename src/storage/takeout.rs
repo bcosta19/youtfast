@@ -15,6 +15,8 @@ use crate::model::{Channel, Video};
 use crate::storage::library::{Import, Watched};
 use crate::youtube::ytdlp;
 
+const MAX_SUBSCRIPTION_ROW_BYTES: usize = 1024 * 1024;
+
 /// Reads either Takeout file, told apart by its contents.
 #[cfg(test)]
 pub fn parse(bytes: &[u8]) -> Result<Import, String> {
@@ -104,20 +106,37 @@ fn parse_limited<R: Read>(reader: R, limit: u64) -> Result<Import, String> {
         Some(_) => {
             let mut subscriptions = Vec::new();
             let mut known = std::collections::HashSet::new();
-            loop {
-                let mut line = String::new();
-                let count = reader
-                    .by_ref()
-                    .take(1024 * 1024 + 1)
-                    .read_line(&mut line)
-                    .map_err(|_| "Could not read this subscriptions file (64 MiB limit).")?;
-                if count == 0 {
-                    break;
+            'records: loop {
+                let mut record = String::new();
+                let mut quoted = false;
+                loop {
+                    let start = record.len();
+                    let count = reader
+                        .by_ref()
+                        .take((MAX_SUBSCRIPTION_ROW_BYTES + 1 - start) as u64)
+                        .read_line(&mut record)
+                        .map_err(|_| "Could not read this subscriptions file (64 MiB limit).")?;
+                    if record.len() > MAX_SUBSCRIPTION_ROW_BYTES {
+                        return Err("A subscriptions row exceeds 1 MiB.".into());
+                    }
+                    if count == 0 {
+                        if record.is_empty() {
+                            break 'records;
+                        }
+                        break;
+                    }
+                    // Escaped quotes come in pairs, so their two toggles
+                    // leave the quoted state unchanged.
+                    for byte in record[start..].bytes() {
+                        if byte == b'"' {
+                            quoted = !quoted;
+                        }
+                    }
+                    if !quoted {
+                        break;
+                    }
                 }
-                if count > 1024 * 1024 {
-                    return Err("A subscriptions row exceeds 1 MiB.".into());
-                }
-                if let Some(channel) = subscription(&line)?
+                if let Some(channel) = subscription(&record)?
                     && known.insert(channel.id.clone())
                 {
                     if subscriptions.len() == 20_000 {
@@ -147,7 +166,7 @@ fn parse_limited<R: Read>(reader: R, limit: u64) -> Result<Import, String> {
     }
 }
 
-/// The channel one subscriptions.csv line names, or `None` for the header
+/// The channel one subscriptions.csv record names, or `None` for the header
 /// row, in whatever language it is.
 fn subscription(line: &str) -> Result<Option<Channel>, String> {
     let fields = csv_fields(line)
@@ -164,7 +183,7 @@ fn subscription(line: &str) -> Result<Option<Channel>, String> {
     }))
 }
 
-/// The fields of one CSV line: commas separate, double quotes enclose a
+/// The fields of one CSV record: commas separate, double quotes enclose a
 /// field that has commas, and `""` inside quotes is one quote.
 fn csv_fields(line: &str) -> Option<Vec<String>> {
     let mut fields = Vec::new();
@@ -360,6 +379,50 @@ mod tests {
             import.subscriptions[1].name,
             "Google for Developers, \"Official\""
         );
+    }
+
+    #[test]
+    fn subscriptions_accept_quoted_multiline_fields_and_following_rows() {
+        let csv = concat!(
+            "Channel Id,Channel Url,Channel Title\r\n",
+            "UC_x5XG1OV2P6uZZ5FSM9Ttw,url,\"First line\r\n",
+            "Second, \"\"quoted\"\" line\"\r\n",
+            "UCBR8-60-B28hp2BmDPdntcQ,url,Another channel\r\n",
+        );
+        let import = parse(csv.as_bytes()).unwrap();
+        assert_eq!(import.subscriptions.len(), 2);
+        assert_eq!(
+            import.subscriptions[0].name,
+            "First line\r\nSecond, \"quoted\" line"
+        );
+        assert_eq!(import.subscriptions[1].name, "Another channel");
+    }
+
+    #[test]
+    fn subscriptions_enforce_the_row_limit_across_multiple_lines() {
+        let csv = format!(
+            "UC_x5XG1OV2P6uZZ5FSM9Ttw,url,\"{}\n{}\"\n",
+            "a".repeat(600_000),
+            "b".repeat(600_000)
+        );
+        assert_eq!(
+            parse(csv.as_bytes()).unwrap_err(),
+            "A subscriptions row exceeds 1 MiB."
+        );
+    }
+
+    #[test]
+    fn subscriptions_accept_a_record_at_the_limit_without_a_final_newline() {
+        let prefix = "UC_x5XG1OV2P6uZZ5FSM9Ttw,url,\"line\n";
+        let suffix = "\"";
+        let csv = format!(
+            "{prefix}{}{suffix}",
+            "x".repeat(MAX_SUBSCRIPTION_ROW_BYTES - prefix.len() - suffix.len())
+        );
+        let import = parse(csv.as_bytes()).unwrap();
+        assert_eq!(import.subscriptions.len(), 1);
+        assert!(import.subscriptions[0].name.starts_with("line\nx"));
+        assert!(parse_limited(csv.as_bytes(), (csv.len() - 1) as u64).is_err());
     }
 
     #[test]

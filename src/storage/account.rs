@@ -204,32 +204,101 @@ async fn extract(spec: &str, what: &str) -> Result<String, String> {
 
 /// The browsers whose data is on this computer, by yt-dlp's names.
 pub fn installed_browsers() -> Vec<&'static str> {
-    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+    let Some(dirs) = BrowserDirs::current() else {
         return Vec::new();
     };
-    let config = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home.join(".config"));
+    installed_browsers_in(&dirs)
+}
+
+fn installed_browsers_in(dirs: &BrowserDirs) -> Vec<&'static str> {
     crate::model::BROWSERS
         .into_iter()
-        .filter(|browser| {
-            let place = match *browser {
-                "chromium" => config.join("chromium"),
-                "chrome" => config.join("google-chrome"),
-                "brave" => config.join("BraveSoftware/Brave-Browser"),
-                // Newer Firefox keeps its profiles in the XDG folder.
-                "firefox" if config.join("mozilla/firefox").exists() => {
-                    config.join("mozilla/firefox")
-                }
-                "firefox" => home.join(".mozilla/firefox"),
-                "vivaldi" => config.join("vivaldi"),
-                "edge" => config.join("microsoft-edge"),
-                "opera" => config.join("opera"),
-                _ => return false,
-            };
-            place.exists()
-        })
+        .filter(|browser| dirs.roots(browser).iter().any(|root| root.exists()))
         .collect()
+}
+
+#[derive(Clone, Copy)]
+enum BrowserPlatform {
+    Linux,
+    Macos,
+    Windows,
+}
+
+struct BrowserDirs {
+    platform: BrowserPlatform,
+    home: PathBuf,
+    config: PathBuf,
+    roaming: PathBuf,
+}
+
+impl BrowserDirs {
+    fn current() -> Option<Self> {
+        let platform = if cfg!(windows) {
+            BrowserPlatform::Windows
+        } else if cfg!(target_os = "macos") {
+            BrowserPlatform::Macos
+        } else {
+            BrowserPlatform::Linux
+        };
+        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+            .map(PathBuf::from)?;
+        let config = match platform {
+            BrowserPlatform::Windows => std::env::var_os("LOCALAPPDATA")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| home.join("AppData/Local")),
+            BrowserPlatform::Macos => home.join("Library/Application Support"),
+            BrowserPlatform::Linux => std::env::var_os("XDG_CONFIG_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| home.join(".config")),
+        };
+        let roaming = std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join("AppData/Roaming"));
+        Some(Self {
+            platform,
+            home,
+            config,
+            roaming,
+        })
+    }
+
+    fn roots(&self, browser: &str) -> Vec<PathBuf> {
+        let config = &self.config;
+        let path = match (self.platform, browser) {
+            (BrowserPlatform::Linux, "firefox") => {
+                return vec![
+                    self.home.join(".mozilla/firefox"),
+                    config.join("mozilla/firefox"),
+                ];
+            }
+            (BrowserPlatform::Linux, "chromium") => "chromium",
+            (BrowserPlatform::Linux, "chrome") => "google-chrome",
+            (BrowserPlatform::Linux, "brave") => "BraveSoftware/Brave-Browser",
+            (BrowserPlatform::Linux, "vivaldi") => "vivaldi",
+            (BrowserPlatform::Linux, "edge") => "microsoft-edge",
+            (BrowserPlatform::Linux, "opera") => "opera",
+            (BrowserPlatform::Macos, "firefox") => "Firefox",
+            (BrowserPlatform::Macos, "chromium") => "Chromium",
+            (BrowserPlatform::Macos, "chrome") => "Google/Chrome",
+            (BrowserPlatform::Macos, "brave") => "BraveSoftware/Brave-Browser",
+            (BrowserPlatform::Macos, "vivaldi") => "Vivaldi",
+            (BrowserPlatform::Macos, "edge") => "Microsoft Edge",
+            (BrowserPlatform::Macos, "opera") => "com.operasoftware.Opera",
+            (BrowserPlatform::Windows, "firefox") => {
+                return vec![self.roaming.join("Mozilla/Firefox")];
+            }
+            (BrowserPlatform::Windows, "opera") => {
+                return vec![self.roaming.join("Opera Software/Opera Stable")];
+            }
+            (BrowserPlatform::Windows, "chromium") => "Chromium/User Data",
+            (BrowserPlatform::Windows, "chrome") => "Google/Chrome/User Data",
+            (BrowserPlatform::Windows, "brave") => "BraveSoftware/Brave-Browser/User Data",
+            (BrowserPlatform::Windows, "vivaldi") => "Vivaldi/User Data",
+            (BrowserPlatform::Windows, "edge") => "Microsoft/Edge/User Data",
+            _ => return Vec::new(),
+        };
+        vec![config.join(path)]
+    }
 }
 
 /// A browser profile the sign-in form offers: one click signs in with its
@@ -283,27 +352,22 @@ impl BrowserProfile {
 /// browsers' own profile lists tell (Chromium's `Local State`, Firefox's
 /// `profiles.ini`). Only names are read, never cookies.
 pub fn browser_profiles() -> Vec<BrowserProfile> {
-    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+    let Some(dirs) = BrowserDirs::current() else {
         return Vec::new();
     };
-    let config = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home.join(".config"));
+    browser_profiles_in(&dirs)
+}
+
+fn browser_profiles_in(dirs: &BrowserDirs) -> Vec<BrowserProfile> {
     let mut profiles = Vec::new();
-    for browser in installed_browsers() {
+    for browser in installed_browsers_in(dirs) {
         if browser == "firefox" {
-            // yt-dlp looks in ~/.mozilla/firefox; a profile kept in the
-            // XDG folder goes as its whole path.
-            let classic = home.join(".mozilla/firefox");
-            let xdg = config.join("mozilla/firefox");
-            for (root, whole_path) in [(classic, false), (xdg, true)] {
+            for root in dirs.roots(browser) {
                 let Ok(ini) = std::fs::read_to_string(root.join("profiles.ini")) else {
                     continue;
                 };
                 for (path, name, relative) in firefox_profiles(&ini) {
-                    let profile = if relative && !whole_path {
-                        path
-                    } else if relative {
+                    let profile = if relative {
                         root.join(&path).display().to_string()
                     } else {
                         path
@@ -318,7 +382,7 @@ pub fn browser_profiles() -> Vec<BrowserProfile> {
             }
             continue;
         }
-        let Some(dir) = chromium_dir(browser, &config) else {
+        let Some(dir) = dirs.roots(browser).into_iter().find(|dir| dir.exists()) else {
             continue;
         };
         let found = std::fs::read_to_string(dir.join("Local State"))
@@ -343,19 +407,6 @@ pub fn browser_profiles() -> Vec<BrowserProfile> {
         }
     }
     profiles
-}
-
-/// Where a Chromium-family browser keeps its profiles.
-fn chromium_dir(browser: &str, config: &std::path::Path) -> Option<PathBuf> {
-    Some(config.join(match browser {
-        "chromium" => "chromium",
-        "chrome" => "google-chrome",
-        "brave" => "BraveSoftware/Brave-Browser",
-        "vivaldi" => "vivaldi",
-        "edge" => "microsoft-edge",
-        "opera" => "opera",
-        _ => return None,
-    }))
 }
 
 /// `(folder, name, e-mail)` of each profile in a Chromium `Local State`,
@@ -502,24 +553,89 @@ async fn with_store_timeout<T: Send + 'static>(
     }
 }
 
-pub async fn save_session(id: u32, cookie: String) -> Result<(), String> {
-    with_store(move || {
-        // Windows' Credential Manager caps a secret at 2560 bytes, which a
-        // YouTube session can exceed; the store's own error would not say
-        // why, and it is not shown anyway.
-        #[cfg(windows)]
-        if cookie.len() > 2560 {
-            return Err(
-                "This session is too large for the Windows Credential Manager \
-                 (2560 bytes), so it cannot be kept there."
-                    .to_owned(),
-            );
+/// A timed-out or canceled write is rolled back before the store permit is
+/// released. A later operation can therefore never be erased by that rollback.
+async fn with_store_write<T: Send + 'static>(
+    store: Arc<tokio::sync::Semaphore>,
+    timeout: Duration,
+    write: impl FnOnce() -> Result<T, String> + Send + 'static,
+    rollback: impl FnOnce(T) -> Result<(), String> + Send + 'static,
+) -> Result<(), String> {
+    let Ok(Ok(turn)) = tokio::time::timeout(timeout, store.acquire_owned()).await else {
+        return Err("The system keyring did not respond.".to_owned());
+    };
+    let (result_send, result_recv) = tokio::sync::oneshot::channel();
+    let (commit_send, commit_recv) = std::sync::mpsc::channel();
+    tokio::task::spawn_blocking(move || {
+        let _turn = turn;
+        match write() {
+            Ok(previous) => {
+                // Commit only when the waiting caller actually receives the
+                // result. Dropping that caller also abandons the write.
+                if (result_send.send(Ok(())).is_err() || commit_recv.recv().is_err())
+                    && rollback(previous).is_err()
+                {
+                    log::warn!("could not restore a timed-out keyring write");
+                }
+            }
+            Err(error) => {
+                let _ = result_send.send(Err(error));
+            }
         }
-        entry(&session_key(id))?
-            .set_secret(cookie.as_bytes())
-            .map_err(store_error)
-    })
+    });
+    match tokio::time::timeout(timeout, result_recv).await {
+        Ok(Ok(Ok(()))) => commit_send
+            .send(())
+            .map_err(|_| "The system keyring failed.".to_owned()),
+        Ok(Ok(Err(error))) => Err(error),
+        Ok(Err(_)) => Err("The system keyring failed.".to_owned()),
+        Err(_) => Err("The system keyring did not respond.".to_owned()),
+    }
+}
+
+pub async fn save_session(id: u32, cookie: String) -> Result<(), String> {
+    with_store_write(
+        STORE_CALLS.clone(),
+        STORE_TIMEOUT,
+        move || {
+            // Windows' Credential Manager caps a secret at 2560 bytes, which a
+            // YouTube session can exceed; the store's own error would not say
+            // why, and it is not shown anyway.
+            #[cfg(windows)]
+            if cookie.len() > 2560 {
+                return Err(
+                    "This session is too large for the Windows Credential Manager \
+                 (2560 bytes), so it cannot be kept there."
+                        .to_owned(),
+                );
+            }
+            let entry = entry(&session_key(id))?;
+            let previous = match entry.get_secret() {
+                Ok(secret) => Some(secret),
+                Err(keyring_core::Error::NoEntry) => None,
+                Err(error) => return Err(store_error(error)),
+            };
+            if let Err(error) = entry.set_secret(cookie.as_bytes()) {
+                if restore_secret(&entry, previous.as_deref()).is_err() {
+                    log::warn!("could not restore a failed keyring write");
+                }
+                return Err(store_error(error));
+            }
+            Ok(previous)
+        },
+        move |previous| restore_secret(&entry(&session_key(id))?, previous.as_deref()),
+    )
     .await
+}
+
+fn restore_secret(entry: &keyring_core::Entry, previous: Option<&[u8]>) -> Result<(), String> {
+    match previous {
+        Some(secret) => entry.set_secret(secret).map_err(store_error),
+        None => match entry.delete_credential() {
+            Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
+            Err(error) => Err(store_error(error)),
+        },
+    }
 }
 
 pub async fn load_session(id: u32) -> Result<Option<String>, String> {
@@ -652,6 +768,154 @@ fn strip_credentials(value: &mut serde_json::Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn timed_out_write_restores_previous_value_before_next_store_call() {
+        let store = Arc::new(tokio::sync::Semaphore::new(1));
+        let value = Arc::new(std::sync::Mutex::new(Some("old")));
+        let (release, wait) = std::sync::mpsc::channel();
+        let written = value.clone();
+        let rolled_back = value.clone();
+        let result = with_store_write(
+            store.clone(),
+            Duration::from_millis(50),
+            move || {
+                let previous = written.lock().unwrap().replace("new");
+                wait.recv().unwrap();
+                Ok(previous)
+            },
+            move |previous| {
+                *rolled_back.lock().unwrap() = previous;
+                Ok(())
+            },
+        )
+        .await;
+        assert!(result.is_err());
+        assert_eq!(store.available_permits(), 0);
+        release.send(()).unwrap();
+        let permit = tokio::time::timeout(Duration::from_secs(2), store.acquire())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(*value.lock().unwrap(), Some("old"));
+        drop(permit);
+    }
+
+    #[tokio::test]
+    async fn canceled_write_is_rolled_back_and_completed_write_is_kept() {
+        let store = Arc::new(tokio::sync::Semaphore::new(1));
+        let value = Arc::new(std::sync::Mutex::new(None));
+        let (started, started_rx) = tokio::sync::oneshot::channel();
+        let (release, wait) = std::sync::mpsc::channel();
+        let written = value.clone();
+        let rollback = value.clone();
+        let pending = tokio::spawn(with_store_write(
+            store.clone(),
+            Duration::from_secs(2),
+            move || {
+                let old = written.lock().unwrap().replace("first");
+                let _ = started.send(());
+                wait.recv().unwrap();
+                Ok(old)
+            },
+            move |old| {
+                *rollback.lock().unwrap() = old;
+                Ok(())
+            },
+        ));
+        started_rx.await.unwrap();
+        pending.abort();
+        let _ = pending.await;
+        release.send(()).unwrap();
+        let permit = tokio::time::timeout(Duration::from_secs(2), store.acquire())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(*value.lock().unwrap(), None);
+        drop(permit);
+        let written = value.clone();
+        let rollback = value.clone();
+        with_store_write(
+            store,
+            Duration::from_secs(2),
+            move || Ok(written.lock().unwrap().replace("second")),
+            move |old| {
+                *rollback.lock().unwrap() = old;
+                Ok(())
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(*value.lock().unwrap(), Some("second"));
+    }
+
+    #[test]
+    fn browser_roots_and_profiles_follow_each_platform() {
+        let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("browser-platforms-{}", std::process::id()));
+        for (platform, name, chrome, firefox) in [
+            (
+                BrowserPlatform::Linux,
+                "linux",
+                "google-chrome",
+                ".mozilla/firefox",
+            ),
+            (BrowserPlatform::Macos, "mac", "Google/Chrome", "Firefox"),
+            (
+                BrowserPlatform::Windows,
+                "windows",
+                "Google/Chrome/User Data",
+                "Mozilla/Firefox",
+            ),
+        ] {
+            let home = base.join(name).join("home");
+            let config = base.join(name).join("config");
+            let roaming = base.join(name).join("roaming");
+            let dirs = BrowserDirs {
+                platform,
+                home: home.clone(),
+                config: config.clone(),
+                roaming: roaming.clone(),
+            };
+            let chrome_root = config.join(chrome);
+            let firefox_root = match platform {
+                BrowserPlatform::Linux => home.join(firefox),
+                BrowserPlatform::Macos => config.join(firefox),
+                BrowserPlatform::Windows => roaming.join(firefox),
+            };
+            std::fs::create_dir_all(&chrome_root).unwrap();
+            std::fs::create_dir_all(&firefox_root).unwrap();
+            std::fs::write(
+                chrome_root.join("Local State"),
+                r#"{"profile":{"info_cache":{"Profile 1":{"name":"Test"}}}}"#,
+            )
+            .unwrap();
+            std::fs::write(
+                firefox_root.join("profiles.ini"),
+                "[Profile0]\nName=Test\nIsRelative=1\nPath=Profiles/test\n",
+            )
+            .unwrap();
+            assert_eq!(installed_browsers_in(&dirs), vec!["chrome", "firefox"]);
+            let profiles = browser_profiles_in(&dirs);
+            assert!(
+                profiles
+                    .iter()
+                    .any(|p| p.browser == "chrome" && p.profile.as_deref() == Some("Profile 1"))
+            );
+            assert!(profiles.iter().any(|p| {
+                p.browser == "firefox"
+                    && p.profile.as_deref()
+                        == Some(
+                            firefox_root
+                                .join("Profiles/test")
+                                .to_string_lossy()
+                                .as_ref(),
+                        )
+            }));
+        }
+        std::fs::remove_dir_all(base).unwrap();
+    }
 
     #[tokio::test]
     async fn timed_out_calls_keep_the_store_permit_until_the_blocking_call_finishes() {
