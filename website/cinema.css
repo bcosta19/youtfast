@@ -1,0 +1,255 @@
+/* Noto Sans is bundled under the SIL Open Font License; see assets/fonts/OFL.txt. */
+@font-face {
+  font-family:'YouTFast Sans';
+  src:url('assets/fonts/NotoSans-Regular.ttf') format('truetype');
+  font-weight:400;
+  font-style:normal;
+  font-display:swap;
+}
+
+@font-face {
+  font-family:'YouTFast Sans';
+  src:url('assets/fonts/NotoSans-Bold.ttf') format('truetype');
+  font-weight:700;
+  font-style:normal;
+  font-display:swap;
+}
+
+body {
+  font-family:'YouTFast Sans',sans-serif;
+}
+
+.hero {
+  display:flex;
+  flex-direction:column;
+  text-align:center;
+  gap:42px;
+  padding-top:56px;
+  padding-bottom:64px;
+}
+
+.hero-copy {
+  max-width:860px;
+  margin:auto;
+}
+
+h1 {
+  max-width:20ch;
+  margin:auto;
+  font-size:clamp(44px,5.4vw,76px);
+  font-weight:700;
+  letter-spacing:-.065em;
+  line-height:1.08;
+}
+
+.hero-description {
+  max-width:59ch;
+  margin:24px auto 28px;
+  font-size:17px;
+  line-height:1.7;
+}
+
+.hero-actions {
+  justify-content:center;
+}
+
+.project-note {
+  color:var(--accent);
+  font-size:14px;
+  font-weight:600;
+  margin-bottom:20px;
+}
+
+.hero-visual {
+  width:100%;
+  max-width:1000px;
+  perspective:none;
+}
+
+.scene-stage,.product-image {
+  transform:none!important;
+}
+
+.scene-layer {
+  display:none;
+}
+
+.product-image {
+  border-radius:12px;
+  box-shadow:0 20px 50px -30px #0009;
+  border:1px solid var(--control-line);
+}
+
+.visual-caption {
+  font-size:12px;
+  text-align:left;
+  margin-top:16px;
+}
+
+.button {
+  border-radius:24px;
+  min-height:48px;
+  padding:12px 24px;
+}
+
+.feature-grid {
+  gap:0;
+  border-top:1px solid var(--line);
+  border-bottom:1px solid var(--line);
+}
+
+.feature {
+  border-top:0;
+  padding:30px;
+}
+
+.feature+.feature {
+  border-left:1px solid var(--line);
+}
+
+.experience {
+  padding-top:48px;
+}
+
+@media(max-width:760px) {
+  .hero {
+    padding-top:40px;
+    gap:28px;
+  }
+  h1 {
+    font-size:clamp(40px,10vw,58px);
+  }
+  .hero-description {
+    font-size:16px;
+  }
+  .hero-actions {
+    align-items:center;
+  }
+  .feature {
+    padding:24px 0;
+  }
+  .feature+.feature {
+    border-left:0;
+    border-top:1px solid var(--line);
+  }
+}
+
+:root {
+  --bg:#f9f7ff;
+  --surface:#efebf8;
+  --surface-hover:#e4def1;
+  --text:#291e3d;
+  --muted:#60546f;
+  --line:#d0c6df;
+  --accent:#6c3cb5;
+  --accent-hover:#502a8b;
+  --button-bg:#6c3cb5;
+  --button-hover:#502a8b;
+}
+
+:root[data-theme="dark"] {
+  --bg:#1c1727;
+  --surface:#292134;
+  --surface-hover:#382e46;
+  --text:#f7f0ff;
+  --muted:#c8bbd6;
+  --line:#51425f;
+  --accent:#d0adff;
+  --accent-hover:#e4ceff;
+  --button-bg:#6c3cb5;
+  --button-hover:#7e48c9;
+}
+
+@media(prefers-color-scheme:dark) {
+  :root:not([data-theme="light"]) {
+    --bg:#1c1727;
+    --surface:#292134;
+    --surface-hover:#382e46;
+    --text:#f7f0ff;
+    --muted:#c8bbd6;
+    --line:#51425f;
+    --accent:#d0adff;
+    --accent-hover:#e4ceff;
+    --button-bg:#6c3cb5;
+    --button-hover:#7e48c9;
+  }
+}
+
+/* Navigation stays native; browsers without View Transitions keep normal links. */
+@media(prefers-reduced-motion:no-preference) {
+  @view-transition {
+    navigation:auto;
+  }
+
+  ::view-transition-old(root) {
+    animation:navigation-out 140ms ease-in both;
+  }
+
+  ::view-transition-new(root) {
+    animation:navigation-in 240ms ease-out both;
+  }
+
+  .hero-copy {
+    animation:content-reveal 360ms ease-out both;
+  }
+
+  .hero-visual {
+    animation:scene-enter 420ms ease-out both;
+  }
+
+  html:active-view-transition .hero-copy,
+  html:active-view-transition .hero-visual {
+    animation:none;
+  }
+
+  .section:target .section-heading h2,
+  .section:target>h2,
+  .demo-section:target h2,
+  .faq-list details[open] p {
+    animation:content-reveal 280ms ease-out both;
+  }
+
+  .button,.language,.header nav a {
+    transition:background-color 160ms ease,color 160ms ease,
+      border-color 160ms ease,transform 160ms ease;
+  }
+
+  @media(hover:hover) {
+    .button:hover,.language:hover {
+      transform:translateY(-2px);
+    }
+  }
+
+  .button:active,.language:active {
+    transform:translateY(0);
+  }
+}
+
+@keyframes content-reveal {
+  from {
+    opacity:0;
+    transform:translateY(8px);
+  }
+  to {
+    opacity:1;
+    transform:translateY(0);
+  }
+}
+
+@keyframes navigation-out {
+  to {
+    opacity:0;
+    transform:translateY(-6px);
+  }
+}
+
+@keyframes navigation-in {
+  from {
+    opacity:0;
+    transform:translateY(6px);
+  }
+  to {
+    opacity:1;
+    transform:translateY(0);
+  }
+}

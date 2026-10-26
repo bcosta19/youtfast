@@ -22,3 +22,6 @@ __pycache__/
 .env.*
 cookies.txt
 /tools/benchmark/startup/probe.so
+
+# Cloudflare local deployment cache (not public site content).
+/.wrangler/

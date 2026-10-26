@@ -8,7 +8,21 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Added
+
+- Website navigation transitions, section and FAQ reveals, and button feedback,
+  respecting the system preference for reduced motion.
+
+- Crawlable English and Portuguese website pages, application structured data,
+  localized search/share descriptions and a sitemap for the Cloudflare Pages site.
+
+- A bilingual project landing page with a local product demo, platform download
+  links, Cloudflare Pages hosting and read-only website validation in CI.
+
 ### Changed
+
+- The project landing page uses the Cinema design with bundled Noto Sans,
+  light/dark/system themes and more space around the frequently asked questions.
 
 - Audio-only mode has its own headphones button in the player controls, with the
   accent line under it while the mode is on, instead of a row inside the Quality
@@ -16,6 +30,9 @@ are the distribution record.
 
 ### Fixed
 
+- The project website keeps its navigation and theme/language controls within
+  narrow screens, uses larger controls, translates the footer navigation label,
+  and clarifies that platform links open the release packages page.
 - Search, feeds and the account work on a freshly installed Windows. YouTube's
   certificates are now checked by the operating system, which downloads the
   root certificates it does not have yet; before, every request failed until
