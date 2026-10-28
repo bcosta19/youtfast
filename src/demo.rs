@@ -158,6 +158,16 @@ pub(crate) fn fixture(page: &str) -> State {
         "account" => View::Account,
         _ => View::Home,
     };
+    if page == "account" {
+        state
+            .library
+            .accounts
+            .push(crate::storage::library::Account {
+                id: 1,
+                name: "Demo account".into(),
+                source: AccountSource::File,
+            });
+    }
     if page == "playlist" {
         state.page = Some(Page::Playlist {
             id: "PLdemo".into(),
@@ -281,6 +291,28 @@ impl eframe::App for Demo {
                     self.state.view = View::Channel;
                 }
                 Action::SetChannelTab(v) => self.state.channel_tab = v,
+                Action::SetChannelQuery(query) => self.state.channel_query = query,
+                Action::MarkRenaming { id, name } => {
+                    self.state.renaming = Some((id, name));
+                    ui.ctx().memory_mut(|memory| {
+                        memory.request_focus(egui::Id::new("rename account"));
+                    });
+                }
+                Action::SetRenameDraft { id, name } => {
+                    if let Some((editing, draft)) = &mut self.state.renaming
+                        && *editing == id
+                    {
+                        *draft = name;
+                    }
+                }
+                Action::RenameAccount { id, name } => {
+                    if !name.trim().is_empty()
+                        && let Some(account) = self.state.library.account_mut(id)
+                    {
+                        account.name = name.trim().to_owned();
+                    }
+                    self.state.renaming = None;
+                }
                 Action::Enqueue { video, next } => {
                     if next {
                         self.state.queue.insert(0, video);

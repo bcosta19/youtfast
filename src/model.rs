@@ -624,6 +624,11 @@ pub enum Action {
         id: u32,
         name: String,
     },
+    /// Update the inline name without saving it yet.
+    SetRenameDraft {
+        id: u32,
+        name: String,
+    },
     /// `[ remove ]` after the inline confirm.
     RemoveAccount(u32),
     /// Open an account row's inline rename field / remove confirm.

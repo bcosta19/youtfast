@@ -1067,7 +1067,17 @@ impl App {
             Action::SetAccountProfile(profile) => self.state.account_profile = profile,
             Action::SwitchAccount(id) => self.switch_account(id),
             Action::RenameAccount { id, name } => self.rename_account(id, &name),
-            Action::MarkRenaming { id, name } => self.state.renaming = Some((id, name)),
+            Action::SetRenameDraft { id, name } => {
+                if let Some((editing, draft)) = &mut self.state.renaming
+                    && *editing == id
+                {
+                    *draft = name;
+                }
+            }
+            Action::MarkRenaming { id, name } => {
+                self.state.renaming = Some((id, name));
+                ctx.memory_mut(|memory| memory.request_focus(egui::Id::new("rename account")));
+            }
             Action::MarkRemoving(id) => self.state.removing = Some(id),
             Action::CancelRemoving => self.state.removing = None,
             Action::RemoveAccount(id) => self.remove_account(id),

@@ -25,6 +25,18 @@ pub fn line(ui: &Ui) -> f32 {
         .y
 }
 
+/// Makes keyboard focus visible on custom controls.
+pub fn focus_outline(ui: &Ui, response: &Response, radius: CornerRadius) {
+    if response.has_focus() {
+        ui.painter().rect_stroke(
+            response.rect,
+            radius,
+            Stroke::new(1.5, ui.visuals().selection.stroke.color),
+            egui::StrokeKind::Inside,
+        );
+    }
+}
+
 /// A frameless button that is just the icon, a round tint under it on
 /// hover.
 pub fn icon_button(ui: &mut Ui, icon: Icon, size: f32, hint: &str) -> Response {
@@ -207,6 +219,7 @@ pub fn icon_text_button(
     };
     let painter = ui.painter();
     painter.rect_filled(rect, CornerRadius::same((height / 2.0) as u8), fill);
+    focus_outline(ui, &response, CornerRadius::same((height / 2.0) as u8));
     let content = icon_width + gap + galley.size().x;
     let mut x = rect.center().x - content / 2.0;
     let tint = if enabled { color } else { palette.dim };
@@ -323,6 +336,9 @@ pub fn nav_item(
     let height = 40.0;
     let (rect, response) =
         ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), selected, label)
+    });
     let hovered = response.hovered();
     if hovered {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
@@ -336,6 +352,7 @@ pub fn nav_item(
         ui.painter()
             .rect_filled(rect, CornerRadius::same(RADIUS), fill);
     }
+    focus_outline(ui, &response, CornerRadius::same(RADIUS));
     let color = if selected || hovered {
         palette.text
     } else {
@@ -614,14 +631,17 @@ pub fn row_fill(ui: &Ui, palette: &Palette, rect: Rect, response: &Response, sel
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
     }
     let fill = if selected {
-        palette.surface_active
+        Some(palette.surface_active)
     } else if response.hovered() {
-        palette.surface_hover
+        Some(palette.surface_hover)
     } else {
-        return;
+        None
     };
-    ui.painter()
-        .rect_filled(rect, CornerRadius::same(RADIUS), fill);
+    if let Some(fill) = fill {
+        ui.painter()
+            .rect_filled(rect, CornerRadius::same(RADIUS), fill);
+    }
+    focus_outline(ui, response, CornerRadius::same(RADIUS));
 }
 
 /// The part of `video` watched (0..1), from its resume position.
@@ -996,6 +1016,9 @@ pub fn chip(ui: &mut Ui, palette: &Palette, label: &str, on: bool) -> Response {
         .layout_no_wrap(label.to_owned(), theme::medium(14.0), color);
     let size = vec2(galley.size().x + 24.0, 32.0);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), on, label)
+    });
     let fill = if !on && response.hovered() {
         palette.surface_hover
     } else {
@@ -1006,6 +1029,7 @@ pub fn chip(ui: &mut Ui, palette: &Palette, label: &str, on: bool) -> Response {
     }
     ui.painter()
         .rect_filled(rect, CornerRadius::same(RADIUS), fill);
+    focus_outline(ui, &response, CornerRadius::same(RADIUS));
     ui.painter()
         .galley(rect.center() - galley.size() / 2.0, galley, color);
     response
@@ -1019,6 +1043,7 @@ pub fn search_field(
     palette: &Palette,
     text: &mut String,
     hint: &str,
+    locale: Locale,
     id: egui::Id,
     width: f32,
 ) -> Response {
@@ -1066,11 +1091,19 @@ pub fn search_field(
         let button =
             Rect::from_center_size(pos2(rect.right() - 20.0, rect.center().y), vec2(24.0, 24.0));
         let clear_response = ui.interact(button, id.with("clear"), Sense::click());
+        clear_response.widget_info(|| {
+            egui::WidgetInfo::labeled(
+                egui::WidgetType::Button,
+                ui.is_enabled(),
+                format!("{}: {hint}", tr(locale, "Clear")),
+            )
+        });
         if clear_response.hovered() {
             ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
             ui.painter()
                 .circle_filled(button.center(), 12.0, palette.surface_active);
         }
+        focus_outline(ui, &clear_response, CornerRadius::same(12));
         Icon::Close.image(palette.secondary, 15.0).paint_at(
             ui,
             Rect::from_center_size(button.center(), vec2(15.0, 15.0)),
@@ -1318,6 +1351,35 @@ fn meta(video: &Video, locale: Locale) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_clear_button_has_a_localized_accessible_name() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        crate::appearance::theme::install_fonts(&ctx);
+        let mut query = "texto".to_owned();
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            search_field(
+                ui,
+                &Palette::dark(),
+                &mut query,
+                "Pesquisar",
+                Locale::PortugueseBrazil,
+                Id::new("search"),
+                240.0,
+            );
+        });
+        output.textures_delta.clear();
+        let tree = output
+            .platform_output
+            .accesskit_update
+            .expect("accessibility tree");
+        assert!(
+            tree.nodes
+                .iter()
+                .any(|(_, node)| node.label() == Some("Limpar: Pesquisar"))
+        );
+    }
 
     #[test]
     fn thumbnail_draws_only_positive_watched_progress() {

@@ -225,6 +225,7 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                         &palette,
                         &mut state.query,
                         tr(locale, "Search or paste a link").as_ref(),
+                        locale,
                         command_line_id(),
                         width,
                     );

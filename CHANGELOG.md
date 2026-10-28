@@ -30,6 +30,12 @@ are the distribution record.
 
 ### Fixed
 
+- Keyboard focus is visible on navigation, buttons, chips, rows and switches;
+  player and miniplayer controls can be reached while a video is playing.
+- A double-click on video no longer also pauses it. Back and forward leave the
+  player untouched when there is no page to navigate to.
+- Account names can be edited before saving, and channel tabs and search remain
+  usable in narrow windows.
 - Account sessions can be retried after temporary network or keyring failures;
   browser profile discovery now follows Windows and macOS locations as well.
   Timed-out credential writes attempt to restore the previous entry.

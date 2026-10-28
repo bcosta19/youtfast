@@ -204,7 +204,6 @@ impl App {
         self.forward.clear();
     }
     pub(super) fn travel(&mut self, ctx: &egui::Context, forward: bool) {
-        self.leave_video(ctx);
         let target = if forward {
             self.forward.pop()
         } else {
@@ -213,6 +212,7 @@ impl App {
         let Some(target) = target else {
             return;
         };
+        self.leave_video(ctx);
         let current = Location::capture(&self.state);
         let stack = if forward {
             &mut self.back

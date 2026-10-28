@@ -46,8 +46,44 @@ struct SpeedHold {
     active: bool,
 }
 
+#[derive(Clone)]
+struct PendingClick {
+    video: String,
+    deadline: f64,
+}
+
 fn hold_id() -> egui::Id {
     egui::Id::new("player-speed-hold")
+}
+
+fn click_id() -> egui::Id {
+    egui::Id::new("player-pending-click")
+}
+
+fn focused_control(ctx: &egui::Context, id: egui::Id) -> bool {
+    let focused = ctx.memory(|memory| memory.focused());
+    focused.is_some_and(|focused| {
+        ctx.data(|data| data.get_temp::<Vec<egui::Id>>(id))
+            .is_some_and(|controls| controls.contains(&focused))
+    })
+}
+
+fn keyboard_video_focus(response: &egui::Response) -> bool {
+    let ctx = &response.ctx;
+    let id = egui::Id::new("player-keyboard-navigation");
+    let (tab, pointer) = ctx.input(|input| {
+        (
+            input.key_pressed(egui::Key::Tab),
+            input.pointer.any_pressed(),
+        )
+    });
+    if tab || pointer {
+        ctx.data_mut(|data| data.insert_temp(id, tab && !pointer));
+    }
+    // Tab can move focus away while the video response is registered. Keep
+    // the controls alive for that pass so egui can give focus to the next one.
+    (response.has_focus() || response.lost_focus())
+        && ctx.data(|data| data.get_temp::<bool>(id).unwrap_or(false))
 }
 
 fn remember_control_focus(response: &egui::Response) {
@@ -61,11 +97,7 @@ fn remember_control_focus(response: &egui::Response) {
 }
 
 fn controls_have_focus(ctx: &egui::Context) -> bool {
-    let focused = ctx.memory(|memory| memory.focused());
-    focused.is_some_and(|focused| {
-        ctx.data(|data| data.get_temp::<Vec<egui::Id>>(egui::Id::new("player-control-focus")))
-            .is_some_and(|controls| controls.contains(&focused))
-    })
+    focused_control(ctx, egui::Id::new("player-control-focus"))
 }
 
 fn control_button(ui: &mut Ui, icon: Icon, size: f32, hint: &str) -> egui::Response {
@@ -74,12 +106,28 @@ fn control_button(ui: &mut Ui, icon: Icon, size: f32, hint: &str) -> egui::Respo
     response
 }
 
+fn mini_control(response: egui::Response, id: egui::Id) -> bool {
+    response.ctx.data_mut(|data| {
+        data.get_temp_mut_or_default::<Vec<egui::Id>>(id)
+            .push(response.id);
+    });
+    response.clicked()
+}
+
 /// Called after drawing the interface, including frames where the full
 /// player is no longer drawn. A release, lost window focus or navigation
 /// always restores the speed that was active before the long press.
 pub fn release_speed_hold(ctx: &egui::Context, state: &State, actions: &mut Vec<Action>) {
     let held = ctx.input(|input| input.focused && input.pointer.primary_down());
     let watching = state.watching.as_ref().map(|video| video.id.as_str());
+    if ctx
+        .data(|data| data.get_temp::<PendingClick>(click_id()))
+        .is_some_and(|click| {
+            watching != Some(click.video.as_str()) || state.view != crate::model::View::Watch
+        })
+    {
+        ctx.data_mut(|data| data.remove::<PendingClick>(click_id()));
+    }
     let stop = ctx
         .data(|data| data.get_temp::<SpeedHold>(hold_id()))
         .filter(|hold| {
@@ -187,7 +235,9 @@ pub fn player(
     }
     let recent = state.controls_until.filter(|until| *until > now);
     let menu_open = state.player_menu != PlayerMenu::Closed;
+    let keyboard_focus = keyboard_video_focus(&response);
     let shown = menu_open
+        || keyboard_focus
         || controls_have_focus(ui.ctx())
         || state.seek_preview.is_some()
         || status.paused
@@ -199,13 +249,57 @@ pub fn player(
     if hovered && !shown {
         ui.ctx().set_cursor_icon(CursorIcon::None);
     }
+    let click = ui
+        .ctx()
+        .data(|data| data.get_temp::<PendingClick>(click_id()));
+    let time = ui.input(|input| input.time);
     if response.double_clicked() && !held_speed {
+        ui.ctx()
+            .data_mut(|data| data.remove::<PendingClick>(click_id()));
         actions.push(Action::ToggleFullscreen);
     } else if response.clicked() && !held_speed {
         if menu_open {
             state.player_menu = PlayerMenu::Closed;
+        } else if response.clicked_by(egui::PointerButton::Primary) {
+            if click
+                .is_some_and(|click| state.watching.as_ref().is_some_and(|v| v.id == click.video))
+            {
+                actions.push(Action::TogglePause);
+            }
+            if let Some(video) = &state.watching {
+                let delay = ui
+                    .ctx()
+                    .memory(|memory| memory.options.input_options.max_double_click_delay);
+                ui.ctx().data_mut(|data| {
+                    data.insert_temp(
+                        click_id(),
+                        PendingClick {
+                            video: video.id.clone(),
+                            deadline: time + delay,
+                        },
+                    )
+                });
+                ui.ctx()
+                    .request_repaint_after(Duration::from_secs_f64(delay));
+            }
         } else {
             actions.push(Action::TogglePause);
+        }
+    } else if let Some(click) = click {
+        if state
+            .watching
+            .as_ref()
+            .is_none_or(|video| video.id != click.video)
+        {
+            ui.ctx()
+                .data_mut(|data| data.remove::<PendingClick>(click_id()));
+        } else if time >= click.deadline {
+            ui.ctx()
+                .data_mut(|data| data.remove::<PendingClick>(click_id()));
+            actions.push(Action::TogglePause);
+        } else {
+            ui.ctx()
+                .request_repaint_after(Duration::from_secs_f64(click.deadline - time));
         }
     }
 
@@ -1483,6 +1577,9 @@ pub fn mini(
             let height = width * 9.0 / 16.0;
             let radius = CornerRadius::same(theme::RADIUS - 1);
             let (rect, response) = ui.allocate_exact_size(vec2(width, height), Sense::click());
+            ctx.data_mut(|data| {
+                data.insert_temp(egui::Id::new("mini-video-keyboard-focus"), response.id)
+            });
             picture_rounded(ui, rect, radius, state, Some(status), surface);
             video_context_menu(&response, state, status, actions);
             // The part played, along the picture's bottom edge.
@@ -1508,7 +1605,14 @@ pub fn mini(
                 );
             }
             let mut control_clicked = false;
-            if ui.rect_contains_pointer(rect) || status.paused {
+            let mini_controls = egui::Id::new("mini-player-control-focus");
+            let keyboard_focus = keyboard_video_focus(&response);
+            if ui.rect_contains_pointer(rect)
+                || status.paused
+                || keyboard_focus
+                || focused_control(ctx, mini_controls)
+            {
+                ctx.data_mut(|data| data.insert_temp(mini_controls, Vec::<egui::Id>::new()));
                 ui.painter()
                     .rect_filled(rect, radius, Color32::from_black_alpha(110));
                 let mut over = ui.new_child(UiBuilder::new().max_rect(rect));
@@ -1526,7 +1630,7 @@ pub fn mini(
                 };
                 if over
                     .scope_builder(place(32.0, rect.center()), |ui| {
-                        widgets::icon_button(ui, icon, 32.0, &hint).clicked()
+                        mini_control(widgets::icon_button(ui, icon, 32.0, &hint), mini_controls)
                     })
                     .inner
                 {
@@ -1563,7 +1667,10 @@ pub fn mini(
                     if available
                         && over
                             .scope_builder(place(22.0, rect.center() + vec2(offset, 0.0)), |ui| {
-                                widgets::icon_button(ui, icon, 22.0, &hint).clicked()
+                                mini_control(
+                                    widgets::icon_button(ui, icon, 22.0, &hint),
+                                    mini_controls,
+                                )
                             })
                             .inner
                     {
@@ -1574,8 +1681,15 @@ pub fn mini(
                 let corner = rect.right_top() + vec2(-20.0, 20.0);
                 if over
                     .scope_builder(place(18.0, corner), |ui| {
-                        widgets::icon_button(ui, Icon::Close, 18.0, &tr(locale, "Close and pause"))
-                            .clicked()
+                        mini_control(
+                            widgets::icon_button(
+                                ui,
+                                Icon::Close,
+                                18.0,
+                                &tr(locale, "Close and pause"),
+                            ),
+                            mini_controls,
+                        )
                     })
                     .inner
                 {
@@ -1585,13 +1699,15 @@ pub fn mini(
                 let corner = rect.left_top() + vec2(20.0, 20.0);
                 if over
                     .scope_builder(place(18.0, corner), |ui| {
-                        widgets::icon_button(
-                            ui,
-                            Icon::MiniPlayer,
-                            18.0,
-                            &tr(locale, "Back to the video"),
+                        mini_control(
+                            widgets::icon_button(
+                                ui,
+                                Icon::MiniPlayer,
+                                18.0,
+                                &tr(locale, "Back to the video"),
+                            ),
+                            mini_controls,
                         )
-                        .clicked()
                     })
                     .inner
                 {
@@ -1844,6 +1960,195 @@ mod tests {
             output.textures_delta.clear();
         }
         assert_eq!(actions, [Action::SetSpeed(2.0), Action::SetSpeed(1.25)]);
+    }
+
+    #[test]
+    fn single_and_double_clicks_have_distinct_playback_effects() {
+        for double in [false, true] {
+            let ctx = egui::Context::default();
+            let mut state = State {
+                view: crate::model::View::Watch,
+                watching: Some(Video::from_id("aaaaaaaaaaa".into())),
+                ..State::default()
+            };
+            let status = Status {
+                speed: 1.0,
+                ..Status::default()
+            };
+            let pointer = pos2(240.0, 120.0);
+            let button = |pressed| egui::Event::PointerButton {
+                pos: pointer,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            let mut actions = Vec::new();
+            let mut frames = vec![
+                (0.0, vec![]),
+                (0.1, vec![egui::Event::PointerMoved(pointer), button(true)]),
+                (0.12, vec![button(false)]),
+            ];
+            if double {
+                frames.extend([(0.2, vec![button(true)]), (0.22, vec![button(false)])]);
+            }
+            frames.push((0.6, vec![]));
+            for (time, events) in frames {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(640.0, 360.0))),
+                        time: Some(time),
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| {
+                        player(
+                            ui,
+                            ui.max_rect(),
+                            &mut state,
+                            Some(&status),
+                            None,
+                            Mode::Page,
+                            &mut actions,
+                        );
+                        release_speed_hold(ui.ctx(), &state, &mut actions);
+                    },
+                );
+                output.textures_delta.clear();
+            }
+            assert_eq!(
+                actions,
+                if double {
+                    vec![Action::ToggleFullscreen]
+                } else {
+                    vec![Action::TogglePause]
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn keyboard_focus_reveals_playing_video_controls() {
+        let ctx = egui::Context::default();
+        let mut state = State {
+            view: crate::model::View::Watch,
+            watching: Some(Video::from_id("aaaaaaaaaaa".into())),
+            ..State::default()
+        };
+        let status = Status {
+            paused: false,
+            speed: 1.0,
+            ..Status::default()
+        };
+        for event in [
+            None,
+            Some(egui::Event::Key {
+                key: egui::Key::Tab,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }),
+            None,
+        ] {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(640.0, 360.0))),
+                    events: event.into_iter().collect(),
+                    ..Default::default()
+                },
+                |ui| {
+                    player(
+                        ui,
+                        ui.max_rect(),
+                        &mut state,
+                        Some(&status),
+                        None,
+                        Mode::Page,
+                        &mut Vec::new(),
+                    )
+                },
+            );
+            output.textures_delta.clear();
+        }
+        let video = ctx
+            .data(|data| data.get_temp::<egui::Id>(egui::Id::new("video-keyboard-focus")))
+            .unwrap();
+        assert_eq!(ctx.memory(|memory| memory.focused()), Some(video));
+        assert!(
+            ctx.data(|data| data.get_temp::<Vec<egui::Id>>(egui::Id::new("player-control-focus")))
+                .is_some_and(|controls| !controls.is_empty())
+        );
+    }
+
+    #[test]
+    fn keyboard_focus_reveals_and_keeps_miniplayer_controls() {
+        let ctx = egui::Context::default();
+        let state = State {
+            view: crate::model::View::Home,
+            watching: Some(Video::from_id("aaaaaaaaaaa".into())),
+            ..State::default()
+        };
+        let status = Status {
+            idle: false,
+            paused: false,
+            ..Status::default()
+        };
+        let mut actions = Vec::new();
+        let mut draw = |events: Vec<egui::Event>| {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(900.0, 600.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ui| mini(ui.ctx(), &state, Some(&status), None, &mut actions),
+            );
+            output.textures_delta.clear();
+        };
+        draw(vec![]);
+        let tab = || egui::Event::Key {
+            key: egui::Key::Tab,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        };
+        draw(vec![tab()]);
+        draw(vec![]);
+        let video = ctx
+            .data(|data| data.get_temp::<egui::Id>(egui::Id::new("mini-video-keyboard-focus")))
+            .unwrap();
+        assert_eq!(ctx.memory(|memory| memory.focused()), Some(video));
+        let controls = ctx
+            .data(|data| data.get_temp::<Vec<egui::Id>>(egui::Id::new("mini-player-control-focus")))
+            .expect("miniplayer controls are visible");
+        assert!(!controls.is_empty());
+        draw(vec![egui::Event::Key {
+            key: egui::Key::Tab,
+            physical_key: None,
+            pressed: false,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }]);
+        draw(vec![tab()]);
+        draw(vec![]);
+        assert!(focused_control(
+            &ctx,
+            egui::Id::new("mini-player-control-focus")
+        ));
+        draw(vec![]);
+        assert!(focused_control(
+            &ctx,
+            egui::Id::new("mini-player-control-focus")
+        ));
+        draw(vec![egui::Event::Key {
+            key: egui::Key::Enter,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }]);
+        assert_eq!(actions, vec![Action::TogglePause]);
     }
 
     #[test]
