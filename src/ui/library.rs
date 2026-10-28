@@ -640,6 +640,7 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 &state.palette,
                 &mut query,
                 tr(locale, hint).as_ref(),
+                locale,
                 egui::Id::new("history search"),
                 480.0_f32.min(ui.available_width()),
             );

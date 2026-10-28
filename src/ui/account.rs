@@ -3,8 +3,8 @@
 //! its own card, and what works without an account.
 
 use egui::{
-    Align, Color32, CornerRadius, Frame, Layout, Margin, Rect, Response, RichText, Sense, Stroke,
-    TextEdit, Ui, pos2, vec2,
+    Align, Color32, CornerRadius, Frame, Margin, Rect, Response, RichText, Sense, Stroke, TextEdit,
+    Ui, pos2, vec2,
 };
 
 use super::{results, widgets};
@@ -99,8 +99,8 @@ fn accounts(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     });
 }
 
-/// The round avatar with the initial, the name in semibold over where it
-/// signs in from, the active one marked, and its actions at the end.
+/// The account's identity and actions, on separate lines so both remain usable
+/// at narrow window widths.
 fn account_row(ui: &mut Ui, state: &State, account: &Account, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
     let palette = &state.palette;
@@ -124,21 +124,25 @@ fn account_row(ui: &mut Ui, state: &State, account: &Account, actions: &mut Vec<
                     egui::Id::new("rename account"),
                     180.0,
                 );
-                if field.changed() {
-                    actions.push(Action::RenameAccount {
-                        id: account.id,
-                        name,
-                    });
-                }
-                field.request_focus();
-                if field.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Escape)) {
+                let escape = ui.input(|input| input.key_pressed(egui::Key::Escape));
+                if escape && (field.has_focus() || field.lost_focus()) {
                     actions.push(Action::RenameAccount {
                         id: account.id,
                         name: String::new(),
                     });
+                } else if field.lost_focus() {
+                    actions.push(Action::RenameAccount {
+                        id: account.id,
+                        name,
+                    });
+                } else if field.changed() {
+                    actions.push(Action::SetRenameDraft {
+                        id: account.id,
+                        name,
+                    });
                 }
             } else {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(
                         RichText::new(&account.name)
                             .font(theme::semibold(14.0))
@@ -160,39 +164,63 @@ fn account_row(ui: &mut Ui, state: &State, account: &Account, actions: &mut Vec<
                 .color(palette.secondary),
             );
         });
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            // The inline confirm: `Remove "name"?  Cancel  Remove`.
-            if state.removing == Some(account.id) {
-                if widgets::button(
-                    ui,
-                    &raised,
-                    &tr(locale, "Remove"),
-                    widgets::ButtonStyle::Primary,
-                )
-                .clicked()
-                {
-                    actions.push(Action::RemoveAccount(account.id));
-                }
-                if widgets::button(
-                    ui,
-                    &raised,
-                    &tr(locale, "Cancel"),
-                    widgets::ButtonStyle::Normal,
-                )
-                .clicked()
-                {
-                    actions.push(Action::CancelRemoving);
-                }
-                ui.label(
-                    RichText::new(trf(
-                        locale,
-                        "Remove “{name}”?",
-                        &[("name", account.name.clone())],
-                    ))
-                    .font(theme::medium(14.0))
-                    .color(palette.red),
-                );
-                return;
+    });
+    if state.removing == Some(account.id) {
+        ui.label(
+            RichText::new(trf(
+                locale,
+                "Remove “{name}”?",
+                &[("name", account.name.clone())],
+            ))
+            .font(theme::medium(14.0))
+            .color(palette.red),
+        );
+        ui.horizontal_wrapped(|ui| {
+            if widgets::button(
+                ui,
+                &raised,
+                &tr(locale, "Cancel"),
+                widgets::ButtonStyle::Normal,
+            )
+            .clicked()
+            {
+                actions.push(Action::CancelRemoving);
+            }
+            if widgets::button(
+                ui,
+                &raised,
+                &tr(locale, "Remove"),
+                widgets::ButtonStyle::Primary,
+            )
+            .clicked()
+            {
+                actions.push(Action::RemoveAccount(account.id));
+            }
+        });
+    } else {
+        ui.horizontal_wrapped(|ui| {
+            if widgets::button(
+                ui,
+                &raised,
+                &tr(locale, "Rename"),
+                widgets::ButtonStyle::Normal,
+            )
+            .clicked()
+            {
+                actions.push(Action::MarkRenaming {
+                    id: account.id,
+                    name: account.name.clone(),
+                });
+            }
+            if widgets::button(
+                ui,
+                &raised,
+                &tr(locale, "Remove"),
+                widgets::ButtonStyle::Normal,
+            )
+            .clicked()
+            {
+                actions.push(Action::MarkRemoving(account.id));
             }
             if active {
                 if widgets::button(
@@ -219,31 +247,8 @@ fn account_row(ui: &mut Ui, state: &State, account: &Account, actions: &mut Vec<
             {
                 actions.push(Action::SwitchAccount(account.id));
             }
-            if widgets::button(
-                ui,
-                &raised,
-                &tr(locale, "Remove"),
-                widgets::ButtonStyle::Normal,
-            )
-            .clicked()
-            {
-                actions.push(Action::MarkRemoving(account.id));
-            }
-            if widgets::button(
-                ui,
-                &raised,
-                &tr(locale, "Rename"),
-                widgets::ButtonStyle::Normal,
-            )
-            .clicked()
-            {
-                actions.push(Action::MarkRenaming {
-                    id: account.id,
-                    name: account.name.clone(),
-                });
-            }
         });
-    });
+    }
 }
 
 /// The `accent` pill with a check that marks the account in use.
@@ -311,7 +316,7 @@ fn add_account(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 
             // The name is optional: a blank one comes from the profile.
             let taken = state.library.account_name_taken(state.account_name.trim());
-            ui.horizontal(|ui| {
+            ui.vertical(|ui| {
                 let mut name = state.account_name.clone();
                 let field = field(
                     ui,
@@ -430,29 +435,27 @@ fn profile_row(
                     .color(palette.secondary),
             );
         });
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if added {
-                ui.label(
-                    RichText::new(tr(locale, "Added"))
-                        .font(theme::medium(13.0))
-                        .color(palette.secondary),
-                );
-            } else if ui
-                .add_enabled_ui(!busy, |ui| {
-                    widgets::button(
-                        ui,
-                        &raised,
-                        &tr(locale, "Sign in"),
-                        widgets::ButtonStyle::Primary,
-                    )
-                })
-                .inner
-                .clicked()
-            {
-                actions.push(Action::AddAccountProfile(index));
-            }
-        });
     });
+    if added {
+        ui.label(
+            RichText::new(tr(locale, "Added"))
+                .font(theme::medium(13.0))
+                .color(palette.secondary),
+        );
+    } else if ui
+        .add_enabled_ui(!busy, |ui| {
+            widgets::button(
+                ui,
+                &raised,
+                &tr(locale, "Sign in"),
+                widgets::ButtonStyle::Primary,
+            )
+        })
+        .inner
+        .clicked()
+    {
+        actions.push(Action::AddAccountProfile(index));
+    }
     ui.add_space(6.0);
 }
 
@@ -629,6 +632,164 @@ mod tests {
     use super::*;
     use crate::model::AccountSource;
     use crate::storage::account::BrowserProfile;
+
+    #[test]
+    fn account_row_actions_fit_narrow_window_in_every_state() {
+        for mode in ["normal", "renaming", "removing"] {
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            crate::appearance::theme::install_fonts(&ctx);
+            let account = Account {
+                id: 1,
+                name: "Ana".into(),
+                source: AccountSource::File,
+            };
+            let mut state = State {
+                account: AccountState::SignedIn(1),
+                ..State::default()
+            };
+            if mode == "renaming" {
+                state.renaming = Some((1, account.name.clone()));
+            }
+            if mode == "removing" {
+                state.removing = Some(1);
+            }
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(336.0, 700.0))),
+                    ..Default::default()
+                },
+                |ui| account_row(ui, &state, &account, &mut Vec::new()),
+            );
+            output.textures_delta.clear();
+            let identity_bottom = output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) if text.galley.text() == "a cookies.txt file" => {
+                        Some(text.pos.y + text.galley.size().y)
+                    }
+                    _ => None,
+                })
+                .expect("account source is visible");
+            let tree = output
+                .platform_output
+                .accesskit_update
+                .expect("accessibility tree");
+            let labels: &[&str] = if mode == "removing" {
+                &["Cancel", "Remove"]
+            } else {
+                &["Rename", "Remove", "Sign out"]
+            };
+            for label in labels {
+                let node = tree
+                    .nodes
+                    .iter()
+                    .find(|(_, node)| node.label() == Some(*label))
+                    .unwrap_or_else(|| panic!("missing {mode} {label}"));
+                let bounds = node.1.bounds().expect("button bounds");
+                assert!(
+                    bounds.x0 >= 0.0 && bounds.x1 <= 336.0,
+                    "{mode} {label} outside window: {bounds:?}"
+                );
+                assert!(
+                    bounds.y0 >= f64::from(identity_bottom),
+                    "{mode} {label} overlaps account identity: {bounds:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn add_account_form_text_fits_narrow_window() {
+        let ctx = egui::Context::default();
+        crate::appearance::theme::install_fonts(&ctx);
+        let state = State::default();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(360.0, 1400.0))),
+                ..Default::default()
+            },
+            |ui| show(ui, &state, &mut Vec::new()),
+        );
+        output.textures_delta.clear();
+        let mut cookie_note_found = false;
+        for shape in &output.shapes {
+            if let egui::Shape::Text(text) = &shape.shape {
+                cookie_note_found |= text
+                    .galley
+                    .text()
+                    .contains("Helps preserve your browser session");
+                assert!(
+                    text.pos.x >= 0.0 && text.pos.x + text.galley.size().x <= 360.0,
+                    "text outside narrow window: {:?}",
+                    text.galley.text()
+                );
+            }
+        }
+        assert!(cookie_note_found, "cookies instructions should be shown");
+    }
+
+    #[test]
+    fn rename_keeps_a_draft_until_enter_and_escape_cancels() {
+        let ctx = egui::Context::default();
+        crate::appearance::theme::install_fonts(&ctx);
+        let account = Account {
+            id: 1,
+            name: "Ana".into(),
+            source: AccountSource::File,
+        };
+        let mut state = State {
+            renaming: Some((1, account.name.clone())),
+            ..State::default()
+        };
+        ctx.memory_mut(|memory| memory.request_focus(egui::Id::new("rename account")));
+        let frame = |state: &mut State, events| {
+            let mut actions = Vec::new();
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(900.0, 400.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ui| account_row(ui, state, &account, &mut actions),
+            );
+            output.textures_delta.clear();
+            actions
+        };
+        assert!(frame(&mut state, vec![]).is_empty());
+        for character in ["x", "y"] {
+            let actions = frame(&mut state, vec![egui::Event::Text(character.into())]);
+            let [Action::SetRenameDraft { id: 1, name }] = actions.as_slice() else {
+                panic!("typing must update only the draft: {actions:?}");
+            };
+            state.renaming = Some((1, name.clone()));
+        }
+        let draft = state.renaming.as_ref().expect("still editing").1.clone();
+        assert!(draft.contains('x') && draft.contains('y'));
+        let key = |key| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        };
+        assert_eq!(
+            frame(&mut state, vec![key(egui::Key::Enter)]),
+            vec![Action::RenameAccount { id: 1, name: draft }]
+        );
+
+        state.renaming = Some((1, "discard me".into()));
+        ctx.memory_mut(|memory| memory.request_focus(egui::Id::new("rename account")));
+        frame(&mut state, vec![]);
+        assert_eq!(
+            frame(&mut state, vec![key(egui::Key::Escape)]),
+            vec![Action::RenameAccount {
+                id: 1,
+                name: String::new(),
+            }]
+        );
+    }
 
     /// The form with profiles found, one already added, and Advanced open
     /// lays out without a NaN or a negative rect.

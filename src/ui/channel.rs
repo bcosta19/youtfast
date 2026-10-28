@@ -4,7 +4,7 @@
 //! or the About cards.
 
 use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
-use egui::{Align, Layout, RichText, Sense, Ui, pos2, vec2};
+use egui::{RichText, Sense, Ui, pos2, vec2};
 
 use super::{results, widgets};
 use crate::app::State;
@@ -216,7 +216,13 @@ fn tab_label(tab: &ChannelTab, locale: Locale) -> String {
         ChannelTab::Live => tr(locale, "Live").into_owned(),
         ChannelTab::Playlists => tr(locale, "Playlists").into_owned(),
         ChannelTab::About => tr(locale, "About").into_owned(),
-        ChannelTab::Search(query) => trf(locale, "Search: {query}", &[("query", query.clone())]),
+        ChannelTab::Search(query) => {
+            let mut short: String = query.chars().take(24).collect();
+            if query.chars().count() > 24 {
+                short.push('…');
+            }
+            trf(locale, "Search: {query}", &[("query", short)])
+        }
     }
 }
 
@@ -228,7 +234,7 @@ fn tab_bar(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 
     let palette = &state.palette;
     let height = 40.0;
-    let bar = ui.horizontal(|ui| {
+    let bar = ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 24.0;
         for tab in tabs(state.channel_header.as_ref(), &state.channel_tab) {
             let current = same_kind(&tab, &state.channel_tab);
@@ -239,6 +245,13 @@ fn tab_bar(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             );
             let (rect, response) =
                 ui.allocate_exact_size(vec2(galley.size().x, height), Sense::click());
+            response.widget_info(|| {
+                egui::WidgetInfo::labeled(
+                    egui::WidgetType::Button,
+                    ui.is_enabled(),
+                    tab_label(&tab, locale),
+                )
+            });
             if response.hovered() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
             }
@@ -257,13 +270,11 @@ fn tab_bar(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 );
                 ui.painter().rect_filled(underline, 1.0, palette.text);
             }
+            widgets::focus_outline(ui, &response, egui::CornerRadius::same(4));
             if response.clicked() {
                 actions.push(Action::SetChannelTab(tab));
             }
         }
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            channel_search(ui, state, actions);
-        });
     });
     let rect = bar.response.rect;
     ui.painter().hline(
@@ -271,6 +282,7 @@ fn tab_bar(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         rect.bottom(),
         egui::Stroke::new(1.0, palette.outline),
     );
+    channel_search(ui, state, actions);
 }
 
 /// The field that searches this channel: Enter opens the Search tab.
@@ -283,22 +295,23 @@ fn channel_search(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         &state.palette,
         &mut query,
         tr(locale, "Search this channel").as_ref(),
+        locale,
         egui::Id::new("channel search"),
         240.0_f32.min(ui.available_width()),
     );
     // The clear button edits the text without the field's `changed`.
     if query != state.channel_query {
-        actions.push(Action::SetChannelQuery(query));
+        actions.push(Action::SetChannelQuery(query.clone()));
     }
     if field.has_focus() && ui.input(|input| input.key_pressed(egui::Key::Escape)) {
         field.surrender_focus();
     }
     if field.lost_focus()
         && ui.input(|input| input.key_pressed(egui::Key::Enter))
-        && !state.channel_query.trim().is_empty()
+        && !query.trim().is_empty()
     {
         actions.push(Action::SetChannelTab(ChannelTab::Search(
-            state.channel_query.trim().to_owned(),
+            query.trim().to_owned(),
         )));
     }
 }
@@ -641,6 +654,68 @@ mod tests {
         assert_eq!(
             cycle_tab(&with_search, &ChannelTab::About, 1),
             ChannelTab::Search("rust".to_owned())
+        );
+    }
+
+    #[test]
+    fn narrow_channel_keeps_tabs_and_search_in_the_available_width() {
+        let ctx = egui::Context::default();
+        crate::appearance::theme::install_fonts(&ctx);
+        let state = State {
+            channel_header: Some(ChannelHeader {
+                has_shorts: true,
+                has_live: true,
+                ..Default::default()
+            }),
+            channel_tab: ChannelTab::Search(
+                "a very long search query which must not overflow".into(),
+            ),
+            ..Default::default()
+        };
+        let mut actions = Vec::new();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    pos2(0.0, 0.0),
+                    vec2(280.0, 800.0),
+                )),
+                ..Default::default()
+            },
+            |ui| tab_bar(ui, &state, &mut actions),
+        );
+        output.textures_delta.clear();
+        for tab in tabs(state.channel_header.as_ref(), &state.channel_tab) {
+            let label = tab_label(&tab, state.settings.language);
+            let text = output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::epaint::Shape::Text(text) if text.galley.text() == label => Some(text),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("missing tab {label}"));
+            assert!(
+                text.pos.x >= 0.0 && text.pos.x + text.galley.size().x <= 280.0,
+                "tab {label} extends outside the window"
+            );
+        }
+        ctx.memory_mut(|memory| memory.request_focus(egui::Id::new("channel search")));
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    pos2(0.0, 0.0),
+                    vec2(280.0, 800.0),
+                )),
+                events: vec![egui::Event::Text("rust".into())],
+                ..Default::default()
+            },
+            |ui| tab_bar(ui, &state, &mut actions),
+        );
+        output.textures_delta.clear();
+        assert!(
+            actions
+                .iter()
+                .any(|action| matches!(action, Action::SetChannelQuery(query) if query == "rust"))
         );
     }
 

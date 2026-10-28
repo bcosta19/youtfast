@@ -778,6 +778,7 @@ fn switch(ui: &mut Ui, palette: &Palette, on: bool, label: &str) -> Response {
             (fill.gamma_multiply(0.5), Color32::WHITE.gamma_multiply(0.6))
         };
         ui.painter().rect_filled(rect, CornerRadius::same(11), fill);
+        widgets::focus_outline(ui, &response, CornerRadius::same(11));
         let x = egui::lerp(rect.left() + 11.0..=rect.right() - 11.0, t);
         ui.painter()
             .circle_filled(pos2(x, rect.center().y), 8.0, knob);
