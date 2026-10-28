@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-use crate::desktop::cast::{Control, Error};
+use crate::desktop::cast::{Control, Error, Sponsor};
 
 const BASE: &str = "https://www.youtube.com/api/lounge";
 const LIMIT: usize = 256 * 1024;
@@ -22,6 +22,10 @@ struct Status {
 }
 
 impl Status {
+    fn playing(&self, video: &str) -> bool {
+        self.video.as_deref() == Some(video) && self.state == Some(1)
+    }
+
     fn sponsor_target(&self, video: &str, segments: &[crate::model::Segment]) -> Option<f64> {
         if self.video.as_deref() != Some(video) || self.state != Some(1) || self.ad {
             return None;
@@ -32,6 +36,7 @@ impl Status {
 
 pub struct Session {
     client: reqwest::Client,
+    screen: String,
     token: String,
     id: String,
     sid: String,
@@ -50,21 +55,10 @@ impl Session {
             .timeout(Duration::from_secs(12))
             .build()
             .map_err(|_| Error::Unavailable)?;
-        let data = fetch(
-            client
-                .post(format!("{BASE}/pairing/get_lounge_token_batch"))
-                .form(&[("screen_ids", screen)]),
-        )
-        .await?;
-        let value: Value = serde_json::from_slice(&data).map_err(|_| Error::InvalidResponse)?;
-        let token = value["screens"][0]["loungeToken"]
-            .as_str()
-            .filter(|token| !token.is_empty() && token.len() < 8192)
-            .ok_or(Error::ConnectionExpired)?
-            .to_owned();
         let mut session = Self {
             client,
-            token,
+            screen: screen.to_owned(),
+            token: String::new(),
             id: format!("youtfast-{:016x}", rand::random::<u64>()),
             sid: String::new(),
             gsid: String::new(),
@@ -73,29 +67,52 @@ impl Session {
             aid: 0,
             status: Status::default(),
         };
+        session.bind().await?;
+        Ok(session)
+    }
+
+    /// A fresh token and channel for the same screen. An idle channel expires
+    /// on YouTube's side; the TV keeps playing meanwhile.
+    async fn bind(&mut self) -> Result<(), Error> {
+        let data = fetch(
+            self.client
+                .post(format!("{BASE}/pairing/get_lounge_token_batch"))
+                .form(&[("screen_ids", self.screen.as_str())]),
+        )
+        .await?;
+        let value: Value = serde_json::from_slice(&data).map_err(|_| Error::InvalidResponse)?;
+        self.token = value["screens"][0]["loungeToken"]
+            .as_str()
+            .filter(|token| !token.is_empty() && token.len() < 8192)
+            .ok_or(Error::ConnectionExpired)?
+            .to_owned();
+        self.sid.clear();
+        self.gsid.clear();
+        self.rid = 1;
+        self.offset = 0;
+        self.aid = 0;
         let query = vec![
             ("CVER", "1".into()),
             ("RID", "1".into()),
             ("VER", "8".into()),
             ("app", "youtube-desktop".into()),
             ("device", "REMOTE_CONTROL".into()),
-            ("id", session.id.clone()),
+            ("id", self.id.clone()),
             ("name", "YouTFast".into()),
-            ("loungeIdToken", session.token.clone()),
+            ("loungeIdToken", self.token.clone()),
         ];
         let data = fetch(
-            session
-                .client
+            self.client
                 .post(format!("{BASE}/bc/bind"))
                 .query(&query)
                 .header("Content-Length", "0"),
         )
         .await?;
-        session.read(&data)?;
-        if session.sid.is_empty() || session.gsid.is_empty() {
+        self.read(&data)?;
+        if self.sid.is_empty() || self.gsid.is_empty() {
             return Err(Error::InvalidResponse);
         }
-        Ok(session)
+        Ok(())
     }
 
     fn query(&self) -> Vec<(&'static str, String)> {
@@ -114,6 +131,16 @@ impl Session {
     }
 
     async fn command(&mut self, command: &str, values: &[(&str, String)]) -> Result<(), Error> {
+        match self.send(command, values).await {
+            Err(Error::ConnectionExpired) => {
+                self.bind().await?;
+                self.send(command, values).await
+            }
+            result => result,
+        }
+    }
+
+    async fn send(&mut self, command: &str, values: &[(&str, String)]) -> Result<(), Error> {
         self.rid += 1;
         // Reserve the offset before awaiting: cancellation must not reuse it.
         self.offset += 1;
@@ -137,7 +164,16 @@ impl Session {
         self.read(&data)
     }
 
+    /// A long poll that ends without events is not an error.
     async fn poll(&mut self) -> Result<(), Error> {
+        match self.poll_once().await {
+            Err(Error::TimedOut) => Ok(()),
+            Err(Error::ConnectionExpired) => self.bind().await,
+            result => result,
+        }
+    }
+
+    async fn poll_once(&mut self) -> Result<(), Error> {
         let mut query = self.query();
         query.retain(|(key, _)| *key != "RID");
         query.extend([
@@ -159,6 +195,19 @@ impl Session {
         self.read(&data)
     }
 
+    /// Polls until `ready` holds or `tries` polls pass.
+    async fn wait(&mut self, tries: usize, ready: impl Fn(&Status) -> bool) -> Result<(), Error> {
+        for _ in 0..tries {
+            if ready(&self.status) {
+                break;
+            }
+            self.poll().await?;
+        }
+        Ok(())
+    }
+
+    /// Confirmed only once the requested video plays: an ad, buffering or the
+    /// TV's "Who's watching?" screen can come first, so this waits a minute.
     pub async fn play(&mut self, video: &str, seconds: u32) -> Result<(), Error> {
         self.status = Status::default();
         self.command(
@@ -173,15 +222,13 @@ impl Session {
         .await?;
         tokio::time::sleep(Duration::from_secs(1)).await;
         self.command("getNowPlaying", &[]).await?;
-        for _ in 0..12 {
-            if self.status.video.as_deref() == Some(video) && self.status.state == Some(1) {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+        while tokio::time::Instant::now() < deadline {
+            if self.status.playing(video) {
                 return Ok(());
             }
             tokio::time::sleep(Duration::from_millis(750)).await;
-            match self.poll().await {
-                Ok(()) | Err(Error::TimedOut) => {}
-                Err(error) => return Err(error),
-            }
+            self.poll().await?;
         }
         Err(Error::Unconfirmed)
     }
@@ -192,31 +239,37 @@ impl Session {
         video: &str,
         segments: &[crate::model::Segment],
         enabled: &std::sync::atomic::AtomicBool,
-    ) -> Result<Option<f64>, Error> {
+    ) -> Result<Sponsor, Error> {
         self.status.video = None;
         self.status.state = None;
         self.status.seconds = None;
         self.command("getNowPlaying", &[]).await?;
-        for _ in 0..3 {
-            if self.status.video.is_some()
-                && self.status.state.is_some()
-                && self.status.seconds.is_some()
-            {
-                break;
-            }
-            self.poll().await?;
-        }
+        self.wait(3, |status| {
+            status.video.is_some() && status.state.is_some() && status.seconds.is_some()
+        })
+        .await?;
+        let next_in = self
+            .status
+            .seconds
+            .filter(|_| self.status.video.as_deref() == Some(video))
+            .and_then(|at| crate::desktop::cast::next_segment_in(at, segments));
         let Some(end) = self.status.sponsor_target(video, segments) else {
-            return Ok(None);
+            return Ok(Sponsor {
+                skipped: None,
+                next_in,
+            });
         };
         if !enabled.load(std::sync::atomic::Ordering::Relaxed) {
-            return Ok(None);
+            return Ok(Sponsor::default());
         }
         self.command("seekTo", &[("newTime", end.to_string())])
             .await?;
         // Do not reuse the pre-seek position while waiting for a TV event.
         self.status.seconds = None;
-        Ok(Some(end))
+        Ok(Sponsor {
+            skipped: Some(end),
+            next_in: crate::desktop::cast::next_segment_in(end, segments),
+        })
     }
 
     pub async fn control(&mut self, control: Control) -> Result<(), Error> {
@@ -226,12 +279,7 @@ impl Session {
             Control::Forward | Control::Rewind => {
                 self.status.seconds = None;
                 self.command("getNowPlaying", &[]).await?;
-                for _ in 0..3 {
-                    if self.status.seconds.is_some() {
-                        break;
-                    }
-                    self.poll().await?;
-                }
+                self.wait(3, |status| status.seconds.is_some()).await?;
                 let at = self.status.seconds.ok_or(Error::Unconfirmed)?;
                 let target = (at
                     + if control == Control::Forward {
@@ -244,15 +292,16 @@ impl Session {
                     .await
             }
             Control::VolumeUp | Control::VolumeDown => {
-                self.status.volume = None;
+                // A TV whose sound goes to a receiver may not answer; the last
+                // volume it reported is then the base.
+                let known = self.status.volume.take();
                 self.command("getVolume", &[]).await?;
-                for _ in 0..3 {
-                    if self.status.volume.is_some() {
-                        break;
-                    }
-                    self.poll().await?;
-                }
-                let volume = self.status.volume.ok_or(Error::Unconfirmed)?;
+                self.wait(3, |status| status.volume.is_some()).await?;
+                let volume = self
+                    .status
+                    .volume
+                    .or(known)
+                    .ok_or(Error::VolumeUnavailable)?;
                 let target = (volume
                     + if control == Control::VolumeUp {
                         10.0
@@ -264,9 +313,11 @@ impl Session {
                     "setVolume",
                     &[("volume", target.to_string()), ("muted", "false".into())],
                 )
-                .await
+                .await?;
+                self.status.volume = Some(target);
+                Ok(())
             }
-            Control::Stop => Err(Error::InvalidRequest), // DIAL owns the app lifecycle.
+            Control::Stop => self.command("stopVideo", &[]).await,
         }
     }
 
@@ -335,6 +386,60 @@ impl Session {
         }
         Ok(())
     }
+}
+
+/// Exchanges the code shown under the TV's "Link with TV code" for its screen
+/// and name. Neither is saved; the code itself is used once.
+pub async fn link(code: &str) -> Result<(String, String), Error> {
+    let code: String = code
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != '-')
+        .collect();
+    if code.len() != 12 || !code.bytes().all(|c| c.is_ascii_digit()) {
+        return Err(Error::InvalidCode);
+    }
+    let client = super::innertube::http()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(12))
+        .build()
+        .map_err(|_| Error::Unavailable)?;
+    let data = fetch(
+        client
+            .post(format!("{BASE}/pairing/get_screen"))
+            .form(&[("pairing_code", code.as_str())]),
+    )
+    .await
+    .map_err(|error| match error {
+        Error::ConnectionExpired => Error::InvalidCode,
+        error => error,
+    })?;
+    screen(&data)
+}
+
+fn screen(data: &[u8]) -> Result<(String, String), Error> {
+    let value: Value = serde_json::from_slice(data).map_err(|_| Error::InvalidResponse)?;
+    let screen = value["screen"]["screenId"]
+        .as_str()
+        .filter(|id| !id.is_empty() && id.len() <= 1024)
+        .ok_or(Error::InvalidCode)?
+        .to_owned();
+    let name: String = value["screen"]["name"]
+        .as_str()
+        .unwrap_or_default()
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(80)
+        .collect();
+    let name = name.trim();
+    Ok((
+        screen,
+        if name.is_empty() {
+            "YouTube on TV".into()
+        } else {
+            name.into()
+        },
+    ))
 }
 
 fn number(value: &Value) -> Option<f64> {
@@ -419,6 +524,32 @@ async fn fetch(request: reqwest::RequestBuilder) -> Result<Vec<u8>, Error> {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn tv_codes_are_checked_before_any_request() {
+        for code in [
+            "",
+            "12345",
+            "1234 5678 9012 3",
+            "abcd efgh ijkl",
+            "1234-5678-901x",
+        ] {
+            assert_eq!(link(code).await.err(), Some(Error::InvalidCode), "{code}");
+        }
+    }
+
+    #[test]
+    fn a_linked_screen_needs_an_id_and_keeps_a_clean_name() {
+        let (id, name) =
+            screen(br#"{"screen":{"screenId":"synthetic-screen","name":"Living\nroom TV","loungeToken":"synthetic"}}"#)
+                .unwrap();
+        assert_eq!(id, "synthetic-screen");
+        assert_eq!(name, "Livingroom TV");
+        let (_, name) = screen(br#"{"screen":{"screenId":"synthetic-screen"}}"#).unwrap();
+        assert_eq!(name, "YouTube on TV");
+        assert_eq!(screen(br#"{"screen":{}}"#), Err(Error::InvalidCode));
+        assert_eq!(screen(b"not json"), Err(Error::InvalidResponse));
+    }
+
     #[test]
     fn browser_channel_reads_multiple_packets_and_rejects_non_protocol_data() {
         let values =
@@ -474,6 +605,7 @@ mod tests {
         let client = super::super::innertube::http().build().unwrap();
         let mut session = Session {
             client,
+            screen: String::new(),
             token: String::new(),
             id: "synthetic".into(),
             sid: String::new(),

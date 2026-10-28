@@ -43,6 +43,9 @@ raw-window-handle = "0.6"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "process", "io-util", "time", "net"] }
 # Native discovery of YouTube DIAL TVs, including Samsung AirPlay adverts.
 mdns-sd = { version = "0.21.6", default-features = false, features = ["async"] }
+# Already in the tree through mdns-sd: per-interface SSDP searches.
+if-addrs = "0.15"
+socket2 = "0.6"
 quick-xml = "0.41"
 # The icons! table and the Lucide icons shared with the sibling apps.
 fastframe-icons = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }

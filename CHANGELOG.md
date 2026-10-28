@@ -20,6 +20,17 @@ are the distribution record.
   verify a YouTube DIAL endpoint), with manual local-IP lookup for compatible
   Samsung TVs when multicast discovery is blocked. TV control identifiers
   remain in memory and do not use the YouTFast account session.
+- Linking a TV with the code under YouTube's **Link with TV code**, for Apple TV,
+  consoles and TVs on another network or behind guest-network isolation.
+- TV sends join a YouTube app that is already open instead of closing it, work
+  on TVs that do not let remotes close the app, and wait up to a minute for ads
+  or the TV's account picker before reporting a failure. Idle TV connections
+  renew themselves instead of asking to send the video again.
+- TV discovery searches every private network interface and repeats the search,
+  also checks Google Cast announcements for YouTube, and IP lookup asks the TV
+  for its own endpoint (LG, Roku and others) before trying known ports. TVs with
+  both paths are listed once through YouTube DIAL, and known Google speakers are
+  left out.
 - Optional Google Cast TV picker and remote through `catt`: discover local
   devices, send the current YouTube video with its starting position, play,
   pause, skip ten seconds, adjust TV volume, stop or disconnect while leaving

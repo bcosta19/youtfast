@@ -115,9 +115,13 @@ window already open instead of opening another.
 
 ## Cast to TV
 
-The TV picker supports two paths. YouTube TVs with DIAL/Lounge use native
-networking and do not require a helper. This includes compatible Samsung TVs
-without Google Cast. Google Cast support is optional and uses
+The TV picker supports three paths. YouTube TVs with DIAL/Lounge use native
+networking and do not require a helper. This includes Samsung, LG, Roku, Fire
+TV and Android/Google TV models that expose YouTube over DIAL; when a TV offers
+both DIAL and Google Cast, the picker lists it once, through DIAL. Any device
+whose YouTube app shows **Link with TV code** (Apple TV, game consoles, a TV on
+another network or behind guest-network isolation) can be linked with that
+code instead. Google Cast support is optional and uses
 [`catt`](https://github.com/skorokithakis/catt) installed separately on `PATH`.
 For example, if you already use pipx, install it with `pipx install catt`.
 Follow catt's installation instructions for your operating system, check
@@ -128,25 +132,36 @@ Flatpak cannot use an arbitrary host helper; this integration is not yet
 qualified for the Flatpak package.
 
 1. Turn on the TV or Chromecast and connect it to the computer's local network.
-   Guest-network isolation, VPN routing and blocked multicast can prevent
-   discovery. This version accepts private/link-local IP addresses. Google Cast
-   uses port 8009; YouTube DIAL uses the endpoint advertised by the TV.
+   Guest-network isolation and blocked multicast can prevent discovery; the
+   search is sent on every private network interface, so VPNs and container
+   bridges do not hide the TV's network. On Windows, the firewall can drop the
+   TVs' replies to a network-wide search: allow YouTFast when Windows asks, or
+   use the IP or TV-code options below. This version accepts private/link-local
+   IP addresses. Google Cast uses port 8009; YouTube DIAL uses the endpoint
+   advertised by the TV.
 2. Open a YouTube video in YouTFast and click **Cast to TV** beside **Audio only**
    in the player controls, or use the button in the top bar.
    Discovery runs only when you open the picker for the first time or press
    **Search for TVs**; there is no background network scan.
    YouTube TVs are discovered through SSDP and verified DIAL endpoints;
-   Samsung AirPlay announcements are also checked for YouTube DIAL support.
-   If a compatible Samsung TV is missing, enter its IP under **Find a YouTube
-   TV by IP address** and press **Find TV**. Manual lookup checks the common
-   DIAL paths on ports 8080 and 8008; other models may require SSDP discovery.
+   AirPlay and Google Cast announcements are also checked for YouTube DIAL
+   support. If a TV is missing, enter its IP under **Find a YouTube TV by IP
+   address** and press **Find TV**. Manual lookup asks that address for its
+   DIAL endpoint, then tries the common paths on ports 8080, 8008 and 8060.
    No app is launched during discovery or IP lookup.
+   To link with a code, open YouTube on the TV, then **Settings → Link with TV
+   code**, type the 12-digit code under **Link a TV with a code** and press
+   **Link TV**. The code is used once and not kept; the linked TV is reached
+   through YouTube's servers and stays in the list until YouTFast exits.
 3. Choose the device. YouTFast sends the canonical video link and the local
    position rounded down to whole seconds. Live videos request the live edge.
    The local player keeps playing until the TV reports the requested video
-   in the playing state. For DIAL, choosing the TV opens its YouTube app and
-   establishes an in-memory Lounge connection. If the TV asks you to sign in
-   or watch as a guest, choose on the TV; YouTFast never handles that login.
+   in the playing state, waiting up to a minute for ads and the TV's account
+   picker. For DIAL, choosing the TV joins its YouTube app when it is already
+   open, or opens it, and establishes an in-memory Lounge connection; an idle
+   connection is renewed automatically. If the TV asks you to sign in, pick an
+   account or watch as a guest, choose on the TV; YouTFast never handles that
+   login.
    A late confirmation never pauses another local
    video, including a newly opened playback of the same video.
 4. Use the panel's explicit TV controls: play, pause, back/forward ten seconds,
@@ -155,7 +170,8 @@ qualified for the Flatpak package.
 5. Closing the panel just hides it. Reopen it from the top bar to control the
    same target. **Disconnect; keep TV playing**, or exiting YouTFast, leaves
    playback on the TV and discards the in-memory control session. **Stop on
-   TV** asks a Cast receiver to stop, or closes the DIAL YouTube app. Neither action
+   TV** asks a Cast receiver to stop, or closes the DIAL YouTube app; a TV that
+   does not allow closing it, or one linked with a code, stops the video. Neither action
    automatically resumes the local player.
 
 The panel is a separate remote: the local player's controls, keyboard shortcuts
@@ -168,7 +184,10 @@ panel retains an uncertain target so you can still stop it or disconnect.
 Google Cast targets are Chromecast, Google TV Streamer,
 and compatible Google TV, Android TV, LG, Samsung and other TVs with Cast
 enabled. Support depends on the exact model and firmware, not the brand.
-Discovery can also return audio-only Cast devices; those are not video targets.
+Known Google speakers (Home, Nest Mini, Nest Audio, Chromecast Audio) are left
+out of the list; other audio-only Cast devices may still appear and are not
+video targets. A TV that does not report its volume (for example, with sound
+on an HDMI-ARC receiver) keeps volume on its own remote.
 DIAL targets need a working YouTube app exposing a screen identifier and
 access to YouTube Lounge. AirPlay is only a discovery hint; media is not sent
 through AirPlay, Miracast or DLNA. Native Windows/macOS and Flatpak qualification
@@ -184,7 +203,8 @@ sponsors, self-promotion and interaction reminders. Keep YouTFast running and
 connected; disconnecting or disabling SponsorBlock stops further automatic seeks.
 This applies to the video explicitly sent, not subsequent videos chosen by the
 TV's autoplay. Live streams, paused playback and missing seek telemetry are not
-skipped. TV position polling and helper startup can delay a skip; the last two
+skipped. Checks run about every two seconds near a segment and up to ten seconds
+apart when the next one is far. TV position polling and helper startup can delay a skip; the last two
 seconds of a segment are left alone. Lounge advertisement events suppress sponsor
 seeks; `catt` does not expose a reliable separate ad flag, so Cast relies on the
 receiver's play state and seek capability. This does not block YouTube ads.

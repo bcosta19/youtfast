@@ -1646,3 +1646,24 @@ msgstr "La connessione alla TV è scaduta. Disconnetti e invia di nuovo il video
 
 msgid "Could not read the TV response. Try again."
 msgstr "Impossibile leggere la risposta della TV. Riprova."
+
+msgid "This TV does not accept that command. Use the TV remote."
+msgstr "Questa TV non accetta il comando. Usa il telecomando della TV."
+
+msgid "That TV code was not accepted. Check the code shown on the TV and try again."
+msgstr "Il codice TV non è stato accettato. Controlla il codice mostrato sulla TV e riprova."
+
+msgid "This TV does not report its volume. Use the TV remote for volume."
+msgstr "Questa TV non comunica il volume. Usa il telecomando della TV per il volume."
+
+msgid "If the TV shows an ad or asks who is watching, answer on the TV. This can take up to a minute."
+msgstr "Se la TV mostra una pubblicità o chiede chi sta guardando, rispondi sulla TV. Può richiedere fino a un minuto."
+
+msgid "Link a TV with a code"
+msgstr "Collega una TV con un codice"
+
+msgid "On the TV, open YouTube, then Settings, then Link with TV code."
+msgstr "Sulla TV apri YouTube, poi Impostazioni, poi Collega con codice TV."
+
+msgid "Link TV"
+msgstr "Collega TV"

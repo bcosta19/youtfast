@@ -15,6 +15,7 @@ pub struct State {
     pub devices: Vec<Device>,
     pub searched: bool,
     pub address: String,
+    pub code: String,
     pub error: Option<Error>,
     pub session: Option<Session>,
     pub command_sent: bool,
@@ -23,6 +24,7 @@ pub struct State {
     pub(super) sponsor_enabled: Arc<AtomicBool>,
     sponsor_pending: bool,
     sponsor_check_at: Option<Instant>,
+    sponsor_requested_at: Option<Instant>,
     sponsor_segments: Vec<Segment>,
     sponsor_skipped: Vec<f64>,
 }
@@ -77,6 +79,7 @@ impl State {
         }
         self.sponsor_pending = true;
         self.sponsor_check_at = Some(now + Duration::from_secs(2));
+        self.sponsor_requested_at = Some(now);
         Some(Request::CheckSponsor {
             enabled: self.sponsor_enabled.clone(),
             device: session.device.clone(),
@@ -95,6 +98,10 @@ impl State {
 
     pub fn busy(&self) -> bool {
         self.pending.is_some()
+    }
+
+    pub fn starting(&self) -> bool {
+        matches!(self.pending, Some(Pending::Start { .. }))
     }
 
     pub fn scanning(&self) -> bool {
@@ -132,6 +139,7 @@ impl State {
                 };
                 (Request::FindYouTube(host), Pending::Find)
             }
+            Action::Link(code) if self.session.is_none() => (Request::Link(code), Pending::Find),
             Action::Start(device) if self.session.is_none() => {
                 self.sponsor_segments.clear();
                 self.sponsor_skipped.clear();
@@ -170,7 +178,7 @@ impl State {
                 self.command_sent = false;
                 (Request::Disconnect, Pending::Disconnect)
             }
-            Action::Start(_) | Action::FindYouTube(_) => return None,
+            Action::Start(_) | Action::FindYouTube(_) | Action::Link(_) => return None,
         };
         self.pending = Some(pending);
         self.error = None;
@@ -188,8 +196,18 @@ impl State {
         if let Reply::SponsorChecked(result) = reply {
             self.sponsor_pending = false;
             match result {
-                Ok(Some(end)) => self.sponsor_skipped.push(end),
-                Ok(None) => {}
+                Ok(sponsor) => {
+                    if let Some(end) = sponsor.skipped {
+                        self.sponsor_skipped.push(end);
+                    }
+                    // Far from the next segment, check less often (at most
+                    // every ten seconds, so a seek on the TV is still caught).
+                    if let (Some(next_in), Some(at)) = (sponsor.next_in, self.sponsor_requested_at)
+                    {
+                        self.sponsor_check_at =
+                            Some(at + Duration::from_secs_f64((next_in - 1.0).clamp(2.0, 10.0)));
+                    }
+                }
                 Err(error) => self.error = Some(error),
             }
             return None;
@@ -369,6 +387,7 @@ impl super::App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::desktop::cast::Sponsor;
 
     fn device() -> Device {
         Device {
@@ -425,7 +444,7 @@ mod tests {
             state.prepare(Action::Control(Control::Pause), None, 0.0, 1),
             Some(Request::Control { .. })
         ));
-        state.finish(Reply::SponsorChecked(Ok(None)));
+        state.finish(Reply::SponsorChecked(Ok(Sponsor::default())));
         assert!(state.busy());
         state.finish(Reply::Controlled {
             control: Control::Pause,
@@ -442,7 +461,10 @@ mod tests {
                 .sponsor_request(true, now + Duration::from_secs(3))
                 .is_some()
         );
-        state.finish(Reply::SponsorChecked(Ok(Some(30.0))));
+        state.finish(Reply::SponsorChecked(Ok(Sponsor {
+            skipped: Some(30.0),
+            next_in: None,
+        })));
         assert!(
             state
                 .sponsor_request(true, now + Duration::from_secs(10))
@@ -466,6 +488,61 @@ mod tests {
         assert!(state.sponsor_request(true, now).is_none());
         state.finish(Reply::Disconnected);
         assert!(state.sponsor_request(true, now).is_none());
+    }
+
+    #[test]
+    fn a_tv_code_links_like_a_search_and_adds_the_linked_tv() {
+        let mut state = State::default();
+        assert!(matches!(
+            state.prepare(Action::Link("123456789012".into()), None, 0.0, 0),
+            Some(Request::Link(code)) if code == "123456789012"
+        ));
+        assert!(state.scanning());
+        let linked = Device {
+            host: std::net::Ipv4Addr::UNSPECIFIED.into(),
+            name: "Living room".into(),
+            protocol: crate::desktop::cast::Protocol::Linked {
+                screen: "synthetic".into(),
+            },
+        };
+        state.finish(Reply::Devices(Ok(vec![linked.clone()])));
+        assert_eq!(state.devices, [linked]);
+    }
+
+    #[test]
+    fn sponsor_checks_wait_longer_when_the_next_segment_is_far() {
+        let mut state = monitoring();
+        let now = Instant::now();
+        assert!(state.sponsor_request(true, now).is_some());
+        state.finish(Reply::SponsorChecked(Ok(Sponsor {
+            skipped: None,
+            next_in: Some(60.0),
+        })));
+        assert!(
+            state
+                .sponsor_request(true, now + Duration::from_secs(9))
+                .is_none()
+        );
+        assert!(
+            state
+                .sponsor_request(true, now + Duration::from_secs(10))
+                .is_some()
+        );
+        state.finish(Reply::SponsorChecked(Ok(Sponsor {
+            skipped: None,
+            next_in: Some(0.5),
+        })));
+        let at = now + Duration::from_secs(10);
+        assert!(
+            state
+                .sponsor_request(true, at + Duration::from_secs(1))
+                .is_none()
+        );
+        assert!(
+            state
+                .sponsor_request(true, at + Duration::from_secs(2))
+                .is_some()
+        );
     }
 
     #[test]

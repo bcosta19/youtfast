@@ -14,13 +14,23 @@ use tokio::io::AsyncReadExt;
 
 const OUTPUT_LIMIT: u64 = 256 * 1024;
 const DEADLINE: Duration = Duration::from_secs(75);
+/// A send also waits for ads and the TV's account picker before playback.
+const START_DEADLINE: Duration = Duration::from_secs(150);
+const CONFIRM_WAIT: Duration = Duration::from_secs(60);
 
 mod dial;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Protocol {
     GoogleCast,
-    YouTube { endpoint: url::Url },
+    YouTube {
+        endpoint: url::Url,
+    },
+    /// Linked with the code the TV's YouTube app shows. Reached through
+    /// YouTube's servers, so it works across networks; `host` is unused.
+    Linked {
+        screen: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -35,6 +45,7 @@ pub enum Action {
     Open,
     Scan,
     FindYouTube(String),
+    Link(String),
     Start(Device),
     Control(Control),
     Disconnect,
@@ -62,6 +73,9 @@ pub enum Error {
     InvalidRequest,
     NoYouTube,
     ConnectionExpired,
+    Unsupported,
+    InvalidCode,
+    VolumeUnavailable,
 }
 
 impl Error {
@@ -78,6 +92,13 @@ impl Error {
             Self::ConnectionExpired => {
                 "The TV connection expired. Disconnect and send the video again."
             }
+            Self::Unsupported => "This TV does not accept that command. Use the TV remote.",
+            Self::InvalidCode => {
+                "That TV code was not accepted. Check the code shown on the TV and try again."
+            }
+            Self::VolumeUnavailable => {
+                "This TV does not report its volume. Use the TV remote for volume."
+            }
         }
     }
 }
@@ -92,6 +113,7 @@ pub enum Request {
     Scan,
     Disconnect,
     FindYouTube(IpAddr),
+    Link(String),
     Start {
         device: Device,
         video: String,
@@ -104,7 +126,8 @@ pub enum Request {
 }
 
 pub enum Reply {
-    SponsorChecked(Result<Option<f64>, Error>),
+    /// The segment end skipped to, and seconds until the next segment starts.
+    SponsorChecked(Result<Sponsor, Error>),
     Disconnected,
     Devices(Result<Vec<Device>, Error>),
     Started {
@@ -116,6 +139,12 @@ pub enum Reply {
         control: Control,
         result: Result<(), Error>,
     },
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Sponsor {
+    pub skipped: Option<f64>,
+    pub next_in: Option<f64>,
 }
 
 pub struct Worker {
@@ -164,7 +193,7 @@ impl Worker {
                                     tokio::select! {
                                         biased;
                                         request = incoming.recv() => {
-                                            let _ = outgoing.send(Reply::SponsorChecked(Ok(None)));
+                                            let _ = outgoing.send(Reply::SponsorChecked(Ok(Sponsor::default())));
                                             ctx.request_repaint();
                                             let Some(request) = request else { break; };
                                             next = Some(request);
@@ -238,8 +267,10 @@ async fn execute_with_session(
             segments,
         } => {
             let result = tokio::time::timeout(Duration::from_secs(15), async {
-                start_args(&device, &video, 0)?;
-                if matches!(device.protocol, Protocol::YouTube { .. }) {
+                if !reachable(&device) || start_args(&device, &video, 0).is_err() {
+                    return Err(Error::InvalidRequest);
+                }
+                if !matches!(device.protocol, Protocol::GoogleCast) {
                     let (_, session) = lounge
                         .as_mut()
                         .filter(|(target, _)| target == &device)
@@ -247,16 +278,24 @@ async fn execute_with_session(
                     return session.skip_sponsor(&video, &segments, &enabled).await;
                 }
                 let info = run(program, &target_args(&device, &["info", "--json-output"])).await?;
+                let next_in = cast_position(&info, &video)?
+                    .and_then(|position| next_segment_in(position, &segments));
                 let Some(end) = cast_sponsor_target(&info, &video, &segments)? else {
-                    return Ok(None);
+                    return Ok(Sponsor {
+                        skipped: None,
+                        next_in,
+                    });
                 };
                 if !enabled.load(std::sync::atomic::Ordering::Relaxed) {
-                    return Ok(None);
+                    return Ok(Sponsor::default());
                 }
                 let mut args = target_args(&device, &["seek"]);
                 args.push(end.ceil().to_string());
                 run(program, &args).await?;
-                Ok(Some(end))
+                Ok(Sponsor {
+                    skipped: Some(end),
+                    next_in: next_segment_in(end, &segments),
+                })
             })
             .await
             .unwrap_or(Err(Error::TimedOut));
@@ -292,25 +331,37 @@ async fn execute_with_session(
         Request::FindYouTube(host) => {
             Reply::Devices(dial::find(host).await.map(|device| vec![device]))
         }
+        Request::Link(code) => Reply::Devices(
+            tokio::time::timeout(DEADLINE, crate::youtube::lounge::link(&code))
+                .await
+                .unwrap_or(Err(Error::TimedOut))
+                .map(|(screen, name)| {
+                    vec![Device {
+                        host: IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
+                        name,
+                        protocol: Protocol::Linked { screen },
+                    }]
+                }),
+        ),
         Request::Start {
             device,
             video,
             seconds,
         } => {
-            let result = tokio::time::timeout(DEADLINE, async {
-                if let Protocol::YouTube { endpoint } = &device.protocol {
-                    start_args(&device, &video, seconds)?;
+            let result = tokio::time::timeout(START_DEADLINE, async {
+                let args = start_args(&device, &video, seconds)?;
+                if !matches!(device.protocol, Protocol::GoogleCast) {
                     *lounge = None;
-                    let screen = dial::launch(endpoint, device.host).await?;
-                    let session = crate::youtube::lounge::Session::connect(&screen).await?;
+                    let session = lounge_session(&device).await?;
                     *lounge = Some((device.clone(), session));
                     return lounge.as_mut().unwrap().1.play(&video, seconds).await;
                 }
-                let args = start_args(&device, &video, seconds)?;
                 run(program, &args).await?;
                 // A successful `catt cast` alone is not evidence of playback.
-                // Confirm the requested video, never an older TV session.
-                for _ in 0..4 {
+                // Confirm the requested video, never an older TV session. Ads
+                // and the TV's account picker can come first.
+                let deadline = tokio::time::Instant::now() + CONFIRM_WAIT;
+                while tokio::time::Instant::now() < deadline {
                     let info =
                         run(program, &target_args(&device, &["info", "--json-output"])).await?;
                     if confirmed(&info, &video)? {
@@ -330,12 +381,24 @@ async fn execute_with_session(
         }
         Request::Control { device, control } => {
             let result = tokio::time::timeout(DEADLINE, async {
-                if !local_address(device.host) {
+                if !reachable(&device) {
                     return Err(Error::InvalidRequest);
                 }
-                if let Protocol::YouTube { endpoint } = &device.protocol {
+                if !matches!(device.protocol, Protocol::GoogleCast) {
                     if control == Control::Stop {
-                        dial::stop(endpoint, device.host).await?;
+                        // DIAL closes the app; without a stop link, or for a
+                        // linked TV, the Lounge stops the video instead.
+                        if let Protocol::YouTube { endpoint } = &device.protocol
+                            && dial::stop(endpoint, device.host).await.is_ok()
+                        {
+                            *lounge = None;
+                            return Ok(());
+                        }
+                        let (_, session) = lounge
+                            .as_mut()
+                            .filter(|(target, _)| target == &device)
+                            .ok_or(Error::ConnectionExpired)?;
+                        session.control(Control::Stop).await?;
                         *lounge = None;
                         return Ok(());
                     }
@@ -353,6 +416,48 @@ async fn execute_with_session(
             Reply::Controlled { control, result }
         }
     }
+}
+
+/// Joins a YouTube app already on screen, so the TV keeps what it shows;
+/// otherwise (or when that screen refuses a session) launches it fresh.
+async fn lounge_session(device: &Device) -> Result<crate::youtube::lounge::Session, Error> {
+    let endpoint = match &device.protocol {
+        Protocol::Linked { screen } => {
+            return crate::youtube::lounge::Session::connect(screen).await;
+        }
+        Protocol::YouTube { endpoint } => endpoint,
+        Protocol::GoogleCast => return Err(Error::InvalidRequest),
+    };
+    if let Some(screen) = dial::running_screen(endpoint, device.host).await?
+        && let Ok(session) = crate::youtube::lounge::Session::connect(&screen).await
+    {
+        return Ok(session);
+    }
+    let screen = dial::launch(endpoint, device.host).await?;
+    crate::youtube::lounge::Session::connect(&screen).await
+}
+
+/// The playing position of the requested video, if the TV reports one.
+fn cast_position(json: &[u8], video: &str) -> Result<Option<f64>, Error> {
+    let info: serde_json::Value =
+        serde_json::from_slice(json).map_err(|_| Error::InvalidResponse)?;
+    Ok(confirmed(json, video)?
+        .then(|| info["current_time"].as_f64())
+        .flatten())
+}
+
+/// Seconds until the next skippable segment starts, to space out checks.
+pub(crate) fn next_segment_in(position: f64, segments: &[crate::model::Segment]) -> Option<f64> {
+    if !position.is_finite() || position < 0.0 {
+        return None;
+    }
+    segments
+        .iter()
+        .filter(|segment| {
+            segment.skipped_at_once() && segment.start.is_finite() && segment.start > position
+        })
+        .map(|segment| segment.start - position)
+        .min_by(f64::total_cmp)
 }
 
 /// Fail closed on another video, live streams, pause or missing seek telemetry.
@@ -396,13 +501,15 @@ pub(crate) fn sponsor_target(position: f64, segments: &[crate::model::Segment]) 
         .max_by(f64::total_cmp)
 }
 
+/// Native DIAL comes first: it needs no helper and joins the TV's own
+/// YouTube app. A Cast target is kept for TVs without DIAL.
 fn merge_discovery(
     cast: Result<Vec<Device>, Error>,
     native: Result<Vec<Device>, Error>,
 ) -> Result<Vec<Device>, Error> {
     let cast_error = cast.as_ref().err().copied();
-    let mut found = cast.unwrap_or_default();
-    for device in native.unwrap_or_default() {
+    let mut found = native.unwrap_or_default();
+    for device in cast.unwrap_or_default() {
         if !found.iter().any(|known| known.host == device.host) {
             found.push(device);
         }
@@ -452,6 +559,11 @@ async fn run(program: &Path, args: &[String]) -> Result<Vec<u8>, Error> {
     Ok(output)
 }
 
+/// Linked TVs are reached through YouTube; every other target must be local.
+fn reachable(device: &Device) -> bool {
+    matches!(device.protocol, Protocol::Linked { .. }) || local_address(device.host)
+}
+
 fn local_address(host: IpAddr) -> bool {
     match host {
         IpAddr::V4(host) => host.is_private() || host.is_link_local(),
@@ -464,6 +576,26 @@ struct Discovered {
     host: IpAddr,
     friendly_name: String,
     port: u16,
+    #[serde(default)]
+    model_name: Option<String>,
+}
+
+/// `catt scan` does not report the cast type, so speakers are known by model.
+fn audio_only(model: Option<&str>) -> bool {
+    model.is_some_and(|model| {
+        // Exact names: "Google Home Hub" (a Nest Hub) has a screen.
+        [
+            "google home",
+            "google home mini",
+            "google home max",
+            "google nest mini",
+            "nest audio",
+            "google nest audio",
+            "chromecast audio",
+            "google nest wifi point",
+        ]
+        .contains(&model.trim().to_ascii_lowercase().as_str())
+    })
 }
 
 fn devices(json: &[u8]) -> Result<Vec<Device>, Error> {
@@ -473,6 +605,7 @@ fn devices(json: &[u8]) -> Result<Vec<Device>, Error> {
     for device in discovered.into_values() {
         if !local_address(device.host)
             || device.port != 8009
+            || audio_only(device.model_name.as_deref())
             || devices
                 .iter()
                 .any(|known: &Device| known.host == device.host)
@@ -511,7 +644,7 @@ fn target_args(device: &Device, command: &[&str]) -> Vec<String> {
 }
 
 fn start_args(device: &Device, video: &str, seconds: u32) -> Result<Vec<String>, Error> {
-    if !local_address(device.host)
+    if !reachable(device)
         || video.len() != 11
         || !video
             .bytes()
@@ -643,6 +776,67 @@ mod tests {
         let found = devices(&serde_json::to_vec(&entries).unwrap()).unwrap();
         assert_eq!(found.len(), 128);
         assert!(found.iter().all(|d| d.name.len() == 100));
+    }
+
+    #[test]
+    fn speakers_are_not_listed_as_tvs_but_screens_are() {
+        let json = br#"{
+            "a": {"host":"192.168.1.20","port":8009,"friendly_name":"Kitchen","model_name":"Google Nest Mini"},
+            "b": {"host":"192.168.1.21","port":8009,"friendly_name":"Hub","model_name":"Google Home Hub"},
+            "c": {"host":"192.168.1.22","port":8009,"friendly_name":"TV","model_name":"BRAVIA 4K"},
+            "d": {"host":"192.168.1.23","port":8009,"friendly_name":"Old"}
+        }"#;
+        let names: Vec<_> = devices(json).unwrap().into_iter().map(|d| d.name).collect();
+        assert_eq!(names, ["Hub", "Old", "TV"]);
+    }
+
+    #[test]
+    fn native_youtube_wins_over_cast_for_the_same_tv() {
+        let native = Device {
+            host: "192.168.1.20".parse().unwrap(),
+            name: "Living room TV".into(),
+            protocol: Protocol::YouTube {
+                endpoint: url::Url::parse("http://192.168.1.20:8008/apps/YouTube").unwrap(),
+            },
+        };
+        let mut other = device();
+        other.host = "192.168.1.30".parse().unwrap();
+        let found =
+            merge_discovery(Ok(vec![device(), other.clone()]), Ok(vec![native.clone()])).unwrap();
+        assert_eq!(found.len(), 2);
+        assert!(found.contains(&native) && found.contains(&other));
+        assert_eq!(
+            merge_discovery(Err(Error::MissingHelper), Ok(vec![native.clone()])),
+            Ok(vec![native])
+        );
+    }
+
+    #[test]
+    fn linked_tvs_are_reached_without_a_local_address_and_others_still_need_one() {
+        let linked = Device {
+            host: std::net::Ipv4Addr::UNSPECIFIED.into(),
+            name: "TV".into(),
+            protocol: Protocol::Linked {
+                screen: "synthetic".into(),
+            },
+        };
+        assert!(reachable(&linked));
+        assert!(start_args(&linked, "abcdefghijk", 0).is_ok());
+        let mut public = device();
+        public.host = "8.8.8.8".parse().unwrap();
+        assert!(!reachable(&public));
+    }
+
+    #[test]
+    fn checks_are_spaced_by_the_time_to_the_next_segment() {
+        let mut later = sponsor();
+        later.start = 100.0;
+        later.end = 120.0;
+        let segments = [sponsor(), later];
+        assert_eq!(next_segment_in(0.0, &segments), Some(10.0));
+        assert_eq!(next_segment_in(12.0, &segments), Some(88.0));
+        assert_eq!(next_segment_in(130.0, &segments), None);
+        assert_eq!(next_segment_in(f64::NAN, &segments), None);
     }
 
     #[test]
@@ -823,7 +1017,7 @@ else:
                 let Reply::SponsorChecked(result) = reply else {
                     panic!("wrong reply")
                 };
-                assert_eq!(result.unwrap(), enabled.then_some(30.25));
+                assert_eq!(result.unwrap().skipped, enabled.then_some(30.25));
                 assert_eq!(fixture.0.join("sought").exists(), enabled);
             }
         }

@@ -264,7 +264,9 @@ impl eframe::App for Demo {
                         0,
                     ) {
                         let reply = match request {
-                            Request::CheckSponsor { .. } => Reply::SponsorChecked(Ok(None)),
+                            Request::CheckSponsor { .. } => {
+                                Reply::SponsorChecked(Ok(Default::default()))
+                            }
                             Request::Disconnect => Reply::Disconnected,
                             Request::FindYouTube(host) => Reply::Devices(Ok(vec![Device {
                                 host,
@@ -275,6 +277,13 @@ impl eframe::App for Demo {
                                     ))
                                     .unwrap(),
                                 },
+                            }])),
+                            Request::Link(_) => Reply::Devices(Ok(vec![Device {
+                                protocol: crate::desktop::cast::Protocol::Linked {
+                                    screen: "demo-screen".into(),
+                                },
+                                host: std::net::Ipv4Addr::UNSPECIFIED.into(),
+                                name: "Demo TV — linked with a code".into(),
                             }])),
                             Request::Scan => Reply::Devices(Ok(vec![Device {
                                 protocol: crate::desktop::cast::Protocol::GoogleCast,

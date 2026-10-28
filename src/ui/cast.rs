@@ -54,6 +54,9 @@ fn body(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                 },
             ));
         });
+        if cast.starting() {
+            ui.label(tr(locale, "If the TV shows an ad or asks who is watching, answer on the TV. This can take up to a minute."));
+        }
     }
     ui.add_enabled_ui(!cast.busy(), |ui| {
         if let Some(session) = &cast.session {
@@ -127,6 +130,16 @@ fn body(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                 ui.add(egui::TextEdit::singleline(&mut cast.address).hint_text("192.168.1.10").desired_width(160.0));
                 if ui.button(tr(locale, "Find TV")).clicked() {
                     actions.push(Action::Cast(CastAction::FindYouTube(cast.address.clone())));
+                }
+            });
+            ui.add_space(8.0);
+            // Works for any YouTube app (Apple TV, consoles, another network).
+            ui.label(tr(locale, "Link a TV with a code"));
+            ui.label(tr(locale, "On the TV, open YouTube, then Settings, then Link with TV code."));
+            ui.horizontal(|ui| {
+                ui.add(egui::TextEdit::singleline(&mut cast.code).hint_text("123 456 789 012").desired_width(160.0));
+                if ui.button(tr(locale, "Link TV")).clicked() {
+                    actions.push(Action::Cast(CastAction::Link(std::mem::take(&mut cast.code))));
                 }
             });
             ui.add_space(8.0);

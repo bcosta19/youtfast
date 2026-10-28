@@ -3,7 +3,7 @@
 //! hint, never permission to send media through AirPlay or to launch an app.
 
 use std::collections::HashSet;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
 use mdns_sd::{ServiceDaemon, ServiceEvent};
@@ -131,17 +131,57 @@ pub(super) async fn find(host: IpAddr) -> Result<Device, Error> {
         return Err(Error::InvalidRequest);
     }
     let client = client()?;
-    for (port, path) in [(8080, "/ws/apps/YouTube"), (8008, "/apps/YouTube")] {
+    // Asking the TV itself returns its real DIAL address (LG, Roku and others
+    // use their own ports), and a reply from the address asked passes
+    // stateful firewalls that drop replies to a multicast search.
+    let socket = bind(None).await?;
+    for location in search(&socket, SocketAddr::new(host, 1900), Duration::from_secs(2))
+        .await
+        .into_iter()
+        .filter(|(source, _)| *source == host)
+        .map(|(_, location)| location)
+    {
+        if let Ok(endpoint) = described(&client, host, location).await {
+            return Ok(device(host, endpoint));
+        }
+    }
+    for (port, path) in [
+        (8080, "/ws/apps/YouTube"),
+        (8008, "/apps/YouTube"),
+        (8060, "/dial/YouTube"),
+    ] {
         let endpoint = endpoint(host, port, path)?;
         if info(&client, &endpoint, host).await.is_ok() {
-            return Ok(Device {
-                host,
-                name: "YouTube on TV".into(),
-                protocol: Protocol::YouTube { endpoint },
-            });
+            return Ok(device(host, endpoint));
         }
     }
     Err(Error::NoYouTube)
+}
+
+fn device(host: IpAddr, endpoint: Url) -> Device {
+    Device {
+        host,
+        name: "YouTube on TV".into(),
+        protocol: Protocol::YouTube { endpoint },
+    }
+}
+
+/// Follows a device description to its DIAL application URL.
+async fn described(client: &Client, host: IpAddr, location: Url) -> Result<Url, Error> {
+    let response = client
+        .get(location)
+        .send()
+        .await
+        .map_err(|_| Error::Failed)?;
+    let base = response
+        .headers()
+        .get("Application-URL")
+        .and_then(|h| h.to_str().ok())
+        .ok_or(Error::NoYouTube)?;
+    let endpoint = Url::parse(&format!("{}/YouTube", base.trim_end_matches('/')))
+        .map_err(|_| Error::InvalidResponse)?;
+    info(client, &endpoint, host).await?;
+    Ok(endpoint)
 }
 
 fn endpoint(host: IpAddr, port: u16, path: &str) -> Result<Url, Error> {
@@ -153,12 +193,20 @@ fn endpoint(host: IpAddr, port: u16, path: &str) -> Result<Url, Error> {
     Ok(url)
 }
 
+/// The screen of a YouTube app the TV already shows, so a send joins it
+/// instead of closing what is on screen.
+pub(super) async fn running_screen(endpoint: &Url, host: IpAddr) -> Result<Option<String>, Error> {
+    let app = info(&client()?, endpoint, host).await?;
+    Ok((app.state == "running" && !app.screen.is_empty()).then_some(app.screen))
+}
+
 pub(super) async fn launch(endpoint: &Url, host: IpAddr) -> Result<String, Error> {
     let client = client()?;
     let app = info(&client, endpoint, host).await?;
     // A previous remote can leave a queued video behind the TV's login screen.
-    // Start a fresh receiver before creating our Lounge session.
-    if app.state != "stopped" {
+    // Start a fresh receiver before creating our Lounge session. DIAL makes the
+    // stop link optional: without one, the launch below reaches the running app.
+    if app.state != "stopped" && app.stop.is_some() {
         stop(endpoint, host).await?;
         let mut stopped = false;
         for _ in 0..10 {
@@ -207,7 +255,7 @@ pub(super) async fn stop(endpoint: &Url, host: IpAddr) -> Result<(), Error> {
     }
     let base = Url::parse(&format!("{}/", endpoint.as_str())).map_err(|_| Error::InvalidRequest)?;
     let target = base
-        .join(app.stop.as_deref().ok_or(Error::Failed)?)
+        .join(app.stop.as_deref().ok_or(Error::Unsupported)?)
         .map_err(|_| Error::InvalidRequest)?;
     if target.origin() != endpoint.origin()
         || !target.path().starts_with(base.path())
@@ -239,11 +287,11 @@ impl Drop for Mdns {
 }
 
 pub(super) async fn discover() -> Result<Vec<Device>, Error> {
-    let (airplay, descriptions) = tokio::join!(airplay_hosts(), ssdp_descriptions());
+    let (hints, descriptions) = tokio::join!(mdns_hosts(), ssdp_descriptions());
     let client = client()?;
     let mut found = Vec::new();
     let mut tasks = tokio::task::JoinSet::new();
-    for (host, name) in airplay.unwrap_or_default().into_iter().take(32) {
+    for (host, name) in hints.unwrap_or_default().into_iter().take(32) {
         tasks.spawn(async move {
             find(host).await.map(|mut device| {
                 device.name = name;
@@ -251,31 +299,12 @@ pub(super) async fn discover() -> Result<Vec<Device>, Error> {
             })
         });
     }
-    for (host, location) in descriptions.unwrap_or_default().into_iter().take(32) {
+    for (host, location) in descriptions.into_iter().take(32) {
         let client = client.clone();
-        tasks.spawn(async move {
-            let response = client
-                .get(location)
-                .send()
-                .await
-                .map_err(|_| Error::Failed)?;
-            let base = response
-                .headers()
-                .get("Application-URL")
-                .and_then(|h| h.to_str().ok())
-                .ok_or(Error::NoYouTube)?;
-            let endpoint = Url::parse(&format!("{}/YouTube", base.trim_end_matches('/')))
-                .map_err(|_| Error::InvalidResponse)?;
-            info(&client, &endpoint, host).await?;
-            Ok(Device {
-                host,
-                name: "YouTube on TV".into(),
-                protocol: Protocol::YouTube { endpoint },
-            })
-        });
+        tasks.spawn(async move { Ok(device(host, described(&client, host, location).await?)) });
     }
-    while let Some(Ok(result)) = tasks.join_next().await {
-        if let Ok(device) = result
+    while let Some(result) = tasks.join_next().await {
+        if let Ok(Ok(device)) = result
             && !found.iter().any(|known: &Device| known.host == device.host)
         {
             found.push(device);
@@ -284,20 +313,32 @@ pub(super) async fn discover() -> Result<Vec<Device>, Error> {
     Ok(found)
 }
 
-async fn airplay_hosts() -> Result<Vec<(IpAddr, String)>, Error> {
+/// Addresses announced over mDNS, probed for a YouTube DIAL endpoint. Samsung
+/// and LG announce AirPlay; Android TV and Google TV announce Google Cast.
+async fn mdns_hosts() -> Result<Vec<(IpAddr, String)>, Error> {
     let daemon = Mdns(ServiceDaemon::new().map_err(|_| Error::Unavailable)?);
-    let receiver = daemon
+    let airplay = daemon
         .0
         .browse("_airplay._tcp.local.")
         .map_err(|_| Error::Unavailable)?;
+    let cast = daemon
+        .0
+        .browse("_googlecast._tcp.local.")
+        .map_err(|_| Error::Unavailable)?;
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     let mut hosts = Vec::new();
-    while let Ok(Ok(event)) = tokio::time::timeout_at(deadline, receiver.recv_async()).await {
+    loop {
+        let event = tokio::select! {
+            event = tokio::time::timeout_at(deadline, airplay.recv_async()) => event,
+            event = tokio::time::timeout_at(deadline, cast.recv_async()) => event,
+        };
+        let Ok(Ok(event)) = event else { break };
         if let ServiceEvent::ServiceResolved(info) = event {
-            let model = info
-                .get_property_val_str("model")
+            let name = info
+                .get_property_val_str("fn")
+                .or_else(|| info.get_property_val_str("model"))
                 .unwrap_or("YouTube on TV");
-            let name: String = model.chars().filter(|c| !c.is_control()).take(80).collect();
+            let name: String = name.chars().filter(|c| !c.is_control()).take(80).collect();
             for host in info.get_addresses_v4() {
                 let host = IpAddr::V4(host);
                 if local_address(host)
@@ -312,43 +353,146 @@ async fn airplay_hosts() -> Result<Vec<(IpAddr, String)>, Error> {
     Ok(hosts)
 }
 
-async fn ssdp_descriptions() -> Result<Vec<(IpAddr, Url)>, Error> {
-    let socket = tokio::net::UdpSocket::bind("0.0.0.0:0")
-        .await
-        .map_err(|_| Error::Unavailable)?;
-    let message = b"M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 2\r\nST: urn:dial-multiscreen-org:service:dial:1\r\n\r\n";
-    socket
-        .send_to(message, "239.255.255.250:1900")
-        .await
-        .map_err(|_| Error::Failed)?;
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(4);
-    let mut buffer = [0; 16 * 1024];
-    let mut seen = HashSet::new();
-    let mut urls = Vec::new();
-    while let Ok(Ok((length, source))) =
-        tokio::time::timeout_at(deadline, socket.recv_from(&mut buffer)).await
-    {
-        if !local_address(source.ip()) || urls.len() >= 32 {
-            continue;
+const SSDP: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(239, 255, 255, 250)), 1900);
+
+/// One socket per local IPv4 interface: with a VPN or container bridge the
+/// default route may not be the TV's network.
+async fn ssdp_descriptions() -> Vec<(IpAddr, Url)> {
+    let mut addresses: Vec<Ipv4Addr> = if_addrs::get_if_addrs()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|interface| match interface.ip() {
+            IpAddr::V4(ip) if !interface.is_loopback() && local_address(IpAddr::V4(ip)) => Some(ip),
+            _ => None,
+        })
+        .collect();
+    // Home networks first: container bridges (172.16/12) can outnumber them.
+    addresses.sort_by_key(|ip| {
+        (
+            !ip.octets().starts_with(&[192, 168]),
+            ip.octets()[0] != 10,
+            *ip,
+        )
+    });
+    addresses.dedup();
+    addresses.truncate(16);
+    let mut sockets = Vec::new();
+    for address in addresses {
+        if let Ok(socket) = bind(Some(address)).await {
+            sockets.push(socket);
         }
-        let text = String::from_utf8_lossy(&buffer[..length]);
-        for line in text.lines() {
-            if let Some((key, value)) = line.split_once(':')
-                && key.eq_ignore_ascii_case("location")
-                && let Ok(location) = Url::parse(value.trim())
-                && location.scheme() == "http"
-                && location.host_str().and_then(|h| h.parse::<IpAddr>().ok()) == Some(source.ip())
-                && location.username().is_empty()
-                && location.password().is_none()
-                && location.query().is_none()
-                && location.fragment().is_none()
-                && seen.insert(location.clone())
-            {
-                urls.push((source.ip(), location));
+    }
+    if sockets.is_empty()
+        && let Ok(socket) = bind(None).await
+    {
+        sockets.push(socket);
+    }
+    let mut searches = tokio::task::JoinSet::new();
+    for socket in sockets {
+        searches.spawn(async move { search(&socket, SSDP, Duration::from_secs(4)).await });
+    }
+    let mut seen = HashSet::new();
+    let mut found = Vec::new();
+    while let Some(result) = searches.join_next().await {
+        for (host, location) in result.unwrap_or_default() {
+            if found.len() < 32 && seen.insert(location.clone()) {
+                found.push((host, location));
             }
         }
     }
-    Ok(urls)
+    found
+}
+
+async fn bind(interface: Option<Ipv4Addr>) -> Result<tokio::net::UdpSocket, Error> {
+    let socket = socket2::Socket::new(
+        socket2::Domain::IPV4,
+        socket2::Type::DGRAM,
+        Some(socket2::Protocol::UDP),
+    )
+    .map_err(|_| Error::Unavailable)?;
+    let address = interface.unwrap_or(Ipv4Addr::UNSPECIFIED);
+    if let Some(interface) = interface {
+        socket
+            .set_multicast_if_v4(&interface)
+            .map_err(|_| Error::Unavailable)?;
+    }
+    socket
+        .set_multicast_ttl_v4(2)
+        .map_err(|_| Error::Unavailable)?;
+    socket
+        .set_nonblocking(true)
+        .map_err(|_| Error::Unavailable)?;
+    socket
+        .bind(&SocketAddr::new(IpAddr::V4(address), 0).into())
+        .map_err(|_| Error::Unavailable)?;
+    tokio::net::UdpSocket::from_std(socket.into()).map_err(|_| Error::Unavailable)
+}
+
+/// Sends the search three times, since one lost datagram would hide a TV.
+async fn search(
+    socket: &tokio::net::UdpSocket,
+    target: SocketAddr,
+    wait: Duration,
+) -> Vec<(IpAddr, Url)> {
+    let message = format!(
+        "M-SEARCH * HTTP/1.1\r\nHOST: {target}\r\nMAN: \"ssdp:discover\"\r\nMX: 2\r\nST: urn:dial-multiscreen-org:service:dial:1\r\n\r\n"
+    );
+    let start = tokio::time::Instant::now();
+    let deadline = start + wait;
+    let resend = [
+        Duration::ZERO,
+        Duration::from_millis(400),
+        Duration::from_millis(1000),
+    ];
+    let mut sent = 0;
+    let mut buffer = [0; 16 * 1024];
+    let mut found = Vec::new();
+    loop {
+        if sent < resend.len() && tokio::time::Instant::now() >= start + resend[sent] {
+            let _ = socket.send_to(message.as_bytes(), target).await;
+            sent += 1;
+        }
+        let until = resend
+            .get(sent)
+            .map_or(deadline, |delay| (start + *delay).min(deadline));
+        match tokio::time::timeout_at(until, socket.recv_from(&mut buffer)).await {
+            Ok(Ok((length, source))) => {
+                if local_address(source.ip()) && found.len() < 32 {
+                    for location in locations(&buffer[..length], source.ip()) {
+                        if !found.iter().any(|(_, known)| *known == location) {
+                            found.push((source.ip(), location));
+                        }
+                    }
+                }
+            }
+            Ok(Err(_)) if sent >= resend.len() => break,
+            Ok(Err(_)) => {}
+            Err(_) if tokio::time::Instant::now() >= deadline => break,
+            Err(_) => {}
+        }
+    }
+    found
+}
+
+/// Description URLs of a search reply, only on the replying address.
+fn locations(reply: &[u8], source: IpAddr) -> Vec<Url> {
+    String::from_utf8_lossy(reply)
+        .lines()
+        .filter_map(|line| {
+            let (key, value) = line.split_once(':')?;
+            if !key.eq_ignore_ascii_case("location") {
+                return None;
+            }
+            let location = Url::parse(value.trim()).ok()?;
+            (location.scheme() == "http"
+                && location.host_str().and_then(|h| h.parse::<IpAddr>().ok()) == Some(source)
+                && location.username().is_empty()
+                && location.password().is_none()
+                && location.query().is_none()
+                && location.fragment().is_none())
+            .then_some(location)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -390,6 +534,36 @@ mod tests {
             &Url::parse("http://127.0.0.1/apps/YouTube").unwrap(),
             "127.0.0.1".parse().unwrap()
         ));
+    }
+
+    #[test]
+    fn search_replies_only_yield_plain_descriptions_on_the_replying_address() {
+        let source: IpAddr = "192.168.1.20".parse().unwrap();
+        let reply = b"HTTP/1.1 200 OK\r\nCACHE-CONTROL: max-age=1800\r\nlocation: http://192.168.1.20:36866/description.xml\r\nST: urn:dial-multiscreen-org:service:dial:1\r\n\r\n";
+        assert_eq!(
+            locations(reply, source),
+            [Url::parse("http://192.168.1.20:36866/description.xml").unwrap()]
+        );
+        for location in [
+            "http://192.168.1.21:8060/dial/dd.xml",
+            "https://192.168.1.20/description.xml",
+            "http://synthetic@192.168.1.20/description.xml",
+            "http://192.168.1.20/description.xml?token=synthetic",
+        ] {
+            let reply = format!("HTTP/1.1 200 OK\r\nLOCATION: {location}\r\n\r\n");
+            assert!(locations(reply.as_bytes(), source).is_empty(), "{location}");
+        }
+    }
+
+    #[test]
+    fn an_app_without_a_stop_link_is_still_a_target() {
+        // DIAL makes the stop link optional; launch then skips the stop.
+        let app = app_info(
+            b"<service><name>YouTube</name><state>running</state><additionalData><screenId>synthetic</screenId></additionalData></service>",
+        )
+        .unwrap();
+        assert!(app.stop.is_none());
+        assert_eq!(app.screen, "synthetic");
     }
 
     #[tokio::test]
