@@ -2,12 +2,13 @@
 from html.parser import HTMLParser
 from pathlib import Path
 import json
+import re
 import unittest
 
-from build_site import ORIGIN, Page
+from build_site import ORIGIN, VERSION, Page, stamp
 from site_locale import portuguese_page
 
-SOURCE = (Path(__file__).resolve().parents[1] / 'website/index.html').read_text()
+SOURCE = stamp((Path(__file__).resolve().parents[1] / 'website/index.html').read_text())
 
 
 class Metadata(HTMLParser):
@@ -41,12 +42,35 @@ class WebsiteTests(unittest.TestCase):
         html = portuguese_page(SOURCE, ORIGIN)
         self.assertIn('<html lang="pt-BR">', html)
         self.assertIn('>Perguntas frequentes.</h2>', html)
-        self.assertIn('>Um cliente YouTube nativo para o seu desktop.</h1>', html)
-        self.assertIn('>Ver pacotes para Linux ↗</a>', html)
+        self.assertIn('>Assista ao YouTube no computador, de um jeito mais leve e rápido.</h1>', html)
+        self.assertIn('>Baixar o Flatpak (recomendado)</a>', html)
         self.assertNotIn('>Common questions.</h2>', html)
         self.assertIn('aria-label="Links do projeto"', html)
         self.assertIn('src="../site.js"', html)
         self.assertIn('poster="../assets/player.webp"', html)
+
+    def test_downloads_link_to_the_current_release_assets(self):
+        self.assertNotIn('{{', SOURCE)
+        for asset in [f'youtfast-v{VERSION}-x86_64.flatpak',
+                      f'youtfast-v{VERSION}-x86_64-unknown-linux-gnu.tar.gz',
+                      f'youtfast-{VERSION}-1-x86_64.pkg.tar.zst',
+                      f'youtfast-v{VERSION}-x86_64-pc-windows-gnu.zip',
+                      f'youtfast-v{VERSION}-aarch64-apple-darwin.zip', 'checksums.txt']:
+            self.assertIn(f'/releases/download/v{VERSION}/{asset}"', SOURCE)
+
+    def test_download_urls_follow_the_release_workflow_naming(self):
+        workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/release.yml').read_text()
+        names = {m.replace('${RELEASE_TAG#v}', VERSION).replace('$env:RELEASE_TAG', 'v' + VERSION)
+                 .replace('$RELEASE_TAG', 'v' + VERSION)
+                 for m in re.findall(r'youtfast-(?:\$\{RELEASE_TAG#v\}|\$env:RELEASE_TAG|\$RELEASE_TAG)[^"\s]*', workflow)}
+        names = {'youtfast-' + n.split('youtfast-', 1)[1] if n.startswith('youtfast-') else n for n in names}
+        urls = re.findall(r'releases/download/v([^/"]+)/([^"]+)"', SOURCE)
+        self.assertTrue(urls)
+        for version, asset in urls:
+            self.assertEqual(version, VERSION)
+            if asset != 'checksums.txt':
+                self.assertIn(asset, names)
+        self.assertIn('checksums.txt', workflow)
 
     def test_canonical_urls_and_language_alternates_match_each_page(self):
         for path, html in [('/', SOURCE), ('/pt/', portuguese_page(SOURCE, ORIGIN))]:

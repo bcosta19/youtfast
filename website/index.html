@@ -26,6 +26,7 @@
   <link rel="alternate" hreflang="x-default" href="https://youtfast.pages.dev/">
   <link rel="icon" href="assets/youtfast.svg" type="image/svg+xml">
   <script>try{const theme=localStorage.getItem('youtfast-theme');if(theme==='light'||theme==='dark')document.documentElement.dataset.theme=theme}catch{}</script>
+  <link rel="preload" href="assets/fonts/NotoSans-Regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="cinema.css">
   <script src="site.js" defer></script>
@@ -62,6 +63,7 @@
       "name": "YouTFast",
       "url": "https://youtfast.pages.dev/",
       "description": "YouTFast is a free, open-source YouTube client for Linux, Windows and macOS. Native playback, a local library and no telemetry.",
+      "softwareVersion": "{{VERSION}}",
       "applicationCategory": "MultimediaApplication",
       "operatingSystem": "Linux x86_64, Windows x86_64, macOS 15+ Apple Silicon",
       "isAccessibleForFree": true,
@@ -93,23 +95,26 @@
     <nav aria-label="Main navigation">
       <a href="#experience" data-en="Features" data-pt="Recursos">Features</a>
       <a href="#download" data-en="Download" data-pt="Baixar">Download</a>
+      <a href="#how-it-works" data-en="How it works" data-pt="Como funciona">How it works</a>
       <a href="https://github.com/bcosta19/youtfast">GitHub <span aria-hidden="true">↗</span></a>
     </nav>
-    <label class="theme-control" id="theme-control" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg><select id="theme" aria-label="Theme"><option value="system" data-en="System" data-pt="Sistema">System</option><option value="light" data-en="Light" data-pt="Claro">Light</option><option value="dark" data-en="Dark" data-pt="Escuro">Dark</option></select></label>
+    <label class="theme-control" id="theme-control" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v16a8 8 0 0 0 0-16Z" fill="currentColor"/></svg><span class="theme-label" data-en="Theme" data-pt="Tema">Theme</span><select id="theme" aria-label="Theme"><option value="system" data-en="System" data-pt="Sistema">System</option><option value="light" data-en="Light" data-pt="Claro">Light</option><option value="dark" data-en="Dark" data-pt="Escuro">Dark</option></select></label>
     <a class="language" id="language" href="pt/" aria-label="Mudar idioma para português" lang="pt-BR">PT-BR</a>
   </header>
 
   <main id="main">
     <section class="hero wrap" aria-labelledby="hero-title">
       <div class="hero-copy">
-        <a class="project-note" href="https://github.com/bcosta19/youtfast/blob/main/LICENSE" data-en="Free and open-source software" data-pt="Software livre e de código aberto">Free and open-source software</a>
-        <h1 id="hero-title" data-en="A native YouTube client for your desktop." data-pt="Um cliente YouTube nativo para o seu desktop.">A native YouTube client for your desktop.</h1>
-        <p class="hero-description" data-en="Watch videos, organize your library and pick up where you left off. Open source, with no telemetry." data-pt="Assista a vídeos, organize sua biblioteca e continue de onde parou. Código aberto, sem telemetria.">Watch videos, organize your library and pick up where you left off. Open source, with no telemetry.</p>
+        <p class="trust-line" data-en="Free · Open source (GPL-3.0) · No telemetry" data-pt="Grátis · Código aberto (GPL-3.0) · Sem telemetria">Free · Open source (GPL-3.0) · No telemetry</p>
+        <h1 id="hero-title" data-en="Watch YouTube on your computer, lighter and faster." data-pt="Assista ao YouTube no computador, de um jeito mais leve e rápido.">Watch YouTube on your computer, lighter and faster.</h1>
+        <p class="hero-description" data-en="YouTFast is a free app that plays YouTube videos in its own window, without a web browser. Keep your subscriptions, history and Watch later list on your computer, with or without an account." data-pt="O YouTFast é um aplicativo gratuito que reproduz vídeos do YouTube na própria janela, sem navegador. Mantenha inscrições, histórico e a lista Assistir mais tarde no seu computador, com ou sem conta.">YouTFast is a free app that plays YouTube videos in its own window, without a web browser. Keep your subscriptions, history and Watch later list on your computer, with or without an account.</p>
         <div class="hero-actions">
-          <a class="button primary" href="#download"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5"/></svg><span data-en="Download YouTFast" data-pt="Baixar o YouTFast">Download YouTFast</span></a>
+          <a class="button primary" id="os-download" href="#download"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5"/></svg><span data-en="Download YouTFast" data-pt="Baixar o YouTFast">Download YouTFast</span></a>
           <a class="text-link" href="#demo" data-en="Watch the demo" data-pt="Ver a demonstração">Watch the demo</a>
         </div>
-        <p class="platform-note">Linux · Windows · macOS</p>
+        <p class="platform-note"><span>v{{VERSION}} ({{DATE}}) · GPL-3.0-only · Linux · Windows · macOS</span> · <a href="#download" data-en="All downloads" data-pt="Todos os downloads">All downloads</a></p>
+        <p class="hero-meta"><span data-en="Not affiliated with YouTube or Google." data-pt="Sem vínculo com YouTube ou Google.">Not affiliated with YouTube or Google.</span> <span data-en="Independent, single-maintainer project." data-pt="Projeto independente de um único mantenedor.">Independent, single-maintainer project.</span> <a href="https://github.com/bcosta19" data-en="Author's GitHub profile (other projects) ↗" data-pt="Perfil do autor no GitHub (outros projetos) ↗">Author's GitHub profile (other projects) ↗</a></p>
+        <p class="dev-line" data-en="Rust + egui app: YouTube data via RustyPipe, playback via yt-dlp and libmpv. No Electron, no web view, no YouTFast server." data-pt="Aplicativo em Rust + egui: dados do YouTube via RustyPipe, reprodução via yt-dlp e libmpv. Sem Electron, sem web view, sem servidor do YouTFast.">Rust + egui app: YouTube data via RustyPipe, playback via yt-dlp and libmpv. No Electron, no web view, no YouTFast server.</p>
       </div>
       <div class="hero-visual">
         <div class="scene-stage" aria-hidden="false">
@@ -117,38 +122,76 @@
           <span class="scene-layer scene-layer-middle" aria-hidden="true"></span>
           <a class="product-image" href="#demo" aria-label="Watch the YouTFast demo"><img src="assets/player.webp" width="1440" height="810" fetchpriority="high" alt="YouTFast playing Spring by Blender Studio, with the video library and recommendations in its native window."></a>
         </div>
-        <div class="visual-caption"><span data-en="YouTFast on Linux" data-pt="YouTFast no Linux">YouTFast on Linux</span><span>Rust · egui · libmpv</span></div>
+        <div class="visual-caption"><span data-en="Screenshot of YouTFast on Linux, from the demo recording" data-pt="Captura do YouTFast no Linux, da gravação da demonstração">Screenshot of YouTFast on Linux, from the demo recording</span></div>
       </div>
     </section>
 
     <section class="experience wrap section" id="experience" aria-labelledby="experience-title">
       <div class="section-heading">
-        <h2 id="experience-title" data-en="YouTube, adapted to the desktop." data-pt="O YouTube, adaptado ao desktop.">YouTube, adapted to the desktop.</h2>
-        <p data-en="The essentials to watch and organize videos." data-pt="O essencial para assistir e organizar vídeos.">The essentials to watch and organize videos.</p>
+        <h2 id="experience-title" data-en="What you can do with it." data-pt="O que você pode fazer.">What you can do with it.</h2>
+        <p data-en="Everything below is in the current release." data-pt="Tudo abaixo está na versão atual.">Everything below is in the current release.</p>
       </div>
       <div class="feature-grid">
         <article class="feature">
           <svg class="feature-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m10 9 5 3-5 3Z"/></svg>
-          <h3 data-en="Native playback" data-pt="Reprodução nativa">Native playback</h3>
-          <p data-en="libmpv, full screen, captions, chapters and a mini player." data-pt="libmpv, tela cheia, legendas, capítulos e mini player.">libmpv, full screen, captions, chapters and a mini player.</p>
+          <h3 data-en="Watch in its own window" data-pt="Assista na própria janela">Watch in its own window</h3>
+          <p data-en="Full screen or theater mode, with hardware video decoding where your computer supports it. No browser tab needed." data-pt="Tela cheia ou modo teatro, com decodificação de vídeo por hardware quando o seu computador permite. Sem aba de navegador.">Full screen or theater mode, with hardware video decoding where your computer supports it. No browser tab needed.</p>
         </article>
         <article class="feature">
           <svg class="feature-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v19l-7-4-7 4Z"/></svg>
-          <h3 data-en="Your library, locally" data-pt="Sua biblioteca, no dispositivo">Your library, locally</h3>
-          <p data-en="Subscriptions, history and Watch later on this device. Account optional." data-pt="Inscrições, histórico e Assistir mais tarde neste dispositivo. Conta opcional.">Subscriptions, history and Watch later on this device. Account optional.</p>
+          <h3 data-en="Your library stays with you" data-pt="Sua biblioteca fica com você">Your library stays with you</h3>
+          <p data-en="Subscriptions, history and Watch later are saved on this computer, without an account. Google Takeout files can be imported." data-pt="Inscrições, histórico e Assistir mais tarde ficam salvos neste computador, sem conta. Dá para importar arquivos do Google Takeout.">Subscriptions, history and Watch later are saved on this computer, without an account. Google Takeout files can be imported.</p>
+        </article>
+        <article class="feature">
+          <svg class="feature-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <h3 data-en="Pick up where you left off" data-pt="Continue de onde parou">Pick up where you left off</h3>
+          <p data-en="YouTFast remembers how far you watched each video and resumes from that point." data-pt="O YouTFast lembra até onde você assistiu cada vídeo e retoma desse ponto.">YouTFast remembers how far you watched each video and resumes from that point.</p>
+        </article>
+        <article class="feature">
+          <svg class="feature-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="12" y="12" width="10" height="7" rx="1.5"/><path d="M3 5h18v5M3 5v14h6"/></svg>
+          <h3 data-en="Keep watching while you work" data-pt="Assista enquanto trabalha">Keep watching while you work</h3>
+          <p data-en="A small mini player floats in a corner. Audio-only mode (Shift+A) plays just the sound to save data and battery." data-pt="Um mini player pequeno flutua no canto da tela. O modo só áudio (Shift+A) toca apenas o som para economizar dados e bateria.">A small mini player floats in a corner. Audio-only mode (Shift+A) plays just the sound to save data and battery.</p>
+        </article>
+        <article class="feature">
+          <svg class="feature-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 12h4m4 0h4M6 15h2m4 0h6"/></svg>
+          <h3 data-en="Captions, chapters and more" data-pt="Legendas, capítulos e mais">Captions, chapters and more</h3>
+          <p data-en="Captions and chapters, plus optional transcripts and timeline previews. SponsorBlock, to skip sponsored segments, is optional and off by default." data-pt="Legendas e capítulos, além de transcrições e prévias da linha do tempo opcionais. O SponsorBlock, que pula trechos patrocinados, é opcional e vem desativado.">Captions and chapters, plus optional transcripts and timeline previews. SponsorBlock, to skip sponsored segments, is optional and off by default.</p>
         </article>
         <article class="feature">
           <svg class="feature-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H4zM8 20h8m-4-4v4"/></svg>
-          <h3 data-en="Desktop integration" data-pt="Integração com o desktop">Desktop integration</h3>
-          <p data-en="Light and dark themes, six languages, shortcuts and media controls." data-pt="Temas claro e escuro, seis idiomas, atalhos e controles de mídia.">Light and dark themes, six languages, shortcuts and media controls.</p>
+          <h3 data-en="Made for the desktop" data-pt="Feito para o desktop">Made for the desktop</h3>
+          <p data-en="Keyboard shortcuts, media keys, light and dark themes, and six interface languages: English, Portuguese, Spanish, French, German and Italian." data-pt="Atalhos de teclado, teclas de mídia, temas claro e escuro e seis idiomas de interface: inglês, português, espanhol, francês, alemão e italiano.">Keyboard shortcuts, media keys, light and dark themes, and six interface languages: English, Portuguese, Spanish, French, German and Italian.</p>
         </article>
+      </div>
+    </section>
+
+    <section class="fit wrap section" id="for-you" aria-labelledby="fit-title">
+      <div class="section-heading">
+        <h2 id="fit-title" data-en="Is YouTFast for you?" data-pt="O YouTFast é para você?">Is YouTFast for you?</h2>
+      </div>
+      <div class="fit-grid">
+        <div>
+          <h3 data-en="Choose YouTFast if…" data-pt="Escolha o YouTFast se…">Choose YouTFast if…</h3>
+          <ul>
+            <li data-en="you want to watch YouTube on a Linux, Windows or Apple Silicon Mac computer without a web browser." data-pt="você quer assistir ao YouTube em um computador Linux, Windows ou Mac com Apple Silicon sem navegador.">you want to watch YouTube on a Linux, Windows or Apple Silicon Mac computer without a web browser.</li>
+            <li data-en="you want subscriptions, history and Watch later kept on your computer, with no account." data-pt="você quer inscrições, histórico e Assistir mais tarde guardados no seu computador, sem conta.">you want subscriptions, history and Watch later kept on your computer, with no account.</li>
+            <li data-en="you are fine with a young project from a single maintainer, with rough edges." data-pt="você aceita um projeto jovem de um único mantenedor, com arestas.">you are fine with a young project from a single maintainer, with rough edges.</li>
+          </ul>
+        </div>
+        <div>
+          <h3 data-en="Prefer something else if…" data-pt="Prefira outra opção se…">Prefer something else if…</h3>
+          <ul>
+            <li data-en="you need a phone or tablet app: YouTFast is for desktop computers only." data-pt="você precisa de um app para celular ou tablet: o YouTFast é só para computadores desktop.">you need a phone or tablet app: YouTFast is for desktop computers only.</li>
+            <li data-en="you need live chat or downloading videos: they are not included." data-pt="você precisa de chat ao vivo ou de baixar vídeos: não estão incluídos.">you need live chat or downloading videos: they are not included.</li>
+          </ul>
+        </div>
       </div>
     </section>
 
     <section class="demo-section" id="demo" aria-labelledby="demo-title">
       <div class="wrap">
         <div class="section-heading">
-          <div><h2 id="demo-title" data-en="See the application in use." data-pt="Veja o aplicativo em uso.">See the application in use.</h2><p data-en="A one-minute recording of search, playback and navigation in the Linux application." data-pt="Uma gravação de um minuto com busca, reprodução e navegação no aplicativo para Linux.">A one-minute recording of search, playback and navigation in the Linux application.</p></div>
+          <div><h2 id="demo-title" data-en="See the application in use." data-pt="Veja o aplicativo em uso.">See the application in use.</h2><p data-en="A one-minute screen recording of search, playback and navigation, signed out, in the Linux application. It has no sound." data-pt="Uma gravação de tela de um minuto com busca, reprodução e navegação, sem conta, no aplicativo para Linux. Não tem som.">A one-minute screen recording of search, playback and navigation, signed out, in the Linux application. It has no sound.</p></div>
           <span class="demo-duration" data-en="1-minute demo" data-pt="Demo de 1 minuto">1-minute demo</span>
         </div>
         <div class="demo-player"><video controls playsinline preload="none" poster="assets/player.webp" width="1920" height="1080" aria-label="YouTFast product demonstration"><source src="assets/youtfast-demo.mp4" type="video/mp4"><p><a href="assets/youtfast-demo.mp4" data-en="Download the demonstration video" data-pt="Baixar o vídeo de demonstração">Download the demonstration video</a></p></video></div>
@@ -156,74 +199,204 @@
       </div>
     </section>
 
+    <section class="download-section section" id="download" aria-labelledby="download-title">
+      <div class="wrap">
+        <div class="section-heading">
+          <div>
+            <h2 id="download-title" data-en="Download for your system." data-pt="Baixe para o seu sistema.">Download for your system.</h2>
+            <p data-en="Version {{VERSION}}, free. Windows and macOS builds are newer and have been checked mainly by automated tests so far, so expect rough edges." data-pt="Versão {{VERSION}}, gratuita. Os pacotes para Windows e macOS são mais recentes e foram verificados principalmente por testes automatizados até agora, então podem ter arestas.">Version {{VERSION}}, free. Windows and macOS builds are newer and have been checked mainly by automated tests so far, so expect rough edges.</p>
+          </div>
+          <a class="release-link" href="https://github.com/bcosta19/youtfast/releases" data-en="All release files ↗" data-pt="Todos os arquivos das versões ↗">All release files ↗</a>
+        </div>
+        <div class="download-grid">
+          <article class="download-card" id="download-windows">
+            <div class="card-head"><h3>Windows</h3><p class="architecture">x86_64 · ZIP</p><span class="recommended" hidden data-en="Recommended for your system" data-pt="Recomendado para o seu sistema">Recommended for your system</span></div>
+            <a class="button primary platform-download" href="https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/youtfast-v{{VERSION}}-x86_64-pc-windows-gnu.zip" data-en="Download for Windows (.zip)" data-pt="Baixar para Windows (.zip)">Download for Windows (.zip)</a>
+            <p class="requirement" data-en="Needs current yt-dlp and Deno installed and on your PATH. They are not included in the ZIP." data-pt="Precisa do yt-dlp e do Deno atuais instalados e no PATH. Eles não vêm no ZIP.">Needs current yt-dlp and Deno installed and on your PATH. They are not included in the ZIP.</p>
+            <p class="inline-links"><span data-en="Get them:" data-pt="Onde obter:">Get them:</span> <a href="https://github.com/yt-dlp/yt-dlp/wiki/Installation">yt-dlp ↗</a> <a href="https://deno.com/">Deno ↗</a></p>
+            <details class="instructions"><summary data-en="Detailed instructions" data-pt="Instruções detalhadas">Detailed instructions</summary>
+            <ol class="steps">
+              <li data-en="Install yt-dlp and Deno first." data-pt="Instale primeiro o yt-dlp e o Deno.">Install yt-dlp and Deno first.</li>
+              <li data-en="Download the ZIP, right-click it and choose Extract All." data-pt="Baixe o ZIP, clique com o botão direito e escolha Extrair Tudo.">Download the ZIP, right-click it and choose Extract All.</li>
+              <li data-en="Open youtfast.exe in the extracted folder." data-pt="Abra o youtfast.exe na pasta extraída.">Open youtfast.exe in the extracted folder.</li>
+            </ol>
+            <p class="notice" data-en="Windows SmartScreen may warn about new apps without a publisher signature, and YouTFast has none. If you trust the download, choose More info, then Run anyway. You can first compare the file's SHA-256 with checksums.txt." data-pt="O Windows SmartScreen pode alertar sobre aplicativos novos sem assinatura de editor, e o YouTFast não tem uma. Se você confia no download, escolha Mais informações e depois Executar assim mesmo. Antes, você pode comparar o SHA-256 do arquivo com o checksums.txt.">Windows SmartScreen may warn about new apps without a publisher signature, and YouTFast has none. If you trust the download, choose More info, then Run anyway. You can first compare the file's SHA-256 with checksums.txt.</p>
+            </details>
+          </article>
+          <article class="download-card" id="download-macos">
+            <div class="card-head"><h3>macOS</h3><p class="architecture">Apple Silicon · macOS 15+</p><span class="recommended" hidden data-en="Recommended for your system" data-pt="Recomendado para o seu sistema">Recommended for your system</span></div>
+            <a class="button primary platform-download" href="https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/youtfast-v{{VERSION}}-aarch64-apple-darwin.zip" data-en="Download for macOS (.zip)" data-pt="Baixar para macOS (.zip)">Download for macOS (.zip)</a>
+            <p class="requirement" data-en="For Macs with Apple Silicon on macOS 15 or newer; Intel Macs are not supported. Needs current yt-dlp and Deno, for example installed with Homebrew." data-pt="Para Macs com Apple Silicon e macOS 15 ou mais novo; Macs Intel não são suportados. Precisa do yt-dlp e do Deno atuais, por exemplo instalados com o Homebrew.">For Macs with Apple Silicon on macOS 15 or newer; Intel Macs are not supported. Needs current yt-dlp and Deno, for example installed with Homebrew.</p>
+            <p class="inline-links"><span data-en="Get them:" data-pt="Onde obter:">Get them:</span> <a href="https://github.com/yt-dlp/yt-dlp/wiki/Installation">yt-dlp ↗</a> <a href="https://deno.com/">Deno ↗</a> <a href="https://brew.sh/">Homebrew ↗</a></p>
+            <details class="instructions"><summary data-en="Detailed instructions" data-pt="Instruções detalhadas">Detailed instructions</summary>
+            <ol class="steps">
+              <li data-en="Install yt-dlp and Deno first." data-pt="Instale primeiro o yt-dlp e o Deno.">Install yt-dlp and Deno first.</li>
+              <li data-en="Download the ZIP and double-click it to unzip." data-pt="Baixe o ZIP e dê dois cliques para descompactar.">Download the ZIP and double-click it to unzip.</li>
+              <li data-en="The first time, right-click YouTFast.app and choose Open, then confirm." data-pt="Na primeira vez, clique com o botão direito em YouTFast.app, escolha Abrir e confirme.">The first time, right-click YouTFast.app and choose Open, then confirm.</li>
+            </ol>
+            <p class="notice" data-en="The app is ad-hoc signed but not notarized by Apple, which is why macOS asks you to confirm the first time." data-pt="O aplicativo tem assinatura ad-hoc, mas não é notarizado pela Apple, por isso o macOS pede confirmação na primeira vez.">The app is ad-hoc signed but not notarized by Apple, which is why macOS asks you to confirm the first time.</p>
+            </details>
+          </article>
+          <article class="download-card" id="download-linux">
+            <div class="card-head"><h3>Linux</h3><p class="architecture">x86_64 · Flatpak</p><span class="recommended" hidden data-en="Recommended for your system" data-pt="Recomendado para o seu sistema">Recommended for your system</span></div>
+            <a class="button primary platform-download" href="https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/youtfast-v{{VERSION}}-x86_64.flatpak" data-en="Download the Flatpak (recommended)" data-pt="Baixar o Flatpak (recomendado)">Download the Flatpak (recommended)</a>
+            <p class="requirement" data-en="Includes everything it needs: libmpv, yt-dlp and Deno. You only need Flatpak installed." data-pt="Inclui tudo o que precisa: libmpv, yt-dlp e Deno. Você só precisa do Flatpak instalado.">Includes everything it needs: libmpv, yt-dlp and Deno. You only need Flatpak installed.</p>
+            <details class="instructions"><summary data-en="Detailed instructions" data-pt="Instruções detalhadas">Detailed instructions</summary>
+            <p class="inline-links"><span data-en="Install in a terminal:" data-pt="Instale em um terminal:">Install in a terminal:</span></p>
+            <pre tabindex="0"><code>flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak install --user ./youtfast-v{{VERSION}}-x86_64.flatpak
+flatpak run io.github.bcosta19.YouTFast</code></pre>
+            </details>
+            <p class="inline-links"><span data-en="Other options:" data-pt="Outras opções:">Other options:</span></p>
+            <ul class="alt-list">
+              <li><a href="https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/youtfast-v{{VERSION}}-x86_64-unknown-linux-gnu.tar.gz" data-en="Native archive (.tar.gz) ↗" data-pt="Arquivo nativo (.tar.gz) ↗">Native archive (.tar.gz) ↗</a> <span data-en="needs glibc 2.39+, libmpv, yt-dlp and a JS runtime" data-pt="precisa de glibc 2.39+, libmpv, yt-dlp e um runtime JS">needs glibc 2.39+, libmpv, yt-dlp and a JS runtime</span></li>
+              <li><a href="https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/youtfast-{{VERSION}}-1-x86_64.pkg.tar.zst" data-en="Arch Linux package ↗" data-pt="Pacote para Arch Linux ↗">Arch Linux package ↗</a> <span data-en="install with:" data-pt="instale com:">install with:</span> <code class="inline-code">sudo pacman -U ./youtfast-{{VERSION}}-1-x86_64.pkg.tar.zst</code></li>
+            </ul>
+            <p class="small-status" data-en="Flathub, AUR, Winget and Homebrew: not published yet." data-pt="Flathub, AUR, Winget e Homebrew: ainda não publicados.">Flathub, AUR, Winget and Homebrew: not published yet.</p>
+          </article>
+        </div>
+        <p class="checksums"><a href="https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/checksums.txt" data-en="checksums.txt (SHA-256) ↗" data-pt="checksums.txt (SHA-256) ↗">checksums.txt (SHA-256) ↗</a> <span data-en="lists the checksum of every download, so you can verify a file." data-pt="lista o checksum de cada download, para você conferir um arquivo.">lists the checksum of every download, so you can verify a file.</span></p>
+      </div>
+    </section>
+
     <section class="benchmark wrap section" id="benchmark" aria-labelledby="benchmark-title">
       <div class="benchmark-overview">
         <div class="benchmark-copy">
-          <h2 id="benchmark-title" data-en="Native software, measured." data-pt="Software nativo, com dados.">Native software, measured.</h2>
-          <p data-en="Less memory than YouTube running in an Electron wrapper." data-pt="Menos memória que o YouTube em um invólucro Electron.">Less memory than YouTube running in an Electron wrapper.</p>
+          <h2 id="benchmark-title" data-en="On a search page, about 4× less memory than a website-wrapper app." data-pt="Em uma página de busca, cerca de 4× menos memória que um app que embrulha o site.">On a search page, about 4× less memory than a website-wrapper app.</h2>
+          <p data-en="Many “YouTube desktop apps” are the YouTube website inside Electron. On the same search results page, YouTFast used 161 MiB of memory and an Electron wrapper used 658 MiB." data-pt="Muitos “apps de YouTube para desktop” são o site do YouTube dentro do Electron. Na mesma página de resultados de busca, o YouTFast usou 161 MiB de memória e um app Electron usou 658 MiB.">Many “YouTube desktop apps” are the YouTube website inside Electron. On the same search results page, YouTFast used 161 MiB of memory and an Electron wrapper used 658 MiB.</p>
+          <p class="measurement-note" data-en="Measured on YouTFast 0.1.0, not the current version: median of 3 runs on one Linux laptop, signed out, search results page only. Playback has not been compared yet." data-pt="Medido no YouTFast 0.1.0, não na versão atual: mediana de 3 execuções em um notebook Linux, sem conta, apenas na página de resultados de busca. A reprodução ainda não foi comparada.">Measured on YouTFast 0.1.0, not the current version: median of 3 runs on one Linux laptop, signed out, search results page only. Playback has not been compared yet.</p>
+          <a class="text-link" href="https://github.com/bcosta19/youtfast/blob/main/docs/benchmarks.md" data-en="Method and all runs ↗" data-pt="Método e todas as execuções ↗">Method and all runs ↗</a>
         </div>
         <div class="measurement">
-          <p class="measurement-label" data-en="Memory on a search results page" data-pt="Memória em uma página de resultados">Memory on a search results page</p>
+          <p class="measurement-label" data-en="Memory on a search results page (lower is better)" data-pt="Memória em uma página de resultados (menor é melhor)">Memory on a search results page (lower is better)</p>
           <div class="bar-label"><span>YouTFast 0.1.0</span><strong>161 MiB</strong></div>
           <div class="bar-track"><div class="bar native"></div></div>
           <div class="bar-label"><span>Electron + youtube.com</span><strong>658 MiB</strong></div>
           <div class="bar-track"><div class="bar electron"></div></div>
-          <p class="measurement-note" data-en="Median of 3 runs on one Linux laptop, signed out. Search only; playback was not compared." data-pt="Mediana de 3 execuções em um notebook Linux, sem login. Apenas busca; reprodução não comparada.">Median of 3 runs on one Linux laptop, signed out. Search only; playback was not compared.</p>
         </div>
       </div>
+      <div class="table-scroll">
+        <table class="bench-table">
+          <caption class="sr-only" data-en="Benchmark results, YouTFast 0.1.0 against an Electron wrapper of youtube.com" data-pt="Resultados do benchmark: YouTFast 0.1.0 contra um app Electron com youtube.com">Benchmark results, YouTFast 0.1.0 against an Electron wrapper of youtube.com</caption>
+          <thead><tr><th scope="col" data-en="Search results page" data-pt="Página de resultados">Search results page</th><th scope="col">YouTFast 0.1.0</th><th scope="col">Electron + youtube.com</th></tr></thead>
+          <tbody>
+            <tr><th scope="row" data-en="Memory, all processes" data-pt="Memória, todos os processos">Memory, all processes</th><td class="better">161 MiB</td><td>658 MiB</td></tr>
+            <tr><th scope="row" data-en="CPU while idle" data-pt="CPU em repouso">CPU while idle</th><td class="better">0%</td><td>18%</td></tr>
+            <tr><th scope="row" data-en="Processes" data-pt="Processos">Processes</th><td class="better">1</td><td>8</td></tr>
+            <tr><th scope="row" data-en="First window on screen (Electron is faster)" data-pt="Primeira janela na tela (o Electron é mais rápido)">First window on screen (Electron is faster)</th><td>1.1 s</td><td class="better">0.4 s</td></tr>
+            <tr><th scope="row" data-en="On disk" data-pt="Em disco">On disk</th><td class="better">31 MB</td><td>296 MB</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="measurement-note" data-en="Bold marks the better value. The disk figure is the YouTFast binary alone, without the system libmpv and yt-dlp it uses (the Flatpak bundles them), against the Electron runtime alone." data-pt="Negrito indica o melhor valor. O valor em disco é só o binário do YouTFast, sem o libmpv e o yt-dlp do sistema que ele usa (o Flatpak os inclui), contra só o runtime do Electron.">Bold marks the better value. The disk figure is the YouTFast binary alone, without the system libmpv and yt-dlp it uses (the Flatpak bundles them), against the Electron runtime alone.</p>
     </section>
 
-    <section class="downloads section" id="download" aria-labelledby="download-title">
-      <div class="wrap">
-        <div class="section-heading">
-          <div><h2 id="download-title" data-en="Download for your system." data-pt="Baixe para o seu sistema.">Download for your system.</h2></div>
-          <a class="release-link" href="https://github.com/bcosta19/youtfast/releases" data-en="All releases ↗" data-pt="Todas as versões ↗">All releases ↗</a>
-        </div>
-        <div class="download-grid">
-          <article class="download-card">
-            <div><h3>Linux</h3><p class="architecture">x86_64 · Flatpak</p></div>
-            <a class="button platform-download" href="https://github.com/bcosta19/youtfast/releases/latest" data-en="View packages for Linux ↗" data-pt="Ver pacotes para Linux ↗">View packages for Linux ↗</a>
-          </article>
-          <article class="download-card">
-            <div><h3>Windows</h3><p class="architecture">x86_64 · ZIP</p></div>
-            <a class="button platform-download" href="https://github.com/bcosta19/youtfast/releases/latest" data-en="View packages for Windows ↗" data-pt="Ver pacotes para Windows ↗">View packages for Windows ↗</a>
-          </article>
-          <article class="download-card">
-            <div><h3>macOS</h3><p class="architecture">Apple Silicon · macOS 15+</p></div>
-            <a class="button platform-download" href="https://github.com/bcosta19/youtfast/releases/latest" data-en="View packages for macOS ↗" data-pt="Ver pacotes para macOS ↗">View packages for macOS ↗</a>
-          </article>
-        </div>
-      </div>
-    </section>
 
     <section class="faq wrap section" id="faq" aria-labelledby="faq-title">
       <h2 id="faq-title" data-en="Common questions." data-pt="Perguntas frequentes.">Common questions.</h2>
       <div class="faq-list">
         <details>
+          <summary data-en="Is it free?" data-pt="É gratuito?">Is it free?</summary>
+          <p data-en="Yes. YouTFast is free software under the GPL-3.0-only license, and its source code is public on GitHub." data-pt="Sim. O YouTFast é software livre sob a licença GPL-3.0-only, e o código-fonte é público no GitHub.">Yes. YouTFast is free software under the GPL-3.0-only license, and its source code is public on GitHub.</p>
+        </details>
+        <details>
+          <summary data-en="Is it safe? What is open source?" data-pt="É seguro? O que é código aberto?">Is it safe? What is open source?</summary>
+          <p data-en="Open source means all of the application's code is public, so anyone can read it. It has no telemetry and no YouTFast server, and each release publishes a checksums.txt. A checksum only detects a corrupted or incomplete download; it cannot show that a release was not tampered with. Release builds come from the public GitHub Actions release workflow, so you can read how they are made. The Windows build has no publisher signature and the macOS build is not notarized, so those systems may ask you to confirm before opening it." data-pt="Código aberto significa que todo o código do aplicativo é público, então qualquer pessoa pode lê-lo. Não há telemetria nem servidor do YouTFast, e cada versão publica um checksums.txt. Um checksum só detecta um download corrompido ou incompleto; ele não prova que a versão não foi adulterada. Os pacotes das versões vêm do workflow público de release do GitHub Actions, então você pode ler como são feitos. O pacote do Windows não tem assinatura de editor e o do macOS não é notarizado, então esses sistemas podem pedir confirmação antes de abrir.">Open source means all of the application's code is public, so anyone can read it. It has no telemetry and no YouTFast server, and each release publishes a checksums.txt. A checksum only detects a corrupted or incomplete download; it cannot show that a release was not tampered with. Release builds come from the public GitHub Actions release workflow, so you can read how they are made. The Windows build has no publisher signature and the macOS build is not notarized, so those systems may ask you to confirm before opening it.</p>
+          <p><a class="text-link" href="https://github.com/bcosta19/youtfast/blob/main/.github/workflows/release.yml" data-en="Release workflow ↗" data-pt="Workflow de release ↗">Release workflow ↗</a></p>
+        </details>
+        <details>
           <summary data-en="Do I need a Google account?" data-pt="Preciso de uma conta Google?">Do I need a Google account?</summary>
-          <p data-en="No. Your library stays on this device. An account is optional, and its session is kept only in the system credential store. This unofficial integration can trigger Google verification or sign-out; a secondary account is safer." data-pt="Não. Sua biblioteca fica neste dispositivo. A conta é opcional, e a sessão fica somente no cofre do sistema. Essa integração não oficial pode provocar verificação ou encerramento da sessão pelo Google; uma conta secundária é mais segura.">No. Your library stays on this device. An account is optional, and its session is kept only in the system credential store. This unofficial integration can trigger Google verification or sign-out; a secondary account is safer.</p>
+          <p data-en="No. You can search, watch and keep a library on this computer without one. If you do sign in, we suggest using a secondary Google account: YouTube has no official sign-in for apps like this one, and Google may treat the session as automated access, which could ask the account to verify itself, sign it out or suspend it." data-pt="Não. Você pode buscar, assistir e manter uma biblioteca neste computador sem conta. Se for entrar, sugerimos usar uma conta Google secundária: o YouTube não tem login oficial para aplicativos como este, e o Google pode tratar a sessão como acesso automatizado, o que pode pedir verificação da conta, encerrar a sessão ou suspender a conta.">No. You can search, watch and keep a library on this computer without one. If you do sign in, we suggest using a secondary Google account: YouTube has no official sign-in for apps like this one, and Google may treat the session as automated access, which could ask the account to verify itself, sign it out or suspend it.</p>
+        </details>
+        <details>
+          <summary data-en="How does sign-in work?" data-pt="Como funciona o login?">How does sign-in work?</summary>
+          <p data-en="YouTFast does not ask for your password. It uses the YouTube session your browser already has, read from the browser's login or from a cookies.txt file you export. The session is stored only in your system's credential store, never in a file or a log." data-pt="O YouTFast não pede sua senha. Ele usa a sessão do YouTube que o seu navegador já tem, lida do login do navegador ou de um arquivo cookies.txt que você exporta. A sessão fica somente no cofre de credenciais do sistema, nunca em arquivo ou log.">YouTFast does not ask for your password. It uses the YouTube session your browser already has, read from the browser's login or from a cookies.txt file you export. The session is stored only in your system's credential store, never in a file or a log.</p>
+        </details>
+        <details>
+          <summary data-en="Will it break when YouTube changes?" data-pt="Vai quebrar quando o YouTube mudar?">Will it break when YouTube changes?</summary>
+          <p data-en="It can. YouTFast is an unofficial client, and a YouTube change can stop videos from loading. Often the fix is updating yt-dlp (the Flatpak bundles it, so install the next bundle). If it still fails, please open an issue." data-pt="Pode. O YouTFast é um cliente não oficial, e uma mudança no YouTube pode impedir o carregamento de vídeos. Muitas vezes a solução é atualizar o yt-dlp (o Flatpak o inclui, então instale o próximo pacote). Se continuar falhando, abra uma issue.">It can. YouTFast is an unofficial client, and a YouTube change can stop videos from loading. Often the fix is updating yt-dlp (the Flatpak bundles it, so install the next bundle). If it still fails, please open an issue.</p>
+        </details>
+        <details>
+          <summary data-en="How do I uninstall it?" data-pt="Como desinstalo?">How do I uninstall it?</summary>
+          <p data-en="Flatpak: run flatpak uninstall --user io.github.bcosta19.YouTFast. Arch package: remove youtfast with pacman. Windows and macOS have no installer, so delete the folder or app you extracted. Your library and settings stay in your user folders until you delete them." data-pt="Flatpak: execute flatpak uninstall --user io.github.bcosta19.YouTFast. Pacote Arch: remova o youtfast com o pacman. Windows e macOS não têm instalador, então apague a pasta ou o app que você extraiu. Sua biblioteca e suas configurações continuam nas suas pastas de usuário até você apagá-las.">Flatpak: run flatpak uninstall --user io.github.bcosta19.YouTFast. Arch package: remove youtfast with pacman. Windows and macOS have no installer, so delete the folder or app you extracted. Your library and settings stay in your user folders until you delete them.</p>
+        </details>
+        <details>
+          <summary data-en="What if Windows shows a warning?" data-pt="E se o Windows mostrar um aviso?">What if Windows shows a warning?</summary>
+          <p data-en="The Windows build has no publisher signature, so SmartScreen may warn about it. You can compare the file's SHA-256 with checksums.txt on the release page. If it matches and you trust the source, choose More info, then Run anyway." data-pt="O pacote do Windows não tem assinatura de editor, então o SmartScreen pode alertar. Você pode comparar o SHA-256 do arquivo com o checksums.txt na página da versão. Se coincidir e você confiar na origem, escolha Mais informações e depois Executar assim mesmo.">The Windows build has no publisher signature, so SmartScreen may warn about it. You can compare the file's SHA-256 with checksums.txt on the release page. If it matches and you trust the source, choose More info, then Run anyway.</p>
         </details>
         <details>
           <summary data-en="Is this an official YouTube app?" data-pt="Este é um aplicativo oficial do YouTube?">Is this an official YouTube app?</summary>
           <p data-en="No. YouTFast is independent and unaffiliated with YouTube or Google." data-pt="Não. O YouTFast é independente e não tem vínculo com YouTube ou Google.">No. YouTFast is independent and unaffiliated with YouTube or Google.</p>
         </details>
+        <details>
+          <summary data-en="Where can I get help?" data-pt="Onde consigo ajuda?">Where can I get help?</summary>
+          <p data-en="Open an issue on GitHub with your version, system and what happened. Portuguese is welcome." data-pt="Abra uma issue no GitHub com a sua versão, o sistema e o que aconteceu. Português é bem-vindo.">Open an issue on GitHub with your version, system and what happened. Portuguese is welcome.</p>
+          <p><a class="text-link" href="https://github.com/bcosta19/youtfast/issues" data-en="YouTFast issues on GitHub ↗" data-pt="Issues do YouTFast no GitHub ↗">YouTFast issues on GitHub ↗</a></p>
+        </details>
+      </div>
+    </section>
+
+    <section class="how wrap section" id="how-it-works" aria-labelledby="how-title">
+      <div class="section-heading">
+        <h2 id="how-title" data-en="How it works." data-pt="Como funciona.">How it works.</h2>
+        <p data-en="For the curious and for developers: where the data comes from, what stays on your computer and what can break." data-pt="Para curiosos e desenvolvedores: de onde vêm os dados, o que fica no seu computador e o que pode quebrar.">For the curious and for developers: where the data comes from, what stays on your computer and what can break.</p>
+      </div>
+      <div class="how-grid">
+        <div>
+          <h3 data-en="Where the data comes from" data-pt="De onde vêm os dados">Where the data comes from</h3>
+          <p data-en="Feeds, search, channels and account data come from YouTube's InnerTube interface through the RustyPipe library. yt-dlp finds the video streams and libmpv plays them. The interface is Rust with egui." data-pt="Feeds, busca, canais e dados da conta vêm da interface InnerTube do YouTube, pela biblioteca RustyPipe. O yt-dlp encontra os fluxos de vídeo e o libmpv os reproduz. A interface é Rust com egui.">Feeds, search, channels and account data come from YouTube's InnerTube interface through the RustyPipe library. yt-dlp finds the video streams and libmpv plays them. The interface is Rust with egui.</p>
+        </div>
+        <div>
+          <h3 data-en="What stays on your computer" data-pt="O que fica no seu computador">What stays on your computer</h3>
+          <p data-en="There is no YouTFast server and no telemetry. Your library and settings are files in your user folders, and the optional account session lives in your system's credential store." data-pt="Não existe servidor do YouTFast nem telemetria. Sua biblioteca e suas configurações são arquivos nas suas pastas de usuário, e a sessão da conta, opcional, fica no cofre de credenciais do sistema.">There is no YouTFast server and no telemetry. Your library and settings are files in your user folders, and the optional account session lives in your system's credential store.</p>
+        </div>
+        <div>
+          <h3 data-en="Network calls it makes" data-pt="Chamadas de rede que faz">Network calls it makes</h3>
+          <p data-en="To YouTube, for data, thumbnails and streams; to SponsorBlock, only if you turn it on; and to GitHub Releases, to check for new versions." data-pt="Para o YouTube, em busca de dados, miniaturas e vídeo; para o SponsorBlock, só se você ativar; e para o GitHub Releases, para verificar novas versões.">To YouTube, for data, thumbnails and streams; to SponsorBlock, only if you turn it on; and to GitHub Releases, to check for new versions.</p>
+        </div>
+        <div>
+          <h3 data-en="When YouTube changes" data-pt="Quando o YouTube muda">When YouTube changes</h3>
+          <p data-en="YouTube can change its responses and break extraction. Native packages keep yt-dlp separate so you can update it on its own; the Flatpak bundles it, so you install the next bundle. Fixes to YouTFast itself arrive in new releases." data-pt="O YouTube pode mudar suas respostas e quebrar a extração. Os pacotes nativos mantêm o yt-dlp separado, para você atualizá-lo por conta própria; o Flatpak o inclui, então você instala o próximo pacote. Correções do próprio YouTFast chegam em novas versões.">YouTube can change its responses and break extraction. Native packages keep yt-dlp separate so you can update it on its own; the Flatpak bundles it, so you install the next bundle. Fixes to YouTFast itself arrive in new releases.</p>
+        </div>
+        <div>
+          <h3 data-en="Accounts" data-pt="Contas">Accounts</h3>
+          <p data-en="YouTube offers no sign-in for apps like this, so YouTFast reuses a session from your browser's login or a cookies.txt file. Google may treat that as automated access, so a secondary account is the safe choice." data-pt="O YouTube não oferece login para aplicativos como este, então o YouTFast reaproveita uma sessão do login do seu navegador ou de um arquivo cookies.txt. O Google pode tratar isso como acesso automatizado, por isso uma conta secundária é a escolha segura.">YouTube offers no sign-in for apps like this, so YouTFast reuses a session from your browser's login or a cookies.txt file. Google may treat that as automated access, so a secondary account is the safe choice.</p>
+        </div>
+        <div>
+          <h3 data-en="Read more" data-pt="Saiba mais">Read more</h3>
+          <ul class="doc-links">
+            <li><a href="https://github.com/bcosta19/youtfast/blob/main/docs/user-guide.md" data-en="User guide ↗" data-pt="Guia do usuário ↗">User guide ↗</a></li>
+            <li><a href="https://github.com/bcosta19/youtfast/blob/main/docs/distribution.md" data-en="Installation and platforms ↗" data-pt="Instalação e plataformas ↗">Installation and platforms ↗</a></li>
+            <li><a href="https://github.com/bcosta19/youtfast/blob/main/docs/youtube-api-format.md" data-en="YouTube response formats ↗" data-pt="Formatos de resposta do YouTube ↗">YouTube response formats ↗</a></li>
+            <li><a href="https://github.com/bcosta19/youtfast" data-en="Source code ↗" data-pt="Código-fonte ↗">Source code ↗</a></li>
+          </ul>
+        </div>
       </div>
     </section>
   </main>
 
   <footer class="footer wrap">
+    <ul class="status-strip">
+      <li>v{{VERSION}}</li>
+      <li><a href="https://github.com/bcosta19/youtfast/blob/main/LICENSE">GPL-3.0-only</a></li>
+      <li data-en="Single maintainer" data-pt="Mantenedor único">Single maintainer</li>
+      <li><a href="https://github.com/bcosta19/youtfast/blob/main/CHANGELOG.md" data-en="Changelog" data-pt="Histórico de mudanças">Changelog</a></li>
+      <li><a href="https://github.com/bcosta19/youtfast/issues" data-en="Issues" data-pt="Issues">Issues</a></li>
+    </ul>
     <div class="footer-grid">
       <div class="footer-intro">
         <a class="brand" href="#"><img src="assets/youtfast.svg" width="30" height="30" alt=""><span>YouTFast</span></a>
         <p data-en="A native, open-source YouTube client for your desktop." data-pt="Um cliente YouTube nativo e de código aberto para o seu desktop.">A native, open-source YouTube client for your desktop.</p>
-        <a class="footer-source" href="https://github.com/bcosta19/youtfast">GitHub ↗</a>
+        <a class="footer-source" href="https://github.com/bcosta19/youtfast" data-en="Source code on GitHub ↗" data-pt="Código-fonte no GitHub ↗">Source code on GitHub ↗</a>
+        <p class="built-by" data-en="Independent, single-maintainer project: code, interface, packaging and this site." data-pt="Projeto independente de um único mantenedor: código, interface, empacotamento e este site.">Independent, single-maintainer project: code, interface, packaging and this site.</p>
+        <a class="footer-source" href="https://github.com/bcosta19" data-en="Author's GitHub profile (other projects) ↗" data-pt="Perfil do autor no GitHub (outros projetos) ↗">Author's GitHub profile (other projects) ↗</a>
       </div>
       <div class="footer-links">
-        <h2 data-en="On this page" data-pt="Nesta página">On this page</h2>
-        <nav aria-label="Project links"><a href="#experience" data-en="Features" data-pt="Recursos">Features</a><a href="#demo" data-en="Demo" data-pt="Demonstração">Demo</a><a href="#benchmark">Benchmark</a><a href="#download" data-en="Installation" data-pt="Instalação">Installation</a><a href="#faq" data-en="Common questions" data-pt="Perguntas frequentes">Common questions</a></nav>
+        <p class="footer-heading" data-en="On this page" data-pt="Nesta página">On this page</p>
+        <nav aria-label="Project links"><a href="#experience" data-en="Features" data-pt="Recursos">Features</a><a href="#demo" data-en="Demo" data-pt="Demonstração">Demo</a><a href="#download" data-en="Download" data-pt="Baixar">Download</a><a href="#benchmark">Benchmark</a><a href="#how-it-works" data-en="How it works" data-pt="Como funciona">How it works</a><a href="#faq" data-en="Common questions" data-pt="Perguntas frequentes">Common questions</a></nav>
       </div>
       <div class="footer-facts">
-        <h2 data-en="Project details" data-pt="Detalhes do projeto">Project details</h2>
+        <p class="footer-heading" data-en="Project details" data-pt="Detalhes do projeto">Project details</p>
         <dl>
           <div><dt data-en="License" data-pt="Licença">License</dt><dd><a href="https://github.com/bcosta19/youtfast/blob/main/LICENSE">GPL-3.0-only</a></dd></div>
           <div><dt data-en="Technology" data-pt="Tecnologia">Technology</dt><dd>Rust · egui · libmpv</dd></div>
@@ -232,7 +405,7 @@
         </dl>
       </div>
     </div>
-    <div class="footer-bottom"><p class="legal" data-en="Independent project; not affiliated with YouTube or Google. This website uses no analytics or third-party embeds." data-pt="Projeto independente, sem vínculo com YouTube ou Google. Este site não usa analytics nem embeds de terceiros.">Independent project; not affiliated with YouTube or Google. This website uses no analytics or third-party embeds.</p><a href="https://github.com/bcosta19/youtfast/blob/main/CHANGELOG.md">Changelog ↗</a></div>
+    <div class="footer-bottom"><p class="legal" data-en="Independent project; not affiliated with YouTube or Google. This website uses no analytics, external fonts or third-party embeds." data-pt="Projeto independente, sem vínculo com YouTube ou Google. Este site não usa analytics, fontes externas nem embeds de terceiros.">Independent project; not affiliated with YouTube or Google. This website uses no analytics, external fonts or third-party embeds.</p></div>
   </footer>
 </body>
 </html>
