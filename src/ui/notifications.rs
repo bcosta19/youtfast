@@ -8,7 +8,7 @@ use super::{results, widgets};
 use crate::app::State;
 use crate::appearance::theme;
 use crate::model::Action;
-use crate::util;
+use crate::util::{self, AgeBucket};
 
 pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
@@ -123,14 +123,18 @@ fn checked_line(state: &State) -> String {
 fn rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
 
-    let now = util::now();
+    let today = util::Today::at(util::now());
     let videos = &state.alerts_visit;
+    let buckets: Vec<AgeBucket> = videos
+        .iter()
+        .map(|video| today.bucket(video.published_at))
+        .collect();
     let mut start = 0;
     while start < videos.len() {
-        let day = util::age_bucket(videos[start].published_at, now);
-        let end = videos[start..]
+        let day = buckets[start];
+        let end = buckets[start..]
             .iter()
-            .position(|video| util::age_bucket(video.published_at, now) != day)
+            .position(|bucket| *bucket != day)
             .map_or(videos.len(), |offset| start + offset);
         widgets::section(ui, &state.palette, &capitalized(day, locale), None, |ui| {
             for (index, video) in videos.iter().enumerate().take(end).skip(start) {
@@ -152,15 +156,15 @@ fn rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     }
 }
 
-/// `today` → `Today`.
-pub(super) fn capitalized(text: &str, locale: Locale) -> String {
-    let source = match text {
-        "today" => "Today",
-        "yesterday" => "Yesterday",
-        "this week" => "This week",
-        "this month" => "This month",
-        "undated" => "",
-        _ => "Earlier",
+/// `Today` → "Today", translated.
+pub(super) fn capitalized(bucket: AgeBucket, locale: Locale) -> String {
+    let source = match bucket {
+        AgeBucket::Today => "Today",
+        AgeBucket::Yesterday => "Yesterday",
+        AgeBucket::ThisWeek => "This week",
+        AgeBucket::ThisMonth => "This month",
+        AgeBucket::Undated => "",
+        AgeBucket::Earlier => "Earlier",
     };
     tr(locale, source).into_owned()
 }

@@ -60,7 +60,13 @@ impl Video {
 
     /// The 320x180 thumbnail every video has.
     pub fn thumbnail(&self) -> String {
-        format!("https://i.ytimg.com/vi/{}/mqdefault.jpg", self.id)
+        const HEAD: &str = "https://i.ytimg.com/vi/";
+        const TAIL: &str = "/mqdefault.jpg";
+        let mut url = String::with_capacity(HEAD.len() + self.id.len() + TAIL.len());
+        url.push_str(HEAD);
+        url.push_str(&self.id);
+        url.push_str(TAIL);
+        url
     }
 
     /// Fills what this one lacks from `other`, the same video described by
@@ -276,7 +282,7 @@ pub struct SaveTarget {
 }
 
 /// The tab a channel page shows.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ChannelTab {
     #[default]
     Videos,
@@ -454,10 +460,10 @@ impl FeedFilter {
 
     /// Whether the video passes; `watched` says whether it is in the
     /// history.
-    pub fn keeps(self, video: &Video, watched: bool, now: i64) -> bool {
+    pub fn keeps(self, video: &Video, watched: bool, today: &crate::util::Today) -> bool {
         match self {
             FeedFilter::ForYou | FeedFilter::All => true,
-            FeedFilter::Today => crate::util::age_bucket(video.published_at, now) == "today",
+            FeedFilter::Today => today.bucket(video.published_at) == crate::util::AgeBucket::Today,
             FeedFilter::Unwatched => !watched,
             FeedFilter::Live => video.live,
         }
@@ -747,6 +753,7 @@ mod tests {
     #[test]
     fn the_feed_chips_keep_what_they_say() {
         let now = crate::util::now();
+        let today = crate::util::Today::at(now);
         let mut fresh = Video::from_id("a".to_owned());
         fresh.published_at = Some(now);
         let mut old = Video::from_id("b".to_owned());
@@ -754,13 +761,13 @@ mod tests {
         let mut live = Video::from_id("c".to_owned());
         live.live = true;
 
-        assert!(FeedFilter::All.keeps(&old, true, now));
-        assert!(FeedFilter::Today.keeps(&fresh, false, now));
-        assert!(!FeedFilter::Today.keeps(&old, false, now));
-        assert!(!FeedFilter::Today.keeps(&live, false, now));
-        assert!(FeedFilter::Unwatched.keeps(&old, false, now));
-        assert!(!FeedFilter::Unwatched.keeps(&fresh, true, now));
-        assert!(FeedFilter::Live.keeps(&live, false, now));
-        assert!(!FeedFilter::Live.keeps(&fresh, false, now));
+        assert!(FeedFilter::All.keeps(&old, true, &today));
+        assert!(FeedFilter::Today.keeps(&fresh, false, &today));
+        assert!(!FeedFilter::Today.keeps(&old, false, &today));
+        assert!(!FeedFilter::Today.keeps(&live, false, &today));
+        assert!(FeedFilter::Unwatched.keeps(&old, false, &today));
+        assert!(!FeedFilter::Unwatched.keeps(&fresh, true, &today));
+        assert!(FeedFilter::Live.keeps(&live, false, &today));
+        assert!(!FeedFilter::Live.keeps(&fresh, false, &today));
     }
 }

@@ -19,7 +19,7 @@ pub type Catalog = fastframe_theme::Catalog<Palette>;
 /// nor the user has installed one.
 pub const OMARCHY_TEMPLATE: &str = include_str!("../../contrib/omarchy/youtfast.json.tpl");
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Palette {
     pub dark: bool,
     pub window: Color32,
@@ -258,6 +258,20 @@ pub enum InterfaceFont {
     Inter,
 }
 
+/// Counts font swaps: text laid out before one is drawn from an atlas that
+/// no longer exists, so anything that keeps galleys must forget them.
+static FONTS_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Changes whenever the fonts do.
+pub fn fonts_epoch() -> u64 {
+    FONTS_EPOCH.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn set_fonts(ctx: &egui::Context, fonts: egui::FontDefinitions) {
+    FONTS_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    ctx.set_fonts(fonts);
+}
+
 impl InterfaceFont {
     pub const ALL: [Self; 2] = [Self::System, Self::Inter];
 
@@ -307,7 +321,7 @@ pub fn system_face_missing() -> bool {
 /// Inter and not the system's face: the same on every machine, for tests
 /// and the demo.
 pub fn install_fonts(ctx: &egui::Context) {
-    ctx.set_fonts(font_definitions(InterfaceFont::Inter, true));
+    set_fonts(ctx, font_definitions(InterfaceFont::Inter, true));
 }
 
 /// The fonts for `choice`. With `system_fallbacks` this also looks for the
@@ -414,17 +428,17 @@ impl SystemFonts {
         if self.poll(ctx) {
             return true;
         }
-        ctx.set_fonts(font_definitions(self.choice, false));
+        set_fonts(ctx, font_definitions(self.choice, false));
         false
     }
 
     /// Swaps in the complete fonts once found; true when they are in.
     pub fn poll(&self, ctx: &egui::Context) -> bool {
         match self.found.try_recv() {
-            Ok(fonts) => ctx.set_fonts(fonts),
+            Ok(fonts) => set_fonts(ctx, fonts),
             Err(std::sync::mpsc::TryRecvError::Empty) => return false,
             Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                ctx.set_fonts(font_definitions(self.choice, true));
+                set_fonts(ctx, font_definitions(self.choice, true));
             }
         }
         // New fonts take effect from the next pass.

@@ -4,6 +4,8 @@
 //! or a card, the playlist as a row, the search field, and rich text.
 
 use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
+use std::sync::Arc;
+
 use egui::text::LayoutJob;
 use egui::{
     Color32, CornerRadius, CursorIcon, FontId, Galley, Id, Pos2, Rect, Response, Sense, Stroke, Ui,
@@ -148,7 +150,7 @@ pub fn card<R>(
 /// The palette for pills and chips on a [`card`]: the card is `surface`,
 /// so they sit a step brighter.
 pub fn on_card(palette: &Palette) -> Palette {
-    let mut raised = palette.clone();
+    let mut raised = *palette;
     raised.surface = palette.surface_hover;
     raised.surface_hover = palette.surface_active;
     raised
@@ -609,12 +611,13 @@ fn video_text(
         painter.galley(pos2(at.x, y), galley, palette.secondary);
         y += height + 1.0;
     }
-    let rest = [Some(meta(video, locale)), note.map(str::to_owned)]
-        .into_iter()
-        .flatten()
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(" · ");
+    let mut rest = meta(video, locale);
+    if let Some(note) = note.filter(|note| !note.is_empty()) {
+        if !rest.is_empty() {
+            rest.push_str(" · ");
+        }
+        rest.push_str(note);
+    }
     if !rest.is_empty() {
         let galley = lines(&rest, theme::regular(13.0), palette.secondary, 1);
         let height = galley.rect.height();
@@ -1142,6 +1145,10 @@ fn span_action(span: &Span) -> Option<Action> {
     }
 }
 
+/// The clickable spans' byte ranges in a job's text, with the span each came
+/// from (its action is built only when it is clicked).
+type SpanLinks = Arc<[(std::ops::Range<usize>, usize)]>;
+
 /// The spans laid out: each span one section, clickable ones remembered
 /// by their byte range in the job's text.
 fn span_job(
@@ -1149,11 +1156,11 @@ fn span_job(
     palette: &Palette,
     width: f32,
     max_rows: Option<usize>,
-) -> (LayoutJob, Vec<(std::ops::Range<usize>, Action)>) {
+) -> (LayoutJob, Vec<(std::ops::Range<usize>, usize)>) {
     let mut job = LayoutJob::default();
     let mut links = Vec::new();
-    for span in spans {
-        let clickable = span_action(span).is_some();
+    for (index, span) in spans.iter().enumerate() {
+        let clickable = !matches!(span, Span::Text(_));
         let format = egui::TextFormat::simple(
             theme::regular(14.0),
             if clickable {
@@ -1164,8 +1171,8 @@ fn span_job(
         );
         let start = job.text.len();
         job.append(span.text(), 0.0, format);
-        if clickable && let Some(action) = span_action(span) {
-            links.push((start..job.text.len(), action));
+        if clickable {
+            links.push((start..job.text.len(), index));
         }
     }
     job.wrap.max_width = width;
@@ -1184,15 +1191,14 @@ fn span_job(
 /// text again for every comment.
 pub fn spans_truncated(ui: &Ui, id: Id, spans: &[Span], max_rows: usize) -> bool {
     let width = ui.available_width();
-    if let Some((cached, truncated)) = ui.ctx().data_mut(|d| d.get_persisted::<(f32, bool)>(id))
+    if let Some((cached, truncated)) = ui.ctx().data_mut(|d| d.get_temp::<(f32, bool)>(id))
         && cached == width
     {
         return truncated;
     }
     let (job, _) = span_job(spans, &Palette::dark(), width, None);
     let truncated = ui.painter().layout_job(job).rows.len() > max_rows;
-    ui.ctx()
-        .data_mut(|d| d.insert_persisted(id, (width, truncated)));
+    ui.ctx().data_mut(|d| d.insert_temp(id, (width, truncated)));
     truncated
 }
 
@@ -1200,8 +1206,8 @@ pub fn spans_truncated(ui: &Ui, id: Id, spans: &[Span], max_rows: usize) -> bool
 fn span_at<'a>(
     galley: &Galley,
     at: Pos2,
-    links: &'a [(std::ops::Range<usize>, Action)],
-) -> Option<&'a (std::ops::Range<usize>, Action)> {
+    links: &'a [(std::ops::Range<usize>, usize)],
+) -> Option<&'a (std::ops::Range<usize>, usize)> {
     for row in &galley.rows {
         for glyph in &row.row.glyphs {
             let rect = Rect::from_min_size(
@@ -1217,6 +1223,41 @@ fn span_at<'a>(
     None
 }
 
+/// A laid-out `rich_text`, kept while its spans, width, colours, row limit
+/// and the fonts stay the same.
+#[derive(Clone)]
+struct RichLayout {
+    signature: u64,
+    galley: Arc<Galley>,
+    links: SpanLinks,
+}
+
+/// What a `rich_text` layout depends on, hashed without building it.
+fn rich_signature(
+    spans: &[Span],
+    palette: &Palette,
+    width: f32,
+    max_rows: Option<usize>,
+    pixels_per_point: f32,
+) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    (
+        width.to_bits(),
+        palette.text,
+        palette.blue,
+        max_rows,
+        pixels_per_point.to_bits(),
+        theme::fonts_epoch(),
+    )
+        .hash(&mut hasher);
+    for span in spans {
+        std::mem::discriminant(span).hash(&mut hasher);
+        span.text().hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
 /// Descriptions and comments: spans wrapped to the width, links in blue
 /// and underlined on hover. Returns the action a clicked span wants.
 pub fn rich_text(
@@ -1226,8 +1267,30 @@ pub fn rich_text(
     max_rows: Option<usize>,
     locale: Locale,
 ) -> Option<Action> {
-    let (job, links) = span_job(spans, palette, ui.available_width(), max_rows);
-    let galley = ui.painter().layout_job(job);
+    // The id the text's widget gets below: stable from frame to frame.
+    let id = ui.next_auto_id();
+    let signature = rich_signature(
+        spans,
+        palette,
+        ui.available_width(),
+        max_rows,
+        ui.ctx().pixels_per_point(),
+    );
+    let cached = ui
+        .ctx()
+        .data(|data| data.get_temp::<RichLayout>(id))
+        .filter(|cached| cached.signature == signature);
+    let RichLayout { galley, links, .. } = cached.unwrap_or_else(|| {
+        let (job, links) = span_job(spans, palette, ui.available_width(), max_rows);
+        let layout = RichLayout {
+            signature,
+            galley: ui.painter().layout_job(job),
+            links: links.into(),
+        };
+        ui.ctx()
+            .data_mut(|data| data.insert_temp(id, layout.clone()));
+        layout
+    });
     let size = galley.size();
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     ui.painter().galley(rect.min, galley.clone(), palette.text);
@@ -1257,9 +1320,9 @@ pub fn rich_text(
     }
     if response.clicked()
         && let Some(at) = response.interact_pointer_pos()
-        && let Some((_, action)) = span_at(&galley, at - rect.min.to_vec2(), &links)
+        && let Some((_, span)) = span_at(&galley, at - rect.min.to_vec2(), &links)
     {
-        return Some(action.clone());
+        return span_action(&spans[*span]);
     }
     // Lets the description or a comment's text be copied to the
     // clipboard, since the galley is painted by hand and cannot be
@@ -1334,18 +1397,23 @@ fn meta(video: &Video, locale: Locale) -> String {
     if video.live {
         return tr(locale, "Live now").into_owned();
     }
-    let parts: Vec<String> = [
-        video.views.map(|count| util::views(count, locale)),
-        video.published.clone().or_else(|| {
-            video
-                .published_at
-                .map(|at| util::ago(at, util::now(), locale))
-        }),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-    parts.join(" · ")
+    let mut meta = String::new();
+    if let Some(count) = video.views {
+        meta.push_str(&util::views(count, locale));
+    }
+    let published = video.published.as_deref().map(std::borrow::Cow::Borrowed);
+    let published = published.or_else(|| {
+        video
+            .published_at
+            .map(|at| std::borrow::Cow::Owned(util::ago(at, util::now(), locale)))
+    });
+    if let Some(published) = published {
+        if video.views.is_some() {
+            meta.push_str(" · ");
+        }
+        meta.push_str(&published);
+    }
+    meta
 }
 
 #[cfg(test)]

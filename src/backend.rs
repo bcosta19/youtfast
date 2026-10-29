@@ -83,7 +83,13 @@ struct Context {
     thumb_pending: Arc<std::sync::Mutex<HashSet<String>>>,
     /// At most this many thumbnail downloads at a time.
     thumb_sem: Arc<tokio::sync::Semaphore>,
+    /// At most this many cache files are read at a time, so a page of
+    /// thumbnails does not queue hundreds of blocking reads at once.
+    thumb_disk_sem: Arc<tokio::sync::Semaphore>,
 }
+
+/// How many thumbnails are read from the disk cache at once.
+const THUMB_DISK_READS: usize = 8;
 
 impl Context {
     fn send(&self, event: Event) {
@@ -125,6 +131,7 @@ impl Backend {
             thumb_sem: Arc::new(tokio::sync::Semaphore::new(
                 crate::youtube::thumbs::DOWNLOADS,
             )),
+            thumb_disk_sem: Arc::new(tokio::sync::Semaphore::new(THUMB_DISK_READS)),
         };
         let backend = Self {
             commands,
@@ -733,12 +740,12 @@ async fn handle(command: Command, context: Context) {
         }
         Command::CacheThumbnails(urls) => {
             let dir = context.dirs.cache.join("thumbnails");
-            let _ = std::fs::create_dir_all(&dir);
             for (url, refresh) in urls {
                 if !context.thumb_pending.lock().unwrap().insert(url.clone()) {
                     continue;
                 }
                 let path = crate::youtube::thumbs::path(&dir, &url);
+                let dir = dir.clone();
                 let context = context.clone();
                 tokio::spawn(async move {
                     // A kept file answers at once: only downloads wait for
@@ -748,17 +755,24 @@ async fn handle(command: Command, context: Context) {
                         None
                     } else {
                         let path = path.clone();
-                        tokio::task::spawn_blocking(move || crate::youtube::thumbs::cached(&path))
-                            .await
-                            .ok()
-                            .flatten()
+                        let dir = dir.clone();
+                        let _turn = context.thumb_disk_sem.acquire().await;
+                        tokio::task::spawn_blocking(move || {
+                            let _ = std::fs::create_dir_all(&dir);
+                            crate::youtube::thumbs::cached(&path)
+                        })
+                        .await
+                        .ok()
+                        .flatten()
                     };
                     let result = match kept {
                         Some(bytes) => Ok(bytes),
                         None => {
                             let _permit = context.thumb_sem.acquire().await;
                             let task = url.clone();
+                            let dir = dir.clone();
                             tokio::task::spawn_blocking(move || {
+                                let _ = std::fs::create_dir_all(&dir);
                                 crate::youtube::thumbs::load_or_fetch(&task, &path, refresh)
                             })
                             .await
@@ -1728,6 +1742,7 @@ mod tests {
             thumb_sem: Arc::new(tokio::sync::Semaphore::new(
                 crate::youtube::thumbs::DOWNLOADS,
             )),
+            thumb_disk_sem: Arc::new(tokio::sync::Semaphore::new(THUMB_DISK_READS)),
         };
         // Slow downloads hold every turn.
         let _turns = context

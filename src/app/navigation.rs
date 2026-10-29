@@ -188,7 +188,7 @@ impl State {
         egui::Id::new((
             self.view as u8,
             page,
-            format!("{:?}", self.channel_tab),
+            &self.channel_tab,
             self.search_query.as_str(),
             self.source as u8,
         ))

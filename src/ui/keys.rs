@@ -153,7 +153,12 @@ pub(super) fn handle(
                     state.page_scroll += (up as f32 - down as f32) * KEY_SCROLL_STEP;
                 }
             }
-            let count = cursor_count(state);
+            // The row count can cost a rebuild of the list, so only ask for it
+            // when a key that moves or opens the cursor was pressed.
+            let moves = [Key::J, Key::K, Key::G, Key::Enter]
+                .into_iter()
+                .any(|key| input.key_pressed(key));
+            let count = if moves { cursor_count(state) } else { 0 };
             if count > 0 {
                 if input.key_pressed(Key::J) {
                     state.cursor = (state.cursor + 1).min(count - 1);
