@@ -241,7 +241,7 @@ fn main() -> eframe::Result {
     };
     // The installed fonts for other scripts are looked for while the window
     // and its OpenGL context are made.
-    let fonts = theme::SystemFonts::find();
+    let fonts = theme::SystemFonts::find(saved_settings().unwrap_or_default().interface_font);
     // Only the owning instance opens the rotating log, avoiding writers from
     // short-lived launcher processes racing with log rotation.
     if diagnostics::init(filter).is_err() {
@@ -291,14 +291,18 @@ fn needs_opengl(error: &eframe::Error) -> bool {
     )
 }
 
-/// The interface language for a message shown before any window: read from
-/// the settings without moving or writing them, English otherwise.
-fn saved_language() -> appearance::i18n::Locale {
+/// The settings as saved, read without moving or writing them, for what is
+/// needed before the app loads them: `None` when they cannot be read.
+fn saved_settings() -> Option<storage::settings::Settings> {
     storage::paths::Dirs::locate()
         .and_then(|dirs| std::fs::read(dirs.settings()).ok())
-        .and_then(|bytes| serde_json::from_slice::<storage::settings::Settings>(&bytes).ok())
-        .map(|settings| settings.language)
-        .unwrap_or_default()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+}
+
+/// The interface language for a message shown before any window: English
+/// when the settings cannot be read.
+fn saved_language() -> appearance::i18n::Locale {
+    saved_settings().unwrap_or_default().language
 }
 
 /// The app's mark, the one the desktop entry names: the full drawing, or

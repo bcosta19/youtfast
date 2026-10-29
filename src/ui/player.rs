@@ -745,7 +745,8 @@ fn time_label(
     if available < 28.0 {
         return;
     }
-    let font = theme::regular(13.0);
+    // Digits that keep their width, so the label does not jitter as it counts.
+    let font = theme::tabular(13.0);
     let full_width = ui
         .painter()
         .layout_no_wrap(time.clone(), font.clone(), Color32::WHITE)
@@ -1966,6 +1967,7 @@ mod tests {
     fn single_and_double_clicks_have_distinct_playback_effects() {
         for double in [false, true] {
             let ctx = egui::Context::default();
+            crate::appearance::theme::install_fonts(&ctx);
             let mut state = State {
                 view: crate::model::View::Watch,
                 watching: Some(Video::from_id("aaaaaaaaaaa".into())),
@@ -2029,6 +2031,7 @@ mod tests {
     #[test]
     fn keyboard_focus_reveals_playing_video_controls() {
         let ctx = egui::Context::default();
+        crate::appearance::theme::install_fonts(&ctx);
         let mut state = State {
             view: crate::model::View::Watch,
             watching: Some(Video::from_id("aaaaaaaaaaa".into())),
