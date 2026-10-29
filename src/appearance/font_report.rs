@@ -23,6 +23,9 @@ pub struct Report {
     pub desktop: Option<String>,
     /// What `fc-match system-ui` prints, where fontconfig is installed.
     pub system_ui: Option<String>,
+    /// The interface font the desktop is configured with (GNOME's
+    /// `font-name`, GTK's or KDE's setting), on Linux.
+    pub desktop_font: Option<String>,
 }
 
 impl Report {
@@ -34,6 +37,7 @@ impl Report {
             os: operating_system(),
             desktop: desktop(),
             system_ui: fc_match(),
+            desktop_font: super::desktop_font::configured_family(),
         }
     }
 
@@ -47,6 +51,12 @@ impl Report {
         ];
         if let Some(desktop) = &self.desktop {
             lines.push(format!("- Desktop session: {}", field(desktop)));
+        }
+        if let Some(configured) = &self.desktop_font {
+            lines.push(format!(
+                "- Desktop's configured interface font: {}",
+                field(configured)
+            ));
         }
         if let Some(system_ui) = &self.system_ui {
             lines.push(format!("- `fc-match system-ui`: {}", field(system_ui)));
@@ -113,8 +123,12 @@ fn operating_system() -> String {
 
 #[cfg(target_os = "windows")]
 fn operating_system() -> String {
+    use std::os::windows::process::CommandExt as _;
+    // The release build is a GUI app on Windows; without this flag a
+    // console window would flash.
     let version = Command::new("cmd")
         .args(["/C", "ver"])
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
         .output()
         .ok()
         .and_then(|output| String::from_utf8(output.stdout).ok())
@@ -146,6 +160,7 @@ mod tests {
             os: "Linux, Arch Linux".into(),
             desktop: Some("Hyprland".into()),
             system_ui: Some("Liberation Sans: \"Regular\" & more".into()),
+            desktop_font: Some("Adwaita Sans".into()),
         }
     }
 
@@ -177,6 +192,7 @@ mod tests {
         assert!(body.contains("- YouTFast: 0.4.0\n"));
         assert!(body.contains("- OS: Linux, Arch Linux\n"));
         assert!(body.contains("- Desktop session: Hyprland\n"));
+        assert!(body.contains("- Desktop's configured interface font: Adwaita Sans\n"));
         assert!(body.contains("- `fc-match system-ui`: Liberation Sans: \"Regular\" & more\n"));
         assert!(body.contains("Which font does your desktop use"));
     }
@@ -186,12 +202,14 @@ mod tests {
         let body = Report {
             desktop: None,
             system_ui: None,
+            desktop_font: None,
             os: "x".repeat(5000),
             ..report()
         }
         .body();
         assert!(!body.contains("Desktop session"));
         assert!(!body.contains("fc-match"));
+        assert!(!body.contains("configured"));
         assert!(body.len() < 600);
     }
 

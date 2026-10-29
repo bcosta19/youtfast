@@ -14,7 +14,9 @@ before decoration. Every keyboard binding stays; the `?` overlay lists them.
 
 ## Type
 
-- The desktop's own interface face by default (San Francisco, Segoe UI,
+- The desktop's own interface face by default (San Francisco, Segoe UI; on
+  Linux the font the desktop is configured with, read from GNOME's
+  `font-name`, GTK's or KDE's settings by `appearance::desktop_font`, then
   fontconfig's `system-ui`), at four weights through fastframe-fonts
   (`Primary::System`), installed faces behind it for other scripts, and the
   desktop's text rendering. When that face cannot be found or read, the

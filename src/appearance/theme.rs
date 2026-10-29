@@ -8,6 +8,8 @@ use std::borrow::Cow;
 
 use egui::{Color32, Stroke};
 
+use super::desktop_font;
+
 /// A palette file from the themes directory.
 pub type CustomTheme = fastframe_theme::CustomTheme<Palette>;
 /// The palette files, and the Omarchy palette where the desktop has one.
@@ -308,13 +310,34 @@ pub fn install_fonts(ctx: &egui::Context) {
     ctx.set_fonts(font_definitions(InterfaceFont::Inter, true));
 }
 
+/// The fonts for `choice`. With `system_fallbacks` this also looks for the
+/// system's faces, running tools that can take a second, so it belongs on
+/// the font thread; without it nothing is looked for, and a system face not
+/// found yet is Inter until the search ends.
+///
+/// The system face is, in order: the desktop's configured font (Linux),
+/// the platform's interface face (`Primary::System`: San Francisco, Segoe
+/// UI, fontconfig's `system-ui`), then Inter.
 fn font_definitions(choice: InterfaceFont, system_fallbacks: bool) -> egui::FontDefinitions {
+    let desktop = match (choice, system_fallbacks) {
+        (InterfaceFont::System, true) => desktop_font::interface(),
+        (InterfaceFont::System, false) => desktop_font::cached(),
+        (InterfaceFont::Inter, _) => None,
+    };
+    let primary = if choice == InterfaceFont::System && desktop.is_none() && system_fallbacks {
+        InterfaceFont::System.primary()
+    } else {
+        InterfaceFont::Inter.primary()
+    };
     let mut fonts = fastframe_fonts::FontSetup::default()
-        .primary(choice.primary())
+        .primary(primary)
         .system_fallbacks(system_fallbacks)
         .definitions();
-    if choice == InterfaceFont::System {
-        let _ = SYSTEM_FACE_MISSING.set(draws_with_inter(&fonts));
+    if let Some(desktop) = desktop {
+        desktop.apply(&mut fonts);
+    }
+    if choice == InterfaceFont::System && system_fallbacks {
+        let _ = SYSTEM_FACE_MISSING.set(desktop.is_none() && draws_with_inter(&fonts));
     }
     add_tabular(&mut fonts);
     text_rendering().apply_to(&mut fonts);
@@ -689,7 +712,7 @@ mod tests {
 
     #[test]
     fn the_system_choice_builds_fonts_with_the_same_families() {
-        let system = font_definitions(InterfaceFont::System, false);
+        let system = font_definitions(InterfaceFont::System, false); // nothing looked for
         let inter = font_definitions(InterfaceFont::Inter, false);
         assert_eq!(
             system
@@ -701,8 +724,13 @@ mod tests {
                 .keys()
                 .collect::<std::collections::HashSet<_>>()
         );
-        // The notice follows what happened to the lookup.
-        assert_eq!(system_face_missing(), draws_with_inter(&system));
+        // The notice follows what happened to the lookup: Inter drew
+        // because neither the desktop's font nor the platform's was found.
+        let searched = font_definitions(InterfaceFont::System, true);
+        assert_eq!(
+            system_face_missing(),
+            desktop_font::cached().is_none() && draws_with_inter(&searched)
+        );
     }
 
     #[test]
