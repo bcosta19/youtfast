@@ -29,6 +29,7 @@ impl State {
         self.subscriptions_more = None;
         self.subscriptions_more_state = Fetch::Idle;
         self.account_history = Listing::Idle;
+        self.account_history_generation += 1;
         self.history_needs_refresh = false;
         self.history_requested_at = None;
         self.history_filter = crate::logic::history::HistoryFilter::All;

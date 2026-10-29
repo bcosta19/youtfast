@@ -42,6 +42,66 @@ pub enum Page {
     Playlist { id: String, name: String },
 }
 
+/// What [`State::history_cache`] was built from; any change rebuilds it.
+#[derive(Debug)]
+struct HistoryKey {
+    library: u64,
+    device_len: usize,
+    account: u64,
+    account_len: usize,
+    source: Option<Source>,
+    merged: bool,
+    query: String,
+    requested_at: Option<i64>,
+    /// `merge` reads the clock when no request time is known; its sections
+    /// only move at midnight (UTC).
+    day: i64,
+}
+
+impl HistoryKey {
+    fn of(state: &State) -> Self {
+        Self {
+            library: state.library.history_stamp(),
+            device_len: state.library.history.len(),
+            account: state.account_history_generation,
+            account_len: state.account_history.items().len(),
+            source: state.history_source(),
+            merged: state.merged_history(),
+            query: state.history_query.clone(),
+            requested_at: state.history_requested_at,
+            day: Self::day(state),
+        }
+    }
+
+    fn day(state: &State) -> i64 {
+        match state.history_requested_at {
+            Some(_) => 0,
+            None => util::now().div_euclid(86_400),
+        }
+    }
+
+    /// Whether `state` would give the same key, without building one.
+    fn is_current(&self, state: &State) -> bool {
+        self.library == state.library.history_stamp()
+            && self.device_len == state.library.history.len()
+            && self.account == state.account_history_generation
+            && self.account_len == state.account_history.items().len()
+            && self.source == state.history_source()
+            && self.merged == state.merged_history()
+            && self.query == state.history_query
+            && self.requested_at == state.history_requested_at
+            && self.day == Self::day(state)
+    }
+}
+
+/// History's rows as indices, with the day sections they fall into.
+#[derive(Debug)]
+pub struct HistoryCache {
+    key: HistoryKey,
+    pub entries: Vec<crate::logic::history::Entry>,
+    pub runs: Vec<crate::logic::history::Run>,
+}
+
 /// What the views draw from.
 #[derive(Default)]
 pub struct State {
@@ -92,6 +152,11 @@ pub struct State {
     pub subscriptions_more: Option<innertube::More>,
     pub subscriptions_more_state: Fetch<()>,
     pub account_history: Listing<HistoryRow>,
+    /// Bumped whenever `account_history` changes, so `history_rows` knows
+    /// when to rebuild.
+    pub account_history_generation: u64,
+    /// History's merged, filtered rows (see [`State::history_cache`]).
+    pub history_cache: std::cell::RefCell<Option<HistoryCache>>,
     pub history_more: Option<innertube::More>,
     pub history_more_state: Fetch<()>,
     pub account_watch_later: Listing<Video>,
@@ -345,7 +410,7 @@ impl State {
         }
     }
 
-    pub fn history_rows(&self) -> Vec<crate::logic::history::Row<'_>> {
+    fn build_history_rows(&self) -> Vec<crate::logic::history::Row<'_>> {
         use crate::logic::history;
         let mut rows = match self.history_source() {
             None => history::merge(
@@ -377,9 +442,68 @@ impl State {
                 .collect(),
         };
         if self.history_source() != Some(Source::Account) || self.merged_history() {
-            rows.retain(|row| row.matches(&self.history_query));
+            let query = self.history_query.trim().to_lowercase();
+            rows.retain(|row| row.matches_lowered(&query));
         }
         rows
+    }
+
+    /// History's rows as the page shows them, rebuilt only when what they
+    /// come from changes (the device history, the account's, the filter, the
+    /// search or the day) rather than on every frame.
+    pub fn history_cache(&self) -> std::cell::Ref<'_, HistoryCache> {
+        let current = self
+            .history_cache
+            .borrow()
+            .as_ref()
+            .is_some_and(|cache| cache.key.is_current(self));
+        if !current {
+            let rows = self.build_history_rows();
+            let entries = crate::logic::history::entries(
+                &rows,
+                self.account_history.items(),
+                &self.library.history,
+            );
+            let runs = crate::logic::history::runs(&entries);
+            *self.history_cache.borrow_mut() = Some(HistoryCache {
+                key: HistoryKey::of(self),
+                entries,
+                runs,
+            });
+        }
+        std::cell::Ref::map(self.history_cache.borrow(), |cache| {
+            cache.as_ref().expect("filled above")
+        })
+    }
+
+    /// The cached entry as a row over the lists it indexes.
+    pub fn history_row(
+        &self,
+        entry: &crate::logic::history::Entry,
+    ) -> crate::logic::history::Row<'_> {
+        use crate::logic::history::Origin;
+        let device = entry
+            .device
+            .and_then(|index| self.library.history.get(index));
+        let video = match entry.video {
+            Origin::Device(index) => &self.library.history[index].video,
+            Origin::Account(index) => &self.account_history.items()[index].video,
+        };
+        crate::logic::history::Row {
+            video,
+            when: entry.when.clone(),
+            device,
+        }
+    }
+
+    /// All of History's rows; prefer [`State::history_cache`] where a frame
+    /// draws only some of them.
+    pub fn history_rows(&self) -> Vec<crate::logic::history::Row<'_>> {
+        self.history_cache()
+            .entries
+            .iter()
+            .map(|entry| self.history_row(entry))
+            .collect()
     }
 
     /// The feed's videos home shows: For you's, or the first
@@ -388,13 +512,13 @@ impl State {
         if self.feed_filter == FeedFilter::ForYou {
             return self.for_you.items().iter().collect();
         }
-        let now = util::now();
+        let today = util::Today::at(util::now());
         let videos = self.feed.items();
         videos[..videos.len().min(self.feed_shown)]
             .iter()
             .filter(|video| {
                 self.feed_filter
-                    .keeps(video, self.library.watched(&video.id), now)
+                    .keeps(video, self.library.watched(&video.id), &today)
             })
             .collect()
     }

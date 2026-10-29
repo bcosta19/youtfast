@@ -197,8 +197,12 @@ fn feed_grid(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         ),
         Listing::Ready(_) => {
             feed_chips(ui, state, actions);
-            let now = crate::util::now();
+            let today = crate::util::Today::at(crate::util::now());
             let videos = state.visible_feed();
+            let buckets: Vec<_> = videos
+                .iter()
+                .map(|video| today.bucket(video.published_at))
+                .collect();
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .show(ui, |ui| {
@@ -217,12 +221,10 @@ fn feed_grid(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     // cards.
                     let mut start = 0;
                     while start < videos.len() {
-                        let day = crate::util::age_bucket(videos[start].published_at, now);
-                        let end = videos[start..]
+                        let day = buckets[start];
+                        let end = buckets[start..]
                             .iter()
-                            .position(|video| {
-                                crate::util::age_bucket(video.published_at, now) != day
-                            })
+                            .position(|bucket| *bucket != day)
                             .map_or(videos.len(), |offset| start + offset);
                         // The account's feed carries no dates: no heading.
                         let heading = super::notifications::capitalized(day, locale);
@@ -609,8 +611,13 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     results::panel(ui, |ui| {
         let source = state.history_source();
         let account = source != Some(Source::Device);
-        let rows = state.history_rows();
-        results::title(ui, state, tr(locale, "History").as_ref(), Some(rows.len()));
+        let cache = state.history_cache();
+        results::title(
+            ui,
+            state,
+            tr(locale, "History").as_ref(),
+            Some(cache.entries.len()),
+        );
         controls(ui, state, actions, |ui, actions| {
             if source != Some(Source::Account)
                 && !state.library.history.is_empty()
@@ -656,7 +663,9 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 _ => {}
             }
         }
-        if rows.is_empty() && (!account || matches!(state.account_history, Listing::Ready(_))) {
+        if cache.entries.is_empty()
+            && (!account || matches!(state.account_history, Listing::Ready(_)))
+        {
             let text =
                 if !state.history_query.trim().is_empty() && (state.merged_history() || !account) {
                     "No videos found in history"
@@ -668,97 +677,37 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             results::nothing(ui, state, tr(locale, text).as_ref());
         }
         let now = util::now();
+        // Rows are one height, so each day's run is drawn only where it shows.
+        let controls = source != Some(Source::Account) || state.merged_history();
         egui::ScrollArea::vertical()
             .auto_shrink(false)
             .show(ui, |ui| {
-                let mut day = None;
-                for (index, row) in rows.into_iter().enumerate() {
-                    if row.when.is_some() && row.when != day {
-                        day.clone_from(&row.when);
-                        if index > 0 {
-                            ui.add_space(16.0);
-                        }
-                        widgets::section(
-                            ui,
-                            &state.palette,
-                            row.when.as_deref().unwrap_or_default(),
-                            None,
-                            |_| {},
-                        );
+                for run in &cache.runs {
+                    if run.start > 0 {
+                        ui.add_space(16.0);
                     }
-                    let note = row.device.map(|watched| {
-                        let mut note = trf(
-                            locale,
-                            "Watched {age}",
-                            &[("age", util::ago(watched.at, now, locale))],
+                    let mut rows = |ui: &mut Ui| {
+                        let selected = (state.cursor_moved
+                            && (run.start..run.end).contains(&state.cursor))
+                        .then(|| state.cursor - run.start);
+                        results::virtual_rows(
+                            ui,
+                            HISTORY_ROW,
+                            run.end - run.start,
+                            selected,
+                            |ui, row| {
+                                let index = run.start + row;
+                                let row = state.history_row(&cache.entries[index]);
+                                history_row(ui, state, &row, index, controls, now, actions);
+                            },
                         );
-                        if watched.position > 0.0 {
-                            note.push_str(&trf(
-                                locale,
-                                " · left at {time}",
-                                &[("time", util::duration(watched.position))],
-                            ));
+                    };
+                    match &run.heading {
+                        Some(heading) => {
+                            widgets::section(ui, &state.palette, heading, None, rows);
                         }
-                        note
-                    });
-                    let video = row.video;
-                    let fraction = row
-                        .device
-                        .and_then(|watched| {
-                            video
-                                .duration
-                                .map(|duration| (watched.position / duration) as f32)
-                        })
-                        .or_else(|| widgets::watched(&state.library, video));
-                    let selected = index == state.cursor;
-                    ui.push_id(&video.id, |ui| {
-                        ui.horizontal(|ui| {
-                            // Reserve the same trailing control space for every merged row.
-                            let controls =
-                                source != Some(Source::Account) || state.merged_history();
-                            let reserve = if controls {
-                                32.0 + ui.spacing().item_spacing.x
-                            } else {
-                                0.0
-                            };
-                            let width = (ui.available_width() - reserve).max(0.0);
-                            ui.allocate_ui_with_layout(
-                                vec2(width, 106.0),
-                                egui::Layout::top_down(egui::Align::Min),
-                                |ui| {
-                                    let response = widgets::video_row(
-                                        ui,
-                                        &state.palette,
-                                        video,
-                                        note.as_deref(),
-                                        fraction,
-                                        selected,
-                                        locale,
-                                    );
-                                    if selected && state.cursor_moved {
-                                        response.clone().scroll_to_me(None);
-                                    }
-                                    widgets::video_interactions(
-                                        ui, &response, state, video, actions,
-                                    );
-                                },
-                            );
-                            if row.device.is_some() {
-                                if widgets::icon_button(
-                                    ui,
-                                    crate::appearance::icons::Icon::Close,
-                                    16.0,
-                                    tr(locale, "Remove from this device's history").as_ref(),
-                                )
-                                .clicked()
-                                {
-                                    actions.push(Action::RemoveHistory(video.id.clone()));
-                                }
-                            } else if controls {
-                                ui.allocate_space(vec2(32.0, 32.0));
-                            }
-                        });
-                    });
+                        None => rows(ui),
+                    }
                 }
             });
         if account {
@@ -771,6 +720,89 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 locale,
             );
         }
+    });
+}
+
+/// A history row's height.
+const HISTORY_ROW: f32 = 106.0;
+
+/// One History row: the video, how long ago it was watched here, and the
+/// button that forgets it.
+fn history_row(
+    ui: &mut Ui,
+    state: &State,
+    row: &crate::logic::history::Row<'_>,
+    index: usize,
+    controls: bool,
+    now: i64,
+    actions: &mut Vec<Action>,
+) {
+    let locale = state.settings.language;
+    let note = row.device.map(|watched| {
+        let mut note = trf(
+            locale,
+            "Watched {age}",
+            &[("age", util::ago(watched.at, now, locale))],
+        );
+        if watched.position > 0.0 {
+            note.push_str(&trf(
+                locale,
+                " · left at {time}",
+                &[("time", util::duration(watched.position))],
+            ));
+        }
+        note
+    });
+    let video = row.video;
+    let fraction = row
+        .device
+        .and_then(|watched| {
+            video
+                .duration
+                .map(|duration| (watched.position / duration) as f32)
+        })
+        .or_else(|| widgets::watched(&state.library, video));
+    let selected = index == state.cursor;
+    ui.push_id(&video.id, |ui| {
+        ui.horizontal(|ui| {
+            // Reserve the same trailing control space for every merged row.
+            let reserve = if controls {
+                32.0 + ui.spacing().item_spacing.x
+            } else {
+                0.0
+            };
+            let width = (ui.available_width() - reserve).max(0.0);
+            ui.allocate_ui_with_layout(
+                vec2(width, HISTORY_ROW),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    let response = widgets::video_row(
+                        ui,
+                        &state.palette,
+                        video,
+                        note.as_deref(),
+                        fraction,
+                        selected,
+                        locale,
+                    );
+                    widgets::video_interactions(ui, &response, state, video, actions);
+                },
+            );
+            if row.device.is_some() {
+                if widgets::icon_button(
+                    ui,
+                    crate::appearance::icons::Icon::Close,
+                    16.0,
+                    tr(locale, "Remove from this device's history").as_ref(),
+                )
+                .clicked()
+                {
+                    actions.push(Action::RemoveHistory(video.id.clone()));
+                }
+            } else if controls {
+                ui.allocate_space(vec2(32.0, 32.0));
+            }
+        });
     });
 }
 
@@ -1337,5 +1369,84 @@ mod tests {
             let drawn = super::super::images::drawn_count(&ctx);
             assert!(drawn > 0 && drawn < 20, "list {kind} drew {drawn} images");
         }
+    }
+
+    #[test]
+    fn the_history_rows_are_rebuilt_only_when_what_they_come_from_changes() {
+        use crate::logic::history::HistoryFilter;
+        use crate::model::HistoryRow;
+        use crate::storage::library::Watched;
+        use crate::storage::settings::HistorySync;
+        let watched = |id: &str, title: &str, at: i64| {
+            let mut video = Video::from_id(id.into());
+            video.title = title.into();
+            Watched {
+                video,
+                at,
+                position: 0.0,
+            }
+        };
+        let mut state = State {
+            account: AccountState::SignedIn(1),
+            account_history: Listing::Ready(vec![HistoryRow {
+                video: Video::from_id("account-only".into()),
+                when: Some("Today".into()),
+            }]),
+            history_requested_at: Some(1_000_000),
+            ..Default::default()
+        };
+        state.settings.history_sync = HistorySync::Merged;
+        state
+            .library
+            .record_watch(watched("a", "Alpha", 1).video, 1);
+        let built = |state: &State| state.history_cache().entries.as_ptr();
+        let first = built(&state);
+        assert_eq!(state.history_rows().len(), 2);
+        // Nothing changed: the same rows, not rebuilt.
+        assert_eq!(built(&state), first);
+        // A search rebuilds, with the same rows lowercased once.
+        state.history_query = " ALPHA ".into();
+        let ids = |state: &State| {
+            state
+                .history_rows()
+                .iter()
+                .map(|row| row.video.id.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(&state), ["a"]);
+        state.history_query.clear();
+        assert_eq!(state.history_rows().len(), 2);
+        // The device history changing (a watch, a removal, a clear).
+        state.library.record_watch(watched("b", "Beta", 2).video, 2);
+        assert_eq!(state.history_rows().len(), 3);
+        state.library.remove_history("a");
+        assert_eq!(state.history_rows().len(), 2);
+        state.library.clear_history();
+        assert_eq!(state.history_rows().len(), 1);
+        // A retitled video is searched by its new title.
+        state
+            .library
+            .record_watch(watched("c", "Gamma", 3).video, 3);
+        let mut renamed = Video::from_id("c".into());
+        renamed.title = "Delta".into();
+        state.library.update_video(&renamed);
+        state.history_query = "delta".into();
+        assert_eq!(ids(&state), ["c"]);
+        state.history_query.clear();
+        // The account's list changing, and the filter.
+        state.account_history_generation += 1;
+        state.account_history.items_mut().push(HistoryRow {
+            video: Video::from_id("later".into()),
+            when: Some("Today".into()),
+        });
+        assert_eq!(state.history_rows().len(), 3);
+        state.history_filter = HistoryFilter::Device;
+        assert_eq!(ids(&state), ["c"]);
+        // The day moving on: sections of a request time are fixed, but with
+        // none the key follows the clock's day.
+        state.history_filter = HistoryFilter::All;
+        state.history_requested_at = None;
+        let key_day = state.history_cache().entries.len();
+        assert_eq!(key_day, 3);
     }
 }

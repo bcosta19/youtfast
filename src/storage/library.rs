@@ -5,6 +5,7 @@
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
@@ -38,11 +39,20 @@ pub struct Library {
     /// load, then never written again.
     #[serde(skip_serializing)]
     pub account: Option<AccountSource>,
-    /// The history's video ids, for `watched` without scanning it. Kept
-    /// by `reindex_watched`; rebuilt on load, never written.
+    /// The history's video ids with where each was left, for `watched` and
+    /// `resume_position` without scanning it. Kept by `reindex_watched` and
+    /// the position setters; rebuilt on load, never written.
     #[serde(skip)]
-    watched_ids: HashSet<String>,
+    watched_ids: HashMap<String, f64>,
+    /// Changes whenever the history's rows or their titles change (not their
+    /// resume positions), so views can cache what they derive from it.
+    /// Unique across libraries; 0 until the first change.
+    #[serde(skip)]
+    history_stamp: u64,
 }
+
+/// Hands out `Library::history_stamp`s.
+static HISTORY_STAMPS: AtomicU64 = AtomicU64::new(1);
 
 /// A named YouTube account; how its session was read is its `source`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -93,11 +103,23 @@ impl Library {
     /// Rebuilds the video-id index `watched` reads after the history
     /// changed (load, a recorded watch, a Takeout merge, a clear).
     fn reindex_watched(&mut self) {
-        self.watched_ids = self
-            .history
-            .iter()
-            .map(|watched| watched.video.id.clone())
-            .collect();
+        // The first entry of an id is the one `resume_position` reads.
+        let mut ids = HashMap::with_capacity(self.history.len());
+        for watched in &self.history {
+            ids.entry(watched.video.id.clone())
+                .or_insert(watched.position);
+        }
+        self.watched_ids = ids;
+        self.touch_history();
+    }
+
+    fn touch_history(&mut self) {
+        self.history_stamp = HISTORY_STAMPS.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Changes whenever the history's rows or their titles do; see the field.
+    pub fn history_stamp(&self) -> u64 {
+        self.history_stamp
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
@@ -171,20 +193,14 @@ impl Library {
 
     /// Whether the video is in the history.
     pub fn watched(&self, video_id: &str) -> bool {
-        self.watched_ids.contains(video_id)
+        self.watched_ids.contains_key(video_id)
     }
 
     /// Where to start the video: where it was left, unless that was right at
     /// its start or end.
     pub fn resume_position(&self, video_id: &str) -> Option<f64> {
-        if !self.watched(video_id) {
-            return None;
-        }
-        let watched = self
-            .history
-            .iter()
-            .find(|watched| watched.video.id == video_id)?;
-        (watched.position >= RESUME_MARGIN).then_some(watched.position)
+        let position = *self.watched_ids.get(video_id)?;
+        (position >= RESUME_MARGIN).then_some(position)
     }
 
     /// Remembers where the video was left. Near its end counts as finished,
@@ -203,6 +219,7 @@ impl Library {
         } else {
             position
         };
+        self.sync_position(video_id);
     }
 
     /// The video was watched to its end: next time it starts over.
@@ -213,6 +230,16 @@ impl Library {
             .find(|watched| watched.video.id == video_id)
         {
             watched.position = 0.0;
+            self.sync_position(video_id);
+        }
+    }
+
+    /// Copies the first history entry of this id's position into the index.
+    fn sync_position(&mut self, video_id: &str) {
+        if let Some(watched) = self.history.iter().find(|w| w.video.id == video_id)
+            && let Some(slot) = self.watched_ids.get_mut(video_id)
+        {
+            *slot = watched.position;
         }
     }
 
@@ -222,6 +249,7 @@ impl Library {
         for watched in &mut self.history {
             if watched.video.id == video.id {
                 watched.video = video.clone();
+                self.history_stamp = HISTORY_STAMPS.fetch_add(1, Ordering::Relaxed);
             }
         }
         for later in &mut self.watch_later {
@@ -234,6 +262,7 @@ impl Library {
     pub fn clear_history(&mut self) {
         self.history.clear();
         self.watched_ids.clear();
+        self.touch_history();
     }
 
     /// Removes this video's watch and resume position while keeping the index in sync.
@@ -241,6 +270,7 @@ impl Library {
         let before = self.history.len();
         self.history.retain(|watched| watched.video.id != id);
         self.watched_ids.remove(id);
+        self.touch_history();
         before != self.history.len()
     }
 
@@ -585,5 +615,26 @@ mod tests {
         .unwrap();
         assert_eq!(old.history[0].position, 0.0);
         assert!(old.subscriptions.is_empty());
+    }
+
+    #[test]
+    fn resume_positions_follow_the_index_and_the_stamp_follows_the_rows() {
+        let mut library = Library::default();
+        let stamp = library.history_stamp();
+        library.record_watch(video("aaaaaaaaaaa"), 1);
+        assert_ne!(library.history_stamp(), stamp);
+        let stamp = library.history_stamp();
+        library.set_position("aaaaaaaaaaa", 100.0, 600.0);
+        assert_eq!(library.resume_position("aaaaaaaaaaa"), Some(100.0));
+        library.mark_finished("aaaaaaaaaaa");
+        assert_eq!(library.resume_position("aaaaaaaaaaa"), None);
+        assert!(library.watched("aaaaaaaaaaa"));
+        // A position is not a row: views keep what they cached.
+        assert_eq!(library.history_stamp(), stamp);
+        library.set_position("aaaaaaaaaaa", 100.0, 600.0);
+        library.remove_history("aaaaaaaaaaa");
+        assert_eq!(library.resume_position("aaaaaaaaaaa"), None);
+        assert!(!library.watched("aaaaaaaaaaa"));
+        assert_ne!(library.history_stamp(), stamp);
     }
 }

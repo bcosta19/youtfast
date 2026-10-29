@@ -21,17 +21,112 @@ pub struct Row<'a> {
 }
 
 impl Row<'_> {
+    #[cfg(test)]
     pub fn matches(&self, query: &str) -> bool {
-        let query = query.trim().to_lowercase();
-        self.video.title.to_lowercase().contains(&query)
+        self.matches_lowered(&query.trim().to_lowercase())
+    }
+
+    /// [`Row::matches`] for a query already trimmed and lowercased, so a
+    /// search over many rows prepares it once.
+    pub fn matches_lowered(&self, query: &str) -> bool {
+        self.video.title.to_lowercase().contains(query)
             || self
                 .video
                 .channel
                 .as_deref()
                 .unwrap_or_default()
                 .to_lowercase()
-                .contains(&query)
+                .contains(query)
     }
+}
+
+/// Where a cached row's video lives.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Origin {
+    /// `library.history[i].video`
+    Device(usize),
+    /// `account_history[i].video`
+    Account(usize),
+}
+
+/// A [`Row`] as indices into the two lists it came from, so a cache of rows
+/// holds no borrows.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Entry {
+    pub video: Origin,
+    /// Index into `library.history` when this device has the video.
+    pub device: Option<usize>,
+    pub when: Option<String>,
+    /// A new day heading starts here.
+    pub heading: bool,
+}
+
+/// The rows from `start` to `end` that share one heading; only the first
+/// run can lack one (rows before any heading).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Run {
+    pub start: usize,
+    pub end: usize,
+    pub heading: Option<String>,
+}
+
+/// Turns rows into indices of `account` and `device`, which they borrow
+/// from, and marks where the day headings fall.
+pub fn entries(rows: &[Row<'_>], account: &[HistoryRow], device: &[Watched]) -> Vec<Entry> {
+    let address = |video: &Video| std::ptr::from_ref(video) as usize;
+    let account_at: HashMap<usize, usize> = account
+        .iter()
+        .enumerate()
+        .map(|(index, row)| (address(&row.video), index))
+        .collect();
+    let device_at: HashMap<usize, usize> = device
+        .iter()
+        .enumerate()
+        .map(|(index, watched)| (address(&watched.video), index))
+        .collect();
+    let mut day: Option<&str> = None;
+    rows.iter()
+        .filter_map(|row| {
+            let video = address(row.video);
+            let origin = match (device_at.get(&video), account_at.get(&video)) {
+                (Some(&index), _) => Origin::Device(index),
+                (None, Some(&index)) => Origin::Account(index),
+                (None, None) => return None,
+            };
+            let heading = row.when.is_some() && row.when.as_deref() != day;
+            if heading {
+                day = row.when.as_deref();
+            }
+            Some(Entry {
+                video: origin,
+                device: row
+                    .device
+                    .and_then(|w| device_at.get(&address(&w.video)).copied()),
+                when: row.when.clone(),
+                heading,
+            })
+        })
+        .collect()
+}
+
+/// The entries grouped under their headings.
+pub fn runs(entries: &[Entry]) -> Vec<Run> {
+    let mut runs: Vec<Run> = Vec::new();
+    for (index, entry) in entries.iter().enumerate() {
+        if entry.heading || runs.is_empty() {
+            if let Some(last) = runs.last_mut() {
+                last.end = index;
+            }
+            runs.push(Run {
+                start: index,
+                end: entries.len(),
+                heading: entry
+                    .heading
+                    .then(|| entry.when.clone().unwrap_or_default()),
+            });
+        }
+    }
+    runs
 }
 
 fn date(at: i64) -> Option<jiff::civil::Date> {
