@@ -27,6 +27,8 @@ are the distribution record.
 
 ### Changed
 
+- The project landing page is rewritten in plain language: a download button that adapts to the visitor's system with direct release links and install steps, six feature cards, a "How it works" section for developers, a readable benchmark and a longer FAQ. Fonts are now compact WOFF2 subsets.
+
 - The project landing page uses the Cinema design with bundled Noto Sans,
   light/dark/system themes and more space around the frequently asked questions.
 

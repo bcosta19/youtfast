@@ -43,6 +43,35 @@ function setLanguage(next) {
   document.querySelector('video').setAttribute('aria-label', next === 'en' ? 'YouTFast product demonstration' : 'Demonstração do YouTFast');
   applyTheme(themePreference, false);
 }
+// Point the main button at the visitor's platform. Without JavaScript it keeps
+// pointing at the whole download section.
+const osLabels = {
+  windows: ['Download for Windows (free)', 'Baixar para Windows (grátis)'],
+  macos: ['Download for macOS (free)', 'Baixar para macOS (grátis)'],
+  linux: ['Download for Linux (free)', 'Baixar para Linux (grátis)'],
+};
+
+function detectPlatform() {
+  const platform = (navigator.userAgentData?.platform || navigator.platform || '').toLowerCase();
+  const agent = navigator.userAgent.toLowerCase();
+  if (/android|iphone|ipad|ipod/.test(agent) || navigator.maxTouchPoints > 1 && /mac/.test(platform)) return null;
+  if (/win/.test(platform) || /windows/.test(agent)) return 'windows';
+  if (/mac/.test(platform) || /macintosh/.test(agent)) return 'macos';
+  if (/linux|x11|cros/.test(platform + agent)) return 'linux';
+  return null;
+}
+
+const detected = detectPlatform();
+if (detected) {
+  const button = document.querySelector('#os-download');
+  const label = button.querySelector('span');
+  [label.dataset.en, label.dataset.pt] = osLabels[detected];
+  button.href = `#download-${detected}`;
+  const card = document.querySelector(`#download-${detected}`);
+  card.classList.add('is-detected');
+  card.querySelector('.recommended').hidden = false;
+}
+
 themeControl.hidden = false;
 languageButton.hidden = false;
 themeSelect.addEventListener('change', () => applyTheme(themeSelect.value));

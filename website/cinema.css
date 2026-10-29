@@ -1,7 +1,7 @@
 /* Noto Sans is bundled under the SIL Open Font License; see assets/fonts/OFL.txt. */
 @font-face {
   font-family:'YouTFast Sans';
-  src:url('assets/fonts/NotoSans-Regular.ttf') format('truetype');
+  src:url('assets/fonts/NotoSans-Regular.woff2') format('woff2');
   font-weight:400;
   font-style:normal;
   font-display:swap;
@@ -9,7 +9,7 @@
 
 @font-face {
   font-family:'YouTFast Sans';
-  src:url('assets/fonts/NotoSans-Bold.ttf') format('truetype');
+  src:url('assets/fonts/NotoSans-Bold.woff2') format('woff2');
   font-weight:700;
   font-style:normal;
   font-display:swap;
@@ -34,18 +34,18 @@ body {
 }
 
 h1 {
-  max-width:20ch;
+  max-width:22ch;
   margin:auto;
-  font-size:clamp(44px,5.4vw,76px);
+  font-size:clamp(38px,4.4vw,60px);
   font-weight:700;
-  letter-spacing:-.065em;
+  letter-spacing:-.04em;
   line-height:1.08;
 }
 
 .hero-description {
   max-width:59ch;
   margin:24px auto 28px;
-  font-size:17px;
+  font-size:18px;
   line-height:1.7;
 }
 
@@ -81,7 +81,7 @@ h1 {
 }
 
 .visual-caption {
-  font-size:12px;
+  font-size:14px;
   text-align:left;
   margin-top:16px;
 }
@@ -103,8 +103,12 @@ h1 {
   padding:30px;
 }
 
-.feature+.feature {
+.feature:not(:nth-child(3n+1)) {
   border-left:1px solid var(--line);
+}
+
+.feature:nth-child(n+4) {
+  border-top:1px solid var(--line);
 }
 
 .experience {
@@ -120,7 +124,7 @@ h1 {
     font-size:clamp(40px,10vw,58px);
   }
   .hero-description {
-    font-size:16px;
+    font-size:17px;
   }
   .hero-actions {
     align-items:center;
@@ -128,8 +132,11 @@ h1 {
   .feature {
     padding:24px 0;
   }
-  .feature+.feature {
+  .feature:not(:nth-child(3n+1)) {
     border-left:0;
+  }
+
+  .feature+.feature {
     border-top:1px solid var(--line);
   }
 }
@@ -251,5 +258,41 @@ h1 {
   to {
     opacity:1;
     transform:translateY(0);
+  }
+}
+
+.hero .trust-line {
+  font-size:15px;
+}
+
+.hero-copy .platform-note {
+  margin-top:20px;
+}
+
+@media(max-width:1000px) {
+  .feature-grid {
+    grid-template-columns:repeat(2,1fr);
+  }
+
+  .feature:not(:nth-child(3n+1)) {
+    border-left:0;
+  }
+
+  .feature:nth-child(even) {
+    border-left:1px solid var(--line);
+  }
+
+  .feature:nth-child(n+3) {
+    border-top:1px solid var(--line);
+  }
+}
+
+@media(max-width:760px) {
+  .feature-grid {
+    grid-template-columns:1fr;
+  }
+
+  .feature:nth-child(even) {
+    border-left:0;
   }
 }

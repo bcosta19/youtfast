@@ -2,7 +2,7 @@
 
 The landing page is static HTML/CSS/JavaScript, in English and Brazilian
 Portuguese. It has no package installation, external fonts, analytics, embeds
-or API calls. All downloads link to the maintained GitHub Releases page.
+or API calls. Download buttons link directly to the current release assets on GitHub; the build reads the version from `Cargo.toml` and fills the `{{VERSION}}` placeholder in `website/index.html`.
 
 ## Preview
 
@@ -19,7 +19,7 @@ in both languages without JavaScript. The theme selector offers System, Light an
 Dark. System follows `prefers-color-scheme`; a manual choice is stored only in
 this browser's local storage. The demo MP4 loads only on user
 interaction. The Cinema layout centers the introduction above a large product
-image. Noto Sans is bundled locally, with its SIL Open Font License in
+image. Noto Sans is bundled locally as Latin and Latin-Extended WOFF2 subsets (made with `pyftsubset` from fonttools in a throwaway virtual environment), with its SIL Open Font License in
 `assets/fonts/OFL.txt`; the page makes no font requests to external services.
 Language navigation uses native cross-document View Transitions where supported.
 Section navigation, FAQ answers and buttons have brief motion feedback. All
