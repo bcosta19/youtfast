@@ -47,7 +47,7 @@ function setLanguage(next) {
 // pointing at the whole download section.
 const osLabels = {
   windows: ['Download for Windows (free)', 'Baixar para Windows (grátis)'],
-  macos: ['Download for macOS (free)', 'Baixar para macOS (grátis)'],
+  macos: ['Download for macOS (Apple Silicon)', 'Baixar para macOS (Apple Silicon)'],
   linux: ['Download for Linux (free)', 'Baixar para Linux (grátis)'],
 };
 

@@ -2,6 +2,7 @@
 from html.parser import HTMLParser
 from pathlib import Path
 import json
+import re
 import unittest
 
 from build_site import ORIGIN, VERSION, Page, stamp
@@ -56,6 +57,20 @@ class WebsiteTests(unittest.TestCase):
                       f'youtfast-v{VERSION}-x86_64-pc-windows-gnu.zip',
                       f'youtfast-v{VERSION}-aarch64-apple-darwin.zip', 'checksums.txt']:
             self.assertIn(f'/releases/download/v{VERSION}/{asset}"', SOURCE)
+
+    def test_download_urls_follow_the_release_workflow_naming(self):
+        workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/release.yml').read_text()
+        names = {m.replace('${RELEASE_TAG#v}', VERSION).replace('$env:RELEASE_TAG', 'v' + VERSION)
+                 .replace('$RELEASE_TAG', 'v' + VERSION)
+                 for m in re.findall(r'youtfast-(?:\$\{RELEASE_TAG#v\}|\$env:RELEASE_TAG|\$RELEASE_TAG)[^"\s]*', workflow)}
+        names = {'youtfast-' + n.split('youtfast-', 1)[1] if n.startswith('youtfast-') else n for n in names}
+        urls = re.findall(r'releases/download/v([^/"]+)/([^"]+)"', SOURCE)
+        self.assertTrue(urls)
+        for version, asset in urls:
+            self.assertEqual(version, VERSION)
+            if asset != 'checksums.txt':
+                self.assertIn(asset, names)
+        self.assertIn('checksums.txt', workflow)
 
     def test_canonical_urls_and_language_alternates_match_each_page(self):
         for path, html in [('/', SOURCE), ('/pt/', portuguese_page(SOURCE, ORIGIN))]:

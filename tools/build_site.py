@@ -2,6 +2,7 @@
 """Build and validate the dependency-free public site into dist/site."""
 
 from html.parser import HTMLParser
+import re
 from pathlib import Path
 from posixpath import normpath
 from shutil import copyfile
@@ -13,6 +14,11 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "dist" / "site"
 ORIGIN = "https://youtfast.pages.dev"
 VERSION = tomllib.loads((ROOT / "Cargo.toml").read_text())["package"]["version"]
+_released = re.search(rf"^## \[{re.escape(VERSION)}\] - (\d{{4}}-\d{{2}}-\d{{2}})$",
+                      (ROOT / "CHANGELOG.md").read_text(), re.M)
+if not _released:
+    raise ValueError(f"CHANGELOG.md has no dated entry for {VERSION}")
+RELEASE_DATE = _released.group(1)
 FILES = {
     "index.html": ROOT / "website/index.html",
     "styles.css": ROOT / "website/styles.css",
@@ -29,7 +35,7 @@ FILES = {
 
 def stamp(source):
     """Fill the release version (from Cargo.toml) into the page source."""
-    return source.replace("{{VERSION}}", VERSION)
+    return source.replace("{{VERSION}}", VERSION).replace("{{DATE}}", RELEASE_DATE)
 
 
 class Page(HTMLParser):
