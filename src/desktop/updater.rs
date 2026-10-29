@@ -703,6 +703,15 @@ fn replace_windows_bundle(bundle_root: &Path, target_exe: &Path) -> Result<(), S
             }
         }
     }
+    // yt-dlp and Deno ship in the ZIP too, and a newer release carries newer
+    // ones. They are best effort: a copy that is in use or missing from an
+    // older ZIP leaves the existing one, and playback falls back to PATH.
+    for tool in ["yt-dlp.exe", "deno.exe"] {
+        let from = bundle_root.join(tool);
+        if from.is_file() {
+            let _ = std::fs::copy(&from, target_dir.join(tool));
+        }
+    }
     let _ = std::fs::remove_file(&old_exe);
     Ok(())
 }

@@ -6,6 +6,7 @@
 //! decodes them (in hardware where it can) and keeps sound and picture in
 //! step. [`VideoSurface`] draws its picture inside the egui window.
 
+mod bundled;
 pub mod ffi;
 mod render;
 
@@ -338,12 +339,15 @@ impl Mpv {
         let raw_options = raw_options(max_resolution, &captions);
         let volume = volume.clamp(0.0, 100.0);
         let initial_volume = volume_text(volume);
-        let options: [(&CStr, &str); 14] = [
+        let script_opts = bundled::Tools::current().script_opts().unwrap_or_default();
+        let options: [(&CStr, &str); 15] = [
             (c"vo", "libmpv"),
             (c"hwdec", "auto-safe"),
             (c"ytdl", "yes"),
             (c"ytdl-format", FORMAT),
             (c"ytdl-raw-options", &raw_options),
+            // The yt-dlp beside youtfast.exe on Windows; empty elsewhere.
+            (c"script-opts", &script_opts),
             // Stay on the last frame at the end instead of unloading.
             (c"keep-open", "yes"),
             (c"idle", "yes"),
@@ -901,6 +905,12 @@ impl Drop for Mpv {
 /// opens a track only once it is shown. A list value goes in brackets, mpv's quoting, so its
 /// commas stay inside it.
 fn raw_options(resolution: u32, captions: &[String]) -> String {
+    raw_options_with(resolution, captions, bundled::Tools::current())
+}
+
+/// [`raw_options`] with the bundled tools given: yt-dlp is also told to run
+/// its YouTube challenges on the Deno shipped beside the executable.
+fn raw_options_with(resolution: u32, captions: &[String], tools: &bundled::Tools) -> String {
     let mut languages: Vec<String> = captions
         .iter()
         .filter(|lang| !lang.is_empty() && lang.chars().all(|c| c.is_ascii_alphanumeric()))
@@ -911,10 +921,15 @@ fn raw_options(resolution: u32, captions: &[String]) -> String {
     languages.push(".*-orig".to_owned());
     // A finished live stream's chat replay is listed as captions.
     languages.push("-live_chat".to_owned());
-    format!(
+    let mut options = format!(
         "format-sort=res:{resolution},write-auto-subs=,sub-langs=[{}]",
         languages.join(",")
-    )
+    );
+    if let Some(runtime) = tools.js_runtime_option() {
+        options.push(',');
+        options.push_str(&runtime);
+    }
+    options
 }
 
 /// The per-file option that adds the browser's session to yt-dlp's
@@ -1104,6 +1119,22 @@ mod tests {
         // Nothing that could close the brackets gets in.
         assert_eq!(
             raw_options(720, &["e]n".to_owned(), String::new(), "pt-BR".to_owned()]),
+            "format-sort=res:720,write-auto-subs=,sub-langs=[.*-orig,-live_chat]"
+        );
+    }
+
+    #[test]
+    fn the_bundled_deno_is_handed_to_yt_dlp_as_its_js_runtime() {
+        let tools = bundled::Tools {
+            ytdlp: None,
+            deno: Some(std::path::PathBuf::from(r"C:\YouTFast\deno.exe")),
+        };
+        assert_eq!(
+            raw_options_with(720, &[], &tools),
+            r"format-sort=res:720,write-auto-subs=,sub-langs=[.*-orig,-live_chat],js-runtimes=%25%deno:C:\YouTFast\deno.exe"
+        );
+        assert_eq!(
+            raw_options_with(720, &[], &bundled::Tools::default()),
             "format-sort=res:720,write-auto-subs=,sub-langs=[.*-orig,-live_chat]"
         );
     }
