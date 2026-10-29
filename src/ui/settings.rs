@@ -8,7 +8,7 @@ use super::{results, widgets};
 use crate::app::State;
 use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use crate::appearance::icons::Icon;
-use crate::appearance::theme::{self, Palette};
+use crate::appearance::theme::{self, InterfaceFont, Palette};
 use crate::model::Action;
 use crate::storage::settings::{
     HistorySync, PlaybackBuffer, SidebarButton, ThemeChoice, default_sidebar,
@@ -72,6 +72,42 @@ fn appearance(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             setting_row(
                 ui,
                 palette,
+                &tr(locale, "Interface font"),
+                &tr(
+                    locale,
+                    "The font that draws the interface. System uses your desktop's own.",
+                ),
+                CONTROL_WIDTH,
+                |ui| {
+                    interface_font_picker(ui, state, actions);
+                },
+            );
+            if state.settings.interface_font == InterfaceFont::System && state.system_font_missing {
+                ui.add_space(8.0);
+                ui.label(
+                    RichText::new(tr(
+                        locale,
+                        "Your system's interface font couldn't be loaded, so YouTFast uses Inter.",
+                    ))
+                    .font(theme::regular(13.0))
+                    .color(palette.secondary),
+                );
+                ui.add_space(4.0);
+                if widgets::button(
+                    ui,
+                    palette,
+                    &tr(locale, "Report this"),
+                    widgets::ButtonStyle::Normal,
+                )
+                .clicked()
+                {
+                    actions.push(Action::ReportInterfaceFont);
+                }
+            }
+            ui.add_space(12.0);
+            setting_row(
+                ui,
+                palette,
                 &tr(locale, "Theme"),
                 &description,
                 CONTROL_WIDTH,
@@ -115,6 +151,34 @@ fn language_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     .clicked()
                 {
                     actions.push(Action::SetLanguage(locale));
+                    ui.close();
+                }
+            }
+        });
+}
+
+/// The interface font's menu: the system's, or Inter.
+fn interface_font_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+    let name = |font: InterfaceFont| match font {
+        InterfaceFont::System => tr(locale, "System (default)").into_owned(),
+        InterfaceFont::Inter => "Inter".to_owned(),
+    };
+    egui::ComboBox::from_id_salt("interface-font")
+        .width(200.0)
+        .selected_text(
+            RichText::new(name(state.settings.interface_font)).font(theme::regular(14.0)),
+        )
+        .show_ui(ui, |ui| {
+            for font in InterfaceFont::ALL {
+                if ui
+                    .selectable_label(
+                        state.settings.interface_font == font,
+                        RichText::new(name(font)).font(theme::regular(14.0)),
+                    )
+                    .clicked()
+                {
+                    actions.push(Action::SetInterfaceFont(font));
                     ui.close();
                 }
             }
@@ -1182,6 +1246,141 @@ mod tests {
             let labels = render(&ctx, &state, Vec::new(), &mut actions);
             assert!(labels.iter().any(|(label, _)| label == expected_title));
         }
+    }
+
+    /// Draws the Appearance group and returns its text, with the centre of
+    /// each, after the pointer events.
+    fn draw_appearance(
+        ctx: &egui::Context,
+        state: &State,
+        events: Vec<egui::Event>,
+        actions: &mut Vec<Action>,
+    ) -> Vec<(String, egui::Pos2)> {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(900.0, 800.0),
+                )),
+                events,
+                ..Default::default()
+            },
+            |ui| appearance(ui, state, actions),
+        );
+        output.textures_delta.clear();
+        output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some((
+                    text.galley.text().to_owned(),
+                    text.pos + text.galley.size() / 2.0,
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn click_at(ctx: &egui::Context, state: &State, pos: egui::Pos2, actions: &mut Vec<Action>) {
+        for pressed in [true, false] {
+            draw_appearance(
+                ctx,
+                state,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                actions,
+            );
+        }
+    }
+
+    fn centre_of(labels: &[(String, egui::Pos2)], text: &str) -> egui::Pos2 {
+        labels
+            .iter()
+            .find(|(label, _)| label == text)
+            .unwrap_or_else(|| panic!("{text} is not drawn"))
+            .1
+    }
+
+    const NOTICE: &str = "Your system's interface font couldn't be loaded, so YouTFast uses Inter.";
+
+    #[test]
+    fn the_font_notice_shows_only_when_the_systems_face_fell_back_to_inter() {
+        let ctx = egui::Context::default();
+        crate::appearance::theme::install_fonts(&ctx);
+        for (font, missing, shown) in [
+            (InterfaceFont::System, false, false),
+            (InterfaceFont::System, true, true),
+            // Choosing Inter is not a failure.
+            (InterfaceFont::Inter, true, false),
+            (InterfaceFont::Inter, false, false),
+        ] {
+            let mut state = State::default();
+            state.settings.interface_font = font;
+            state.system_font_missing = missing;
+            let labels = draw_appearance(&ctx, &state, Vec::new(), &mut Vec::new());
+            let has = |text: &str| labels.iter().any(|(label, _)| label == text);
+            assert_eq!(has(NOTICE), shown, "{font:?} {missing}");
+            assert_eq!(has("Report this"), shown, "{font:?} {missing}");
+            assert!(has("Interface font"));
+        }
+    }
+
+    #[test]
+    fn report_this_asks_to_open_the_issue_and_nothing_else() {
+        let ctx = egui::Context::default();
+        crate::appearance::theme::install_fonts(&ctx);
+        let state = State {
+            system_font_missing: true,
+            ..State::default()
+        };
+        let mut actions = Vec::new();
+        let labels = draw_appearance(&ctx, &state, Vec::new(), &mut actions);
+        assert!(actions.is_empty());
+        click_at(
+            &ctx,
+            &state,
+            centre_of(&labels, "Report this"),
+            &mut actions,
+        );
+        assert_eq!(actions, [Action::ReportInterfaceFont]);
+    }
+
+    #[test]
+    fn the_interface_font_menu_emits_the_chosen_face() {
+        let ctx = egui::Context::default();
+        crate::appearance::theme::install_fonts(&ctx);
+        let mut state = State::default();
+        let mut actions = Vec::new();
+        let labels = draw_appearance(&ctx, &state, Vec::new(), &mut actions);
+        click_at(
+            &ctx,
+            &state,
+            centre_of(&labels, "System (default)"),
+            &mut actions,
+        );
+        let labels = draw_appearance(&ctx, &state, Vec::new(), &mut actions);
+        click_at(&ctx, &state, centre_of(&labels, "Inter"), &mut actions);
+        assert_eq!(actions, [Action::SetInterfaceFont(InterfaceFont::Inter)]);
+        actions.clear();
+        // And back, from Inter.
+        state.settings.interface_font = InterfaceFont::Inter;
+        let labels = draw_appearance(&ctx, &state, Vec::new(), &mut actions);
+        click_at(&ctx, &state, centre_of(&labels, "Inter"), &mut actions);
+        let labels = draw_appearance(&ctx, &state, Vec::new(), &mut actions);
+        click_at(
+            &ctx,
+            &state,
+            centre_of(&labels, "System (default)"),
+            &mut actions,
+        );
+        assert_eq!(actions, [Action::SetInterfaceFont(InterfaceFont::System)]);
     }
 
     #[test]

@@ -10,6 +10,13 @@ are the distribution record.
 
 ### Added
 
+- Settings → Appearance → Interface font: YouTFast now draws with your
+  desktop's own interface font by default (System), or with Inter as before.
+  The choice applies at once and older settings start on System. When the
+  system's font cannot be loaded, Inter draws instead, Settings says so and
+  Report this opens a prefilled GitHub issue in your browser (nothing is sent
+  by YouTFast). The player's time keeps fixed-width digits with either font.
+
 - Settings → Sidebar lets you hide sidebar buttons and move them up or down,
   with Restore default. Account and Settings cannot be hidden. The number keys
   1 to 9 now follow the buttons as the sidebar shows them, so they shift when
