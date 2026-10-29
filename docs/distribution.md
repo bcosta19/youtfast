@@ -12,7 +12,7 @@ outstanding gates.
 | Linux x86_64 native | `*-x86_64-unknown-linux-gnu.tar.gz` | glibc 2.39+, system libmpv/Lua, graphics libraries, current yt-dlp and JS runtime | In-app updater (`Settings → About`, SHA-256 verified) or replace archive; update system dependencies separately |
 | Linux x86_64 Flatpak | `*-x86_64.flatpak` and Flathub source manifest (`channels.tar.gz`) | Flatpak, Freedesktop 25.08 runtime, graphics drivers and portals | Install next bundle; no Flathub update remote until listing submission is accepted |
 | Arch Linux x86_64 | `.pkg.tar.zst` and `*-aur.tar.gz` recipe | System dependencies installed by pacman; AUR source builds also need Rust/Cargo | Local pacman package; AUR helper after entry acceptance |
-| Windows x86_64 | `*-x86_64-pc-windows-gnu.zip` and Winget manifest (`channels.tar.gz`) | Bundled libmpv/imported DLLs; current yt-dlp and Deno on PATH | In-app updater (`Settings → About`), replace extracted directory, or update via Winget |
+| Windows x86_64 | `*-x86_64-pc-windows-gnu.zip` and Winget manifest (`channels.tar.gz`) | Bundled libmpv/imported DLLs, `yt-dlp.exe` and `deno.exe` (nothing on PATH needed) | In-app updater (`Settings → About`), replace extracted directory, or update via Winget; `yt-dlp.exe -U` updates yt-dlp between releases |
 | macOS 15+ Apple Silicon | `*-aarch64-apple-darwin.zip` with `.app` and Homebrew Cask (`channels.tar.gz`) | Bundled libmpv/dylibs; current yt-dlp and Deno | In-app updater (`Settings → About`), replace `.app`, or update via Homebrew tap; update extraction tools separately |
 
 Windows/macOS candidates include a native dependency inventory and collected
@@ -28,14 +28,30 @@ notarization or proof that Gatekeeper accepts the download. Never recommend
 disabling system security globally. Intel Macs/universal binaries, ARM Windows
 and Linux ARM64 are not built.
 
-Native packages keep extraction tools external so users can update them as
-YouTube changes. Install current yt-dlp with its matching EJS component and a
-supported JS runtime; Deno is enabled by default by yt-dlp. See
+The Linux archive and macOS app keep extraction tools external so users can
+update them as YouTube changes. Install current yt-dlp with its matching EJS
+component and a supported JS runtime; Deno is enabled by default by yt-dlp. See
 [upstream EJS setup](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
+
+The Windows ZIP instead ships the official standalone `yt-dlp.exe` (it includes
+the EJS component) and `deno.exe` beside `youtfast.exe`, so playback works
+without installing anything. YouTFast uses those two files first (mpv's
+`ytdl_path` and yt-dlp's `--js-runtimes deno:<path>`) and falls back to `PATH`
+when one is missing. Their versions and SHA-256 digests are pinned in
+`packaging/windows-tools.json`, verified when the ZIP is built, and bumped for
+every release ([RELEASING.md](../RELEASING.md)), because old yt-dlp versions
+stop working when YouTube changes. Between releases a Windows user can run
+`yt-dlp.exe -U` in the extracted folder (the standalone build updates itself in
+place; see [yt-dlp's update docs](https://github.com/yt-dlp/yt-dlp#update)). The
+in-app updater and a new ZIP replace the folder's `yt-dlp.exe` and `deno.exe`
+with the release's copies. `yt-dlp.exe` is a PyInstaller build whose combined
+work is GPLv3+; its licence texts are in `windows-tools-notices/`.
+
 Browser-session import additionally invokes `python3` with the `yt_dlp` Python
-module; a standalone yt-dlp executable does not provide that module. This
-optional integration is a separate platform QA gate. Cookies.txt selection and
-signed-out use do not need browser-profile access.
+module; the standalone executables, bundled or not, do not provide that module.
+Playback never needs it: it only affects reading cookies from a browser's
+login. This optional integration is a separate platform QA gate. Cookies.txt
+selection and signed-out use do not need browser-profile access.
 
 ## Linux and Flatpak
 

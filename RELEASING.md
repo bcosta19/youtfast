@@ -35,19 +35,27 @@ a patch release instead of replacing downloads.
    **Included**,
    **Not included** and **Known limitations**. The first release links to its
    tag; later versions link to their previous-tag comparisons.
-3. Run CONTRIBUTING.md's packaging/Rust/documentation checks and actionlint
+3. Bump the Windows tools. The ZIP ships the official `yt-dlp.exe` and `deno.exe`,
+   and YouTube breaks old yt-dlp often, so every release must carry the newest
+   stable ones. Run `python3 packaging/windows_tools.py latest` and copy its
+   versions, URLs and digests into `packaging/windows-tools.json`. The digests
+   come from GitHub's release metadata, so also compare them with upstream's own
+   files (yt-dlp's `SHA2-256SUMS`, Deno's `*.sha256sum`) before committing; check
+   the changelogs for breaking changes (Deno must still run yt-dlp's EJS). The
+   dry run's smoke test fails if the packaged versions differ from the pins.
+4. Run CONTRIBUTING.md's packaging/Rust/documentation checks and actionlint
    when available. Do not use real accounts to debug releases. Preserve
    unrelated local changes and inspect the exact commit/source export.
-4. Commit/push only when authorized. On that exact commit, manually dispatch
+5. Commit/push only when authorized. On that exact commit, manually dispatch
    **Release**, selecting the intended ref and entering `vX.Y.Z`. The dry run
    reuses full CI and builds every candidate on hosted runners without creating
    a release. Download artifacts before their seven-day retention expires.
    See [Actions policy](docs/actions.md).
-5. Inspect all packages and complete [platform QA](docs/distribution.md).
+6. Inspect all packages and complete [platform QA](docs/distribution.md).
    Windows/macOS also need matching native dependency sources, patches, build
    instructions and notices; inventories are not sufficient. If a required
    platform fails, fix it and repeat; do not silently drop it.
-6. After approval, create an annotated tag on the validated commit and push
+7. After approval, create an annotated tag on the validated commit and push
    that tag. Never move an existing distributed tag. Automatic tag jobs run
    only when public or opted in with `YOUTFAST_AUTOMATIC_CI=true`.
 
@@ -103,7 +111,7 @@ package (`youtfast-X.Y.Z-1-x86_64.pkg.tar.zst`) and `checksums.txt`.
 | `x86_64-unknown-linux-gnu.tar.gz` | Ubuntu 24.04/glibc 2.39+ baseline; system libmpv |
 | `x86_64.flatpak` | Freedesktop 25.08 runtime; sandboxed app/native components |
 | `flatpak-sources.flatpak` | Flatpak builder's exported corresponding sources |
-| `x86_64-pc-windows-gnu.zip` | Windows executable, imported DLL closure, notices/inventory |
+| `x86_64-pc-windows-gnu.zip` | Windows executable, imported DLL closure, pinned `yt-dlp.exe`/`deno.exe`, notices/inventory |
 | `aarch64-apple-darwin.zip` | macOS 15+ Apple Silicon app, dylibs, notices/inventory |
 | `source-with-dependencies.tar.gz` | App and locked Rust sources/notices; offline Cargo config |
 | `aur.tar.gz` | Tested PKGBUILD and `.SRCINFO`, with source SHA-256; not an AUR submission |

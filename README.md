@@ -76,7 +76,7 @@ checks on clean Windows and macOS machines are still in progress. Download from
 |---|---|---|
 | Linux x86_64 | Flatpak bundle | Flatpak, Freedesktop 25.08 runtime and desktop drivers/portals |
 | Linux x86_64 | Native archive | glibc 2.39+, system libmpv and current yt-dlp/Deno; supports in-app updates |
-| Windows x86_64 | ZIP with libmpv and DLLs | Current yt-dlp/Deno on PATH; supports in-app updates; no MSI/MSIX or publisher signature |
+| Windows x86_64 | ZIP with libmpv, DLLs, `yt-dlp.exe` and `deno.exe` | Nothing to install; supports in-app updates; no MSI/MSIX or publisher signature |
 | macOS 15+ Apple Silicon | ZIP with app and dylibs | Current yt-dlp/Deno; supports in-app updates; ad-hoc signed, not notarized |
 | Arch Linux x86_64 | Pacman package and source PKGBUILD | Built and installed in a clean Arch container by CI; AUR submission pending |
 

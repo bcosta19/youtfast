@@ -154,7 +154,10 @@ its job, not at the root:
 - `src/youtube/ytdlp.rs` parses extraction JSON; search goes through RustyPipe.
   Playback hands the watch link to mpv, whose ytdl hook asks yt-dlp for the streams
   (`mpv::FORMAT`, bounded by the quality chosen, 1080p on Auto). Updating yt-dlp fixes YouTube
-  breakage without a release. Videos play signed out: with a session,
+  breakage without a release. On Windows the ZIP ships `yt-dlp.exe` and `deno.exe` beside
+  `youtfast.exe` (pins and SHA-256 in `packaging/windows-tools.json`, bumped every release);
+  `mpv/bundled.rs` points mpv's `ytdl_path` and yt-dlp's `js-runtimes` at them when present
+  and leaves everything else to `PATH`. Videos play signed out: with a session,
   yt-dlp only has YouTube's web clients, which without a PO token offer
   little more than one 360p stream. A video refused signed out (bot
   check, age limit, private) is tried once more through a browser

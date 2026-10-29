@@ -14,6 +14,11 @@
 
 mpv must be built with Lua (the usual packages are): it resolves YouTube
 links through its `ytdl_hook` script. Keep yt-dlp and its JS runtime on `PATH`.
+The Windows ZIP already contains `yt-dlp.exe` and `deno.exe` next to
+`youtfast.exe`, which YouTFast uses first; nothing needs installing there. When
+YouTube changes and playback stops working before the next YouTFast release,
+open a terminal in the extracted folder and run `.\yt-dlp.exe -U`. Updating
+YouTFast from Settings → About also replaces them with the new release's copies.
 Browser import also needs `python3` with the `yt_dlp` module; an executable-only
 yt-dlp install does not supply that Python module.
 

@@ -34,6 +34,17 @@ GitHub release, without relying only on Cargo registries or moving branches.
 Do not redistribute binary-only copies without also meeting the
 applicable source and notice obligations.
 
+The Windows ZIP also ships the official standalone `yt-dlp.exe` and `deno.exe`
+beside `youtfast.exe`, unmodified and pinned by SHA-256 in
+`packaging/windows-tools.json`. yt-dlp's own code is Unlicense, but its
+PyInstaller executable bundles Python and other packages (some GPLv3+, so that
+build is distributed as GPLv3+); its `LICENSE` and `THIRD_PARTY_LICENSES.txt`
+for the pinned release are in the ZIP's `windows-tools-notices/`, and the
+matching source is the tagged release at
+<https://github.com/yt-dlp/yt-dlp/releases>. Deno is MIT (`deno-LICENSE.md`
+beside them); its source is at <https://github.com/denoland/deno>. YouTFast
+runs them as separate programs and does not link to them.
+
 Windows/macOS candidate bundles include libmpv and linked native libraries.
 Their MSYS2/Homebrew inventories and collected notices are review inputs, not
 corresponding source. The platform collectors now produce separate source

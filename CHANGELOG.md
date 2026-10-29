@@ -10,6 +10,12 @@ are the distribution record.
 
 ### Added
 
+- The Windows ZIP now includes `yt-dlp.exe` and `deno.exe` (pinned official
+  builds, checked by SHA-256), so playback works without installing anything or
+  editing `PATH`. YouTFast uses them before anything on `PATH`, and updating
+  from Settings → About replaces them. To refresh yt-dlp between releases, run
+  `yt-dlp.exe -U` in the extracted folder.
+
 - Settings → Sidebar lets you hide sidebar buttons and move them up or down,
   with Restore default. Account and Settings cannot be hidden. The number keys
   1 to 9 now follow the buttons as the sidebar shows them, so they shift when
