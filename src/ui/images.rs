@@ -34,6 +34,17 @@ struct Cache {
     repaired: HashSet<String>,
 }
 impl Cache {
+    /// Drops retained state for an unseen image and returns its display URI.
+    fn forget(&mut self, url: &str) -> String {
+        self.failed.remove(url);
+        self.loaded.remove(url);
+        self.refreshed.remove(url);
+        self.repaired.remove(url);
+        self.uris
+            .remove(url)
+            .unwrap_or_else(|| memory_uri(&self.dir, url))
+    }
+
     /// Queues `url` for the backend; false when it is already on its way
     /// or waiting to be retried.
     fn request(&mut self, url: &str, now: f64) -> bool {
@@ -309,11 +320,7 @@ pub fn forget_unseen(ctx: &Context) {
     });
     if let Some(c) = CACHE.lock().unwrap().as_mut() {
         for url in stale {
-            c.failed.remove(&url);
-            c.loaded.remove(&url);
-            c.refreshed.remove(&url);
-            c.repaired.remove(&url);
-            let uri = memory_uri(&c.dir, &url);
+            let uri = c.forget(&url);
             animation::forget(ctx, &uri);
             ctx.forget_image(&uri);
         }
@@ -386,8 +393,21 @@ mod tests {
     }
     #[test]
     fn only_unseen_images_are_forgotten() {
+        let mut c = cache();
+        for url in ["old", "recent"] {
+            c.loaded.insert(url.to_owned());
+            c.uris.insert(url.to_owned(), memory_uri(&c.dir, url));
+        }
         let mut drawn = HashMap::from([("old".to_owned(), 10.0), ("recent".to_owned(), 100.0)]);
-        assert_eq!(take_stale(&mut drawn, 120.0, 60.0), ["old"]);
+        let stale = take_stale(&mut drawn, 120.0, 60.0);
+        assert_eq!(stale, ["old"]);
+        for url in stale {
+            assert_eq!(c.forget(&url), memory_uri(&c.dir, &url));
+        }
+        assert!(!c.loaded.contains("old"));
+        assert!(!c.uris.contains_key("old"));
+        assert!(c.loaded.contains("recent"));
+        assert!(c.uris.contains_key("recent"));
         assert!(drawn.contains_key("recent"));
     }
 }

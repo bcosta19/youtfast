@@ -26,7 +26,7 @@ impl Row<'_> {
         self.matches_lowered(&query.trim().to_lowercase())
     }
 
-    /// [`Row::matches`] for a query already trimmed and lowercased, so a
+    /// `Row::matches` for a query already trimmed and lowercased, so a
     /// search over many rows prepares it once.
     pub fn matches_lowered(&self, query: &str) -> bool {
         self.video.title.to_lowercase().contains(query)
