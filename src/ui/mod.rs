@@ -7,6 +7,8 @@
 //! search field, a sidebar of views and subscribed channels, notices as
 //! toasts at the bottom right, and `?` for the keyboard shortcuts.
 
+use std::borrow::Cow;
+
 use crate::appearance::i18n::{format as trf, gettext as tr};
 mod account;
 #[cfg(test)]
@@ -109,7 +111,7 @@ const TOP_BAR: f32 = 56.0;
 fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
 
-    let palette = state.palette.clone();
+    let palette = state.palette;
     egui::Panel::top("top-bar")
         .exact_size(TOP_BAR)
         .resizable(false)
@@ -314,7 +316,7 @@ fn suggestions(
             state.suggestion_cursor = state.suggestion_cursor.and_then(|at| at.checked_sub(1));
         }
     }
-    let palette = state.palette.clone();
+    let palette = state.palette;
     let area = egui::Area::new(id.with("area"))
         .order(egui::Order::Foreground)
         .fixed_pos(field_rect.left_bottom() + vec2(0.0, 4.0))
@@ -453,12 +455,12 @@ fn sidebar_views(state: &State) -> Vec<View> {
 }
 
 /// The sidebar's views: icon, view, label and a count to show.
-fn sidebar_items(state: &State) -> Vec<(Icon, View, String, Option<usize>)> {
+fn sidebar_items(state: &State) -> Vec<(Icon, View, Cow<'_, str>, Option<usize>)> {
     let locale = state.settings.language;
     sidebar_buttons(state)
         .filter_map(|button| {
             let item = |icon, view, label: &'static str, count| {
-                Some((icon, view, tr(locale, label).into_owned(), count))
+                Some((icon, view, tr(locale, label), count))
             };
             match button {
                 SidebarButton::Home => item(Icon::Home, View::Home, "Home", None),
@@ -483,13 +485,13 @@ fn sidebar_items(state: &State) -> Vec<(Icon, View, String, Option<usize>)> {
                     Some(state.alerts.len()),
                 ),
                 SidebarButton::Account => {
-                    let name = state
-                        .active_account()
-                        .map(|account| account.name.clone())
-                        .unwrap_or_else(|| match &state.account {
-                            AccountState::SigningIn => tr(locale, "Signing in").into_owned(),
-                            _ => tr(locale, "Sign in").into_owned(),
-                        });
+                    let name = state.active_account().map_or_else(
+                        || match &state.account {
+                            AccountState::SigningIn => tr(locale, "Signing in"),
+                            _ => tr(locale, "Sign in"),
+                        },
+                        |account| Cow::Borrowed(account.name.as_str()),
+                    );
                     Some((Icon::User, View::Account, name, None))
                 }
                 SidebarButton::Settings => {
@@ -807,7 +809,7 @@ fn open_at(state: &State, index: usize) -> Option<Action> {
 fn keys_overlay(ctx: &egui::Context, state: &mut State) {
     let locale = state.settings.language;
 
-    let palette = state.palette.clone();
+    let palette = state.palette;
     let mut close = false;
     let response = egui::Modal::new(egui::Id::new("keys")).show(ctx, |ui| {
         let width = (ctx.content_rect().width() - 64.0).clamp(280.0, 840.0);

@@ -30,7 +30,7 @@ pub(super) fn transcript(
     if !state.transcript_open {
         return;
     }
-    widgets::card(ui, &state.palette.clone(), |ui| match &state.extras {
+    widgets::card(ui, &state.palette, |ui| match &state.extras {
         Fetch::Idle => actions.push(Action::LoadExtras),
         Fetch::Loading => widgets::loading(ui, &state.palette, "transcript", locale),
         Fetch::Failed(_) => {

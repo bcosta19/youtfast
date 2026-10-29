@@ -17,7 +17,7 @@ pub type Catalog = fastframe_theme::Catalog<Palette>;
 /// nor the user has installed one.
 pub const OMARCHY_TEMPLATE: &str = include_str!("../../contrib/omarchy/youtfast.json.tpl");
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Palette {
     pub dark: bool,
     pub window: Color32,
@@ -248,7 +248,21 @@ fn text_rendering() -> fastframe_text::TextRendering {
 /// installed faces behind it for other scripts, drawn the way the desktop
 /// renders text: the siblings' setup.
 pub fn install_fonts(ctx: &egui::Context) {
-    ctx.set_fonts(font_definitions(true));
+    set_fonts(ctx, font_definitions(true));
+}
+
+/// Counts font swaps: text laid out before one is drawn from an atlas that
+/// no longer exists, so anything that keeps galleys must forget them.
+static FONTS_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Changes whenever the fonts do.
+pub fn fonts_epoch() -> u64 {
+    FONTS_EPOCH.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn set_fonts(ctx: &egui::Context, fonts: egui::FontDefinitions) {
+    FONTS_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    ctx.set_fonts(fonts);
 }
 
 fn font_definitions(system_fallbacks: bool) -> egui::FontDefinitions {
@@ -307,14 +321,14 @@ impl SystemFonts {
         if self.poll(ctx) {
             return true;
         }
-        ctx.set_fonts(font_definitions(false));
+        set_fonts(ctx, font_definitions(false));
         false
     }
 
     /// Swaps in the complete fonts once found; true when they are in.
     pub fn poll(&self, ctx: &egui::Context) -> bool {
         match self.found.try_recv() {
-            Ok(fonts) => ctx.set_fonts(fonts),
+            Ok(fonts) => set_fonts(ctx, fonts),
             Err(std::sync::mpsc::TryRecvError::Empty) => return false,
             Err(std::sync::mpsc::TryRecvError::Disconnected) => install_fonts(ctx),
         }

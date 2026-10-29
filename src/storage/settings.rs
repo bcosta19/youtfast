@@ -324,12 +324,12 @@ impl Settings {
                 .custom_theme_cache
                 .as_ref()
                 .filter(|theme| &theme.filename == filename)
-                .map(|theme| theme.palette.clone())
+                .map(|theme| theme.palette)
                 .unwrap_or_else(Palette::dark),
             ThemeChoice::Auto => self
                 .system_theme_cache
                 .as_ref()
-                .map(|theme| theme.palette.clone())
+                .map(|theme| theme.palette)
                 .unwrap_or_else(Palette::dark),
             ThemeChoice::Dark => Palette::dark(),
             ThemeChoice::Light => Palette::light(),
@@ -483,7 +483,7 @@ mod tests {
         let mut settings = Settings {
             system_theme_cache: Some(CustomTheme {
                 filename: "omarchy.json".into(),
-                palette: omarchy.clone(),
+                palette: omarchy,
             }),
             ..Settings::default()
         };
@@ -493,7 +493,7 @@ mod tests {
         nord.accent = egui::Color32::from_rgb(4, 5, 6);
         settings.custom_theme_cache = Some(CustomTheme {
             filename: "Nord.json".into(),
-            palette: nord.clone(),
+            palette: nord,
         });
         settings.theme = ThemeChoice::Custom("Nord.json".into());
         assert_eq!(settings.palette(), nord);

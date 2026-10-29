@@ -395,7 +395,7 @@ fn about_video(
     actions: &mut Vec<Action>,
 ) {
     let locale: Locale = state.settings.language;
-    let palette = state.palette.clone();
+    let palette = state.palette;
     // A video opened from a link has no title until mpv reads it.
     let title = Some(watching.title.as_str())
         .filter(|title| !title.is_empty())
@@ -1128,36 +1128,23 @@ fn comment_row(
     let locale: Locale = state.settings.language;
     let top = ui.next_widget_position();
     let width = ui.available_width();
-    let text: Vec<_> = comment
-        .text
-        .iter()
-        .map(|span| (std::mem::discriminant(span), span.text()))
-        .collect();
-    let key = egui::Id::new((
-        "comment-layout",
+    // One entry per comment, replaced when the width changes. Its signature
+    // covers what else decides the height without hashing the whole text.
+    let key = egui::Id::new(("comment-layout", comment.id.as_str()));
+    let signature = comment_signature(
+        comment,
         state.settings.language.native_name(),
-        &comment.id,
-        (
-            width.to_bits(),
-            avatar.to_bits(),
-            ui.text_style_height(&egui::TextStyle::Body).to_bits(),
-        ),
-        (
-            &comment.author,
-            &comment.published,
-            comment.pinned,
-            comment.by_owner,
-            comment.hearted,
-            comment.likes,
-            comment.replies,
-        ),
-        (text, &comment.image),
-    ));
+        avatar,
+        ui.text_style_height(&egui::TextStyle::Body),
+    );
     let closed =
         !state.comments_open.contains(&comment.id) && !state.replies.contains_key(&comment.id);
-    let cached = ui.ctx().data(|data| data.get_temp::<f32>(key));
+    let cached = ui
+        .ctx()
+        .data(|data| data.get_temp::<CommentHeight>(key))
+        .filter(|cached| cached.width == width.to_bits() && cached.signature == signature);
     if closed
-        && let Some(height) = cached
+        && let Some(CommentHeight { height, .. }) = cached
         && !ui.is_rect_visible(Rect::from_min_size(top, vec2(width, height)))
     {
         ui.allocate_exact_size(vec2(width, height), Sense::hover());
@@ -1231,8 +1218,50 @@ fn comment_row(
     ui.add_space(16.0);
     if closed {
         let height = (ui.next_widget_position().y - top.y - ui.spacing().item_spacing.y).max(0.0);
-        ui.ctx().data_mut(|data| data.insert_temp(key, height));
+        ui.ctx().data_mut(|data| {
+            data.insert_temp(
+                key,
+                CommentHeight {
+                    width: width.to_bits(),
+                    signature,
+                    height,
+                },
+            );
+        });
     }
+}
+
+/// A comment's measured height at one width (`f32::to_bits`).
+#[derive(Clone, Copy)]
+struct CommentHeight {
+    width: u32,
+    signature: u64,
+    height: f32,
+}
+
+/// What besides the width decides a closed comment's height: the language,
+/// the sizes it is laid out with and its fields. The text counts by shape
+/// (spans and characters) rather than being hashed on every frame.
+fn comment_signature(comment: &CommentRow, language: &str, avatar: f32, body: f32) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    (language, avatar.to_bits(), body.to_bits()).hash(&mut hasher);
+    (
+        &comment.author,
+        &comment.published,
+        comment.pinned,
+        comment.by_owner,
+        comment.hearted,
+        comment.likes,
+        comment.replies,
+        &comment.image,
+    )
+        .hash(&mut hasher);
+    comment.text.len().hash(&mut hasher);
+    for span in &comment.text {
+        (std::mem::discriminant(span), span.text().len()).hash(&mut hasher);
+    }
+    hasher.finish()
 }
 
 /// Reserve a stable box so loading an attachment does not move the comments.
