@@ -36,6 +36,11 @@ are the distribution record.
 
 ### Fixed
 
+- Scrolling is smoother and uses less CPU on History (long histories are only
+  drawn where they show and are no longer re-sorted on every frame), Home,
+  Notifications and the comments under a video, and audio-only playback no
+  longer redraws the window for every tick of the seek bar.
+
 - Keyboard focus is visible on navigation, buttons, chips, rows and switches;
   player and miniplayer controls can be reached while a video is playing.
 - A double-click on video no longer also pauses it. Back and forward leave the

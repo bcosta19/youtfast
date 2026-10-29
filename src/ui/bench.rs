@@ -54,7 +54,11 @@ fn video(index: usize, published_at: Option<i64>) -> Video {
     let mut video = Video::from_id(format!("{index:011}"));
     video.title = format!(
         "Video number {index}{} with a title long enough to wrap onto a second line",
-        if index % 10 == 0 { " alpha" } else { "" }
+        if index.is_multiple_of(10) {
+            " alpha"
+        } else {
+            ""
+        }
     );
     video.channel = Some(format!("Channel {}", index % 37));
     video.channel_id = Some(format!("UC{:022}", index % 37));
@@ -212,7 +216,7 @@ fn results() -> State {
 /// Draws one frame; every tenth frame the pointer moves, so hover work is
 /// part of the mix without making the run depend on timing.
 fn frame(ctx: &egui::Context, state: &mut State, index: usize) {
-    let events = if index % 10 == 0 {
+    let events = if index.is_multiple_of(10) {
         let x = 300.0 + (index % 50) as f32 * 12.0;
         vec![egui::Event::PointerMoved(egui::pos2(x, 400.0))]
     } else {
