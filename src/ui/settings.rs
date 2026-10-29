@@ -11,7 +11,7 @@ use crate::appearance::icons::Icon;
 use crate::appearance::theme::{self, Palette};
 use crate::model::Action;
 use crate::storage::settings::{
-    HistorySync, PlaybackBuffer, SidebarButton, ThemeChoice, default_sidebar, sanitize_sidebar,
+    HistorySync, PlaybackBuffer, SidebarButton, ThemeChoice, default_sidebar,
 };
 
 /// The widest the settings read well.
@@ -302,56 +302,59 @@ fn sidebar(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 .wrap(),
             );
             ui.add_space(8.0);
-            let entries = sanitize_sidebar(state.settings.sidebar.clone());
+            let entries = &state.settings.sidebar;
             let last = entries.len() - 1;
             for (index, entry) in entries.iter().enumerate() {
                 let name = sidebar_button_name(locale, entry.button);
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 8.0;
-                    ui.add_enabled_ui(entry.button.can_hide(), |ui| {
-                        if switch(ui, palette, entry.visible, &name).clicked() {
-                            let mut next = entries.clone();
-                            next[index].visible = !entry.visible;
-                            actions.push(Action::SetSidebar(next));
-                        }
-                    });
-                    ui.label(
-                        RichText::new(&name)
-                            .font(theme::medium(14.0))
-                            .color(palette.text),
-                    );
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        for (icon, to, key, enabled) in [
-                            (
-                                Icon::ChevronDown,
-                                index + 1,
-                                "Move {name} down",
-                                index < last,
-                            ),
-                            (
-                                Icon::ChevronUp,
-                                index.wrapping_sub(1),
-                                "Move {name} up",
-                                index > 0,
-                            ),
-                        ] {
-                            let hint = trf(locale, key, &[("name", name.clone())]);
-                            let moved = ui
-                                .add_enabled_ui(enabled, |ui| {
-                                    widgets::icon_button(ui, icon, 18.0, &hint)
-                                })
-                                .inner;
-                            if moved.clicked() {
+                // A global id keyed by button (`push_id`'s widget ids still
+                // follow the row's position), so focus and the switch's
+                // animation travel with the row when it moves.
+                let row = egui::UiBuilder::new().id(egui::Id::new(("sidebar-row", entry.button)));
+                ui.scope_builder(row, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 8.0;
+                        ui.add_enabled_ui(entry.button.can_hide(), |ui| {
+                            if switch(ui, palette, entry.visible, &name).clicked() {
                                 let mut next = entries.clone();
-                                next.swap(index, to);
+                                next[index].visible = !entry.visible;
                                 actions.push(Action::SetSidebar(next));
                             }
-                        }
-                    });
+                        });
+                        ui.label(
+                            RichText::new(&name)
+                                .font(theme::medium(14.0))
+                                .color(palette.text),
+                        );
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            for (icon, up, key, enabled) in [
+                                (Icon::ChevronDown, false, "Move {name} down", index < last),
+                                (Icon::ChevronUp, true, "Move {name} up", index > 0),
+                            ] {
+                                let hint = trf(locale, key, &[("name", name.clone())]);
+                                let moved = ui
+                                    .add_enabled_ui(enabled, |ui| {
+                                        widgets::icon_button(ui, icon, 18.0, &hint)
+                                    })
+                                    .inner;
+                                if moved.clicked() {
+                                    let to = if up {
+                                        index.checked_sub(1)
+                                    } else {
+                                        Some(index + 1).filter(|to| *to <= last)
+                                    };
+                                    if let Some(to) = to {
+                                        let mut next = entries.clone();
+                                        next.swap(index, to);
+                                        actions.push(Action::SetSidebar(next));
+                                    }
+                                }
+                            }
+                        });
+                    })
                 });
             }
             ui.add_space(8.0);
-            ui.add_enabled_ui(entries != default_sidebar(), |ui| {
+            ui.add_enabled_ui(*entries != default_sidebar(), |ui| {
                 if widgets::button(
                     ui,
                     &card,
@@ -1038,6 +1041,62 @@ mod tests {
             );
         }
         assert_eq!(actions, vec![Action::SetSidebar(default_sidebar())]);
+    }
+
+    #[test]
+    fn keyboard_focus_follows_a_moved_sidebar_row() {
+        fn frame(
+            ctx: &egui::Context,
+            state: &State,
+            events: Vec<egui::Event>,
+            actions: &mut Vec<Action>,
+        ) {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        vec2(900.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| sidebar(ui, state, actions),
+            );
+            output.textures_delta.clear();
+        }
+        fn key(key: egui::Key) -> Vec<egui::Event> {
+            vec![egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }]
+        }
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let mut state = State::default();
+        let mut actions = Vec::new();
+        frame(&ctx, &state, Vec::new(), &mut actions);
+        // Home's switch, then Home's "move down".
+        for _ in 0..2 {
+            frame(&ctx, &state, key(egui::Key::Tab), &mut actions);
+        }
+        let focused = ctx.memory(|m| m.focused()).expect("a focused widget");
+        frame(&ctx, &state, key(egui::Key::Enter), &mut actions);
+        frame(&ctx, &state, Vec::new(), &mut actions);
+        let Some(Action::SetSidebar(next)) = actions.pop() else {
+            panic!("moving down emits the new list");
+        };
+        assert_eq!(next[0].button, SidebarButton::Subscriptions);
+        assert_eq!(next[1].button, SidebarButton::Home);
+        frame(&ctx, &state, Vec::new(), &mut actions);
+        state.settings.sidebar = next;
+        frame(&ctx, &state, Vec::new(), &mut actions);
+        frame(&ctx, &state, Vec::new(), &mut actions);
+        // The ids are keyed by button: focus stays on Home's arrow, which
+        // is now in the second row, instead of the first row's.
+        assert_eq!(ctx.memory(|m| m.focused()), Some(focused));
     }
 
     #[test]

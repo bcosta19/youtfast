@@ -525,7 +525,7 @@ mod tests {
         );
         assert!(press(&mut state, Key::Num8, egui::Modifiers::NONE).is_empty());
         // Hide Home and move Settings first.
-        state.settings.sidebar = vec![
+        state.settings.sidebar = crate::storage::settings::sanitize_sidebar(vec![
             SidebarEntry {
                 button: SidebarButton::Settings,
                 visible: true,
@@ -534,7 +534,7 @@ mod tests {
                 button: SidebarButton::Home,
                 visible: false,
             },
-        ];
+        ]);
         assert_eq!(
             press(&mut state, Key::Num1, egui::Modifiers::NONE),
             vec![Action::Navigate(View::Settings)]

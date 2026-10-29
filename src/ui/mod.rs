@@ -415,20 +415,33 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
         });
 }
 
-/// The views the sidebar shows, in the order the user chose (the number
-/// keys' order too): hidden buttons are left out, and Liked videos and
-/// Playlists need a signed-in account whatever the setting says.
-fn sidebar_views(state: &State) -> Vec<View> {
-    crate::storage::settings::sanitize_sidebar(state.settings.sidebar.clone())
-        .into_iter()
+/// The buttons the sidebar draws, in the order the user chose (the number
+/// keys' order too): hidden ones are left out, and Liked videos and
+/// Playlists need a signed-in account whatever the setting says. The stored
+/// list is already sanitized (on load, by default and by `SetSidebar`).
+fn sidebar_buttons(state: &State) -> impl Iterator<Item = SidebarButton> + '_ {
+    state
+        .settings
+        .sidebar
+        .iter()
         .filter(|entry| entry.visible)
-        .filter_map(|entry| match entry.button {
+        .map(|entry| entry.button)
+        .filter(|button| match button {
+            SidebarButton::Liked | SidebarButton::Playlists => state.signed_in(),
+            _ => true,
+        })
+}
+
+/// The views of [`sidebar_buttons`], for the number keys.
+fn sidebar_views(state: &State) -> Vec<View> {
+    sidebar_buttons(state)
+        .filter_map(|button| match button {
             SidebarButton::Home => Some(View::Home),
             SidebarButton::Subscriptions => Some(View::Subscriptions),
             SidebarButton::History => Some(View::History),
             SidebarButton::WatchLater => Some(View::WatchLater),
-            SidebarButton::Liked => state.signed_in().then_some(View::Liked),
-            SidebarButton::Playlists => state.signed_in().then_some(View::Playlists),
+            SidebarButton::Liked => Some(View::Liked),
+            SidebarButton::Playlists => Some(View::Playlists),
             SidebarButton::Notifications => Some(View::Notifications),
             SidebarButton::Account => Some(View::Account),
             SidebarButton::Settings => Some(View::Settings),
@@ -440,68 +453,52 @@ fn sidebar_views(state: &State) -> Vec<View> {
 /// The sidebar's views: icon, view, label and a count to show.
 fn sidebar_items(state: &State) -> Vec<(Icon, View, String, Option<usize>)> {
     let locale = state.settings.language;
-    sidebar_views(state)
-        .into_iter()
-        .map(|view| match view {
-            View::Home => (Icon::Home, view, tr(locale, "Home").into_owned(), None),
-            View::Subscriptions => (
-                Icon::Subscriptions,
-                view,
-                tr(locale, "Subscriptions").into_owned(),
-                None,
-            ),
-            View::History => (
-                Icon::History,
-                view,
-                tr(locale, "History").into_owned(),
-                None,
-            ),
-            View::WatchLater => (
-                Icon::Clock,
-                view,
-                tr(locale, "Watch later").into_owned(),
-                None,
-            ),
-            View::Liked => (
-                Icon::ThumbsUp,
-                view,
-                tr(locale, "Liked videos").into_owned(),
-                None,
-            ),
-            View::Playlists => (
-                Icon::Playlists,
-                view,
-                tr(locale, "Playlists").into_owned(),
-                None,
-            ),
-            View::Notifications => (
-                Icon::Bell,
-                view,
-                tr(locale, "Notifications").into_owned(),
-                Some(state.alerts.len()),
-            ),
-            View::Account => {
-                let name = state
-                    .active_account()
-                    .map(|account| account.name.clone())
-                    .unwrap_or_else(|| match &state.account {
-                        AccountState::SigningIn => tr(locale, "Signing in").into_owned(),
-                        _ => tr(locale, "Sign in").into_owned(),
-                    });
-                (Icon::User, view, name, None)
-            }
-            _ => {
-                let update_badge = matches!(
-                    state.update,
-                    crate::desktop::updater::UpdateState::Available(_)
-                )
-                .then_some(1);
-                (
-                    Icon::Settings,
-                    View::Settings,
-                    tr(locale, "Settings").into_owned(),
-                    update_badge,
-                )
+    sidebar_buttons(state)
+        .filter_map(|button| {
+            let item = |icon, view, label: &'static str, count| {
+                Some((icon, view, tr(locale, label).into_owned(), count))
+            };
+            match button {
+                SidebarButton::Home => item(Icon::Home, View::Home, "Home", None),
+                SidebarButton::Subscriptions => item(
+                    Icon::Subscriptions,
+                    View::Subscriptions,
+                    "Subscriptions",
+                    None,
+                ),
+                SidebarButton::History => item(Icon::History, View::History, "History", None),
+                SidebarButton::WatchLater => {
+                    item(Icon::Clock, View::WatchLater, "Watch later", None)
+                }
+                SidebarButton::Liked => item(Icon::ThumbsUp, View::Liked, "Liked videos", None),
+                SidebarButton::Playlists => {
+                    item(Icon::Playlists, View::Playlists, "Playlists", None)
+                }
+                SidebarButton::Notifications => item(
+                    Icon::Bell,
+                    View::Notifications,
+                    "Notifications",
+                    Some(state.alerts.len()),
+                ),
+                SidebarButton::Account => {
+                    let name = state
+                        .active_account()
+                        .map(|account| account.name.clone())
+                        .unwrap_or_else(|| match &state.account {
+                            AccountState::SigningIn => tr(locale, "Signing in").into_owned(),
+                            _ => tr(locale, "Sign in").into_owned(),
+                        });
+                    Some((Icon::User, View::Account, name, None))
+                }
+                SidebarButton::Settings => {
+                    let update_badge = matches!(
+                        state.update,
+                        crate::desktop::updater::UpdateState::Available(_)
+                    )
+                    .then_some(1);
+                    item(Icon::Settings, View::Settings, "Settings", update_badge)
+                }
+                SidebarButton::Unknown => None,
             }
         })
         .collect()
@@ -911,7 +908,7 @@ fn key_pill(ui: &mut egui::Ui, palette: &theme::Palette, key: &str) {
 mod tests {
     use super::*;
     use crate::model::Video;
-    use crate::storage::settings::{SidebarEntry, default_sidebar};
+    use crate::storage::settings::{SidebarEntry, default_sidebar, sanitize_sidebar};
 
     fn views(state: &State) -> Vec<View> {
         sidebar_items(state)
@@ -947,7 +944,7 @@ mod tests {
         entries.swap(0, 2);
         entries[1].visible = false;
         entries[4].visible = true;
-        state.settings.sidebar = entries;
+        state.settings.sidebar = sanitize_sidebar(entries);
         assert_eq!(
             views(&state),
             [
@@ -968,13 +965,15 @@ mod tests {
     #[test]
     fn account_and_settings_stay_in_a_sidebar_saved_with_them_hidden() {
         let mut state = State::default();
-        state.settings.sidebar = default_sidebar()
-            .into_iter()
-            .map(|e| SidebarEntry {
-                visible: false,
-                ..e
-            })
-            .collect();
+        state.settings.sidebar = sanitize_sidebar(
+            default_sidebar()
+                .into_iter()
+                .map(|e| SidebarEntry {
+                    visible: false,
+                    ..e
+                })
+                .collect(),
+        );
         assert_eq!(views(&state), [View::Account, View::Settings]);
     }
 

@@ -164,7 +164,7 @@ pub struct Settings {
 
 /// A button of the sidebar. `Unknown` stands for a name a newer version
 /// saved; [`sanitize_sidebar`] drops it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SidebarButton {
     Home,
