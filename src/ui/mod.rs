@@ -32,6 +32,7 @@ use crate::appearance::icons::Icon;
 use crate::appearance::theme::{self, RADIUS};
 use crate::model::{Action, ChannelTab, Fetch, Listing, View};
 use crate::mpv::{Status, VideoSurface};
+use crate::storage::settings::SidebarButton;
 
 /// The search field's widget id, so `/` can focus it.
 fn command_line_id() -> egui::Id {
@@ -396,11 +397,12 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
         )
         .show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 2.0;
-            for (icon, view, label, count) in sidebar_items(state) {
+            for (index, (icon, view, label, count)) in sidebar_items(state).into_iter().enumerate()
+            {
                 let selected = state.view == view
                     || (view == View::Playlists && state.view == View::Playlist)
                     || (view == View::Subscriptions && state.view == View::Channel);
-                if view == View::Account {
+                if view == View::Account && index > 0 {
                     ui.add_space(12.0);
                 }
                 if widgets::nav_item(ui, palette, icon, &label, count, selected, collapsed)
@@ -413,77 +415,96 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
         });
 }
 
-/// The sidebar's views, in the number keys' order: icon, view, label and
-/// a count to show.
+/// The views the sidebar shows, in the order the user chose (the number
+/// keys' order too): hidden buttons are left out, and Liked videos and
+/// Playlists need a signed-in account whatever the setting says.
+fn sidebar_views(state: &State) -> Vec<View> {
+    crate::storage::settings::sanitize_sidebar(state.settings.sidebar.clone())
+        .into_iter()
+        .filter(|entry| entry.visible)
+        .filter_map(|entry| match entry.button {
+            SidebarButton::Home => Some(View::Home),
+            SidebarButton::Subscriptions => Some(View::Subscriptions),
+            SidebarButton::History => Some(View::History),
+            SidebarButton::WatchLater => Some(View::WatchLater),
+            SidebarButton::Liked => state.signed_in().then_some(View::Liked),
+            SidebarButton::Playlists => state.signed_in().then_some(View::Playlists),
+            SidebarButton::Notifications => Some(View::Notifications),
+            SidebarButton::Account => Some(View::Account),
+            SidebarButton::Settings => Some(View::Settings),
+            SidebarButton::Unknown => None,
+        })
+        .collect()
+}
+
+/// The sidebar's views: icon, view, label and a count to show.
 fn sidebar_items(state: &State) -> Vec<(Icon, View, String, Option<usize>)> {
     let locale = state.settings.language;
-
-    let mut items = vec![
-        (
-            Icon::Home,
-            View::Home,
-            tr(locale, "Home").into_owned(),
-            None,
-        ),
-        (
-            Icon::Subscriptions,
-            View::Subscriptions,
-            tr(locale, "Subscriptions").into_owned(),
-            None,
-        ),
-        (
-            Icon::History,
-            View::History,
-            tr(locale, "History").into_owned(),
-            None,
-        ),
-        (
-            Icon::Clock,
-            View::WatchLater,
-            tr(locale, "Watch later").into_owned(),
-            None,
-        ),
-    ];
-    if state.signed_in() {
-        items.push((
-            Icon::ThumbsUp,
-            View::Liked,
-            tr(locale, "Liked videos").into_owned(),
-            None,
-        ));
-        items.push((
-            Icon::Playlists,
-            View::Playlists,
-            tr(locale, "Playlists").into_owned(),
-            None,
-        ));
-    }
-    items.push((
-        Icon::Bell,
-        View::Notifications,
-        tr(locale, "Notifications").into_owned(),
-        Some(state.alerts.len()),
-    ));
-    let account = state
-        .active_account()
-        .map(|account| account.name.clone())
-        .unwrap_or_else(|| match &state.account {
-            AccountState::SigningIn => tr(locale, "Signing in").into_owned(),
-            _ => tr(locale, "Sign in").into_owned(),
-        });
-    items.push((Icon::User, View::Account, account, None));
-    let update_badge = matches!(
-        state.update,
-        crate::desktop::updater::UpdateState::Available(_)
-    )
-    .then_some(1);
-    items.push((
-        Icon::Settings,
-        View::Settings,
-        tr(locale, "Settings").into_owned(),
-        update_badge,
-    ));
-    items
+    sidebar_views(state)
+        .into_iter()
+        .map(|view| match view {
+            View::Home => (Icon::Home, view, tr(locale, "Home").into_owned(), None),
+            View::Subscriptions => (
+                Icon::Subscriptions,
+                view,
+                tr(locale, "Subscriptions").into_owned(),
+                None,
+            ),
+            View::History => (
+                Icon::History,
+                view,
+                tr(locale, "History").into_owned(),
+                None,
+            ),
+            View::WatchLater => (
+                Icon::Clock,
+                view,
+                tr(locale, "Watch later").into_owned(),
+                None,
+            ),
+            View::Liked => (
+                Icon::ThumbsUp,
+                view,
+                tr(locale, "Liked videos").into_owned(),
+                None,
+            ),
+            View::Playlists => (
+                Icon::Playlists,
+                view,
+                tr(locale, "Playlists").into_owned(),
+                None,
+            ),
+            View::Notifications => (
+                Icon::Bell,
+                view,
+                tr(locale, "Notifications").into_owned(),
+                Some(state.alerts.len()),
+            ),
+            View::Account => {
+                let name = state
+                    .active_account()
+                    .map(|account| account.name.clone())
+                    .unwrap_or_else(|| match &state.account {
+                        AccountState::SigningIn => tr(locale, "Signing in").into_owned(),
+                        _ => tr(locale, "Sign in").into_owned(),
+                    });
+                (Icon::User, view, name, None)
+            }
+            _ => {
+                let update_badge = matches!(
+                    state.update,
+                    crate::desktop::updater::UpdateState::Available(_)
+                )
+                .then_some(1);
+                (
+                    Icon::Settings,
+                    View::Settings,
+                    tr(locale, "Settings").into_owned(),
+                    update_badge,
+                )
+            }
+        })
+        .collect()
 }
 
 /// YouTube's sidebar lists the channels subscribed to under the views:
@@ -890,6 +911,85 @@ fn key_pill(ui: &mut egui::Ui, palette: &theme::Palette, key: &str) {
 mod tests {
     use super::*;
     use crate::model::Video;
+    use crate::storage::settings::{SidebarEntry, default_sidebar};
+
+    fn views(state: &State) -> Vec<View> {
+        sidebar_items(state)
+            .into_iter()
+            .map(|item| item.1)
+            .collect()
+    }
+
+    #[test]
+    fn the_default_sidebar_keeps_its_original_buttons_and_order() {
+        let mut state = State::default();
+        assert_eq!(
+            views(&state),
+            [
+                View::Home,
+                View::Subscriptions,
+                View::History,
+                View::WatchLater,
+                View::Notifications,
+                View::Account,
+                View::Settings,
+            ]
+        );
+        state.account = crate::app::AccountState::SignedIn(1);
+        assert_eq!(views(&state).len(), 9);
+        assert_eq!(views(&state)[4..6], [View::Liked, View::Playlists]);
+    }
+
+    #[test]
+    fn the_sidebar_hides_and_reorders_buttons_and_keeps_signed_in_ones_gated() {
+        let mut state = State::default();
+        let mut entries = default_sidebar();
+        entries.swap(0, 2);
+        entries[1].visible = false;
+        entries[4].visible = true;
+        state.settings.sidebar = entries;
+        assert_eq!(
+            views(&state),
+            [
+                View::History,
+                View::Home,
+                View::WatchLater,
+                View::Notifications,
+                View::Account,
+                View::Settings,
+            ]
+        );
+        // Shown in the setting, but still only for a signed-in account.
+        state.account = crate::app::AccountState::SignedIn(1);
+        assert!(views(&state).contains(&View::Liked));
+        assert!(!views(&state).contains(&View::Subscriptions));
+    }
+
+    #[test]
+    fn account_and_settings_stay_in_a_sidebar_saved_with_them_hidden() {
+        let mut state = State::default();
+        state.settings.sidebar = default_sidebar()
+            .into_iter()
+            .map(|e| SidebarEntry {
+                visible: false,
+                ..e
+            })
+            .collect();
+        assert_eq!(views(&state), [View::Account, View::Settings]);
+    }
+
+    #[test]
+    fn the_badges_follow_their_buttons_when_moved() {
+        let mut state = State::default();
+        let mut entries = default_sidebar();
+        entries.reverse();
+        state.settings.sidebar = entries;
+        let items = sidebar_items(&state);
+        assert_eq!(items[0].1, View::Settings);
+        assert_eq!(items[0].3, None);
+        let notifications = items.iter().find(|i| i.1 == View::Notifications).unwrap();
+        assert_eq!(notifications.3, Some(0));
+    }
 
     /// Draws one frame and reports the left edge of the sidebar's nav label:
     /// `Some` only when the sidebar is open, `None` on the rail.

@@ -57,6 +57,11 @@ box in the bottom-right corner (click to return to the watch page, or hover for
 play/pause and close controls). Playlist playback continues beyond the initially
 loaded page. Device history supports filtering and removing individual entries.
 
+Settings → Sidebar chooses which sidebar buttons are shown and their order
+(switch to hide, arrows to move, Restore default to undo). Account and Settings
+cannot be hidden. Liked videos and Playlists still appear only when signed in.
+The number keys 1 to 9 open the buttons as the sidebar shows them.
+
 Settings → Playback → Miniplayer while scrolling keeps a video visible in the
 corner miniplayer when you scroll past it to read comments. It is off by default.
 Scrolling back reveals the inline player again; clicking the miniplayer returns

@@ -128,17 +128,8 @@ pub(super) fn handle(
             }
         }
         if state.view != View::Watch {
-            let views = [
-                View::Home,
-                View::Subscriptions,
-                View::History,
-                View::WatchLater,
-                View::Liked,
-                View::Playlists,
-                View::Notifications,
-                View::Account,
-                View::Settings,
-            ];
+            // The number keys follow the buttons as the sidebar shows them.
+            let views = sidebar_views(state);
             let digits = [
                 Key::Num1,
                 Key::Num2,
@@ -150,11 +141,10 @@ pub(super) fn handle(
                 Key::Num8,
                 Key::Num9,
             ];
-            if let Some(index) = digits.iter().position(|key| input.key_pressed(*key)) {
-                let view = views[index];
-                if !matches!(view, View::Liked | View::Playlists) || state.signed_in() {
-                    actions.push(Action::Navigate(view));
-                }
+            if let Some(index) = digits.iter().position(|key| input.key_pressed(*key))
+                && let Some(view) = views.get(index)
+            {
+                actions.push(Action::Navigate(*view));
             }
             if !focused {
                 let down = input.count_and_consume_key(egui::Modifiers::NONE, Key::ArrowDown);
@@ -517,5 +507,47 @@ mod tests {
         assert_eq!(state.cursor, 0);
         assert!(state.cursor_moved);
         assert_eq!(state.page_scroll, 0.0);
+    }
+
+    #[test]
+    fn number_keys_follow_the_buttons_the_sidebar_shows() {
+        use crate::storage::settings::{SidebarButton, SidebarEntry};
+        let mut state = State::default();
+        // Default order, signed out: Liked and Playlists are not drawn, so
+        // 5 is Notifications.
+        assert_eq!(
+            press(&mut state, Key::Num5, egui::Modifiers::NONE),
+            vec![Action::Navigate(View::Notifications)]
+        );
+        assert_eq!(
+            press(&mut state, Key::Num7, egui::Modifiers::NONE),
+            vec![Action::Navigate(View::Settings)]
+        );
+        assert!(press(&mut state, Key::Num8, egui::Modifiers::NONE).is_empty());
+        // Hide Home and move Settings first.
+        state.settings.sidebar = vec![
+            SidebarEntry {
+                button: SidebarButton::Settings,
+                visible: true,
+            },
+            SidebarEntry {
+                button: SidebarButton::Home,
+                visible: false,
+            },
+        ];
+        assert_eq!(
+            press(&mut state, Key::Num1, egui::Modifiers::NONE),
+            vec![Action::Navigate(View::Settings)]
+        );
+        assert_eq!(
+            press(&mut state, Key::Num2, egui::Modifiers::NONE),
+            vec![Action::Navigate(View::Subscriptions)]
+        );
+        // Signed in, Liked and Playlists count again.
+        state.account = crate::app::AccountState::SignedIn(1);
+        assert_eq!(
+            press(&mut state, Key::Num5, egui::Modifiers::NONE),
+            vec![Action::Navigate(View::Liked)]
+        );
     }
 }
