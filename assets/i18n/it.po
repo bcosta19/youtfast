@@ -422,6 +422,9 @@ msgstr "Installa python-secretstorage, sblocca il portachiavi del desktop e ripr
 msgid "Interaction reminder skipped"
 msgstr "Promemoria di interazione ignorato"
 
+msgid "Interface font"
+msgstr "Carattere dell'interfaccia"
+
 msgid "Joined"
 msgstr "Data di iscrizione"
 
@@ -779,6 +782,9 @@ msgstr "Rinomina"
 msgid "Replay GIF"
 msgstr "Riprova GIF"
 
+msgid "Report this"
+msgstr "Segnala questo"
+
 msgid "Retry"
 msgstr "Riprova"
 
@@ -953,6 +959,9 @@ msgstr "Le iscrizioni, la cronologia e Guarda più tardi funzionano anche solo s
 msgid "Switch"
 msgstr "Cambia"
 
+msgid "System (default)"
+msgstr "Sistema (predefinito)"
+
 msgid "Takeout subscriptions or history"
 msgstr "Iscrizioni o cronologia Takeout"
 
@@ -979,6 +988,9 @@ msgstr "Iscrizioni dell'account"
 
 msgid "The account's watch history"
 msgstr "Cronologia delle visualizzazioni dell'account"
+
+msgid "The font that draws the interface. System uses your desktop's own."
+msgstr "Il carattere con cui è disegnata l'interfaccia. «Sistema» usa quello del tuo desktop."
 
 msgid "The history file has invalid or oversized trailing data."
 msgstr "Il file della cronologia contiene dati finali non validi o di dimensioni eccessive."
@@ -1198,6 +1210,9 @@ msgstr "Il tuo feed è vuoto"
 
 msgid "Your rating could not be read"
 msgstr "Impossibile leggere la tua valutazione"
+
+msgid "Your system's interface font couldn't be loaded, so YouTFast uses Inter."
+msgstr "Non è stato possibile caricare il carattere di interfaccia del sistema, quindi YouTFast usa Inter."
 
 msgid "a cookies.txt file"
 msgstr "un file cookies.txt"

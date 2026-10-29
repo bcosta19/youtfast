@@ -72,6 +72,9 @@ pub struct Settings {
     /// The interface language; older settings start in English too.
     #[serde(default)]
     pub language: crate::appearance::i18n::Locale,
+    /// The face that draws the interface; older settings use the system's.
+    #[serde(default)]
+    pub interface_font: crate::appearance::theme::InterfaceFont,
     /// Applies only while signed in; older files keep separate histories.
     #[serde(default)]
     pub history_sync: HistorySync,
@@ -277,6 +280,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             language: crate::appearance::i18n::Locale::default(),
+            interface_font: crate::appearance::theme::InterfaceFont::default(),
             history_sync: HistorySync::default(),
             playback_buffer: PlaybackBuffer::default(),
             quality: Quality::default(),
@@ -459,11 +463,27 @@ mod tests {
     }
 
     #[test]
+    fn the_interface_font_defaults_to_the_systems_and_is_kept() {
+        use crate::appearance::theme::InterfaceFont;
+        assert_eq!(Settings::default().interface_font, InterfaceFont::System);
+        let settings: Settings = serde_json::from_str(r#"{"interface_font":"inter"}"#).unwrap();
+        assert_eq!(settings.interface_font, InterfaceFont::Inter);
+        let json = serde_json::to_string(&settings).unwrap();
+        assert!(json.contains(r#""interface_font":"inter""#));
+        let again: Settings = serde_json::from_str(&json).unwrap();
+        assert_eq!(again.interface_font, InterfaceFont::Inter);
+    }
+
+    #[test]
     fn an_older_file_loads_as_auto() {
         let settings: Settings =
             serde_json::from_str(r#"{"quality":{"Max":720},"volume":40}"#).unwrap();
         assert_eq!(settings.theme, ThemeChoice::Auto);
         assert_eq!(settings.language, crate::appearance::i18n::Locale::English);
+        assert_eq!(
+            settings.interface_font,
+            crate::appearance::theme::InterfaceFont::System
+        );
         assert!(settings.custom_theme_cache.is_none());
         assert!(settings.system_theme_cache.is_none());
     }

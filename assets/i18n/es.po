@@ -422,6 +422,9 @@ msgstr "Instala python-secretstorage, desbloquea el depósito de claves del escr
 msgid "Interaction reminder skipped"
 msgstr "Recordatorio de interacción omitido"
 
+msgid "Interface font"
+msgstr "Fuente de la interfaz"
+
 msgid "Joined"
 msgstr "Se unió el"
 
@@ -779,6 +782,9 @@ msgstr "Renombrar"
 msgid "Replay GIF"
 msgstr "Volver a reproducir GIF"
 
+msgid "Report this"
+msgstr "Informar de esto"
+
 msgid "Retry"
 msgstr "Reintentar"
 
@@ -953,6 +959,9 @@ msgstr "Las suscripciones, el historial y Ver más tarde también funcionan solo
 msgid "Switch"
 msgstr "Cambiar"
 
+msgid "System (default)"
+msgstr "Sistema (predeterminada)"
+
 msgid "Takeout subscriptions or history"
 msgstr "Suscripciones o historial de Takeout"
 
@@ -979,6 +988,9 @@ msgstr "Suscripciones de la cuenta"
 
 msgid "The account's watch history"
 msgstr "Historial de reproducciones de la cuenta"
+
+msgid "The font that draws the interface. System uses your desktop's own."
+msgstr "La fuente con la que se dibuja la interfaz. «Sistema» usa la de tu escritorio."
 
 msgid "The history file has invalid or oversized trailing data."
 msgstr "El archivo de historial contiene datos finales no válidos o de tamaño excesivo."
@@ -1198,6 +1210,9 @@ msgstr "Tu feed está vacío"
 
 msgid "Your rating could not be read"
 msgstr "No se pudo leer tu valoración"
+
+msgid "Your system's interface font couldn't be loaded, so YouTFast uses Inter."
+msgstr "No se pudo cargar la fuente de interfaz del sistema, así que YouTFast usa Inter."
 
 msgid "a cookies.txt file"
 msgstr "un archivo cookies.txt"

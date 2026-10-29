@@ -249,6 +249,26 @@ uploads also come to the desktop as notifications. Both can be turned
 off there; the first run only starts the clock, so a fresh install
 doesn't flood you.
 
+## Interface font
+
+Settings → Appearance → Interface font. **System** (the default) draws
+YouTFast with your desktop's own interface font: San Francisco on macOS,
+Segoe UI on Windows and, on Linux, the font your desktop is set to use
+(GNOME's interface font, GTK's or KDE's setting), else what fontconfig's
+`system-ui` names.
+**Inter** is the font YouTFast ships with, the same on every computer. The
+change applies at once. Other scripts (Arabic, Chinese, Devanagari, ...) are
+drawn with the fonts installed on the computer either way.
+
+If the system's font cannot be found or read, YouTFast draws with Inter and
+the Appearance group says so. **Report this** opens your browser at a new
+GitHub issue with the YouTFast version, your operating system, the desktop
+session, the font your desktop is set to use and what `fc-match system-ui`
+prints already written in; you read it,
+add the font your desktop uses, and decide whether to submit. YouTFast sends
+nothing by itself. The player's time keeps Inter's fixed-width digits with
+either choice, so it does not jiggle while it counts.
+
 ## Themes
 
 Settings → Appearance. **Automatic** follows the Omarchy desktop's theme

@@ -600,6 +600,10 @@ pub enum Action {
     SetQuality(Quality),
     SetTheme(crate::storage::settings::ThemeChoice),
     SetLanguage(crate::appearance::i18n::Locale),
+    /// Draw the interface with this face, now.
+    SetInterfaceFont(crate::appearance::theme::InterfaceFont),
+    /// Open a prefilled GitHub issue about the system font, in the browser.
+    ReportInterfaceFont,
     /// Subscribes on this device, or unsubscribes.
     ToggleSubscription(Channel),
     /// Adds to this device's Watch later, or removes.
