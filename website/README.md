@@ -38,6 +38,10 @@ https://youtfast.pages.dev/pt/ (Brazilian Portuguese). Publish only `dist/site`,
 which contains the explicit public allowlist; previews in `dist/designs` are
 never uploaded.
 
+The download links point at the release named by `Cargo.toml`'s version. Deploy
+only after that release is published, so the links never point at a release
+that does not exist yet.
+
 After authenticating with Wrangler, build and deploy:
 
 ```sh
