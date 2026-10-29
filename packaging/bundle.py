@@ -16,6 +16,7 @@ from pathlib import Path
 
 from release import ROOT, check, copy_public_files
 from native_sources import msys_inventory
+from windows_tools import install as install_windows_tools
 
 
 def run(*args):
@@ -46,7 +47,7 @@ def collect_dlls(binary, prefix, system, inspect):
     return sorted(found.values())
 
 
-def windows(binary, prefix, dist):
+def windows(binary, prefix, dist, install_tools=install_windows_tools):
     current = check()
     directory = dist / f"youtfast-v{current}-x86_64-pc-windows-gnu"
     directory.mkdir(parents=True, exist_ok=False)
@@ -70,11 +71,15 @@ def windows(binary, prefix, dist):
     if not licenses.is_dir():
         raise ValueError("MSYS2 native dependency notices are missing")
     shutil.copytree(licenses, directory / "native-licenses")
+    # The official yt-dlp.exe and deno.exe, pinned and checksummed, beside
+    # youtfast.exe: the app prefers them to anything on PATH.
+    install_tools(directory)
     copy_public_files(directory)
     (directory / "INSTALL.txt").write_text(
         "YouTFast Windows x86_64 release candidate. Extract the entire ZIP, then run youtfast.exe.\n"
         "libmpv and its imported DLLs are included; keep them beside the executable.\n"
-        "Install current yt-dlp and Deno separately and make them available on PATH.\n"
+        "yt-dlp.exe and deno.exe are included; playback uses them before anything on PATH.\n"
+        "To update yt-dlp between releases, run yt-dlp.exe -U in this folder.\n"
         "Browser-session import additionally needs Python with the yt_dlp module.\n"
         "This package has no publisher signature or installer. Interactive QA and\n"
         "matching native dependency sources must be reviewed before publication.\n"

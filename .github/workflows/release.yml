@@ -249,6 +249,17 @@ jobs:
           $process = Start-Process -FilePath $exe.FullName -ArgumentList '--version' -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out
           $actual = (Get-Content $out -Raw).Trim()
           if ($process.ExitCode -ne 0 -or $actual -ne "youtfast $($env:RELEASE_TAG.Substring(1))") { throw "Packaged Windows startup failed: exit $($process.ExitCode), output '$actual'" }
+          # The bundled yt-dlp and Deno must run from the unpacked folder with the
+          # same minimal PATH, and be the versions packaging/windows-tools.json pins.
+          $pins = Get-Content packaging/windows-tools.json -Raw | ConvertFrom-Json
+          $expected = @{ 'yt-dlp.exe' = $pins.'yt-dlp'.version; 'deno.exe' = "deno $($pins.deno.version) " }
+          foreach ($tool in 'yt-dlp.exe', 'deno.exe') {
+            $path = Join-Path $exe.DirectoryName $tool
+            if (-not (Test-Path $path)) { throw "$tool is missing next to youtfast.exe" }
+            $version = (& $path --version | Select-Object -First 1)
+            if ($LASTEXITCODE -ne 0 -or -not "$version ".StartsWith($expected[$tool])) { throw "Bundled $tool failed or is not the pinned version: exit $LASTEXITCODE, output '$version'" }
+            Write-Host "$tool -> $version"
+          }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: windows
