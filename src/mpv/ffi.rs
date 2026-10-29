@@ -158,6 +158,7 @@ unsafe extern "C" {
         name: *const c_char,
         format: mpv_format,
     ) -> c_int;
+    pub fn mpv_unobserve_property(ctx: *mut mpv_handle, registered_reply_userdata: u64) -> c_int;
     pub fn mpv_request_log_messages(ctx: *mut mpv_handle, min_level: *const c_char) -> c_int;
     pub fn mpv_wait_event(ctx: *mut mpv_handle, timeout: c_double) -> *mut mpv_event;
     pub fn mpv_set_wakeup_callback(ctx: *mut mpv_handle, cb: Option<mpv_wakeup_fn>, d: *mut c_void);
