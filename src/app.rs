@@ -871,6 +871,10 @@ impl App {
                 self.state.settings.scroll_miniplayer = on;
                 self.save_settings();
             }
+            Action::SetSidebar(entries) => {
+                self.state.settings.sidebar = crate::storage::settings::sanitize_sidebar(entries);
+                self.save_settings();
+            }
             Action::SetPlaybackBuffer(buffer) => {
                 self.state.settings.playback_buffer = buffer;
                 if let Some(player) = &self.player {
@@ -1325,7 +1329,7 @@ impl App {
 
     fn save_settings(&self) {
         self.backend
-            .send(Command::SaveSettings(self.state.settings.clone()));
+            .send(Command::SaveSettings(Box::new(self.state.settings.clone())));
     }
 }
 

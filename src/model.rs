@@ -581,6 +581,8 @@ pub enum Action {
     ToggleTheater,
     ToggleMiniPlayer,
     SetScrollMiniplayer(bool),
+    /// The sidebar's buttons: their order and which are shown.
+    SetSidebar(Vec<crate::storage::settings::SidebarEntry>),
     SetPlaybackBuffer(crate::storage::settings::PlaybackBuffer),
     SetHistorySync(crate::storage::settings::HistorySync),
     SeekChapter(bool),

@@ -73,7 +73,8 @@ The video rectangle is always black.
   an `accent` pill), then the account and Settings (with an `accent` `!` badge
   when a release update is available). Under them, a
   `Subscriptions` section lists the channels followed (round avatar, name).
-  Number keys still jump to the views (1–9, in that order).
+  Settings → Sidebar hides or reorders these buttons (Account and Settings
+  always stay); number keys 1–9 jump to the buttons as drawn, in that order.
   Collapsed (`b`, or the toggle) it is a 72 px rail of the icons and the
   channels' avatars, each named on hover. Watch and narrow windows use the
   rail automatically; the first toggle opens it, and the choice then rules

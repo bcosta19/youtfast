@@ -10,6 +10,12 @@ are the distribution record.
 
 ### Added
 
+- Settings → Sidebar lets you hide sidebar buttons and move them up or down,
+  with Restore default. Account and Settings cannot be hidden. The number keys
+  1 to 9 now follow the buttons as the sidebar shows them, so they shift when
+  buttons are hidden or moved, and when Liked videos and Playlists appear on
+  signing in.
+
 - Website navigation transitions, section and FAQ reveals, and button feedback,
   respecting the system preference for reduced motion.
 

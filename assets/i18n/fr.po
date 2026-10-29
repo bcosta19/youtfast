@@ -1541,3 +1541,15 @@ msgstr "Impossible d'installer la mise à jour sur ce système."
 
 msgid "Automatic installation is not supported for this package format."
 msgstr "L'installation automatique n'est pas prise en charge pour ce format de paquet."
+
+msgid "Choose which buttons the sidebar shows and in what order. The number keys 1 to 9 follow the buttons as shown. Account and Settings always stay."
+msgstr "Choisissez les boutons affichés dans le volet latéral et leur ordre. Les touches numériques 1 à 9 suivent les boutons tels qu'ils sont affichés. Compte et Paramètres restent toujours."
+
+msgid "Move {name} up"
+msgstr "Monter {name}"
+
+msgid "Move {name} down"
+msgstr "Descendre {name}"
+
+msgid "Restore default"
+msgstr "Rétablir les valeurs par défaut"

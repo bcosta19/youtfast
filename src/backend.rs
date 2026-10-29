@@ -234,7 +234,7 @@ impl Backend {
                 return;
             }
             Command::SaveSettings(settings) => {
-                self.settings_saves.send_replace(Some(settings));
+                self.settings_saves.send_replace(Some(*settings));
                 return;
             }
             command => command,
@@ -677,7 +677,7 @@ async fn handle(command: Command, context: Context) {
             context.library_saves.send_replace(Some(library));
         }
         Command::SaveSettings(settings) => {
-            context.settings_saves.send_replace(Some(settings));
+            context.settings_saves.send_replace(Some(*settings));
         }
         Command::CheckForUpdates { manual } => {
             let result = tokio::task::spawn_blocking(crate::desktop::updater::check_latest)

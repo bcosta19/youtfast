@@ -264,7 +264,7 @@ pub enum Command {
     /// Forget an account: its keyring entry is deleted too.
     RemoveAccount(u32),
     SaveLibrary(Library),
-    SaveSettings(Settings),
+    SaveSettings(Box<Settings>),
     /// Thumbnail URLs the interface is drawing from the network, for the
     /// disk cache to keep next time.
     CacheThumbnails(Vec<(String, bool)>),
