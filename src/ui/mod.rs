@@ -9,6 +9,8 @@
 
 use crate::appearance::i18n::{format as trf, gettext as tr};
 mod account;
+#[cfg(test)]
+mod bench;
 mod discovery;
 mod extras;
 mod keys;
