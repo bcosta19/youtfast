@@ -381,3 +381,67 @@ fn yt5_an_abbreviated_video_count_is_not_read_digit_by_digit() {
     // Read digit by digit, "2.2K" was 22.
     assert_eq!(videos, Some(2_200));
 }
+
+// ---------------------------------------------------------------------------
+// YT-6: the channel's avatar on a video lockup
+// ---------------------------------------------------------------------------
+
+fn video_lockup(image: &str) -> String {
+    format!(
+        r#"[{{ "lockupViewModel": {{
+          "contentId": "aaaaaaaaaaa",
+          "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+          "contentImage": {{ "thumbnailViewModel": {{
+              "image": {{ "sources": [ {{ "url": "https://i.ytimg.com/vi/aaaaaaaaaaa/hq720.jpg", "width": 720, "height": 404 }} ] }},
+              "overlays": [ {{ "thumbnailOverlayBadgeViewModel": {{ "thumbnailBadges": [
+                  {{ "thumbnailBadgeViewModel": {{ "text": "12:34" }} }}
+              ] }} }} ]
+          }} }},
+          "metadata": {{ "lockupMetadataViewModel": {{
+              "title": {{ "content": "A video" }},
+              {image}
+              "metadata": {{ "contentMetadataViewModel": {{ "metadataRows": [
+                  {{ "metadataParts": [ {{ "text": {{ "content": "A channel",
+                      "commandRuns": [ {{ "startIndex": 0, "length": 9, "onTap": {{ "innertubeCommand": {{
+                          "commandMetadata": {{ "webCommandMetadata": {{ "webPageType": "WEB_PAGE_TYPE_CHANNEL" }} }},
+                          "browseEndpoint": {{ "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa" }} }} }} }} ] }} }} ] }},
+                  {{ "metadataParts": [
+                      {{ "text": {{ "content": "1.2K views" }} }},
+                      {{ "text": {{ "content": "2 days ago" }} }}
+                  ] }}
+              ] }} }}
+          }} }}
+      }} }}]"#
+    )
+}
+
+#[test]
+fn yt6_a_video_lockup_keeps_its_channels_avatar() {
+    // Home, subscriptions and related lists since 2026-10: the avatar sits
+    // beside the title, not on the channel's row.
+    let json = video_lockup(
+        r#""image": { "decoratedAvatarViewModel": { "avatar": { "avatarViewModel": {
+            "image": { "sources": [
+                { "url": "https://yt3.ggpht.com/avatar=s68", "width": 68, "height": 68 }
+            ] } } } } },"#,
+    );
+    let (items, warnings) = regression::video_items(&json, Language::En).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let channel = items[0].channel.as_ref().expect("the channel was dropped");
+    assert_eq!(channel.id, "UCaaaaaaaaaaaaaaaaaaaaaa");
+    assert_eq!(
+        channel.avatar.first().map(|avatar| avatar.url.as_str()),
+        Some("https://yt3.ggpht.com/avatar=s68"),
+        "the avatar was dropped"
+    );
+}
+
+#[test]
+fn yt6_a_video_lockup_with_another_image_is_still_read() {
+    // An image of another shape leaves the avatar out, not the video.
+    let json = video_lockup(r#""image": { "somethingElse": {} },"#);
+    let (items, _) = regression::video_items(&json, Language::En).unwrap();
+    assert_eq!(items.len(), 1, "the video was dropped");
+    let channel = items[0].channel.as_ref().unwrap();
+    assert!(channel.avatar.is_empty());
+}

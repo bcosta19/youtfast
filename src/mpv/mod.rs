@@ -528,6 +528,15 @@ impl Mpv {
         self.load_with(url, &options)
     }
 
+    /// Unloads the video when its last tab closes and discards pending playback events.
+    pub fn stop(&mut self) -> Result<(), Error> {
+        self.replace(&["stop"])?;
+        // Nothing left for a signed-in retry to reload.
+        self.current = None;
+        self.status.buffering = false;
+        Ok(())
+    }
+
     /// Opens `url` in place of the current video with per-file `options`.
     fn load_with(&mut self, url: &str, options: &str) -> Result<(), Error> {
         // The index argument (-1, ignored by "replace") came in mpv 0.38;

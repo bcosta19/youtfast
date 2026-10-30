@@ -558,6 +558,11 @@ pub enum Action {
     /// A search, or a YouTube link to open.
     Search(String),
     Open(Video),
+    OpenVideoTab(Video),
+    SelectVideoTab(String),
+    CloseVideoTab(String),
+    /// The "+" button: go Home and open the next video in a new tab.
+    NewVideoTab,
     /// Goes back to where the current page was opened from.
     Back,
     Forward,

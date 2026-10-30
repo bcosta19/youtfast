@@ -78,10 +78,13 @@ pub(super) fn from_renderer(renderer: &Value) -> Option<Video> {
                     == Some("BADGE_STYLE_TYPE_LIVE_NOW")
             })
         });
+    let avatar = renderer
+        .pointer("/channelThumbnailSupportedRenderers/channelThumbnailWithLinkRenderer/thumbnail/thumbnails")
+        .or_else(|| renderer.pointer("/channelThumbnail/thumbnails"));
     Some(Video {
         id,
         title: text(renderer.get("title")).unwrap_or_default(),
-        channel_avatar: None,
+        channel_avatar: widest(avatar),
         channel: text(owner),
         channel_id: owner.and_then(|owner| {
             owner
@@ -145,10 +148,13 @@ pub(super) fn from_lockup(lockup: &Value) -> Option<Video> {
         (Some(first), second) => (parse_count(&first), second),
         (None, _) => (None, None),
     };
+    // The channel's avatar, left of the title.
+    let avatar =
+        metadata.pointer("/image/decoratedAvatarViewModel/avatar/avatarViewModel/image/sources");
     Some(Video {
         id,
         title,
-        channel_avatar: None,
+        channel_avatar: widest(avatar),
         channel: part(0, 0),
         channel_id,
         duration: badge.and_then(parse_length),
@@ -158,6 +164,19 @@ pub(super) fn from_lockup(lockup: &Value) -> Option<Video> {
         published,
         short: false,
     })
+}
+
+/// The URL of the widest image in a `thumbnails` or `sources` list.
+fn widest(images: Option<&Value>) -> Option<String> {
+    images?
+        .as_array()?
+        .iter()
+        .filter_map(|image| {
+            let width = image.get("width").and_then(Value::as_u64).unwrap_or(0);
+            Some((width, image.get("url")?.as_str()?))
+        })
+        .max_by_key(|(width, _)| *width)
+        .map(|(_, url)| super::absolute(url))
 }
 
 /// `"12:34"` or `"1:02:03"` in seconds.
@@ -194,6 +213,11 @@ mod tests {
                 { "richItemRenderer": { "content": { "videoRenderer": {
                     "videoId": "aaaaaaaaaaa",
                     "title": { "runs": [{ "text": "Old card" }] },
+                    "channelThumbnailSupportedRenderers": { "channelThumbnailWithLinkRenderer": {
+                        "thumbnail": { "thumbnails": [
+                            { "url": "//yt3.ggpht.com/old=s48", "width": 48, "height": 48 },
+                            { "url": "//yt3.ggpht.com/old=s68", "width": 68, "height": 68 }
+                        ] } } },
                     "ownerText": { "runs": [{ "text": "Chan", "navigationEndpoint":
                         { "browseEndpoint": { "browseId": "UCold" } } }] },
                     "lengthText": { "simpleText": "1:02:03" },
@@ -210,6 +234,10 @@ mod tests {
                     ] } },
                     "metadata": { "lockupMetadataViewModel": {
                         "title": { "content": "New card" },
+                        "image": { "decoratedAvatarViewModel": { "avatar": { "avatarViewModel": {
+                            "image": { "sources": [
+                                { "url": "https://yt3.ggpht.com/new=s68", "width": 68, "height": 68 }
+                            ] } } } } },
                         "metadata": { "contentMetadataViewModel": { "metadataRows": [
                             { "metadataParts": [{ "text": { "content": "Other",
                                 "commandRuns": [{ "onTap": { "innertubeCommand":
@@ -246,6 +274,10 @@ mod tests {
         assert_eq!(old.duration, Some(3723.0));
         assert_eq!(old.views, Some(1234));
         assert_eq!(old.published.as_deref(), Some("2 days ago"));
+        assert_eq!(
+            old.channel_avatar.as_deref(),
+            Some("https://yt3.ggpht.com/old=s68")
+        );
         let new = &videos[1];
         assert_eq!(
             (new.id.as_str(), new.title.as_str(), new.channel.as_deref()),
@@ -255,6 +287,25 @@ mod tests {
         assert_eq!(new.duration, Some(754.0));
         assert_eq!(new.views, Some(1_200_000));
         assert_eq!(new.published.as_deref(), Some("3 weeks ago"));
+        assert_eq!(
+            new.channel_avatar.as_deref(),
+            Some("https://yt3.ggpht.com/new=s68")
+        );
+    }
+
+    #[test]
+    fn a_card_without_an_avatar_keeps_the_initial() {
+        let lockup: Value = serde_json::from_str(
+            r#"{ "contentId": "ccccccccccc", "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+                "metadata": { "lockupMetadataViewModel": { "title": { "content": "No avatar" } } } }"#,
+        )
+        .unwrap();
+        assert_eq!(from_lockup(&lockup).unwrap().channel_avatar, None);
+        let renderer: Value = serde_json::from_str(
+            r#"{ "videoId": "ddddddddddd", "channelThumbnail": { "thumbnails": [] } }"#,
+        )
+        .unwrap();
+        assert_eq!(from_renderer(&renderer).unwrap().channel_avatar, None);
     }
 
     #[test]

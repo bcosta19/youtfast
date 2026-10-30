@@ -105,6 +105,7 @@ pub struct HistoryCache {
 /// What the views draw from.
 #[derive(Default)]
 pub struct State {
+    pub video_tabs: crate::logic::video_tabs::VideoTabs<PlayingContext>,
     pub cast: cast::State,
     pub view: View,
     /// The search field's text.
@@ -334,6 +335,15 @@ pub struct State {
 pub enum PlaylistAdvance {
     Manual,
     Autoplay,
+}
+
+/// What a video tab plays from: its list (Up next) and, from a playlist, the
+/// playlist and its next page. Kept by the tab while another tab plays.
+#[derive(Debug, Default)]
+pub struct PlayingContext {
+    up_next: Vec<Video>,
+    playlist: Option<String>,
+    more: Option<innertube::More>,
 }
 
 /// Which page of the player's menu is open.
@@ -965,6 +975,22 @@ impl App {
                 self.load(View::Results, true);
             }
             Action::Open(video) => self.open(video),
+            Action::OpenVideoTab(video) => self.state.video_tabs.add(video),
+            Action::SelectVideoTab(id) => {
+                if let Some(video) = self.state.video_tabs.video(&id).cloned() {
+                    if self.state.watching.as_ref().is_some_and(|v| v.id == id) {
+                        self.return_to_watch();
+                    } else {
+                        self.select_video_tab(video);
+                    }
+                }
+            }
+            Action::NewVideoTab => {
+                // Leaving the watch page keeps the video playing in the mini player.
+                self.apply(ctx, Action::Navigate(View::Home));
+                self.state.video_tabs.request_new_tab();
+            }
+            Action::CloseVideoTab(id) => self.close_video_tab(ctx, &id),
             Action::LoadExtras => self.load_extras(),
             Action::ToggleTranscript => {
                 self.state.transcript_open = !self.state.transcript_open;

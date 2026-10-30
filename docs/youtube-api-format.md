@@ -122,6 +122,23 @@ request shows a new format.
 - **Tests:** `yt5_a_subscriber_part_with_an_accessibility_label_is_read`,
   `yt5_an_abbreviated_video_count_is_not_read_digit_by_digit`.
 
+### YT-6: channel avatars on video lockups (2026-10-30)
+
+- **Symptom:** Home's recommendations for the account (For you) show each
+  channel's initial in a grey circle instead of its avatar; titles, channels and
+  counts are right.
+- **Old format:** video cards were `videoRenderer`s with the avatar in
+  `channelThumbnailSupportedRenderers` (still the case in search results).
+- **New format:** video cards are `lockupViewModel`s; the avatar sits beside the
+  title, in `metadata.lockupMetadataViewModel.image.decoratedAvatarViewModel.avatar.avatarViewModel.image.sources`.
+  Our own reader of the first Home page never read an avatar, and rustypipe's
+  lockup type had no `image` field, so serde dropped it on every later page.
+- **Fix:** `from_lockup` and `from_renderer` in
+  `src/youtube/innertube/home.rs`; `LockupViewModelMetadataInner` and
+  `map_lockup` in `vendor/rustypipe/src/client/response/video_item.rs`.
+- **Tests:** `yt6_a_video_lockup_keeps_its_channels_avatar`,
+  `yt6_a_video_lockup_with_another_image_is_still_read`.
+
 ## Adding an entry
 
 Copy this outline. Number entries in order, and never reuse a number.

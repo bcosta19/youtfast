@@ -10,6 +10,9 @@ are the distribution record.
 
 ### Fixed
 
+- Show channel avatars on Home's recommendations and on other lists in YouTube's
+  newer card layout, instead of the channel's initial.
+
 - Show local TV addresses in the picker to distinguish receivers with the same name.
 
 - Keep both Google Cast and YouTube TV choices when a receiver advertises both,
@@ -18,6 +21,12 @@ are the distribution record.
 - Only use DIAL links marked as running instances when stopping a TV app.
 
 ### Added
+
+- Session-only video tabs: open videos in the background using the context menu,
+  middle-click or Ctrl/Cmd-click; switch with Ctrl+Tab / Ctrl+Shift+Tab and close
+  with Ctrl/Cmd+W; the + button opens the next video in a new tab. Only the selected
+  video plays; switching back resumes it where it was left, with the playlist or
+  list it was playing from. Closing the last tab stops playback.
 
 - Opt-in SponsorBlock remote skips for the video sent to a YouTube DIAL TV or
   Google Cast receiver. YouTFast checks TV telemetry independently of local
