@@ -422,6 +422,9 @@ msgstr "Installieren Sie python-secretstorage, entsperren Sie den Desktop-Schlü
 msgid "Interaction reminder skipped"
 msgstr "Interaktionserinnerung übersprungen"
 
+msgid "Interface font"
+msgstr "Schriftart der Oberfläche"
+
 msgid "Joined"
 msgstr "Beigetreten am"
 
@@ -779,6 +782,9 @@ msgstr "Umbenennen"
 msgid "Replay GIF"
 msgstr "GIF wiederholen"
 
+msgid "Report this"
+msgstr "Melden"
+
 msgid "Retry"
 msgstr "Erneut versuchen"
 
@@ -953,6 +959,9 @@ msgstr "Abonnements, Verlauf und „Später ansehen“ funktionieren auch allein
 msgid "Switch"
 msgstr "Wechseln"
 
+msgid "System (default)"
+msgstr "System (Standard)"
+
 msgid "Takeout subscriptions or history"
 msgstr "Takeout-Abos oder -Verlauf"
 
@@ -979,6 +988,9 @@ msgstr "Abonnements des Kontos"
 
 msgid "The account's watch history"
 msgstr "Wiedergabeverlauf des Kontos"
+
+msgid "The font that draws the interface. System uses your desktop's own."
+msgstr "Die Schriftart, mit der die Oberfläche gezeichnet wird. „System“ verwendet die Ihres Desktops."
 
 msgid "The history file has invalid or oversized trailing data."
 msgstr "Die Verlaufsdatei enthält ungültige oder überdimensionierte nachfolgende Daten."
@@ -1198,6 +1210,9 @@ msgstr "Ihr Feed ist leer"
 
 msgid "Your rating could not be read"
 msgstr "Ihre Bewertung konnte nicht gelesen werden"
+
+msgid "Your system's interface font couldn't be loaded, so YouTFast uses Inter."
+msgstr "Die Systemschriftart der Oberfläche konnte nicht geladen werden, daher verwendet YouTFast Inter."
 
 msgid "a cookies.txt file"
 msgstr "eine Datei cookies.txt"
@@ -1667,3 +1682,14 @@ msgstr "Öffne auf dem TV YouTube, dann Einstellungen, dann Mit TV-Code verknüp
 
 msgid "Link TV"
 msgstr "TV verknüpfen"
+msgid "Choose which buttons the sidebar shows and in what order. The number keys 1 to 9 follow the buttons as shown. Account and Settings always stay."
+msgstr "Lege fest, welche Schaltflächen die Seitenleiste zeigt und in welcher Reihenfolge. Die Zifferntasten 1 bis 9 folgen den Schaltflächen, wie sie angezeigt werden. Konto und Einstellungen bleiben immer erhalten."
+
+msgid "Move {name} up"
+msgstr "{name} nach oben"
+
+msgid "Move {name} down"
+msgstr "{name} nach unten"
+
+msgid "Restore default"
+msgstr "Standard wiederherstellen"

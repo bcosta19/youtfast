@@ -72,6 +72,9 @@ pub struct Settings {
     /// The interface language; older settings start in English too.
     #[serde(default)]
     pub language: crate::appearance::i18n::Locale,
+    /// The face that draws the interface; older settings use the system's.
+    #[serde(default)]
+    pub interface_font: crate::appearance::theme::InterfaceFont,
     /// Applies only while signed in; older files keep separate histories.
     #[serde(default)]
     pub history_sync: HistorySync,
@@ -122,6 +125,10 @@ pub struct Settings {
     /// The sidebar collapsed to its rail of keys and avatars.
     #[serde(default)]
     pub sidebar_collapsed: bool,
+    /// The sidebar's buttons in the order drawn, each shown or hidden. A
+    /// saved list is read through [`sanitize_sidebar`], so it is complete.
+    #[serde(default = "default_sidebar", deserialize_with = "read_sidebar")]
+    pub sidebar: Vec<SidebarEntry>,
     /// At a video's end, the next one (the queue's, Up next's, then the
     /// first related) plays after a short countdown.
     #[serde(default = "on")]
@@ -158,6 +165,103 @@ pub struct Settings {
     pub last_updated_changelog: Option<String>,
 }
 
+/// A button of the sidebar. `Unknown` stands for a name a newer version
+/// saved; [`sanitize_sidebar`] drops it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SidebarButton {
+    Home,
+    Subscriptions,
+    History,
+    WatchLater,
+    Liked,
+    Playlists,
+    Notifications,
+    Account,
+    Settings,
+    #[serde(other)]
+    Unknown,
+}
+
+impl SidebarButton {
+    /// Every button, in the default order.
+    pub const ALL: [Self; 9] = [
+        Self::Home,
+        Self::Subscriptions,
+        Self::History,
+        Self::WatchLater,
+        Self::Liked,
+        Self::Playlists,
+        Self::Notifications,
+        Self::Account,
+        Self::Settings,
+    ];
+
+    /// Account and Settings stay shown: hiding Settings would leave no way
+    /// back to this list.
+    pub fn can_hide(self) -> bool {
+        !matches!(self, Self::Account | Self::Settings)
+    }
+}
+
+/// One sidebar button and whether it is shown.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SidebarEntry {
+    pub button: SidebarButton,
+    #[serde(default = "on")]
+    pub visible: bool,
+}
+
+/// All buttons, shown, in the default order.
+pub fn default_sidebar() -> Vec<SidebarEntry> {
+    SidebarButton::ALL
+        .into_iter()
+        .map(|button| SidebarEntry {
+            button,
+            visible: true,
+        })
+        .collect()
+}
+
+/// Makes a saved list usable: unknown buttons and repeats are dropped (the
+/// first stays), buttons it lacks are appended shown in the default order,
+/// and Account and Settings are shown.
+pub fn sanitize_sidebar(entries: Vec<SidebarEntry>) -> Vec<SidebarEntry> {
+    let mut clean: Vec<SidebarEntry> = Vec::with_capacity(SidebarButton::ALL.len());
+    for entry in entries {
+        if entry.button != SidebarButton::Unknown && !clean.iter().any(|e| e.button == entry.button)
+        {
+            clean.push(entry);
+        }
+    }
+    for button in SidebarButton::ALL {
+        if !clean.iter().any(|e| e.button == button) {
+            clean.push(SidebarEntry {
+                button,
+                visible: true,
+            });
+        }
+    }
+    for entry in &mut clean {
+        entry.visible |= !entry.button.can_hide();
+    }
+    clean
+}
+
+/// Reads the list entry by entry: a malformed entry is skipped instead of
+/// failing the whole settings file.
+fn read_sidebar<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<SidebarEntry>, D::Error> {
+    let values = Vec::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(sanitize_sidebar(
+        values
+            .into_iter()
+            .filter_map(|value| serde_json::from_value(value).ok())
+            .collect(),
+    ))
+}
+
 fn default_alerts_every() -> u32 {
     15
 }
@@ -176,6 +280,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             language: crate::appearance::i18n::Locale::default(),
+            interface_font: crate::appearance::theme::InterfaceFont::default(),
             history_sync: HistorySync::default(),
             playback_buffer: PlaybackBuffer::default(),
             quality: Quality::default(),
@@ -189,6 +294,7 @@ impl Default for Settings {
             theater: false,
             scroll_miniplayer: false,
             sidebar_collapsed: false,
+            sidebar: default_sidebar(),
             autoplay: on(),
             captions: None,
             caption_scale: 1.0,
@@ -222,12 +328,12 @@ impl Settings {
                 .custom_theme_cache
                 .as_ref()
                 .filter(|theme| &theme.filename == filename)
-                .map(|theme| theme.palette.clone())
+                .map(|theme| theme.palette)
                 .unwrap_or_else(Palette::dark),
             ThemeChoice::Auto => self
                 .system_theme_cache
                 .as_ref()
-                .map(|theme| theme.palette.clone())
+                .map(|theme| theme.palette)
                 .unwrap_or_else(Palette::dark),
             ThemeChoice::Dark => Palette::dark(),
             ThemeChoice::Light => Palette::light(),
@@ -357,11 +463,27 @@ mod tests {
     }
 
     #[test]
+    fn the_interface_font_defaults_to_the_systems_and_is_kept() {
+        use crate::appearance::theme::InterfaceFont;
+        assert_eq!(Settings::default().interface_font, InterfaceFont::System);
+        let settings: Settings = serde_json::from_str(r#"{"interface_font":"inter"}"#).unwrap();
+        assert_eq!(settings.interface_font, InterfaceFont::Inter);
+        let json = serde_json::to_string(&settings).unwrap();
+        assert!(json.contains(r#""interface_font":"inter""#));
+        let again: Settings = serde_json::from_str(&json).unwrap();
+        assert_eq!(again.interface_font, InterfaceFont::Inter);
+    }
+
+    #[test]
     fn an_older_file_loads_as_auto() {
         let settings: Settings =
             serde_json::from_str(r#"{"quality":{"Max":720},"volume":40}"#).unwrap();
         assert_eq!(settings.theme, ThemeChoice::Auto);
         assert_eq!(settings.language, crate::appearance::i18n::Locale::English);
+        assert_eq!(
+            settings.interface_font,
+            crate::appearance::theme::InterfaceFont::System
+        );
         assert!(settings.custom_theme_cache.is_none());
         assert!(settings.system_theme_cache.is_none());
     }
@@ -381,7 +503,7 @@ mod tests {
         let mut settings = Settings {
             system_theme_cache: Some(CustomTheme {
                 filename: "omarchy.json".into(),
-                palette: omarchy.clone(),
+                palette: omarchy,
             }),
             ..Settings::default()
         };
@@ -391,7 +513,7 @@ mod tests {
         nord.accent = egui::Color32::from_rgb(4, 5, 6);
         settings.custom_theme_cache = Some(CustomTheme {
             filename: "Nord.json".into(),
-            palette: nord.clone(),
+            palette: nord,
         });
         settings.theme = ThemeChoice::Custom("Nord.json".into());
         assert_eq!(settings.palette(), nord);
@@ -424,5 +546,69 @@ mod tests {
         };
         let json = serde_json::to_string(&settings).unwrap();
         assert_eq!(serde_json::from_str::<Settings>(&json).unwrap(), settings);
+    }
+
+    fn entry(button: SidebarButton, visible: bool) -> SidebarEntry {
+        SidebarEntry { button, visible }
+    }
+
+    #[test]
+    fn the_default_sidebar_lists_every_button_shown_in_the_original_order() {
+        let buttons: Vec<_> = default_sidebar().iter().map(|e| e.button).collect();
+        assert_eq!(buttons, SidebarButton::ALL);
+        assert!(default_sidebar().iter().all(|e| e.visible));
+        // A file from before the setting loads the default.
+        let parsed: Settings = serde_json::from_str(r#"{"volume": 40.0}"#).unwrap();
+        assert_eq!(parsed.sidebar, default_sidebar());
+    }
+
+    #[test]
+    fn a_damaged_sidebar_list_is_completed_without_losing_the_other_settings() {
+        let text = r#"{
+            "volume": 37,
+            "sidebar": [
+                {"button": "history", "visible": false},
+                {"button": "from_the_future"},
+                {"button": "home"},
+                {"button": "history", "visible": true},
+                "nonsense",
+                {"button": "settings", "visible": false}
+            ]
+        }"#;
+        let settings: Settings = serde_json::from_str(text).unwrap();
+        assert_eq!(settings.volume, 37.0);
+        let got: Vec<_> = settings
+            .sidebar
+            .iter()
+            .map(|e| (e.button, e.visible))
+            .collect();
+        use SidebarButton as B;
+        assert_eq!(
+            got,
+            [
+                (B::History, false),
+                (B::Home, true),
+                (B::Settings, true),
+                (B::Subscriptions, true),
+                (B::WatchLater, true),
+                (B::Liked, true),
+                (B::Playlists, true),
+                (B::Notifications, true),
+                (B::Account, true),
+            ]
+        );
+        let json = serde_json::to_string(&settings).unwrap();
+        assert_eq!(serde_json::from_str::<Settings>(&json).unwrap(), settings);
+    }
+
+    #[test]
+    fn account_and_settings_cannot_be_hidden() {
+        let hidden = SidebarButton::ALL.map(|button| entry(button, false));
+        for e in sanitize_sidebar(hidden.to_vec()) {
+            assert_eq!(e.visible, !e.button.can_hide(), "{:?}", e.button);
+        }
+        assert!(!SidebarButton::Account.can_hide());
+        assert!(!SidebarButton::Settings.can_hide());
+        assert!(SidebarButton::Home.can_hide());
     }
 }

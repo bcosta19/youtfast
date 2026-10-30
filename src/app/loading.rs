@@ -316,6 +316,7 @@ impl App {
             }
             Slot::History => {
                 state.account_history = Listing::Loading;
+                state.account_history_generation += 1;
                 state.history_more = None;
                 state.history_more_state = Fetch::Idle;
             }
@@ -631,12 +632,14 @@ impl App {
                 state.history_more = more;
                 state.history_more_state = Fetch::Idle;
                 put(&mut state.account_history, Ok(items));
+                state.account_history_generation += 1;
             }
             (Slot::History, Ok(Payload::More { items, more })) => {
                 state.history_more = more;
                 state.history_more_state = Fetch::Idle;
                 if let PageItems::History(rows) = items {
                     state.account_history.items_mut().extend(rows);
+                    state.account_history_generation += 1;
                 }
             }
             (Slot::WatchLater, Ok(Payload::More { items, more })) => {
@@ -754,6 +757,7 @@ impl App {
                     state.history_more_state = Fetch::Failed(error);
                 } else {
                     put(&mut state.account_history, Err(error));
+                    state.account_history_generation += 1;
                 }
             }
             (Slot::Playlists, Err(error)) => {

@@ -14,14 +14,24 @@ before decoration. Every keyboard binding stays; the `?` overlay lists them.
 
 ## Type
 
-- Inter at four weights through fastframe-fonts (the platform's interface
-  face where it has one), installed faces behind it for other scripts, and
-  the desktop's text rendering (`theme::install_fonts`).
+- The desktop's own interface face by default (San Francisco, Segoe UI; on
+  Linux the font the desktop is configured with, read from GNOME's
+  `font-name`, GTK's or KDE's settings by `appearance::desktop_font`, then
+  fontconfig's `system-ui`), at four weights through fastframe-fonts
+  (`Primary::System`), installed faces behind it for other scripts, and the
+  desktop's text rendering. When that face cannot be found or read, the
+  bundled Inter draws instead and Settings → Appearance says so, with a
+  button that opens a prefilled GitHub issue (nothing is sent until the user
+  submits it). Settings → Appearance → Interface font can choose Inter
+  outright; it applies live (`InterfaceFont`, `theme::SystemFonts`).
 - `theme::{regular, medium, semibold, bold}(size)` give the weights.
 - Sizes: 12–13 secondary and metadata, 14 body, lists and buttons, 18 bold
   section headings, 20 bold a video's title on the watch page, 24 bold a
   page's own title (a channel's name). Emphasis comes from weight first.
-- Numbers keep the body face; durations sit in the thumbnail's badge.
+- Numbers keep the body face; durations sit in the thumbnail's badge. The
+  system's faces have proportional digits, so the figures that count (the
+  player's position) use `theme::tabular`: Inter's tabular digits, in a
+  family of their own that falls back to the interface face.
 
 ## Colour
 
@@ -73,7 +83,8 @@ The video rectangle is always black.
   an `accent` pill), then the account and Settings (with an `accent` `!` badge
   when a release update is available). Under them, a
   `Subscriptions` section lists the channels followed (round avatar, name).
-  Number keys still jump to the views (1–9, in that order).
+  Settings → Sidebar hides or reorders these buttons (Account and Settings
+  always stay); number keys 1–9 jump to the buttons as drawn, in that order.
   Collapsed (`b`, or the toggle) it is a 72 px rail of the icons and the
   channels' avatars, each named on hover. Watch and narrow windows use the
   rail automatically; the first toggle opens it, and the choice then rules

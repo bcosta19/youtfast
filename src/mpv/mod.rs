@@ -314,7 +314,14 @@ pub struct Mpv {
     at_end: bool,
     /// Only audio streams are requested and decoded.
     audio_only: bool,
+    /// `time-pos` is read on a timer instead of observed: with no video
+    /// frames, each of its changes would otherwise wake a whole interface
+    /// pass just to move the seek bar.
+    position_polled: bool,
 }
+
+/// How often the position is read while playing without a picture.
+const POSITION_EVERY: std::time::Duration = std::time::Duration::from_millis(100);
 
 impl Mpv {
     /// Starts mpv with its video output set to the render API, so nothing
@@ -456,6 +463,7 @@ impl Mpv {
             signed_in: false,
             at_end: false,
             audio_only: false,
+            position_polled: false,
         })
     }
 
@@ -560,7 +568,32 @@ impl Mpv {
         let format = if audio_only { AUDIO_FORMAT } else { FORMAT };
         let vid = if audio_only { "no" } else { "auto" };
         self.set_property("ytdl-format", format)?;
-        self.set_property("vid", vid)
+        self.set_property("vid", vid)?;
+        self.set_position_polled(audio_only)
+    }
+
+    /// Switches `time-pos` between being observed (a wakeup per change) and
+    /// being read by [`Mpv::poll`] every [`POSITION_EVERY`].
+    fn set_position_polled(&mut self, polled: bool) -> Result<(), Error> {
+        if self.position_polled == polled {
+            return Ok(());
+        }
+        self.position_polled = polled;
+        // SAFETY: valid handle; TIME_POS was registered by `new`, and a
+        // static property name.
+        let code = unsafe {
+            if polled {
+                ffi::mpv_unobserve_property(self.handle.ptr(), TIME_POS)
+            } else {
+                ffi::mpv_observe_property(
+                    self.handle.ptr(),
+                    TIME_POS,
+                    c"time-pos".as_ptr(),
+                    ffi::MPV_FORMAT_DOUBLE,
+                )
+            }
+        };
+        check(code, "observing the position")
     }
 
     /// Sets how much video mpv keeps buffered ahead and behind in memory.
@@ -817,6 +850,16 @@ impl Mpv {
                 }
                 ffi::MPV_EVENT_SHUTDOWN => break,
                 _ => {}
+            }
+        }
+        if self.position_polled && self.playback_events.active {
+            self.status.position = self
+                .get_property("time-pos")
+                .and_then(|text| text.parse().ok())
+                .unwrap_or(0.0);
+            if self.is_playing() {
+                // SAFETY: the boxed context lives until Drop.
+                unsafe { &*self.wakeup }.request_repaint_after(POSITION_EVERY);
             }
         }
         let playing = self.is_playing();

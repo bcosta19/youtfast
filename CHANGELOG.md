@@ -38,7 +38,7 @@ are the distribution record.
 - TV discovery searches every private network interface and repeats the search,
   also checks Google Cast announcements for YouTube, and IP lookup asks the TV
   for its own endpoint (LG, Roku and others) before trying known ports. TVs with
-  both paths are listed once through YouTube DIAL, and known Google speakers are
+  both paths keep separate connection choices, and known Google speakers are
   left out.
 - Optional Google Cast TV picker and remote through `catt`: discover local
   devices, send the current YouTube video with its starting position, play,
@@ -46,6 +46,23 @@ are the distribution record.
   the TV playing. The local player pauses only after the TV confirms the
   requested video. `catt` must be installed separately; physical-device and
   native Windows/macOS qualification remain pending.
+
+## [0.4.0] - 2026-10-29
+
+### Added
+
+- Settings → Appearance → Interface font: YouTFast now draws with your
+  desktop's own interface font by default (System), or with Inter as before.
+  The choice applies at once and older settings start on System. When the
+  system's font cannot be loaded, Inter draws instead, Settings says so and
+  Report this opens a prefilled GitHub issue in your browser (nothing is sent
+  by YouTFast). The player's time keeps fixed-width digits with either font.
+
+- Settings → Sidebar lets you hide sidebar buttons and move them up or down,
+  with Restore default. Account and Settings cannot be hidden. The number keys
+  1 to 9 now follow the buttons as the sidebar shows them, so they shift when
+  buttons are hidden or moved, and when Liked videos and Playlists appear on
+  signing in.
 
 - Website navigation transitions, section and FAQ reveals, and button feedback,
   respecting the system preference for reduced motion.
@@ -58,6 +75,8 @@ are the distribution record.
 
 ### Changed
 
+- The project landing page is rewritten in plain language: a download button that adapts to the visitor's system with direct release links and install steps, six feature cards, a "How it works" section for developers, a readable benchmark and a longer FAQ. Fonts are now compact WOFF2 subsets.
+
 - The project landing page uses the Cinema design with bundled Noto Sans,
   light/dark/system themes and more space around the frequently asked questions.
 
@@ -66,6 +85,11 @@ are the distribution record.
   menu.
 
 ### Fixed
+
+- Scrolling is smoother and uses less CPU on History (long histories are only
+  drawn where they show and are no longer re-sorted on every frame), Home,
+  Notifications and the comments under a video, and audio-only playback no
+  longer redraws the window for every tick of the seek bar.
 
 - Keyboard focus is visible on navigation, buttons, chips, rows and switches;
   player and miniplayer controls can be reached while a video is playing.
@@ -240,7 +264,8 @@ macOS Apple Silicon. Interactive Windows/macOS qualification is still pending.
 These exclusions are scope decisions, not completed features promised for a
 specific next version. See [ROADMAP.md](ROADMAP.md) for follow-up gates.
 
-[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/bcosta19/youtfast/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/bcosta19/youtfast/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/bcosta19/youtfast/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/bcosta19/youtfast/releases/tag/v0.1.0

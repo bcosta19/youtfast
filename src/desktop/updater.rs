@@ -851,8 +851,12 @@ mod tests {
     #[test]
     fn bundled_changelog_extracts_current_version_notes() {
         let notes = bundled_changelog_for(CURRENT_VERSION);
-        assert!(notes.contains("Added"));
-        assert!(notes.contains("About section and built-in updater"));
+        let current = extract_changelog_section(BUNDLED_CHANGELOG, CURRENT_VERSION)
+            .expect("the compiled version has its own changelog section");
+        assert!(!current.is_empty());
+        assert_eq!(notes, current);
+        let notes_030 = bundled_changelog_for("0.3.0");
+        assert!(notes_030.contains("About section and built-in updater"));
         let notes_020 = bundled_changelog_for("0.2.0");
         assert!(notes_020.contains("Spanish, French, German and Italian"));
     }

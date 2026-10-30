@@ -2,7 +2,7 @@
 //! widget, the lock screen and `playerctl` read them): what is playing,
 //! and the commands media keys and those panels send back.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use fastframe_now_playing as np;
 
@@ -31,6 +31,61 @@ impl Effect {
 /// The controls' handle; the controls run on a thread of their own.
 pub struct MediaControls {
     controls: np::NowPlaying,
+    /// What the last state sent was built from, and when.
+    sent: Option<(Inputs, Instant)>,
+}
+
+/// How long a state built from the same inputs is trusted: the position
+/// moves on its own, and what the next and previous buttons offer depends
+/// on lists that are costly to compare every frame.
+const REFRESH: Duration = Duration::from_millis(500);
+
+/// What decides the media state besides the position and the queue.
+#[derive(Debug, PartialEq)]
+struct Inputs {
+    video: Option<(String, String)>,
+    status: Option<(Option<String>, bool, bool, u64, u64)>,
+}
+
+impl Inputs {
+    fn of(state: &State, status: Option<&Status>) -> Self {
+        Self {
+            video: state
+                .watching
+                .as_ref()
+                .map(|video| (video.id.clone(), video.title.clone())),
+            status: status.map(|status| {
+                (
+                    status.title.clone(),
+                    status.paused,
+                    status.idle,
+                    status.duration.to_bits(),
+                    status.volume.to_bits(),
+                )
+            }),
+        }
+    }
+
+    /// [`Inputs::of`] equals `self`, without building it.
+    fn same(&self, state: &State, status: Option<&Status>) -> bool {
+        let video = match (&self.video, &state.watching) {
+            (None, None) => true,
+            (Some((id, title)), Some(video)) => *id == video.id && *title == video.title,
+            _ => false,
+        };
+        let status = match (&self.status, status) {
+            (None, None) => true,
+            (Some((title, paused, idle, duration, volume)), Some(status)) => {
+                *title == status.title
+                    && *paused == status.paused
+                    && *idle == status.idle
+                    && *duration == status.duration.to_bits()
+                    && *volume == status.volume.to_bits()
+            }
+            _ => false,
+        };
+        video && status
+    }
 }
 
 impl MediaControls {
@@ -42,6 +97,7 @@ impl MediaControls {
             controls: np::NowPlaying::start(np::App::new("youtfast", "YouTFast"), move || {
                 waker.request_repaint()
             }),
+            sent: None,
         }
     }
 
@@ -56,7 +112,18 @@ impl MediaControls {
 
     /// Tells the desktop what is playing now.
     pub fn update(&mut self, state: &State, status: Option<&Status>) {
+        // Building the state allocates its strings: while the inputs are
+        // the same, only the position moves, which the controls take at most
+        // once a second.
+        let now = Instant::now();
+        if let Some((inputs, at)) = &self.sent
+            && now.duration_since(*at) < REFRESH
+            && inputs.same(state, status)
+        {
+            return;
+        }
         self.controls.update(media_state(state, status));
+        self.sent = Some((Inputs::of(state, status), now));
     }
 
     /// Tells clients where playback is after a seek, so they jump.

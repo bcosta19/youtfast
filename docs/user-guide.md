@@ -57,6 +57,11 @@ box in the bottom-right corner (click to return to the watch page, or hover for
 play/pause and close controls). Playlist playback continues beyond the initially
 loaded page. Device history supports filtering and removing individual entries.
 
+Settings → Sidebar chooses which sidebar buttons are shown and their order
+(switch to hide, arrows to move, Restore default to undo). Account and Settings
+cannot be hidden. Liked videos and Playlists still appear only when signed in.
+The number keys 1 to 9 open the buttons as the sidebar shows them.
+
 Settings → Playback → Miniplayer while scrolling keeps a video visible in the
 corner miniplayer when you scroll past it to read comments. It is off by default.
 Scrolling back reveals the inline player again; clicking the miniplayer returns
@@ -347,6 +352,26 @@ or 60 in Settings) and lists what's new under `[7] Notifications`. New
 uploads also come to the desktop as notifications. Both can be turned
 off there; the first run only starts the clock, so a fresh install
 doesn't flood you.
+
+## Interface font
+
+Settings → Appearance → Interface font. **System** (the default) draws
+YouTFast with your desktop's own interface font: San Francisco on macOS,
+Segoe UI on Windows and, on Linux, the font your desktop is set to use
+(GNOME's interface font, GTK's or KDE's setting), else what fontconfig's
+`system-ui` names.
+**Inter** is the font YouTFast ships with, the same on every computer. The
+change applies at once. Other scripts (Arabic, Chinese, Devanagari, ...) are
+drawn with the fonts installed on the computer either way.
+
+If the system's font cannot be found or read, YouTFast draws with Inter and
+the Appearance group says so. **Report this** opens your browser at a new
+GitHub issue with the YouTFast version, your operating system, the desktop
+session, the font your desktop is set to use and what `fc-match system-ui`
+prints already written in; you read it,
+add the font your desktop uses, and decide whether to submit. YouTFast sends
+nothing by itself. The player's time keeps Inter's fixed-width digits with
+either choice, so it does not jiggle while it counts.
 
 ## Themes
 

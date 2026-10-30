@@ -436,25 +436,36 @@ impl App {
                 ctx.request_repaint_after(Duration::from_millis(250));
             }
         }
-        let Some(status) = self.player.as_ref().map(|player| player.status().clone()) else {
+        // Only what the checks below read: this runs every frame, and the
+        // status carries strings and the captions' list.
+        let Some((paused, seekable, position)) = self.player.as_ref().map(|player| {
+            let status = player.status();
+            (status.paused, status.seekable, status.position)
+        }) else {
             return;
         };
-        if self.captions_pending && !status.subtitles.is_empty() {
+        if self.captions_pending
+            && let Some(subtitles) = self
+                .player
+                .as_ref()
+                .map(|player| player.status().subtitles.clone())
+                .filter(|subtitles| !subtitles.is_empty())
+        {
             self.captions_pending = false;
             if let Some(id) = self
                 .state
                 .settings
                 .captions
                 .as_deref()
-                .and_then(|lang| pick_subtitle(&status.subtitles, lang))
+                .and_then(|lang| pick_subtitle(&subtitles, lang))
             {
                 self.with_player(|player| player.set_subtitle(Some(id)));
             }
         }
         if self.state.settings.sponsorblock
-            && !status.paused
-            && status.seekable
-            && let Some(index) = self.current_segment(status.position)
+            && !paused
+            && seekable
+            && let Some(index) = self.current_segment(position)
             && !self.state.skipped.contains(&index)
             && self.state.segments[index].skipped_at_once()
         {

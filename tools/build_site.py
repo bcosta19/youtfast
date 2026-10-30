@@ -2,27 +2,40 @@
 """Build and validate the dependency-free public site into dist/site."""
 
 from html.parser import HTMLParser
+import re
 from pathlib import Path
 from posixpath import normpath
 from shutil import copyfile
+import tomllib
 from urllib.parse import unquote, urlsplit
 from site_locale import portuguese_page
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "dist" / "site"
 ORIGIN = "https://youtfast.pages.dev"
+VERSION = tomllib.loads((ROOT / "Cargo.toml").read_text())["package"]["version"]
+_released = re.search(rf"^## \[{re.escape(VERSION)}\] - (\d{{4}}-\d{{2}}-\d{{2}})$",
+                      (ROOT / "CHANGELOG.md").read_text(), re.M)
+if not _released:
+    raise ValueError(f"CHANGELOG.md has no dated entry for {VERSION}")
+RELEASE_DATE = _released.group(1)
 FILES = {
     "index.html": ROOT / "website/index.html",
     "styles.css": ROOT / "website/styles.css",
     "cinema.css": ROOT / "website/cinema.css",
-    "assets/fonts/NotoSans-Regular.ttf": ROOT / "website/assets/fonts/NotoSans-Regular.ttf",
-    "assets/fonts/NotoSans-Bold.ttf": ROOT / "website/assets/fonts/NotoSans-Bold.ttf",
+    "assets/fonts/NotoSans-Regular.woff2": ROOT / "website/assets/fonts/NotoSans-Regular.woff2",
+    "assets/fonts/NotoSans-Bold.woff2": ROOT / "website/assets/fonts/NotoSans-Bold.woff2",
     "assets/fonts/OFL.txt": ROOT / "website/assets/fonts/OFL.txt",
     "site.js": ROOT / "website/site.js",
     "assets/player.webp": ROOT / "website/assets/player.webp",
     "assets/youtfast.svg": ROOT / "packaging/icons/youtfast.svg",
     "assets/youtfast-demo.mp4": ROOT / "assets/demo/youtfast-demo.mp4",
 }
+
+
+def stamp(source):
+    """Fill the release version (from Cargo.toml) into the page source."""
+    return source.replace("{{VERSION}}", VERSION).replace("{{DATE}}", RELEASE_DATE)
 
 
 class Page(HTMLParser):
@@ -70,13 +83,16 @@ class Page(HTMLParser):
 
 
 def build():
-    source = FILES["index.html"].read_text()
+    source = stamp(FILES["index.html"].read_text())
+    if "{{" in source:
+        raise ValueError("Unresolved template placeholder in website/index.html")
     localized = portuguese_page(source, ORIGIN)
     for name, html in [("index.html", source), ("pt/index.html", localized)]:
         page = Page(name)
         page.feed(html)
         page.validate()
     generated = {
+        "index.html": source,
         "pt/index.html": localized,
         "404.html": ('<!doctype html><html lang="en"><meta charset="utf-8">'
                      '<meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -101,6 +117,8 @@ def build():
     }
     # Publish only the explicit public assets above, never the repository root.
     for name, source in FILES.items():
+        if name == "index.html":
+            continue  # written above with the release version filled in
         if not source.is_file() or source.is_symlink():
             raise ValueError(f"Missing or symbolic source asset: {source.relative_to(ROOT)}")
         target = OUTPUT / name

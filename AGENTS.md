@@ -243,7 +243,7 @@ its job, not at the root:
 
 See `ROADMAP.md` for pending work and `CHANGELOG.md` for implemented features.
 RustyPipe search, i18n, persistence and the offline demo are in the tree.
-0.1.0, 0.2.0 and 0.3.0 target Linux x86_64, Windows x86_64 and macOS Apple
+0.x releases target Linux x86_64, Windows x86_64 and macOS Apple
 Silicon; candidate packaging is not completed interactive platform qualification.
 
 ## YouTube response formats

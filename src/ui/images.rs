@@ -26,12 +26,25 @@ struct Cache {
     asked: HashSet<String>,
     failed: HashMap<String, Failed>,
     loaded: HashSet<String>,
+    /// `memory_uri` of each loaded url, worked out once.
+    uris: HashMap<String, String>,
     wanted: Vec<(String, bool)>,
     expired: Vec<(String, bool)>,
     refreshed: HashSet<String>,
     repaired: HashSet<String>,
 }
 impl Cache {
+    /// Drops retained state for an unseen image and returns its display URI.
+    fn forget(&mut self, url: &str) -> String {
+        self.failed.remove(url);
+        self.loaded.remove(url);
+        self.refreshed.remove(url);
+        self.repaired.remove(url);
+        self.uris
+            .remove(url)
+            .unwrap_or_else(|| memory_uri(&self.dir, url))
+    }
+
     /// Queues `url` for the backend; false when it is already on its way
     /// or waiting to be retried.
     fn request(&mut self, url: &str, now: f64) -> bool {
@@ -105,6 +118,7 @@ pub fn init(dir: PathBuf) {
         asked: HashSet::new(),
         failed: HashMap::new(),
         loaded: HashSet::new(),
+        uris: HashMap::new(),
         wanted: Vec::new(),
         expired: Vec::new(),
         refreshed: HashSet::new(),
@@ -160,13 +174,26 @@ pub fn remote<'a>(ui: &Ui, url: &'a str) -> Image<'a> {
     let ctx = ui.ctx();
     let now = ctx.input(|input| input.time);
     ctx.data_mut(|data| {
-        data.get_temp_mut_or_default::<Drawn>(id())
-            .0
-            .insert(url.to_owned(), now);
+        let drawn = &mut data.get_temp_mut_or_default::<Drawn>(id()).0;
+        // Most frames redraw a url already listed: no new key to allocate.
+        match drawn.get_mut(url) {
+            Some(seen) => *seen = now,
+            None => {
+                drawn.insert(url.to_owned(), now);
+            }
+        }
     });
     if let Some(cache) = CACHE.lock().unwrap().as_mut() {
         if cache.loaded.contains(url) {
-            return Image::new(memory_uri(&cache.dir, url));
+            let uri = match cache.uris.get(url) {
+                Some(uri) => uri.clone(),
+                None => {
+                    let uri = memory_uri(&cache.dir, url);
+                    cache.uris.insert(url.to_owned(), uri.clone());
+                    uri
+                }
+            };
+            return Image::new(uri);
         }
         // The next pass hands the request to the backend; it should not
         // wait for unrelated input to come.
@@ -293,11 +320,7 @@ pub fn forget_unseen(ctx: &Context) {
     });
     if let Some(c) = CACHE.lock().unwrap().as_mut() {
         for url in stale {
-            c.failed.remove(&url);
-            c.loaded.remove(&url);
-            c.refreshed.remove(&url);
-            c.repaired.remove(&url);
-            let uri = memory_uri(&c.dir, &url);
+            let uri = c.forget(&url);
             animation::forget(ctx, &uri);
             ctx.forget_image(&uri);
         }
@@ -324,6 +347,7 @@ mod tests {
             asked: HashSet::new(),
             failed: HashMap::new(),
             loaded: HashSet::new(),
+            uris: HashMap::new(),
             wanted: Vec::new(),
             expired: Vec::new(),
             refreshed: HashSet::new(),
@@ -369,8 +393,21 @@ mod tests {
     }
     #[test]
     fn only_unseen_images_are_forgotten() {
+        let mut c = cache();
+        for url in ["old", "recent"] {
+            c.loaded.insert(url.to_owned());
+            c.uris.insert(url.to_owned(), memory_uri(&c.dir, url));
+        }
         let mut drawn = HashMap::from([("old".to_owned(), 10.0), ("recent".to_owned(), 100.0)]);
-        assert_eq!(take_stale(&mut drawn, 120.0, 60.0), ["old"]);
+        let stale = take_stale(&mut drawn, 120.0, 60.0);
+        assert_eq!(stale, ["old"]);
+        for url in stale {
+            assert_eq!(c.forget(&url), memory_uri(&c.dir, &url));
+        }
+        assert!(!c.loaded.contains("old"));
+        assert!(!c.uris.contains_key("old"));
+        assert!(c.loaded.contains("recent"));
+        assert!(c.uris.contains_key("recent"));
         assert!(drawn.contains_key("recent"));
     }
 }

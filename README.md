@@ -67,7 +67,8 @@ been compared yet; numbers from other machines are welcome.
 
 ## Installation
 
-**0.2.0 is published; 0.3.0 is the current release candidate.**
+Published versions are listed on GitHub Releases. A version bump in the
+repository does not mean its packages have been published.
 Packages are built and tested headlessly on GitHub-hosted runners; interactive
 checks on clean Windows and macOS machines are still in progress. Download from
 [GitHub Releases](https://github.com/bcosta19/youtfast/releases).

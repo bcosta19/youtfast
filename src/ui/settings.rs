@@ -7,9 +7,12 @@ use egui::{Align, Color32, CornerRadius, Layout, Response, RichText, Sense, Ui, 
 use super::{results, widgets};
 use crate::app::State;
 use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
-use crate::appearance::theme::{self, Palette};
+use crate::appearance::icons::Icon;
+use crate::appearance::theme::{self, InterfaceFont, Palette};
 use crate::model::Action;
-use crate::storage::settings::{HistorySync, PlaybackBuffer, ThemeChoice};
+use crate::storage::settings::{
+    HistorySync, PlaybackBuffer, SidebarButton, ThemeChoice, default_sidebar,
+};
 
 /// The widest the settings read well.
 const WIDTH: f32 = 760.0;
@@ -31,6 +34,8 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 appearance(ui, state, actions);
                 ui.add_space(24.0);
                 playback(ui, state, actions);
+                ui.add_space(24.0);
+                sidebar(ui, state, actions);
                 ui.add_space(24.0);
                 history(ui, state, actions);
                 ui.add_space(24.0);
@@ -63,6 +68,42 @@ fn appearance(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     language_picker(ui, state, actions);
                 },
             );
+            ui.add_space(12.0);
+            setting_row(
+                ui,
+                palette,
+                &tr(locale, "Interface font"),
+                &tr(
+                    locale,
+                    "The font that draws the interface. System uses your desktop's own.",
+                ),
+                CONTROL_WIDTH,
+                |ui| {
+                    interface_font_picker(ui, state, actions);
+                },
+            );
+            if state.settings.interface_font == InterfaceFont::System && state.system_font_missing {
+                ui.add_space(8.0);
+                ui.label(
+                    RichText::new(tr(
+                        locale,
+                        "Your system's interface font couldn't be loaded, so YouTFast uses Inter.",
+                    ))
+                    .font(theme::regular(13.0))
+                    .color(palette.secondary),
+                );
+                ui.add_space(4.0);
+                if widgets::button(
+                    ui,
+                    palette,
+                    &tr(locale, "Report this"),
+                    widgets::ButtonStyle::Normal,
+                )
+                .clicked()
+                {
+                    actions.push(Action::ReportInterfaceFont);
+                }
+            }
             ui.add_space(12.0);
             setting_row(
                 ui,
@@ -110,6 +151,34 @@ fn language_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     .clicked()
                 {
                     actions.push(Action::SetLanguage(locale));
+                    ui.close();
+                }
+            }
+        });
+}
+
+/// The interface font's menu: the system's, or Inter.
+fn interface_font_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+    let name = |font: InterfaceFont| match font {
+        InterfaceFont::System => tr(locale, "System (default)").into_owned(),
+        InterfaceFont::Inter => "Inter".to_owned(),
+    };
+    egui::ComboBox::from_id_salt("interface-font")
+        .width(200.0)
+        .selected_text(
+            RichText::new(name(state.settings.interface_font)).font(theme::regular(14.0)),
+        )
+        .show_ui(ui, |ui| {
+            for font in InterfaceFont::ALL {
+                if ui
+                    .selectable_label(
+                        state.settings.interface_font == font,
+                        RichText::new(name(font)).font(theme::regular(14.0)),
+                    )
+                    .clicked()
+                {
+                    actions.push(Action::SetInterfaceFont(font));
                     ui.close();
                 }
             }
@@ -275,6 +344,111 @@ fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             );
         });
     });
+}
+
+/// The Sidebar group: each button with a switch to show it and arrows to
+/// move it. Account and Settings stay shown. Number keys follow this order.
+fn sidebar(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+    let palette = &state.palette;
+    widgets::section(ui, palette, &tr(locale, "Sidebar"), None, |ui| {
+        widgets::card(ui, palette, |ui| {
+            let card = widgets::on_card(palette);
+            ui.add(
+                egui::Label::new(
+                    RichText::new(tr(
+                        locale,
+                        "Choose which buttons the sidebar shows and in what order. The number keys 1 to 9 follow the buttons as shown. Account and Settings always stay.",
+                    ))
+                    .font(theme::regular(13.0))
+                    .color(palette.secondary),
+                )
+                .wrap(),
+            );
+            ui.add_space(8.0);
+            let entries = &state.settings.sidebar;
+            let last = entries.len() - 1;
+            for (index, entry) in entries.iter().enumerate() {
+                let name = sidebar_button_name(locale, entry.button);
+                // A global id keyed by button (`push_id`'s widget ids still
+                // follow the row's position), so focus and the switch's
+                // animation travel with the row when it moves.
+                let row = egui::UiBuilder::new().id(egui::Id::new(("sidebar-row", entry.button)));
+                ui.scope_builder(row, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 8.0;
+                        ui.add_enabled_ui(entry.button.can_hide(), |ui| {
+                            if switch(ui, palette, entry.visible, &name).clicked() {
+                                let mut next = entries.clone();
+                                next[index].visible = !entry.visible;
+                                actions.push(Action::SetSidebar(next));
+                            }
+                        });
+                        ui.label(
+                            RichText::new(&name)
+                                .font(theme::medium(14.0))
+                                .color(palette.text),
+                        );
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            for (icon, up, key, enabled) in [
+                                (Icon::ChevronDown, false, "Move {name} down", index < last),
+                                (Icon::ChevronUp, true, "Move {name} up", index > 0),
+                            ] {
+                                let hint = trf(locale, key, &[("name", name.clone())]);
+                                let moved = ui
+                                    .add_enabled_ui(enabled, |ui| {
+                                        widgets::icon_button(ui, icon, 18.0, &hint)
+                                    })
+                                    .inner;
+                                if moved.clicked() {
+                                    let to = if up {
+                                        index.checked_sub(1)
+                                    } else {
+                                        Some(index + 1).filter(|to| *to <= last)
+                                    };
+                                    if let Some(to) = to {
+                                        let mut next = entries.clone();
+                                        next.swap(index, to);
+                                        actions.push(Action::SetSidebar(next));
+                                    }
+                                }
+                            }
+                        });
+                    })
+                });
+            }
+            ui.add_space(8.0);
+            ui.add_enabled_ui(*entries != default_sidebar(), |ui| {
+                if widgets::button(
+                    ui,
+                    &card,
+                    &tr(locale, "Restore default"),
+                    widgets::ButtonStyle::Normal,
+                )
+                .clicked()
+                {
+                    actions.push(Action::SetSidebar(default_sidebar()));
+                }
+            });
+        });
+    });
+}
+
+/// A sidebar button's name. Liked and Playlists are listed even while
+/// signed out: they only show when signed in.
+fn sidebar_button_name(locale: Locale, button: SidebarButton) -> String {
+    match button {
+        SidebarButton::Home => tr(locale, "Home"),
+        SidebarButton::Subscriptions => tr(locale, "Subscriptions"),
+        SidebarButton::History => tr(locale, "History"),
+        SidebarButton::WatchLater => tr(locale, "Watch later"),
+        SidebarButton::Liked => tr(locale, "Liked videos"),
+        SidebarButton::Playlists => tr(locale, "Playlists"),
+        SidebarButton::Notifications => tr(locale, "Notifications"),
+        SidebarButton::Account => tr(locale, "Account"),
+        SidebarButton::Settings | SidebarButton::Unknown => tr(locale, "Settings"),
+    }
+    .into_owned()
 }
 
 /// History keeps the account reporting choice visible beside its control.
@@ -832,6 +1006,164 @@ mod tests {
     }
 
     #[test]
+    fn the_sidebar_group_lists_every_button_and_restores_the_default() {
+        fn render(
+            ctx: &egui::Context,
+            state: &State,
+            events: Vec<egui::Event>,
+            actions: &mut Vec<Action>,
+        ) -> Vec<(String, egui::Pos2)> {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        vec2(900.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| sidebar(ui, state, actions),
+            );
+            let labels = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) => Some((
+                        text.galley.text().to_owned(),
+                        text.pos + text.galley.size() / 2.0,
+                    )),
+                    _ => None,
+                })
+                .collect();
+            output.textures_delta.clear();
+            labels
+        }
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let mut state = State::default();
+        let mut actions = Vec::new();
+        let labels = render(&ctx, &state, Vec::new(), &mut actions);
+        for name in [
+            "Home",
+            "Subscriptions",
+            "History",
+            "Watch later",
+            "Liked videos",
+            "Playlists",
+            "Notifications",
+            "Account",
+            "Settings",
+            "Restore default",
+        ] {
+            assert!(labels.iter().any(|(text, _)| text == name), "{name}");
+        }
+        // Nothing to restore yet: the button is disabled and silent.
+        let restore = labels
+            .iter()
+            .find(|(t, _)| t == "Restore default")
+            .unwrap()
+            .1;
+        for pressed in [true, false] {
+            render(
+                &ctx,
+                &state,
+                vec![
+                    egui::Event::PointerMoved(restore),
+                    egui::Event::PointerButton {
+                        pos: restore,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                &mut actions,
+            );
+        }
+        assert!(actions.is_empty());
+        // Once changed, it asks for the default list back.
+        state.settings.sidebar.reverse();
+        let labels = render(&ctx, &state, Vec::new(), &mut actions);
+        let restore = labels
+            .iter()
+            .find(|(t, _)| t == "Restore default")
+            .unwrap()
+            .1;
+        for pressed in [true, false] {
+            render(
+                &ctx,
+                &state,
+                vec![
+                    egui::Event::PointerMoved(restore),
+                    egui::Event::PointerButton {
+                        pos: restore,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                &mut actions,
+            );
+        }
+        assert_eq!(actions, vec![Action::SetSidebar(default_sidebar())]);
+    }
+
+    #[test]
+    fn keyboard_focus_follows_a_moved_sidebar_row() {
+        fn frame(
+            ctx: &egui::Context,
+            state: &State,
+            events: Vec<egui::Event>,
+            actions: &mut Vec<Action>,
+        ) {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        vec2(900.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| sidebar(ui, state, actions),
+            );
+            output.textures_delta.clear();
+        }
+        fn key(key: egui::Key) -> Vec<egui::Event> {
+            vec![egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }]
+        }
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let mut state = State::default();
+        let mut actions = Vec::new();
+        frame(&ctx, &state, Vec::new(), &mut actions);
+        // Home's switch, then Home's "move down".
+        for _ in 0..2 {
+            frame(&ctx, &state, key(egui::Key::Tab), &mut actions);
+        }
+        let focused = ctx.memory(|m| m.focused()).expect("a focused widget");
+        frame(&ctx, &state, key(egui::Key::Enter), &mut actions);
+        frame(&ctx, &state, Vec::new(), &mut actions);
+        let Some(Action::SetSidebar(next)) = actions.pop() else {
+            panic!("moving down emits the new list");
+        };
+        assert_eq!(next[0].button, SidebarButton::Subscriptions);
+        assert_eq!(next[1].button, SidebarButton::Home);
+        frame(&ctx, &state, Vec::new(), &mut actions);
+        state.settings.sidebar = next;
+        frame(&ctx, &state, Vec::new(), &mut actions);
+        frame(&ctx, &state, Vec::new(), &mut actions);
+        // The ids are keyed by button: focus stays on Home's arrow, which
+        // is now in the second row, instead of the first row's.
+        assert_eq!(ctx.memory(|m| m.focused()), Some(focused));
+    }
+
+    #[test]
     fn selecting_a_language_emits_an_action_and_redraws_the_same_settings_page() {
         fn render(
             ctx: &egui::Context,
@@ -914,6 +1246,141 @@ mod tests {
             let labels = render(&ctx, &state, Vec::new(), &mut actions);
             assert!(labels.iter().any(|(label, _)| label == expected_title));
         }
+    }
+
+    /// Draws the Appearance group and returns its text, with the centre of
+    /// each, after the pointer events.
+    fn draw_appearance(
+        ctx: &egui::Context,
+        state: &State,
+        events: Vec<egui::Event>,
+        actions: &mut Vec<Action>,
+    ) -> Vec<(String, egui::Pos2)> {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(900.0, 800.0),
+                )),
+                events,
+                ..Default::default()
+            },
+            |ui| appearance(ui, state, actions),
+        );
+        output.textures_delta.clear();
+        output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some((
+                    text.galley.text().to_owned(),
+                    text.pos + text.galley.size() / 2.0,
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn click_at(ctx: &egui::Context, state: &State, pos: egui::Pos2, actions: &mut Vec<Action>) {
+        for pressed in [true, false] {
+            draw_appearance(
+                ctx,
+                state,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                actions,
+            );
+        }
+    }
+
+    fn centre_of(labels: &[(String, egui::Pos2)], text: &str) -> egui::Pos2 {
+        labels
+            .iter()
+            .find(|(label, _)| label == text)
+            .unwrap_or_else(|| panic!("{text} is not drawn"))
+            .1
+    }
+
+    const NOTICE: &str = "Your system's interface font couldn't be loaded, so YouTFast uses Inter.";
+
+    #[test]
+    fn the_font_notice_shows_only_when_the_systems_face_fell_back_to_inter() {
+        let ctx = egui::Context::default();
+        crate::appearance::theme::install_fonts(&ctx);
+        for (font, missing, shown) in [
+            (InterfaceFont::System, false, false),
+            (InterfaceFont::System, true, true),
+            // Choosing Inter is not a failure.
+            (InterfaceFont::Inter, true, false),
+            (InterfaceFont::Inter, false, false),
+        ] {
+            let mut state = State::default();
+            state.settings.interface_font = font;
+            state.system_font_missing = missing;
+            let labels = draw_appearance(&ctx, &state, Vec::new(), &mut Vec::new());
+            let has = |text: &str| labels.iter().any(|(label, _)| label == text);
+            assert_eq!(has(NOTICE), shown, "{font:?} {missing}");
+            assert_eq!(has("Report this"), shown, "{font:?} {missing}");
+            assert!(has("Interface font"));
+        }
+    }
+
+    #[test]
+    fn report_this_asks_to_open_the_issue_and_nothing_else() {
+        let ctx = egui::Context::default();
+        crate::appearance::theme::install_fonts(&ctx);
+        let state = State {
+            system_font_missing: true,
+            ..State::default()
+        };
+        let mut actions = Vec::new();
+        let labels = draw_appearance(&ctx, &state, Vec::new(), &mut actions);
+        assert!(actions.is_empty());
+        click_at(
+            &ctx,
+            &state,
+            centre_of(&labels, "Report this"),
+            &mut actions,
+        );
+        assert_eq!(actions, [Action::ReportInterfaceFont]);
+    }
+
+    #[test]
+    fn the_interface_font_menu_emits_the_chosen_face() {
+        let ctx = egui::Context::default();
+        crate::appearance::theme::install_fonts(&ctx);
+        let mut state = State::default();
+        let mut actions = Vec::new();
+        let labels = draw_appearance(&ctx, &state, Vec::new(), &mut actions);
+        click_at(
+            &ctx,
+            &state,
+            centre_of(&labels, "System (default)"),
+            &mut actions,
+        );
+        let labels = draw_appearance(&ctx, &state, Vec::new(), &mut actions);
+        click_at(&ctx, &state, centre_of(&labels, "Inter"), &mut actions);
+        assert_eq!(actions, [Action::SetInterfaceFont(InterfaceFont::Inter)]);
+        actions.clear();
+        // And back, from Inter.
+        state.settings.interface_font = InterfaceFont::Inter;
+        let labels = draw_appearance(&ctx, &state, Vec::new(), &mut actions);
+        click_at(&ctx, &state, centre_of(&labels, "Inter"), &mut actions);
+        let labels = draw_appearance(&ctx, &state, Vec::new(), &mut actions);
+        click_at(
+            &ctx,
+            &state,
+            centre_of(&labels, "System (default)"),
+            &mut actions,
+        );
+        assert_eq!(actions, [Action::SetInterfaceFont(InterfaceFont::System)]);
     }
 
     #[test]

@@ -42,6 +42,66 @@ pub enum Page {
     Playlist { id: String, name: String },
 }
 
+/// What [`State::history_cache`] was built from; any change rebuilds it.
+#[derive(Debug)]
+struct HistoryKey {
+    library: u64,
+    device_len: usize,
+    account: u64,
+    account_len: usize,
+    source: Option<Source>,
+    merged: bool,
+    query: String,
+    requested_at: Option<i64>,
+    /// `merge` reads the clock when no request time is known; its sections
+    /// only move at midnight (UTC).
+    day: i64,
+}
+
+impl HistoryKey {
+    fn of(state: &State) -> Self {
+        Self {
+            library: state.library.history_stamp(),
+            device_len: state.library.history.len(),
+            account: state.account_history_generation,
+            account_len: state.account_history.items().len(),
+            source: state.history_source(),
+            merged: state.merged_history(),
+            query: state.history_query.clone(),
+            requested_at: state.history_requested_at,
+            day: Self::day(state),
+        }
+    }
+
+    fn day(state: &State) -> i64 {
+        match state.history_requested_at {
+            Some(_) => 0,
+            None => util::now().div_euclid(86_400),
+        }
+    }
+
+    /// Whether `state` would give the same key, without building one.
+    fn is_current(&self, state: &State) -> bool {
+        self.library == state.library.history_stamp()
+            && self.device_len == state.library.history.len()
+            && self.account == state.account_history_generation
+            && self.account_len == state.account_history.items().len()
+            && self.source == state.history_source()
+            && self.merged == state.merged_history()
+            && self.query == state.history_query
+            && self.requested_at == state.history_requested_at
+            && self.day == Self::day(state)
+    }
+}
+
+/// History's rows as indices, with the day sections they fall into.
+#[derive(Debug)]
+pub struct HistoryCache {
+    key: HistoryKey,
+    pub entries: Vec<crate::logic::history::Entry>,
+    pub runs: Vec<crate::logic::history::Run>,
+}
+
 /// What the views draw from.
 #[derive(Default)]
 pub struct State {
@@ -93,6 +153,11 @@ pub struct State {
     pub subscriptions_more: Option<innertube::More>,
     pub subscriptions_more_state: Fetch<()>,
     pub account_history: Listing<HistoryRow>,
+    /// Bumped whenever `account_history` changes, so `history_rows` knows
+    /// when to rebuild.
+    pub account_history_generation: u64,
+    /// History's merged, filtered rows (see [`State::history_cache`]).
+    pub history_cache: std::cell::RefCell<Option<HistoryCache>>,
     pub history_more: Option<innertube::More>,
     pub history_more_state: Fetch<()>,
     pub account_watch_later: Listing<Video>,
@@ -147,6 +212,9 @@ pub struct State {
     pub themes: Vec<(String, String)>,
     /// Whether the desktop's palette is followed (Omarchy on Linux).
     pub follows_omarchy: bool,
+    /// The system's interface font was asked for and could not be used, so
+    /// Inter draws instead (`theme::system_face_missing`).
+    pub system_font_missing: bool,
     /// What the theme setting says under it; empty when all is well.
     pub theme_status: String,
     /// Where the palette files live, for the settings page to say.
@@ -346,7 +414,7 @@ impl State {
         }
     }
 
-    pub fn history_rows(&self) -> Vec<crate::logic::history::Row<'_>> {
+    fn build_history_rows(&self) -> Vec<crate::logic::history::Row<'_>> {
         use crate::logic::history;
         let mut rows = match self.history_source() {
             None => history::merge(
@@ -378,9 +446,68 @@ impl State {
                 .collect(),
         };
         if self.history_source() != Some(Source::Account) || self.merged_history() {
-            rows.retain(|row| row.matches(&self.history_query));
+            let query = self.history_query.trim().to_lowercase();
+            rows.retain(|row| row.matches_lowered(&query));
         }
         rows
+    }
+
+    /// History's rows as the page shows them, rebuilt only when what they
+    /// come from changes (the device history, the account's, the filter, the
+    /// search or the day) rather than on every frame.
+    pub fn history_cache(&self) -> std::cell::Ref<'_, HistoryCache> {
+        let current = self
+            .history_cache
+            .borrow()
+            .as_ref()
+            .is_some_and(|cache| cache.key.is_current(self));
+        if !current {
+            let rows = self.build_history_rows();
+            let entries = crate::logic::history::entries(
+                &rows,
+                self.account_history.items(),
+                &self.library.history,
+            );
+            let runs = crate::logic::history::runs(&entries);
+            *self.history_cache.borrow_mut() = Some(HistoryCache {
+                key: HistoryKey::of(self),
+                entries,
+                runs,
+            });
+        }
+        std::cell::Ref::map(self.history_cache.borrow(), |cache| {
+            cache.as_ref().expect("filled above")
+        })
+    }
+
+    /// The cached entry as a row over the lists it indexes.
+    pub fn history_row(
+        &self,
+        entry: &crate::logic::history::Entry,
+    ) -> crate::logic::history::Row<'_> {
+        use crate::logic::history::Origin;
+        let device = entry
+            .device
+            .and_then(|index| self.library.history.get(index));
+        let video = match entry.video {
+            Origin::Device(index) => &self.library.history[index].video,
+            Origin::Account(index) => &self.account_history.items()[index].video,
+        };
+        crate::logic::history::Row {
+            video,
+            when: entry.when.clone(),
+            device,
+        }
+    }
+
+    /// All of History's rows; prefer [`State::history_cache`] where a frame
+    /// draws only some of them.
+    pub fn history_rows(&self) -> Vec<crate::logic::history::Row<'_>> {
+        self.history_cache()
+            .entries
+            .iter()
+            .map(|entry| self.history_row(entry))
+            .collect()
     }
 
     /// The feed's videos home shows: For you's, or the first
@@ -389,13 +516,13 @@ impl State {
         if self.feed_filter == FeedFilter::ForYou {
             return self.for_you.items().iter().collect();
         }
-        let now = util::now();
+        let today = util::Today::at(util::now());
         let videos = self.feed.items();
         videos[..videos.len().min(self.feed_shown)]
             .iter()
             .filter(|video| {
                 self.feed_filter
-                    .keeps(video, self.library.watched(&video.id), now)
+                    .keeps(video, self.library.watched(&video.id), &today)
             })
             .collect()
     }
@@ -880,6 +1007,10 @@ impl App {
                 self.state.settings.scroll_miniplayer = on;
                 self.save_settings();
             }
+            Action::SetSidebar(entries) => {
+                self.state.settings.sidebar = crate::storage::settings::sanitize_sidebar(entries);
+                self.save_settings();
+            }
             Action::SetPlaybackBuffer(buffer) => {
                 self.state.settings.playback_buffer = buffer;
                 if let Some(player) = &self.player {
@@ -1037,6 +1168,28 @@ impl App {
                 self.state.notice = None;
                 self.save_settings();
                 ctx.request_repaint();
+            }
+            Action::SetInterfaceFont(choice) => {
+                self.state.settings.interface_font = choice;
+                self.save_settings();
+                // The search for other scripts' faces runs again; once the
+                // first has finished it answers at once.
+                let fonts = theme::SystemFonts::find(choice);
+                self.fonts = (!fonts.install(ctx)).then_some(fonts);
+                self.state.system_font_missing = theme::system_face_missing();
+                ctx.request_repaint();
+            }
+            Action::ReportInterfaceFont => {
+                // fc-match runs off the interface thread; nothing is sent,
+                // the browser opens at a form the user submits or closes.
+                let ctx = ctx.clone();
+                let _ = std::thread::Builder::new()
+                    .name("youtfast-font-report".into())
+                    .spawn(move || {
+                        let url = crate::appearance::font_report::Report::gather().issue_url();
+                        ctx.open_url(egui::OpenUrl::new_tab(url));
+                        ctx.request_repaint();
+                    });
             }
             Action::ToggleSubscription(channel) => {
                 self.state.library.toggle_subscription(channel);
@@ -1336,7 +1489,7 @@ impl App {
 
     fn save_settings(&self) {
         self.backend
-            .send(Command::SaveSettings(self.state.settings.clone()));
+            .send(Command::SaveSettings(Box::new(self.state.settings.clone())));
     }
 }
 
@@ -1345,6 +1498,7 @@ impl eframe::App for App {
         if self.fonts.as_ref().is_some_and(|fonts| fonts.poll(ctx)) {
             self.fonts = None;
         }
+        self.state.system_font_missing = theme::system_face_missing();
         self.poll();
         self.poll_cast(ctx);
         ui::images::forget_unseen(ctx);

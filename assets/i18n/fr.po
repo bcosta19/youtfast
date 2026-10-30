@@ -422,6 +422,9 @@ msgstr "Installez python-secretstorage, déverrouillez le trousseau de clés du 
 msgid "Interaction reminder skipped"
 msgstr "Rappel d'interaction ignoré"
 
+msgid "Interface font"
+msgstr "Police de l'interface"
+
 msgid "Joined"
 msgstr "A rejoint le"
 
@@ -779,6 +782,9 @@ msgstr "Renommer"
 msgid "Replay GIF"
 msgstr "Rejouer le GIF"
 
+msgid "Report this"
+msgstr "Signaler ceci"
+
 msgid "Retry"
 msgstr "Réessayer"
 
@@ -953,6 +959,9 @@ msgstr "Les abonnements, l'historique et « À regarder plus tard » fonctionnen
 msgid "Switch"
 msgstr "Changer"
 
+msgid "System (default)"
+msgstr "Système (par défaut)"
+
 msgid "Takeout subscriptions or history"
 msgstr "Abonnements ou historique Takeout"
 
@@ -979,6 +988,9 @@ msgstr "Abonnements du compte"
 
 msgid "The account's watch history"
 msgstr "Historique des vidéos regardées du compte"
+
+msgid "The font that draws the interface. System uses your desktop's own."
+msgstr "La police qui dessine l'interface. « Système » utilise celle de votre bureau."
 
 msgid "The history file has invalid or oversized trailing data."
 msgstr "Le fichier d'historique contient des données finales non valides ou trop volumineuses."
@@ -1198,6 +1210,9 @@ msgstr "Votre flux est vide"
 
 msgid "Your rating could not be read"
 msgstr "Impossible de lire votre évaluation"
+
+msgid "Your system's interface font couldn't be loaded, so YouTFast uses Inter."
+msgstr "La police d'interface du système n'a pas pu être chargée, YouTFast utilise donc Inter."
 
 msgid "a cookies.txt file"
 msgstr "un fichier cookies.txt"
@@ -1667,3 +1682,14 @@ msgstr "Sur la TV, ouvrez YouTube, puis Paramètres, puis Associer avec un code 
 
 msgid "Link TV"
 msgstr "Associer la TV"
+msgid "Choose which buttons the sidebar shows and in what order. The number keys 1 to 9 follow the buttons as shown. Account and Settings always stay."
+msgstr "Choisissez les boutons affichés dans le volet latéral et leur ordre. Les touches numériques 1 à 9 suivent les boutons tels qu'ils sont affichés. Compte et Paramètres restent toujours."
+
+msgid "Move {name} up"
+msgstr "Monter {name}"
+
+msgid "Move {name} down"
+msgstr "Descendre {name}"
+
+msgid "Restore default"
+msgstr "Rétablir les valeurs par défaut"
