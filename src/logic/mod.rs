@@ -4,3 +4,5 @@
 pub mod alerts;
 pub mod history;
 pub mod recommend;
+
+pub mod video_tabs;

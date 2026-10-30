@@ -25,6 +25,7 @@ mod notifications;
 mod player;
 mod results;
 mod settings;
+mod video_tabs;
 mod watch;
 mod widgets;
 
@@ -64,6 +65,7 @@ pub fn show(
         return;
     }
     top_bar(ui, state, actions);
+    video_tabs::show(ui, state, actions);
     if !(state.view == View::Watch && state.settings.theater) {
         sidebar(ui, state, actions);
     }
@@ -850,6 +852,8 @@ fn keys_overlay(ctx: &egui::Context, state: &mut State) {
             ("?", "Show this list"),
             ("Esc", "Close or go back"),
             ("Alt+← / →", "Back / forward"),
+            ("Ctrl+Tab / Ctrl+Shift+Tab", "Next / previous video tab"),
+            ("Ctrl/Cmd+W", "Close tab"),
             ("Space", "Play/pause in miniplayer"),
             ("r", "Refresh page"),
             ("↑ / ↓", "Scroll page"),

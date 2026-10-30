@@ -105,6 +105,7 @@ pub struct HistoryCache {
 /// What the views draw from.
 #[derive(Default)]
 pub struct State {
+    pub video_tabs: crate::logic::video_tabs::VideoTabs,
     pub cast: cast::State,
     pub view: View,
     /// The search field's text.
@@ -965,6 +966,39 @@ impl App {
                 self.load(View::Results, true);
             }
             Action::Open(video) => self.open(video),
+            Action::OpenVideoTab(video) => self.state.video_tabs.add(video),
+            Action::SelectVideoTab(id) => {
+                if let Some(video) = self.state.video_tabs.video(&id).cloned() {
+                    if self.state.watching.as_ref().is_some_and(|v| v.id == id) {
+                        self.return_to_watch();
+                    } else {
+                        self.select_video_tab(video);
+                    }
+                }
+            }
+            Action::CloseVideoTab(id) => {
+                let active = self.state.video_tabs.active() == Some(id.as_str());
+                self.remember_position();
+                self.state.video_tabs.close(&id);
+                if active {
+                    if let Some(video) = self.state.video_tabs.selected().cloned() {
+                        self.select_video_tab(video);
+                    } else {
+                        self.close_mini_player();
+                        if let Some(player) = &mut self.player
+                            && let Err(error) = player.stop()
+                        {
+                            log::warn!("mpv: {error}");
+                        }
+                        self.playback_report.cancel();
+                        self.reset_watch_panes();
+                        self.state.watching = None;
+                        self.state.fullscreen = false;
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+                        self.state.view = View::Home;
+                    }
+                }
+            }
             Action::LoadExtras => self.load_extras(),
             Action::ToggleTranscript => {
                 self.state.transcript_open = !self.state.transcript_open;

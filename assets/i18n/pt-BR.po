@@ -1719,3 +1719,12 @@ msgstr "Mover {name} para baixo"
 
 msgid "Restore default"
 msgstr "Restaurar padrão"
+
+msgid "Open in new tab"
+msgstr "Abrir em nova aba"
+
+msgid "Close tab"
+msgstr "Fechar aba"
+
+msgid "Next / previous video tab"
+msgstr "Próxima aba de vídeo / anterior"

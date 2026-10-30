@@ -146,7 +146,11 @@ fn rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     response.clone().scroll_to_me(None);
                 }
                 if response.clicked() {
-                    actions.push(Action::Open(video.clone()));
+                    actions.push(if ui.input(|i| i.modifiers.command) {
+                        Action::OpenVideoTab(video.clone())
+                    } else {
+                        Action::Open(video.clone())
+                    });
                 }
                 results::video_menu(&response, state, video, actions);
             }

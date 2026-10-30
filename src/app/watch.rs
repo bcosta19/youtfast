@@ -159,10 +159,21 @@ impl App {
                 // stream live.
                 watching.live = details.live;
                 let watching = watching.clone();
+                self.state.video_tabs.update(&watching);
                 self.state.library.update_video(&watching);
                 self.save_library();
             }
         }
+    }
+
+    pub(super) fn select_video_tab(&mut self, video: Video) {
+        self.open(video);
+        // A tab has no pending continuation from the previously playing playlist.
+        self.playing_generation += 1;
+        self.state.playing_playlist = None;
+        self.state.playing_more = None;
+        self.state.playing_more_state = Fetch::Idle;
+        self.state.up_next.clear();
     }
 
     pub(super) fn open(&mut self, mut video: Video) {
@@ -225,7 +236,12 @@ impl App {
         {
             video.complete_from(&known.video);
         }
-        let start = self.state.library.resume_position(&video.id);
+        self.state.video_tabs.open(video.clone());
+        let start = self
+            .state
+            .video_tabs
+            .position(&video.id)
+            .or_else(|| self.state.library.resume_position(&video.id));
         self.state.library.record_watch(video.clone(), util::now());
         self.save_library();
 
@@ -277,7 +293,7 @@ impl App {
 
     /// Empties the details and comments panes, and drops the answers to
     /// their requests in flight.
-    fn reset_watch_panes(&mut self) {
+    pub(super) fn reset_watch_panes(&mut self) {
         self.state.reset_watch_fetches();
         self.more_comments_token = None;
         self.generation += 1;
@@ -440,6 +456,7 @@ impl App {
             };
             watching.complete_from(&filled);
             let watching = watching.clone();
+            self.state.video_tabs.update(&watching);
             self.state.library.update_video(&watching);
             self.save_library();
         }
@@ -486,6 +503,7 @@ impl App {
         if let (Some(video), Some(player)) = (&self.state.watching, &self.player) {
             let status = player.status();
             if !status.idle && !video.live {
+                self.state.video_tabs.remember(&video.id, status.position);
                 self.state
                     .library
                     .set_position(&video.id, status.position, status.duration);

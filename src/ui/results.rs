@@ -241,7 +241,14 @@ pub fn video_menu(
 ) {
     let locale = state.settings.language;
 
+    if response.middle_clicked() {
+        actions.push(Action::OpenVideoTab(video.clone()));
+    }
     response.context_menu(|ui| {
+        if ui.button(tr(locale, "Open in new tab").as_ref()).clicked() {
+            actions.push(Action::OpenVideoTab(video.clone()));
+            ui.close();
+        }
         if ui.button(tr(locale, "Play next").as_ref()).clicked() {
             actions.push(Action::Enqueue {
                 video: video.clone(),

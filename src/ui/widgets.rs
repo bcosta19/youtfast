@@ -829,6 +829,7 @@ pub fn video_interactions(
                 },
                 Action::ToggleWatchLater(video.clone()),
             ),
+            ("Open in new tab", Action::OpenVideoTab(video.clone())),
             ("Copy link", Action::CopyLink(video.url())),
             ("Open in browser", Action::OpenUrl(video.url())),
         ] {
@@ -874,7 +875,11 @@ pub fn video_interactions(
     }
     super::results::video_menu(response, state, video, actions);
     if response.clicked() && !handled {
-        actions.push(Action::Open(video.clone()));
+        actions.push(if ui.input(|i| i.modifiers.command) {
+            Action::OpenVideoTab(video.clone())
+        } else {
+            Action::Open(video.clone())
+        });
     }
 }
 
@@ -1574,6 +1579,43 @@ mod tests {
                 ..Video::from_id(format!("demo{index:07}"))
             })
             .collect()
+    }
+
+    #[test]
+    fn middle_and_command_click_open_background_video_tabs() {
+        for (button, modifiers) in [
+            (egui::PointerButton::Middle, egui::Modifiers::NONE),
+            (egui::PointerButton::Primary, egui::Modifiers::COMMAND),
+        ] {
+            let ctx = egui::Context::default();
+            crate::appearance::theme::install_fonts(&ctx);
+            let state = State::default();
+            let videos = action_videos(1);
+            let (cards, _) = draw_action_cards(&ctx, &state, &videos, 1, 480.0, Vec::new());
+            let pos = cards[0].1.center();
+            let mut actions = Vec::new();
+            for pressed in [true, false] {
+                let (_, emitted) = draw_action_cards(
+                    &ctx,
+                    &state,
+                    &videos,
+                    1,
+                    480.0,
+                    vec![
+                        egui::Event::ModifiersChanged(modifiers),
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button,
+                            pressed,
+                            modifiers,
+                        },
+                    ],
+                );
+                actions.extend(emitted);
+            }
+            assert_eq!(actions, vec![Action::OpenVideoTab(videos[0].clone())]);
+        }
     }
 
     #[test]

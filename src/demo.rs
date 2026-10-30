@@ -225,6 +225,9 @@ pub(crate) fn fixture(page: &str) -> State {
             });
         }
     }
+    if let Some(video) = state.watching.clone() {
+        state.video_tabs.open(video);
+    }
     state
 }
 
@@ -313,9 +316,28 @@ impl eframe::App for Demo {
                 }
                 Action::Navigate(v) => self.state.view = v,
                 Action::Open(v) => {
+                    self.state.video_tabs.open(v.clone());
                     self.state.watching = Some(v);
                     self.state.view = View::Watch;
                     self.state.mini_closed = false;
+                }
+                Action::OpenVideoTab(v) => self.state.video_tabs.add(v),
+                Action::SelectVideoTab(id) => {
+                    if let Some(video) = self.state.video_tabs.video(&id).cloned() {
+                        self.state.video_tabs.open(video.clone());
+                        self.state.watching = Some(video);
+                        self.state.view = View::Watch;
+                    }
+                }
+                Action::CloseVideoTab(id) => {
+                    let active = self.state.video_tabs.active() == Some(id.as_str());
+                    self.state.video_tabs.close(&id);
+                    if active {
+                        self.state.watching = self.state.video_tabs.selected().cloned();
+                        if self.state.watching.is_none() {
+                            self.state.view = View::Home;
+                        }
+                    }
                 }
                 Action::Back => {
                     self.state.view = View::Home;

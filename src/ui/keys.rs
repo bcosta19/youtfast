@@ -22,6 +22,40 @@ pub(super) fn handle(
     if ctx.text_edit_focused() || egui::Popup::is_any_open(ctx) {
         return;
     }
+    if !state.keys_open && state.player_menu == crate::app::PlayerMenu::Closed {
+        let handled = ctx.input_mut(|input| {
+            if input.consume_key(egui::Modifiers::COMMAND, Key::W) {
+                if let Some(id) = state.video_tabs.active() {
+                    actions.push(Action::CloseVideoTab(id.to_owned()));
+                }
+                return true;
+            }
+            let previous =
+                input.consume_key(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, Key::Tab);
+            let next = input.consume_key(egui::Modifiers::CTRL, Key::Tab);
+            if previous || next {
+                let videos: Vec<_> = state.video_tabs.videos().collect();
+                if !videos.is_empty() {
+                    let current = videos
+                        .iter()
+                        .position(|v| Some(v.id.as_str()) == state.video_tabs.active());
+                    let index = current.map_or(0, |i| {
+                        if previous {
+                            (i + videos.len() - 1) % videos.len()
+                        } else {
+                            (i + 1) % videos.len()
+                        }
+                    });
+                    actions.push(Action::SelectVideoTab(videos[index].id.clone()));
+                }
+                return true;
+            }
+            false
+        });
+        if handled {
+            return;
+        }
+    }
     let focus = ctx.memory(|m| m.focused());
     let focused = focus.is_some();
     let player_focused = focus.is_some_and(|id| {
@@ -314,6 +348,58 @@ pub(super) fn handle(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn video_tab_shortcuts_cycle_and_close_without_player_actions() {
+        for (key, modifiers, expected) in [
+            (
+                Key::Tab,
+                egui::Modifiers::CTRL,
+                Action::SelectVideoTab("b".into()),
+            ),
+            (
+                Key::Tab,
+                egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
+                Action::SelectVideoTab("c".into()),
+            ),
+            (
+                Key::W,
+                egui::Modifiers::COMMAND,
+                Action::CloseVideoTab("a".into()),
+            ),
+        ] {
+            let ctx = egui::Context::default();
+            let mut state = State::default();
+            state
+                .video_tabs
+                .open(crate::model::Video::from_id("a".into()));
+            state
+                .video_tabs
+                .add(crate::model::Video::from_id("b".into()));
+            state
+                .video_tabs
+                .add(crate::model::Video::from_id("c".into()));
+            let mut actions = Vec::new();
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    events: vec![
+                        egui::Event::ModifiersChanged(modifiers),
+                        egui::Event::Key {
+                            key,
+                            physical_key: None,
+                            pressed: true,
+                            repeat: false,
+                            modifiers,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| handle(ui.ctx(), &mut state, None, &mut actions),
+            );
+            out.textures_delta.clear();
+            assert_eq!(actions, vec![expected]);
+        }
+    }
+
     #[test]
     fn focused_volume_slider_owns_arrows_and_focused_video_space_pauses_once() {
         for video_focus in [false, true] {
