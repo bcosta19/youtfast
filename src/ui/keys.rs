@@ -24,33 +24,39 @@ pub(super) fn handle(
     }
     if !state.keys_open && state.player_menu == crate::app::PlayerMenu::Closed {
         let handled = ctx.input_mut(|input| {
-            if input.consume_key(egui::Modifiers::COMMAND, Key::W) {
-                if let Some(id) = state.video_tabs.active() {
+            if let Some(first) = consume_once(input, egui::Modifiers::COMMAND, Key::W) {
+                if first && let Some(id) = state.video_tabs.active() {
                     actions.push(Action::CloseVideoTab(id.to_owned()));
                 }
                 return true;
             }
-            let previous =
-                input.consume_key(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, Key::Tab);
-            let next = input.consume_key(egui::Modifiers::CTRL, Key::Tab);
-            if previous || next {
-                let videos: Vec<_> = state.video_tabs.videos().collect();
-                if !videos.is_empty() {
-                    let current = videos
-                        .iter()
-                        .position(|v| Some(v.id.as_str()) == state.video_tabs.active());
-                    let index = current.map_or(0, |i| {
-                        if previous {
-                            (i + videos.len() - 1) % videos.len()
-                        } else {
-                            (i + 1) % videos.len()
-                        }
-                    });
-                    actions.push(Action::SelectVideoTab(videos[index].id.clone()));
-                }
-                return true;
+            // Ctrl+Shift+Tab first: Ctrl+Tab's match ignores an extra Shift.
+            let (first, previous) = if let Some(first) = consume_once(
+                input,
+                egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
+                Key::Tab,
+            ) {
+                (first, true)
+            } else if let Some(first) = consume_once(input, egui::Modifiers::CTRL, Key::Tab) {
+                (first, false)
+            } else {
+                return false;
+            };
+            let videos: Vec<_> = state.video_tabs.videos().collect();
+            if first && !videos.is_empty() {
+                let current = videos
+                    .iter()
+                    .position(|v| Some(v.id.as_str()) == state.video_tabs.active());
+                let index = current.map_or(0, |i| {
+                    if previous {
+                        (i + videos.len() - 1) % videos.len()
+                    } else {
+                        (i + 1) % videos.len()
+                    }
+                });
+                actions.push(Action::SelectVideoTab(videos[index].id.clone()));
             }
-            false
+            true
         });
         if handled {
             return;
@@ -345,9 +351,80 @@ pub(super) fn handle(
     });
 }
 
+/// Consumes a tab shortcut: `Some(true)` on its first press, `Some(false)`
+/// for the repeats of a held key (each would load or close another tab),
+/// `None` when it was not pressed.
+fn consume_once(
+    input: &mut egui::InputState,
+    modifiers: egui::Modifiers,
+    key: Key,
+) -> Option<bool> {
+    let first = input.events.iter().any(|event| {
+        matches!(
+            event,
+            egui::Event::Key {
+                key: pressed,
+                pressed: true,
+                repeat: false,
+                modifiers: held,
+                ..
+            } if *pressed == key && held.matches_logically(modifiers)
+        )
+    });
+    input.consume_key(modifiers, key).then_some(first)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn held_tab_shortcuts_act_once_and_close_needs_a_tab() {
+        // egui tells a repeat by the key still being down from an earlier frame.
+        let press = |ctx: &egui::Context, state: &mut State, key, modifiers| {
+            let mut actions = Vec::new();
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    events: vec![
+                        egui::Event::ModifiersChanged(modifiers),
+                        egui::Event::Key {
+                            key,
+                            physical_key: None,
+                            pressed: true,
+                            repeat: false,
+                            modifiers,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| handle(ui.ctx(), state, None, &mut actions),
+            );
+            out.textures_delta.clear();
+            actions
+        };
+        let mut state = State::default();
+        let ctx = egui::Context::default();
+        assert!(press(&ctx, &mut state, Key::W, egui::Modifiers::COMMAND).is_empty());
+        for (key, modifiers) in [
+            (Key::Tab, egui::Modifiers::CTRL),
+            (Key::Tab, egui::Modifiers::CTRL | egui::Modifiers::SHIFT),
+            (Key::W, egui::Modifiers::COMMAND),
+        ] {
+            let mut state = State::default();
+            state
+                .video_tabs
+                .open(crate::model::Video::from_id("a".into()));
+            state
+                .video_tabs
+                .add(crate::model::Video::from_id("b".into()));
+            let ctx = egui::Context::default();
+            assert_eq!(press(&ctx, &mut state, key, modifiers).len(), 1);
+            assert!(
+                press(&ctx, &mut state, key, modifiers).is_empty(),
+                "{key:?} repeats must not act"
+            );
+        }
+    }
+
     #[test]
     fn video_tab_shortcuts_cycle_and_close_without_player_actions() {
         for (key, modifiers, expected) in [

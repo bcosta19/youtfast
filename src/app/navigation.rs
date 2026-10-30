@@ -63,6 +63,11 @@ impl Location {
             playing_more: s.playing_more.clone(),
         }
     }
+    /// Whether going back here would play `id` on the watch page.
+    fn plays(&self, id: &str) -> bool {
+        self.view == View::Watch && self.watching.as_ref().is_some_and(|v| v.id == id)
+    }
+
     fn restore(self, s: &mut State) -> Option<Video> {
         fn settled<T>(v: Listing<T>) -> Listing<T> {
             if matches!(v, Listing::Loading) {
@@ -203,6 +208,12 @@ impl App {
         self.back.push(Location::capture(&self.state));
         self.forward.clear();
     }
+    /// A closed tab's video does not come back through Back or Forward.
+    pub(super) fn forget_locations_of(&mut self, id: &str) {
+        self.back.retain(|location| !location.plays(id));
+        self.forward.retain(|location| !location.plays(id));
+    }
+
     pub(super) fn travel(&mut self, ctx: &egui::Context, forward: bool) {
         let target = if forward {
             self.forward.pop()
@@ -239,6 +250,11 @@ impl App {
                 .as_ref()
                 .is_none_or(|v| v.id != video.id)
             {
+                // History is shared by the tabs: a video whose tab is gone
+                // comes back in a tab of its own, never over another one.
+                if self.state.video_tabs.video(&video.id).is_none() {
+                    self.state.video_tabs.request_new_tab();
+                }
                 self.open(video);
             } else {
                 self.return_to_watch();
@@ -370,6 +386,21 @@ mod tests {
         s.playing_more = None;
         assert!(!s.needs_playlist_page());
     }
+    #[test]
+    fn only_watch_locations_of_a_video_play_it_again() {
+        let a = Video::from_id("aaaaaaaaaaa".into());
+        let mut s = State {
+            view: View::Watch,
+            watching: Some(a),
+            ..State::default()
+        };
+        assert!(Location::capture(&s).plays("aaaaaaaaaaa"));
+        assert!(!Location::capture(&s).plays("bbbbbbbbbbb"));
+        // A page browsed under the mini player does not bring the video back.
+        s.view = View::Home;
+        assert!(!Location::capture(&s).plays("aaaaaaaaaaa"));
+    }
+
     #[test]
     fn restoring_a_watch_location_restores_its_playlist_but_preserves_global_queue() {
         let a = Video::from_id("aaaaaaaaaaa".into());

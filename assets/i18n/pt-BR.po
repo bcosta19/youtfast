@@ -1730,4 +1730,4 @@ msgid "New tab"
 msgstr "Nova aba"
 
 msgid "Next / previous video tab"
-msgstr "Próxima aba de vídeo / anterior"
+msgstr "Aba de vídeo seguinte / anterior"

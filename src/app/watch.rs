@@ -3,6 +3,36 @@
 use super::*;
 
 impl State {
+    /// Hands over what the playing video plays from, leaving nothing.
+    fn take_playing_context(&mut self) -> PlayingContext {
+        PlayingContext {
+            up_next: std::mem::take(&mut self.up_next),
+            playlist: self.playing_playlist.take(),
+            more: self.playing_more.take(),
+        }
+    }
+
+    fn give_playing_context(&mut self, context: PlayingContext) {
+        self.up_next = context.up_next;
+        self.playing_playlist = context.playlist;
+        self.playing_more = context.more;
+        self.playing_more_state = Fetch::Idle;
+        self.playing_waiting = None;
+    }
+
+    /// Nothing plays any more: what came with the last video goes too, so
+    /// the desktop's media keys cannot start a video from its list.
+    fn forget_playback(&mut self) {
+        self.watching = None;
+        self.give_playing_context(PlayingContext::default());
+        self.autoplay = None;
+        self.segments.clear();
+        self.skipped.clear();
+        self.resolutions.clear();
+        self.player_error = None;
+        self.seek_preview = None;
+    }
+
     fn renew_comment_image(&mut self, comment: &str, manual: bool) -> bool {
         // Bound the entire renewal chain, even if each refused request produces
         // a different signed URL. A deliberate retry starts one new attempt.
@@ -166,14 +196,63 @@ impl App {
         }
     }
 
+    /// Plays a tab with the list it was playing from; the tab left keeps its
+    /// own. A tab opened in the background has none: related videos follow.
     pub(super) fn select_video_tab(&mut self, video: Video) {
+        if let Some(playing) = self.state.watching.as_ref().map(|v| v.id.clone()) {
+            let context = self.state.take_playing_context();
+            self.state.video_tabs.stash(&playing, context);
+        }
+        let context = self.state.video_tabs.take_context(&video.id);
         self.open(video);
-        // A tab has no pending continuation from the previously playing playlist.
+        // Drops the answers to page requests for the list left.
         self.playing_generation += 1;
-        self.state.playing_playlist = None;
-        self.state.playing_more = None;
-        self.state.playing_more_state = Fetch::Idle;
-        self.state.up_next.clear();
+        self.state.give_playing_context(context.unwrap_or_default());
+    }
+
+    /// Closing the playing tab plays its neighbour where the video was shown:
+    /// the watch page, or the mini player (left paused if it was closed). The
+    /// last tab stops playback, and only the watch page then goes Home.
+    pub(super) fn close_video_tab(&mut self, ctx: &egui::Context, id: &str) {
+        let playing = self.state.video_tabs.active() == Some(id);
+        if playing {
+            self.remember_position();
+        }
+        self.state.video_tabs.close(id);
+        self.forget_locations_of(id);
+        if !playing {
+            return;
+        }
+        let view = self.state.view;
+        if let Some(next) = self.state.video_tabs.selected().cloned() {
+            let mini_closed = self.state.mini_closed;
+            // As `advance`: the page underneath is not a place to go back to.
+            self.state.view = View::Watch;
+            self.select_video_tab(next);
+            self.state.view = view;
+            if view != View::Watch && mini_closed {
+                self.close_mini_player();
+            }
+        } else {
+            self.stop_playback(ctx);
+            if view == View::Watch {
+                self.apply(ctx, Action::Navigate(View::Home));
+            }
+        }
+    }
+
+    fn stop_playback(&mut self, ctx: &egui::Context) {
+        self.close_mini_player();
+        if let Some(player) = &mut self.player
+            && let Err(error) = player.stop()
+        {
+            log::warn!("mpv: {error}");
+        }
+        self.playback_report.cancel();
+        self.playing_generation += 1;
+        self.reset_watch_panes();
+        self.state.forget_playback();
+        self.set_fullscreen(ctx, false);
     }
 
     pub(super) fn open(&mut self, mut video: Video) {
@@ -237,11 +316,7 @@ impl App {
             video.complete_from(&known.video);
         }
         self.state.video_tabs.open(video.clone());
-        let start = self
-            .state
-            .video_tabs
-            .position(&video.id)
-            .or_else(|| self.state.library.resume_position(&video.id));
+        let start = self.state.library.resume_position(&video.id);
         self.state.library.record_watch(video.clone(), util::now());
         self.save_library();
 
@@ -503,7 +578,6 @@ impl App {
         if let (Some(video), Some(player)) = (&self.state.watching, &self.player) {
             let status = player.status();
             if !status.idle && !video.live {
-                self.state.video_tabs.remember(&video.id, status.position);
                 self.state
                     .library
                     .set_position(&video.id, status.position, status.duration);
@@ -688,6 +762,36 @@ fn failure_message(failure: mpv::Failure) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tab_keeps_its_list_and_stopping_forgets_the_last_one() {
+        let a = Video::from_id("aaaaaaaaaaa".into());
+        let b = Video::from_id("bbbbbbbbbbb".into());
+        let mut state = State {
+            watching: Some(a.clone()),
+            up_next: vec![a.clone(), b.clone()],
+            playing_playlist: Some("PLfirst".into()),
+            playing_waiting: Some(PlaylistAdvance::Autoplay),
+            ..State::default()
+        };
+        let context = state.take_playing_context();
+        assert!(state.up_next.is_empty() && state.playing_playlist.is_none());
+        state.give_playing_context(context);
+        assert_eq!(state.up_next, vec![a.clone(), b]);
+        assert_eq!(state.playing_playlist.as_deref(), Some("PLfirst"));
+        assert_eq!(state.playing_waiting, None);
+
+        state.player_error = Some("failed".into());
+        state.forget_playback();
+        assert!(state.watching.is_none());
+        assert!(state.up_next.is_empty());
+        assert!(state.playing_playlist.is_none() && state.playing_more.is_none());
+        assert!(state.player_error.is_none());
+        // With nothing playing and no queue, the media keys find nothing.
+        assert!(
+            super::super::player::next_video(None, &state.queue, &state.up_next, &[]).is_none()
+        );
+    }
 
     #[test]
     fn interruption_feedback_does_not_recommend_an_extractor_update() {

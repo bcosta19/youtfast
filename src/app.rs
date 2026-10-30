@@ -105,7 +105,7 @@ pub struct HistoryCache {
 /// What the views draw from.
 #[derive(Default)]
 pub struct State {
-    pub video_tabs: crate::logic::video_tabs::VideoTabs,
+    pub video_tabs: crate::logic::video_tabs::VideoTabs<PlayingContext>,
     pub cast: cast::State,
     pub view: View,
     /// The search field's text.
@@ -335,6 +335,15 @@ pub struct State {
 pub enum PlaylistAdvance {
     Manual,
     Autoplay,
+}
+
+/// What a video tab plays from: its list (Up next) and, from a playlist, the
+/// playlist and its next page. Kept by the tab while another tab plays.
+#[derive(Debug, Default)]
+pub struct PlayingContext {
+    up_next: Vec<Video>,
+    playlist: Option<String>,
+    more: Option<innertube::More>,
 }
 
 /// Which page of the player's menu is open.
@@ -981,29 +990,7 @@ impl App {
                 self.apply(ctx, Action::Navigate(View::Home));
                 self.state.video_tabs.request_new_tab();
             }
-            Action::CloseVideoTab(id) => {
-                let active = self.state.video_tabs.active() == Some(id.as_str());
-                self.remember_position();
-                self.state.video_tabs.close(&id);
-                if active {
-                    if let Some(video) = self.state.video_tabs.selected().cloned() {
-                        self.select_video_tab(video);
-                    } else {
-                        self.close_mini_player();
-                        if let Some(player) = &mut self.player
-                            && let Err(error) = player.stop()
-                        {
-                            log::warn!("mpv: {error}");
-                        }
-                        self.playback_report.cancel();
-                        self.reset_watch_panes();
-                        self.state.watching = None;
-                        self.state.fullscreen = false;
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
-                        self.state.view = View::Home;
-                    }
-                }
-            }
+            Action::CloseVideoTab(id) => self.close_video_tab(ctx, &id),
             Action::LoadExtras => self.load_extras(),
             Action::ToggleTranscript => {
                 self.state.transcript_open = !self.state.transcript_open;

@@ -1,15 +1,19 @@
 //! Session-only video tabs. Background tabs never start playback or record history.
+//! Where each video was left stays in the library's history, whose resume rule
+//! (restart near the start or end) the tabs share.
 use crate::model::Video;
 
 #[derive(Debug)]
-struct Tab {
+struct Tab<C> {
     video: Video,
-    position: Option<f64>,
+    /// What the tab was playing from (its list, playlist) while another tab
+    /// played; given back when it is selected again.
+    context: Option<C>,
 }
 
-#[derive(Debug, Default)]
-pub struct VideoTabs {
-    tabs: Vec<Tab>,
+#[derive(Debug)]
+pub struct VideoTabs<C = ()> {
+    tabs: Vec<Tab<C>>,
     active: Option<String>,
     /// Set by the "+" button: the next new video opens its own tab. Cleared by
     /// `open` (new or existing video) and when the last tab closes; selecting a
@@ -18,7 +22,17 @@ pub struct VideoTabs {
     new_tab_pending: bool,
 }
 
-impl VideoTabs {
+impl<C> Default for VideoTabs<C> {
+    fn default() -> Self {
+        Self {
+            tabs: Vec::new(),
+            active: None,
+            new_tab_pending: false,
+        }
+    }
+}
+
+impl<C> VideoTabs<C> {
     pub fn videos(&self) -> impl Iterator<Item = &Video> {
         self.tabs.iter().map(|tab| &tab.video)
     }
@@ -39,7 +53,7 @@ impl VideoTabs {
         if self.video(&video.id).is_none() {
             self.tabs.push(Tab {
                 video,
-                position: None,
+                context: None,
             });
         }
     }
@@ -68,7 +82,7 @@ impl VideoTabs {
             {
                 *tab = Tab {
                     video: video.clone(),
-                    position: None,
+                    context: None,
                 };
             } else {
                 self.add(video.clone());
@@ -83,17 +97,19 @@ impl VideoTabs {
         }
     }
 
-    pub fn position(&self, id: &str) -> Option<f64> {
-        self.tabs.iter().find(|tab| tab.video.id == id)?.position
+    /// Keeps what `id` was playing from while another tab plays.
+    pub fn stash(&mut self, id: &str, context: C) {
+        if let Some(tab) = self.tabs.iter_mut().find(|tab| tab.video.id == id) {
+            tab.context = Some(context);
+        }
     }
 
-    pub fn remember(&mut self, id: &str, seconds: f64) {
-        if seconds.is_finite()
-            && seconds >= 0.0
-            && let Some(tab) = self.tabs.iter_mut().find(|tab| tab.video.id == id)
-        {
-            tab.position = Some(seconds);
-        }
+    pub fn take_context(&mut self, id: &str) -> Option<C> {
+        self.tabs
+            .iter_mut()
+            .find(|tab| tab.video.id == id)?
+            .context
+            .take()
     }
 
     pub fn close(&mut self, id: &str) {
@@ -118,27 +134,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn background_open_preserves_playback_and_switch_retains_positions() {
-        let mut tabs = VideoTabs::default();
+    fn background_open_preserves_selection_and_switch_returns_contexts() {
+        let mut tabs = VideoTabs::<&str>::default();
         tabs.open(Video::from_id("first".into()));
-        tabs.remember("first", 2.5);
         tabs.add(Video::from_id("second".into()));
         tabs.add(Video::from_id("second".into()));
         assert_eq!(tabs.active(), Some("first"));
         assert_eq!(tabs.videos().count(), 2);
+        tabs.stash("first", "playlist");
         tabs.open(Video::from_id("second".into()));
-        tabs.remember("second", 42.0);
+        assert_eq!(tabs.take_context("second"), None);
         tabs.open(Video::from_id("first".into()));
-        assert_eq!(tabs.position("first"), Some(2.5));
-        assert_eq!(tabs.position("second"), Some(42.0));
+        assert_eq!(tabs.take_context("first"), Some("playlist"));
+        assert_eq!(tabs.take_context("first"), None);
+        // Replacing the selected tab drops what it was playing from.
+        tabs.stash("first", "playlist");
         tabs.open(Video::from_id("third".into()));
         assert!(tabs.video("first").is_none());
+        assert_eq!(tabs.take_context("third"), None);
         assert_eq!(tabs.videos().count(), 2);
     }
 
     #[test]
     fn open_after_new_tab_adds_and_selects_instead_of_replacing() {
-        let mut tabs = VideoTabs::default();
+        let mut tabs = VideoTabs::<()>::default();
         tabs.open(Video::from_id("a".into()));
         tabs.request_new_tab();
         assert!(tabs.new_tab_pending());
@@ -153,7 +172,7 @@ mod tests {
 
     #[test]
     fn opening_an_existing_tab_clears_pending_new_tab() {
-        let mut tabs = VideoTabs::default();
+        let mut tabs = VideoTabs::<()>::default();
         tabs.open(Video::from_id("a".into()));
         tabs.add(Video::from_id("b".into()));
         tabs.request_new_tab();
@@ -170,7 +189,7 @@ mod tests {
 
     #[test]
     fn closing_the_last_tab_clears_pending_new_tab() {
-        let mut tabs = VideoTabs::default();
+        let mut tabs = VideoTabs::<()>::default();
         tabs.open(Video::from_id("a".into()));
         tabs.request_new_tab();
         tabs.close("a");
@@ -179,7 +198,7 @@ mod tests {
 
     #[test]
     fn closing_selects_neighbor_and_background_close_preserves_selection() {
-        let mut tabs = VideoTabs::default();
+        let mut tabs = VideoTabs::<()>::default();
         tabs.open(Video::from_id("a".into()));
         tabs.add(Video::from_id("b".into()));
         tabs.add(Video::from_id("c".into()));
