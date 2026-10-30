@@ -11,6 +11,11 @@ struct Tab {
 pub struct VideoTabs {
     tabs: Vec<Tab>,
     active: Option<String>,
+    /// Set by the "+" button: the next new video opens its own tab. Cleared by
+    /// `open` (new or existing video) and when the last tab closes; selecting a
+    /// tab goes through `open`, so it clears too. Background `add` and closing
+    /// other tabs leave it alone.
+    new_tab_pending: bool,
 }
 
 impl VideoTabs {
@@ -39,10 +44,24 @@ impl VideoTabs {
         }
     }
 
-    /// Ordinary navigation replaces the selected tab; an existing tab is selected.
+    #[cfg(test)]
+    pub fn new_tab_pending(&self) -> bool {
+        self.new_tab_pending
+    }
+
+    /// The next ordinary open adds a tab instead of replacing the selected one.
+    pub fn request_new_tab(&mut self) {
+        self.new_tab_pending = true;
+    }
+
+    /// Ordinary navigation replaces the selected tab, or adds one after
+    /// `request_new_tab`; an existing tab is selected.
     pub fn open(&mut self, video: Video) {
+        let new_tab = std::mem::take(&mut self.new_tab_pending);
         if self.video(&video.id).is_none() {
-            if let Some(tab) = self
+            if new_tab {
+                self.add(video.clone());
+            } else if let Some(tab) = self
                 .tabs
                 .iter_mut()
                 .find(|tab| Some(&tab.video.id) == self.active.as_ref())
@@ -82,6 +101,9 @@ impl VideoTabs {
             return;
         };
         self.tabs.remove(index);
+        if self.tabs.is_empty() {
+            self.new_tab_pending = false;
+        }
         if self.active() == Some(id) {
             self.active = self
                 .tabs
@@ -112,6 +134,47 @@ mod tests {
         tabs.open(Video::from_id("third".into()));
         assert!(tabs.video("first").is_none());
         assert_eq!(tabs.videos().count(), 2);
+    }
+
+    #[test]
+    fn open_after_new_tab_adds_and_selects_instead_of_replacing() {
+        let mut tabs = VideoTabs::default();
+        tabs.open(Video::from_id("a".into()));
+        tabs.request_new_tab();
+        assert!(tabs.new_tab_pending());
+        tabs.open(Video::from_id("b".into()));
+        assert!(!tabs.new_tab_pending());
+        assert_eq!(tabs.active(), Some("b"));
+        assert_eq!(tabs.videos().count(), 2);
+        tabs.open(Video::from_id("c".into()));
+        assert!(tabs.video("b").is_none());
+        assert_eq!(tabs.videos().count(), 2);
+    }
+
+    #[test]
+    fn opening_an_existing_tab_clears_pending_new_tab() {
+        let mut tabs = VideoTabs::default();
+        tabs.open(Video::from_id("a".into()));
+        tabs.add(Video::from_id("b".into()));
+        tabs.request_new_tab();
+        tabs.add(Video::from_id("c".into()));
+        assert!(tabs.new_tab_pending());
+        tabs.open(Video::from_id("b".into()));
+        assert!(!tabs.new_tab_pending());
+        assert_eq!(tabs.active(), Some("b"));
+        assert_eq!(tabs.videos().count(), 3);
+        tabs.open(Video::from_id("d".into()));
+        assert!(tabs.video("b").is_none());
+        assert_eq!(tabs.videos().count(), 3);
+    }
+
+    #[test]
+    fn closing_the_last_tab_clears_pending_new_tab() {
+        let mut tabs = VideoTabs::default();
+        tabs.open(Video::from_id("a".into()));
+        tabs.request_new_tab();
+        tabs.close("a");
+        assert!(!tabs.new_tab_pending());
     }
 
     #[test]

@@ -21,7 +21,8 @@ are the distribution record.
 
 - Session-only video tabs: open videos in the background using the context menu,
   middle-click or Ctrl/Cmd-click; switch with Ctrl+Tab / Ctrl+Shift+Tab and close
-  with Ctrl/Cmd+W. Only the selected video plays; switching restores its position.
+  with Ctrl/Cmd+W; the + button opens the next video in a new tab. Only the selected
+  video plays; switching restores its position.
 
 - Opt-in SponsorBlock remote skips for the video sent to a YouTube DIAL TV or
   Google Cast receiver. YouTFast checks TV telemetry independently of local

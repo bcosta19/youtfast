@@ -44,7 +44,72 @@ pub(super) fn show(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) 
                                 }
                             });
                         }
+                        new_tab_button(ui, state.settings.language, actions);
                     });
                 });
         });
+}
+
+fn new_tab_button(
+    ui: &mut egui::Ui,
+    language: crate::appearance::i18n::Locale,
+    actions: &mut Vec<Action>,
+) -> egui::Response {
+    let response = widgets::icon_button(ui, Icon::Plus, 14.0, tr(language, "New tab").as_ref());
+    if response.clicked() {
+        actions.push(Action::NewVideoTab);
+    }
+    response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clicking_plus_emits_only_the_new_tab_action() {
+        let ctx = egui::Context::default();
+        let run = |events: Vec<egui::Event>| {
+            let mut actions = Vec::new();
+            let mut rect = egui::Rect::NOTHING;
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(400.0, 100.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    rect = new_tab_button(
+                        ui,
+                        crate::appearance::i18n::Locale::default(),
+                        &mut actions,
+                    )
+                    .rect;
+                },
+            );
+            output.textures_delta.clear();
+            (rect, actions)
+        };
+        let (rect, _) = run(Vec::new());
+        let pos = rect.center();
+        let mut actions = Vec::new();
+        for pressed in [true, false] {
+            actions.extend(
+                run(vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ])
+                .1,
+            );
+        }
+        assert_eq!(actions, vec![Action::NewVideoTab]);
+    }
 }

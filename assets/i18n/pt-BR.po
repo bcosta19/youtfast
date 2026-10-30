@@ -1726,5 +1726,8 @@ msgstr "Abrir em nova aba"
 msgid "Close tab"
 msgstr "Fechar aba"
 
+msgid "New tab"
+msgstr "Nova aba"
+
 msgid "Next / previous video tab"
 msgstr "Próxima aba de vídeo / anterior"

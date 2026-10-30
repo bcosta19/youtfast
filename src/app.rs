@@ -976,6 +976,11 @@ impl App {
                     }
                 }
             }
+            Action::NewVideoTab => {
+                // Leaving the watch page keeps the video playing in the mini player.
+                self.apply(ctx, Action::Navigate(View::Home));
+                self.state.video_tabs.request_new_tab();
+            }
             Action::CloseVideoTab(id) => {
                 let active = self.state.video_tabs.active() == Some(id.as_str());
                 self.remember_position();

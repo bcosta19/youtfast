@@ -329,6 +329,11 @@ impl eframe::App for Demo {
                         self.state.view = View::Watch;
                     }
                 }
+                Action::NewVideoTab => {
+                    self.state.view = View::Home;
+                    self.state.mini_closed = false;
+                    self.state.video_tabs.request_new_tab();
+                }
                 Action::CloseVideoTab(id) => {
                     let active = self.state.video_tabs.active() == Some(id.as_str());
                     self.state.video_tabs.close(&id);
