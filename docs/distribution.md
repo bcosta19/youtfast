@@ -49,7 +49,7 @@ After installing Flatpak using the distribution's supported instructions:
 
 ```sh
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-flatpak install --user ./youtfast-v0.4.0-x86_64.flatpak
+flatpak install --user ./youtfast-v0.5.0-x86_64.flatpak
 flatpak run io.github.bcosta19.YouTFast
 ```
 

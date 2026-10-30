@@ -15,6 +15,9 @@
   <url type="bugtracker">https://github.com/bcosta19/youtfast/issues</url>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.5.0" date="2026-10-30">
+      <description><p>Adds sending videos to TVs through Google Cast and YouTube's TV link (DIAL/Lounge, or a TV code), with optional SponsorBlock skips on the TV, and browser-style video tabs. Shows channel avatars on Home's recommendations.</p></description>
+    </release>
     <release version="0.4.0" date="2026-10-29">
       <description><p>Adds system interface fonts with an Inter option and a customizable sidebar. Reduces History, Home, Notifications and comment rendering costs, improves keyboard access and account reliability, and refreshes the project website.</p></description>
     </release>
