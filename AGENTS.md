@@ -104,8 +104,8 @@ its job, not at the root:
   comment authors' avatars and the comment count, and with a failed
   visitor-data fetch returned as an error instead of unwrapped (a panic
   aborts the release build), reqwest errors kept with their causes (the
-  only place a refused certificate shows up), and history reports sent through
-  the shared client. Channel pages follow YouTube's
+  only place a refused certificate shows up), history reports sent through
+  the shared client, and video lockups keeping their channel's avatar (YT-6). Channel pages follow YouTube's
   October 2026 layout: `order_ctoken` builds the sort chips' token (`{1: target, 3:
   order}` under field 8, 7 on Shorts), Shorts items read their
   `thumbnailViewModel`, the Playlists tab sends its new `params`, podcast

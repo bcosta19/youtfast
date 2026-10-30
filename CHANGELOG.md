@@ -10,6 +10,9 @@ are the distribution record.
 
 ### Fixed
 
+- Show channel avatars on Home's recommendations and on other lists in YouTube's
+  newer card layout, instead of the channel's initial.
+
 - Show local TV addresses in the picker to distinguish receivers with the same name.
 
 - Keep both Google Cast and YouTube TV choices when a receiver advertises both,

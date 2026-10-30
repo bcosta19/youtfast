@@ -224,6 +224,10 @@ pub(crate) struct LockupViewModelMetadataInner {
     #[serde_as(as = "AttributedText")]
     pub title: String,
     pub metadata: PhMetadataView,
+    /// The channel's avatar, beside a video's title.
+    #[serde_as(as = "DefaultOnError")]
+    #[serde(default)]
+    pub image: Option<super::channel::PhAvatarView>,
 }
 
 /// Video displayed in a playlist
@@ -773,10 +777,23 @@ impl<T> YouTubeListMapper<T> {
                     .content_metadata_view_model
                     .metadata_rows
                     .into_iter();
+                let avatar = md.image.map(|image| {
+                    image
+                        .decorated_avatar_view_model
+                        .avatar
+                        .avatar_view_model
+                        .image
+                });
                 let channel = mdr
                     .next()
                     .and_then(|r| r.metadata_parts.into_iter().next())
-                    .and_then(|p| ChannelTag::try_from(p.into_text_component()).ok());
+                    .and_then(|p| ChannelTag::try_from(p.into_text_component()).ok())
+                    .map(|mut channel| {
+                        if let Some(avatar) = avatar {
+                            channel.avatar = avatar.into();
+                        }
+                        channel
+                    });
                 let (view_count, publish_date_txt) = mdr
                     .next()
                     .map(|metadata_row| {
