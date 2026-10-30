@@ -16,7 +16,7 @@ build and check run with `--frozen`. System libmpv/yt-dlp remain Arch packages.
 To generate it locally from an already built final source asset:
 
 ```sh
-python3 packaging/arch.py dist/youtfast-v0.4.0-source-with-dependencies.tar.gz
+python3 packaging/arch.py dist/youtfast-v0.5.0-source-with-dependencies.tar.gz
 ```
 
 Do not upload the `.in` template. In a separate Arch packaging checkout, review
@@ -26,7 +26,7 @@ the generated `PKGBUILD`, add the maintainer contact, then run:
 makepkg --verifysource
 makepkg --printsrcinfo > .SRCINFO
 extra-x86_64-build
-namcap PKGBUILD youtfast-0.4.0-1-x86_64.pkg.tar.zst
+namcap PKGBUILD youtfast-0.5.0-1-x86_64.pkg.tar.zst
 ```
 
 `extra-x86_64-build` comes from `devtools`; it installs/builds in a clean chroot.
@@ -37,7 +37,7 @@ explicit maintainer action; GitHub Actions does not push to AUR.
 
 After the accepted entry is public, users can run `yay -S youtfast`. Before
 that, do not advertise that command as working. `makepkg` builds a local package;
-`sudo pacman -U ./youtfast-0.4.0-1-x86_64.pkg.tar.zst` installs it. `pacman -S`
+`sudo pacman -U ./youtfast-0.5.0-1-x86_64.pkg.tar.zst` installs it. `pacman -S`
 requires inclusion in an official or separately configured binary repository.
 
 For every upstream release, regenerate the recipe with the final archive and

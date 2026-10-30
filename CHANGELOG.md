@@ -8,17 +8,7 @@ are the distribution record.
 
 ## [Unreleased]
 
-### Fixed
-
-- Show channel avatars on Home's recommendations and on other lists in YouTube's
-  newer card layout, instead of the channel's initial.
-
-- Show local TV addresses in the picker to distinguish receivers with the same name.
-
-- Keep both Google Cast and YouTube TV choices when a receiver advertises both,
-  so either connection can be selected. Report failed native discovery when
-  Google Cast finds no devices.
-- Only use DIAL links marked as running instances when stopping a TV app.
+## [0.5.0] - 2026-10-30
 
 ### Added
 
@@ -27,7 +17,6 @@ are the distribution record.
   with Ctrl/Cmd+W; the + button opens the next video in a new tab. Only the selected
   video plays; switching back resumes it where it was left, with the playlist or
   list it was playing from. Closing the last tab stops playback.
-
 - Opt-in SponsorBlock remote skips for the video sent to a YouTube DIAL TV or
   Google Cast receiver. YouTFast checks TV telemetry independently of local
   playback and stops monitoring on disconnect; keep the app running. Subsequent
@@ -55,6 +44,16 @@ are the distribution record.
   the TV playing. The local player pauses only after the TV confirms the
   requested video. `catt` must be installed separately; physical-device and
   native Windows/macOS qualification remain pending.
+
+### Fixed
+
+- Show channel avatars on Home's recommendations and on other lists in YouTube's
+  newer card layout, instead of the channel's initial.
+- Show local TV addresses in the picker to distinguish receivers with the same name.
+- Keep both Google Cast and YouTube TV choices when a receiver advertises both,
+  so either connection can be selected. Report failed native discovery when
+  Google Cast finds no devices.
+- Only use DIAL links marked as running instances when stopping a TV app.
 
 ## [0.4.0] - 2026-10-29
 
@@ -273,7 +272,8 @@ macOS Apple Silicon. Interactive Windows/macOS qualification is still pending.
 These exclusions are scope decisions, not completed features promised for a
 specific next version. See [ROADMAP.md](ROADMAP.md) for follow-up gates.
 
-[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/bcosta19/youtfast/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/bcosta19/youtfast/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/bcosta19/youtfast/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/bcosta19/youtfast/compare/v0.1.0...v0.2.0
