@@ -501,22 +501,44 @@ pub(crate) fn sponsor_target(position: f64, segments: &[crate::model::Segment]) 
         .max_by(f64::total_cmp)
 }
 
-/// Native DIAL comes first: it needs no helper and joins the TV's own
-/// YouTube app. A Cast target is kept for TVs without DIAL.
+/// Keep both routes when a TV advertises DIAL and Cast: either service can
+/// fail independently, and the user must be able to try the other one.
 fn merge_discovery(
     cast: Result<Vec<Device>, Error>,
     native: Result<Vec<Device>, Error>,
 ) -> Result<Vec<Device>, Error> {
     let cast_error = cast.as_ref().err().copied();
+    let native_error = native.as_ref().err().copied();
     let mut found = native.unwrap_or_default();
     for device in cast.unwrap_or_default() {
-        if !found.iter().any(|known| known.host == device.host) {
+        if !found
+            .iter()
+            .any(|known| known.host == device.host && known.protocol == device.protocol)
+        {
             found.push(device);
+        }
+    }
+    let shared_hosts: Vec<_> = found
+        .iter()
+        .filter(|device| {
+            found
+                .iter()
+                .any(|other| other.host == device.host && other.protocol != device.protocol)
+        })
+        .map(|device| device.host)
+        .collect();
+    for device in &mut found {
+        if shared_hosts.contains(&device.host) {
+            device.name.push_str(match device.protocol {
+                Protocol::GoogleCast => " (Google Cast)",
+                Protocol::YouTube { .. } => " (YouTube TV)",
+                Protocol::Linked { .. } => " (TV code)",
+            });
         }
     }
     found.sort_by(|a, b| a.name.cmp(&b.name).then(a.host.cmp(&b.host)));
     if found.is_empty()
-        && let Some(error) = cast_error
+        && let Some(error) = cast_error.or(native_error)
     {
         return Err(error);
     }
@@ -791,7 +813,7 @@ mod tests {
     }
 
     #[test]
-    fn native_youtube_wins_over_cast_for_the_same_tv() {
+    fn both_routes_remain_selectable_for_a_tv_with_cast_and_dial() {
         let native = Device {
             host: "192.168.1.20".parse().unwrap(),
             name: "Living room TV".into(),
@@ -803,11 +825,33 @@ mod tests {
         other.host = "192.168.1.30".parse().unwrap();
         let found =
             merge_discovery(Ok(vec![device(), other.clone()]), Ok(vec![native.clone()])).unwrap();
-        assert_eq!(found.len(), 2);
-        assert!(found.contains(&native) && found.contains(&other));
+        assert_eq!(found.len(), 3);
+        assert!(found.contains(&other));
+        assert!(found.iter().any(|device| device.host == native.host
+            && device.protocol == native.protocol
+            && device.name == "Living room TV (YouTube TV)"));
+        assert!(found.iter().any(|device| device.host == native.host
+            && device.protocol == Protocol::GoogleCast
+            && device.name.ends_with(" (Google Cast)")));
         assert_eq!(
             merge_discovery(Err(Error::MissingHelper), Ok(vec![native.clone()])),
             Ok(vec![native])
+        );
+    }
+
+    #[test]
+    fn failed_native_discovery_is_not_reported_as_an_empty_success() {
+        assert_eq!(
+            merge_discovery(Ok(Vec::new()), Err(Error::Unavailable)),
+            Err(Error::Unavailable)
+        );
+        assert_eq!(
+            merge_discovery(Ok(vec![device()]), Err(Error::Unavailable)),
+            Ok(vec![device()])
+        );
+        assert_eq!(
+            merge_discovery(Ok(Vec::new()), Ok(Vec::new())),
+            Ok(Vec::new())
         );
     }
 

@@ -8,6 +8,15 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Fixed
+
+- Show local TV addresses in the picker to distinguish receivers with the same name.
+
+- Keep both Google Cast and YouTube TV choices when a receiver advertises both,
+  so either connection can be selected. Report failed native discovery when
+  Google Cast finds no devices.
+- Only use DIAL links marked as running instances when stopping a TV app.
+
 ### Added
 
 - Opt-in SponsorBlock remote skips for the video sent to a YouTube DIAL TV or

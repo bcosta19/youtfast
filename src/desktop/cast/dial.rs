@@ -72,16 +72,22 @@ fn app_info(bytes: &[u8]) -> Result<AppInfo, Error> {
             Event::Start(element) | Event::Empty(element) => {
                 tag = element.local_name().as_ref().to_vec();
                 if tag == b"link" {
+                    let mut relation = None;
+                    let mut href = None;
                     for attribute in element.attributes() {
                         let attribute = attribute.map_err(|_| Error::InvalidResponse)?;
-                        if attribute.key.as_ref() == b"href" {
-                            info.stop = Some(
-                                attribute
-                                    .normalized_value(quick_xml::XmlVersion::Implicit1_0)
-                                    .map_err(|_| Error::InvalidResponse)?
-                                    .into_owned(),
-                            );
+                        let value = attribute
+                            .normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                            .map_err(|_| Error::InvalidResponse)?
+                            .into_owned();
+                        match attribute.key.as_ref() {
+                            b"rel" => relation = Some(value),
+                            b"href" => href = Some(value),
+                            _ => {}
                         }
+                    }
+                    if relation.as_deref() == Some("run") {
+                        info.stop = href;
                     }
                 }
             }
@@ -498,6 +504,17 @@ fn locations(reply: &[u8], source: IpAddr) -> Vec<Url> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_running_instance_link_can_stop_the_app() {
+        let app = app_info(br#"<service><name>YouTube</name><state>running</state><link href="run" rel="run"/><link rel="help" href="help"/></service>"#).unwrap();
+        assert_eq!(app.stop.as_deref(), Some("run"));
+        let app = app_info(
+            br#"<service><name>YouTube</name><state>running</state><link href="help"/></service>"#,
+        )
+        .unwrap();
+        assert!(app.stop.is_none());
+    }
 
     #[test]
     fn dial_status_accepts_namespaces_and_never_treats_an_uninstalled_app_as_a_target() {

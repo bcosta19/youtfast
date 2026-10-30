@@ -116,6 +116,9 @@ fn body(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                     {
                         actions.push(Action::Cast(CastAction::Start(device.clone())));
                     }
+                    if !matches!(device.protocol, crate::desktop::cast::Protocol::Linked { .. }) {
+                        ui.small(device.host.to_string());
+                    }
                 }
             });
             if cast.searched && cast.devices.is_empty() && cast.error.is_none() {

@@ -118,7 +118,8 @@ window already open instead of opening another.
 The TV picker supports three paths. YouTube TVs with DIAL/Lounge use native
 networking and do not require a helper. This includes Samsung, LG, Roku, Fire
 TV and Android/Google TV models that expose YouTube over DIAL; when a TV offers
-both DIAL and Google Cast, the picker lists it once, through DIAL. Any device
+both DIAL and Google Cast, the picker keeps both connection options. Local
+IP addresses distinguish TVs with the same name. Any device
 whose YouTube app shows **Link with TV code** (Apple TV, game consoles, a TV on
 another network or behind guest-network isolation) can be linked with that
 code instead. Google Cast support is optional and uses
