@@ -8,6 +8,45 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Fixed
+
+- Show local TV addresses in the picker to distinguish receivers with the same name.
+
+- Keep both Google Cast and YouTube TV choices when a receiver advertises both,
+  so either connection can be selected. Report failed native discovery when
+  Google Cast finds no devices.
+- Only use DIAL links marked as running instances when stopping a TV app.
+
+### Added
+
+- Opt-in SponsorBlock remote skips for the video sent to a YouTube DIAL TV or
+  Google Cast receiver. YouTFast checks TV telemetry independently of local
+  playback and stops monitoring on disconnect; keep the app running. Subsequent
+  TV autoplay videos and YouTube ads are not covered. Physical-device and native
+  platform qualification remain pending.
+- Native YouTube TV support through DIAL/Lounge, alongside Google Cast.
+  Discovery combines SSDP and AirPlay announcements (used only to locate and
+  verify a YouTube DIAL endpoint), with manual local-IP lookup for compatible
+  Samsung TVs when multicast discovery is blocked. TV control identifiers
+  remain in memory and do not use the YouTFast account session.
+- Linking a TV with the code under YouTube's **Link with TV code**, for Apple TV,
+  consoles and TVs on another network or behind guest-network isolation.
+- TV sends join a YouTube app that is already open instead of closing it, work
+  on TVs that do not let remotes close the app, and wait up to a minute for ads
+  or the TV's account picker before reporting a failure. Idle TV connections
+  renew themselves instead of asking to send the video again.
+- TV discovery searches every private network interface and repeats the search,
+  also checks Google Cast announcements for YouTube, and IP lookup asks the TV
+  for its own endpoint (LG, Roku and others) before trying known ports. TVs with
+  both paths keep separate connection choices, and known Google speakers are
+  left out.
+- Optional Google Cast TV picker and remote through `catt`: discover local
+  devices, send the current YouTube video with its starting position, play,
+  pause, skip ten seconds, adjust TV volume, stop or disconnect while leaving
+  the TV playing. The local player pauses only after the TV confirms the
+  requested video. `catt` must be installed separately; physical-device and
+  native Windows/macOS qualification remain pending.
+
 ## [0.4.0] - 2026-10-29
 
 ### Added

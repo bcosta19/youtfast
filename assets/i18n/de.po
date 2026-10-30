@@ -1557,6 +1557,131 @@ msgstr "Das Update konnte auf diesem System nicht installiert werden."
 msgid "Automatic installation is not supported for this package format."
 msgstr "Die automatische Installation wird für dieses Paketformat nicht unterstützt."
 
+msgid "Cast to TV"
+msgstr "Auf TV übertragen"
+
+msgid "Google Cast devices on your local network."
+msgstr "Google Cast-Geräte in deinem lokalen Netzwerk."
+
+msgid "Install catt"
+msgstr "catt installieren"
+
+msgid "Searching for TVs…"
+msgstr "TVs werden gesucht…"
+
+msgid "Waiting for the TV…"
+msgstr "Warten auf den TV…"
+
+msgid "Playback confirmed on TV."
+msgstr "Wiedergabe auf dem TV bestätigt."
+
+msgid "Video requested; playback is not confirmed."
+msgstr "Video angefordert; Wiedergabe nicht bestätigt."
+
+msgid "−10 s on TV"
+msgstr "−10 s am TV"
+
+msgid "+10 s on TV"
+msgstr "+10 s am TV"
+
+msgid "TV volume −"
+msgstr "TV-Lautstärke −"
+
+msgid "TV volume +"
+msgstr "TV-Lautstärke +"
+
+msgid "Command sent to TV."
+msgstr "Befehl an den TV gesendet."
+
+msgid "Use these controls for the TV. Player controls and media keys control this computer."
+msgstr "Diese Steuerelemente bedienen den TV. Player und Medientasten steuern diesen Computer."
+
+msgid "Stop on TV"
+msgstr "Auf TV stoppen"
+
+msgid "Disconnect; keep TV playing"
+msgstr "Trennen; TV weiterspielen lassen"
+
+msgid "Send the current video:"
+msgstr "Aktuelles Video senden:"
+
+msgid "Open a video to send it to a TV."
+msgstr "Öffne ein Video, um es an einen TV zu senden."
+
+msgid "No devices found. Turn on Google Cast and check that both devices are on the same network."
+msgstr "Keine Geräte gefunden. Aktiviere Google Cast und prüfe, ob beide Geräte im selben Netzwerk sind."
+
+msgid "Search for TVs"
+msgstr "TVs suchen"
+
+msgid "The TV uses its YouTube app and account. Local playback pauses only after confirmation."
+msgstr "Der TV nutzt seine YouTube-App und sein Konto. Die lokale Wiedergabe pausiert erst nach Bestätigung."
+
+msgid "Install catt to use Google Cast, then search again."
+msgstr "Installiere catt für Google Cast und suche erneut."
+
+msgid "Could not start the TV connection. Try again."
+msgstr "Die TV-Verbindung konnte nicht gestartet werden. Versuche es erneut."
+
+msgid "The TV command failed. Check the TV and your network, then retry."
+msgstr "Der TV-Befehl ist fehlgeschlagen. Prüfe TV und Netzwerk und versuche es erneut."
+
+msgid "The TV did not respond in time. Check the TV before retrying."
+msgstr "Der TV hat nicht rechtzeitig geantwortet. Prüfe ihn vor einem neuen Versuch."
+
+msgid "Could not read the TV response. Update catt and retry."
+msgstr "Die TV-Antwort konnte nicht gelesen werden. Aktualisiere catt und versuche es erneut."
+
+msgid "Playback on TV was not confirmed. Check the TV before retrying."
+msgstr "Die TV-Wiedergabe wurde nicht bestätigt. Prüfe den TV vor einem neuen Versuch."
+
+msgid "This video or device cannot be sent to the TV."
+msgstr "Dieses Video oder Gerät kann nicht für die Übertragung verwendet werden."
+
+msgid "The TV is playing, but local playback could not be paused."
+msgstr "Der TV spielt ab, aber die lokale Wiedergabe konnte nicht pausiert werden."
+
+msgid "Google Cast and YouTube TVs on your network."
+msgstr "TVs mit Google Cast oder YouTube im Netzwerk."
+
+msgid "No TVs found. Open YouTube on your TV, check the network, or enter its IP address below."
+msgstr "Keine TVs gefunden. Öffne YouTube am TV, prüfe das Netzwerk oder gib seine IP ein."
+
+msgid "Find a YouTube TV by IP address"
+msgstr "YouTube-TV über IP suchen"
+
+msgid "Find TV"
+msgstr "TV suchen"
+
+msgid "No compatible YouTube app was found at this TV address."
+msgstr "Keine kompatible YouTube-App unter dieser Adresse gefunden."
+
+msgid "The TV connection expired. Disconnect and send the video again."
+msgstr "Die TV-Verbindung ist abgelaufen. Trenne sie und sende das Video erneut."
+
+msgid "Could not read the TV response. Try again."
+msgstr "Die TV-Antwort konnte nicht gelesen werden. Versuche es erneut."
+
+msgid "This TV does not accept that command. Use the TV remote."
+msgstr "Dieser TV akzeptiert den Befehl nicht. Nutze die Fernbedienung."
+
+msgid "That TV code was not accepted. Check the code shown on the TV and try again."
+msgstr "Der TV-Code wurde nicht akzeptiert. Prüfe den Code auf dem TV und versuche es erneut."
+
+msgid "This TV does not report its volume. Use the TV remote for volume."
+msgstr "Dieser TV meldet seine Lautstärke nicht. Nutze die Fernbedienung für die Lautstärke."
+
+msgid "If the TV shows an ad or asks who is watching, answer on the TV. This can take up to a minute."
+msgstr "Zeigt der TV Werbung oder fragt, wer zuschaut, antworte am TV. Das kann bis zu einer Minute dauern."
+
+msgid "Link a TV with a code"
+msgstr "TV mit Code verknüpfen"
+
+msgid "On the TV, open YouTube, then Settings, then Link with TV code."
+msgstr "Öffne auf dem TV YouTube, dann Einstellungen, dann Mit TV-Code verknüpfen."
+
+msgid "Link TV"
+msgstr "TV verknüpfen"
 msgid "Choose which buttons the sidebar shows and in what order. The number keys 1 to 9 follow the buttons as shown. Account and Settings always stay."
 msgstr "Lege fest, welche Schaltflächen die Seitenleiste zeigt und in welcher Reihenfolge. Die Zifferntasten 1 bis 9 folgen den Schaltflächen, wie sie angezeigt werden. Konto und Einstellungen bleiben immer erhalten."
 

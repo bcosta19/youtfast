@@ -31,6 +31,11 @@ as a candidate. Before publishing 0.4.0 or promoting a release to latest:
 
 ## Product follow-ups
 
+- Qualify the optional `catt` Google Cast adapter on physical Chromecast and
+  Google TV devices, and native Windows/macOS. Check resume, live playback,
+  disconnect, network loss and the TV's reported video identity. Bundling the
+  helper, Flatpak qualification, live remote-status synchronization and broader
+  DIAL TV model qualification remain separate work.
 - Live chat and downloads need their own design and resource/privacy limits.
 - Cookies.txt accounts have no signed-in playback retry; any future session
   handoff to extraction tools must preserve the no-session-file boundary.

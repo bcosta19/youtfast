@@ -13,6 +13,7 @@ use crate::appearance::i18n::{format as trf, gettext as tr};
 mod account;
 #[cfg(test)]
 mod bench;
+mod cast;
 mod discovery;
 mod extras;
 mod keys;
@@ -51,12 +52,15 @@ pub fn show(
     actions: &mut Vec<Action>,
 ) {
     state.scrolling.apply(ui.ctx());
-    keys::handle(ui.ctx(), state, status, actions);
+    if !state.cast.open {
+        keys::handle(ui.ctx(), state, status, actions);
+    }
     if state.view == View::Watch && state.fullscreen {
         watch::fullscreen(ui, state, status, surface, actions);
         if state.keys_open {
             keys_overlay(ui.ctx(), state);
         }
+        cast::show(ui.ctx(), state, actions);
         return;
     }
     top_bar(ui, state, actions);
@@ -100,6 +104,7 @@ pub fn show(
     if state.keys_open {
         keys_overlay(ui.ctx(), state);
     }
+    cast::show(ui.ctx(), state, actions);
 }
 
 /// The top bar's height.
@@ -187,6 +192,22 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                     {
                         actions.push(Action::Navigate(View::Account));
                     }
+                    let cast_button = widgets::icon_button(
+                        ui,
+                        Icon::Cast,
+                        20.0,
+                        tr(locale, "Cast to TV").as_ref(),
+                    );
+                    if state.cast.session.is_some() {
+                        ui.painter().circle_filled(
+                            cast_button.rect.right_top() + vec2(-5.0, 5.0),
+                            3.0,
+                            palette.accent,
+                        );
+                    }
+                    if cast_button.clicked() {
+                        actions.push(Action::Cast(crate::desktop::cast::Action::Open));
+                    }
                     let hint = trf(
                         locale,
                         "Notifications: {count} new",
@@ -216,7 +237,7 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                 },
             );
             let left = bar.left() + if wide { 220.0 } else { 106.0 };
-            let right = bar.right() - 116.0;
+            let right = bar.right() - 156.0;
             let width = (right - left - 36.0).clamp(80.0, 560.0);
             let center = egui::pos2((left + right - 36.0) / 2.0, bar.center().y);
             let field_rect = egui::Rect::from_center_size(center, vec2(width, 36.0));

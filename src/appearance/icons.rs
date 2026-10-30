@@ -55,5 +55,6 @@ fastframe_icons::icons! {
         Queue => "list-plus",
         MiniPlayer => "picture-in-picture-2",
         Live => "radio",
+        Cast => "cast",
     }
 }
