@@ -48,24 +48,24 @@ if-addrs = "0.15"
 socket2 = "0.6"
 quick-xml = "0.41"
 # The icons! table and the Lucide icons shared with the sibling apps.
-fastframe-icons = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
+fastframe-icons = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
 # Inter at its four weights (or the platform's interface face), with the
 # installed faces behind it for the scripts Inter lacks, as in the siblings.
-fastframe-fonts = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
+fastframe-fonts = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
 # How the desktop renders text (hinting, coverage), applied to egui's.
-fastframe-text = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
+fastframe-text = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
 # Bundled translations, compiled from gettext catalogs; no runtime files.
 fastframe-i18n = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
 # Palette files, the shared palettes, and following the Omarchy desktop's
 # theme live.
-fastframe-theme = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
+fastframe-theme = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
 # One running copy per user; a second launch hands its request over.
-fastframe-instance = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
+fastframe-instance = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
 # The desktop's media controls: MPRIS on Linux, media keys and panels.
-fastframe-now-playing = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
+fastframe-now-playing = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
 # The wheel step, the Linux touchpad scale and glide, and the axis a scroll
 # gesture holds.
-fastframe-scroll = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
+fastframe-scroll = { git = "https://github.com/crmne/fastframe", tag = "v0.14.1" }
 # YouTube's own API (InnerTube): the signed-in account's feed, history,
 # subscriptions, playlists, liked videos and Watch later (`userdata`), and
 # channel RSS for the feed without an account (`rss`). rustls, as in the
