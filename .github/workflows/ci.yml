@@ -62,7 +62,7 @@ jobs:
         with:
           path: ~/apt-archives
           key: ${{ steps.apt-cache.outputs.cache-primary-key }}
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           shared-key: linux-quality
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -98,7 +98,7 @@ jobs:
           rustup toolchain install "$toolchain" --profile minimal
           brew install mpv
           echo "LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           shared-key: macos15-tests
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -131,7 +131,7 @@ jobs:
           path-type: inherit
           update: true
           install: mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-mpv
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           shared-key: windows-gnu-tests
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
