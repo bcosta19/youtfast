@@ -48,24 +48,24 @@ if-addrs = "0.15"
 socket2 = "0.6"
 quick-xml = "0.41"
 # The icons! table and the Lucide icons shared with the sibling apps.
-fastframe-icons = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
+fastframe-icons = { git = "https://github.com/crmne/fastframe", tag = "v0.15.5" }
 # Inter at its four weights (or the platform's interface face), with the
 # installed faces behind it for the scripts Inter lacks, as in the siblings.
-fastframe-fonts = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
+fastframe-fonts = { git = "https://github.com/crmne/fastframe", tag = "v0.15.5" }
 # How the desktop renders text (hinting, coverage), applied to egui's.
-fastframe-text = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
+fastframe-text = { git = "https://github.com/crmne/fastframe", tag = "v0.15.5" }
 # Bundled translations, compiled from gettext catalogs; no runtime files.
-fastframe-i18n = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
+fastframe-i18n = { git = "https://github.com/crmne/fastframe", tag = "v0.15.5" }
 # Palette files, the shared palettes, and following the Omarchy desktop's
 # theme live.
-fastframe-theme = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
+fastframe-theme = { git = "https://github.com/crmne/fastframe", tag = "v0.15.5" }
 # One running copy per user; a second launch hands its request over.
-fastframe-instance = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
+fastframe-instance = { git = "https://github.com/crmne/fastframe", tag = "v0.15.5" }
 # The desktop's media controls: MPRIS on Linux, media keys and panels.
-fastframe-now-playing = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
+fastframe-now-playing = { git = "https://github.com/crmne/fastframe", tag = "v0.15.5" }
 # The wheel step, the Linux touchpad scale and glide, and the axis a scroll
 # gesture holds.
-fastframe-scroll = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0" }
+fastframe-scroll = { git = "https://github.com/crmne/fastframe", tag = "v0.15.5" }
 # YouTube's own API (InnerTube): the signed-in account's feed, history,
 # subscriptions, playlists, liked videos and Watch later (`userdata`), and
 # channel RSS for the feed without an account (`rss`). rustls, as in the
@@ -120,7 +120,7 @@ windows-native-keyring-store = { version = "1.1", default-features = false }
 rustypipe = { version = "0.11.4", default-features = false, features = ["regression"] }
 
 [build-dependencies]
-fastframe-i18n = { git = "https://github.com/crmne/fastframe", tag = "v0.6.0", features = ["build"] }
+fastframe-i18n = { git = "https://github.com/crmne/fastframe", tag = "v0.15.5", features = ["build"] }
 
 [profile.release]
 lto = "thin"
@@ -143,19 +143,19 @@ incremental = false
 opt-level = 0
 
 [patch.crates-io]
-# crmne/egui apps-0.36 and crmne/winit apps-0.30, the same revisions Spotifast
+# crmne/egui apps-0.36.2 and crmne/winit apps-0.30, the same revisions Spotifast
 # and ZapFast pin: Wayland frame pacing by the compositor's frame callbacks
 # (a window Hyprland hides never blocks in a vsync swap), plus the clipboard
 # and accessibility fixes listed in those projects' Cargo.toml. Move all of
 # them together with the sibling apps.
-ecolor = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-eframe = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-egui = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-egui-winit = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-egui_extras = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-egui_glow = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-emath = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-epaint = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
+ecolor = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
+eframe = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
+egui = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
+egui-winit = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
+egui_extras = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
+egui_glow = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
+emath = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
+epaint = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
 # rustypipe 0.11.4 with ThetaDev/rustypipe PR #80 applied (codeberg.org):
 # comment authors' avatars, which YouTube now sends as
 # `author.avatarThumbnailUrl`, and the comment count from the engagement
@@ -169,5 +169,5 @@ epaint = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce
 # reqwest 0.13, with rustls and ring as the process crypto provider. Drop the
 # copy once a release carries these changes.
 rustypipe = { path = "vendor/rustypipe" }
-epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "ba6790fe7cf46e58e8d27ce1524cbfdee745e938" }
-winit = { git = "https://github.com/crmne/winit", rev = "ed7caa9023f10b397f5b6ec8284a840cbd8a6f65" }
+epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
+winit = { git = "https://github.com/crmne/winit", rev = "59ebfb727b8c83fcd28f8ca59c3733e32b4b4e9b" }
