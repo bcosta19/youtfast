@@ -6,9 +6,9 @@ use youtfast_core::model::{Channel, ChannelTab, FeedFilter, Quality, Rating, Sou
 /// applies them after the frame.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action {
-    Cast(crate::desktop::cast::Action),
-    SetSearchOptions(crate::youtube::innertube::SearchOptions),
-    SetChannelOrder(crate::youtube::innertube::ChannelOrder),
+    Cast(youtfast_cast::Action),
+    SetSearchOptions(youtfast_youtube::innertube::SearchOptions),
+    SetChannelOrder(youtfast_youtube::innertube::ChannelOrder),
     SetHistoryQuery(String),
     RemoveHistory(String),
     PlayPlaylist,
@@ -32,7 +32,7 @@ pub enum Action {
     /// Loads the page on screen again.
     Refresh,
     SetSource(Source),
-    SetHistoryFilter(crate::logic::history::HistoryFilter),
+    SetHistoryFilter(youtfast_logic::history::HistoryFilter),
     TogglePause,
     /// The desktop's media controls ask for play or pause directly.
     SetPaused(bool),
@@ -51,9 +51,9 @@ pub enum Action {
     ToggleMiniPlayer,
     SetScrollMiniplayer(bool),
     /// The sidebar's buttons: their order and which are shown.
-    SetSidebar(Vec<crate::storage::settings::SidebarEntry>),
-    SetPlaybackBuffer(crate::storage::settings::PlaybackBuffer),
-    SetHistorySync(crate::storage::settings::HistorySync),
+    SetSidebar(Vec<youtfast_storage::settings::SidebarEntry>),
+    SetPlaybackBuffer(youtfast_storage::settings::PlaybackBuffer),
+    SetHistorySync(youtfast_storage::settings::HistorySync),
     SeekChapter(bool),
     RetryPlayback,
     ToggleLoop,
@@ -67,10 +67,10 @@ pub enum Action {
     ToggleTranscript,
     ToggleAudioOnly,
     SetQuality(Quality),
-    SetTheme(crate::storage::settings::ThemeChoice),
+    SetTheme(youtfast_storage::settings::ThemeChoice),
     SetLanguage(youtfast_i18n::Locale),
     /// Draw the interface with this face, now.
-    SetInterfaceFont(crate::appearance::theme::InterfaceFont),
+    SetInterfaceFont(youtfast_appearance::theme::InterfaceFont),
     /// Open a prefilled GitHub issue about the system font, in the browser.
     ReportInterfaceFont,
     /// Subscribes on this device, or unsubscribes.

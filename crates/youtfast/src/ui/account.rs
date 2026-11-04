@@ -10,11 +10,11 @@ use egui::{
 use super::{results, widgets};
 use crate::app::Action;
 use crate::app::{AccountState, State};
-use crate::appearance::icons::Icon;
-use crate::appearance::theme::{self, Palette, RADIUS};
-use crate::storage::library::Account;
+use youtfast_appearance::icons::Icon;
+use youtfast_appearance::theme::{self, Palette, RADIUS};
 use youtfast_core::model::browser_label;
 use youtfast_i18n::{Locale, format as trf, gettext as tr};
+use youtfast_storage::library::Account;
 
 /// The text column's width: long lines of explanation read badly wider.
 const WIDTH: f32 = 640.0;
@@ -396,7 +396,7 @@ fn profile_row(
     ui: &mut Ui,
     state: &State,
     index: usize,
-    profile: &crate::storage::account::BrowserProfile,
+    profile: &youtfast_storage::account::BrowserProfile,
     busy: bool,
     actions: &mut Vec<Action>,
 ) {
@@ -629,15 +629,15 @@ fn field(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::account::BrowserProfile;
     use youtfast_core::model::AccountSource;
+    use youtfast_storage::account::BrowserProfile;
 
     #[test]
     fn account_row_actions_fit_narrow_window_in_every_state() {
         for mode in ["normal", "renaming", "removing"] {
             let ctx = egui::Context::default();
             ctx.enable_accesskit();
-            crate::appearance::theme::install_fonts(&ctx);
+            youtfast_appearance::theme::install_fonts(&ctx);
             let account = Account {
                 id: 1,
                 name: "Ana".into(),
@@ -702,7 +702,7 @@ mod tests {
     #[test]
     fn add_account_form_text_fits_narrow_window() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let state = State::default();
         let mut output = ctx.run_ui(
             egui::RawInput {
@@ -732,7 +732,7 @@ mod tests {
     #[test]
     fn rename_keeps_a_draft_until_enter_and_escape_cancels() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let account = Account {
             id: 1,
             name: "Ana".into(),
@@ -821,7 +821,7 @@ mod tests {
             source: AccountSource::Browser("chromium".to_owned()),
         });
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         for (width, advanced) in [(1200.0, false), (420.0, true)] {
             state.account_advanced = advanced;
             let input = egui::RawInput {

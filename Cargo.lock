@@ -6474,50 +6474,67 @@ name = "youtfast"
 version = "0.5.0"
 dependencies = [
  "anyhow",
- "apple-native-keyring-store",
  "clap",
- "directories",
  "eframe",
  "egui",
  "egui_extras",
- "ehttp",
- "env_logger",
- "fastframe-fonts",
- "fastframe-i18n",
  "fastframe-icons",
- "fastframe-instance",
  "fastframe-now-playing",
  "fastframe-scroll",
- "fastframe-text",
  "fastframe-theme",
- "if-addrs",
  "image",
  "jiff",
- "keyring-core",
  "log",
- "mdns-sd",
  "notify-rust",
- "quick-xml 0.41.0",
- "rand 0.10.3",
  "raw-window-handle",
- "reqwest",
  "resvg",
  "rfd",
- "rustls",
- "rustls-platform-verifier",
  "rustypipe",
+ "serde_json",
+ "tokio",
+ "url",
+ "youtfast-appearance",
+ "youtfast-cast",
+ "youtfast-core",
+ "youtfast-desktop",
+ "youtfast-i18n",
+ "youtfast-logic",
+ "youtfast-mpv",
+ "youtfast-storage",
+ "youtfast-youtube",
+]
+
+[[package]]
+name = "youtfast-appearance"
+version = "0.5.0"
+dependencies = [
+ "egui",
+ "fastframe-fonts",
+ "fastframe-icons",
+ "fastframe-text",
+ "fastframe-theme",
+ "log",
+ "serde",
+ "url",
+]
+
+[[package]]
+name = "youtfast-cast"
+version = "0.5.0"
+dependencies = [
+ "egui",
+ "if-addrs",
+ "mdns-sd",
+ "quick-xml 0.41.0",
+ "rand 0.10.3",
+ "reqwest",
  "serde",
  "serde_json",
- "sha2",
  "socket2",
  "tokio",
- "ureq",
  "url",
- "windows-native-keyring-store",
  "youtfast-core",
- "youtfast-i18n",
- "youtfast-mpv",
- "zbus-secret-service-keyring-store",
+ "youtfast-youtube",
 ]
 
 [[package]]
@@ -6526,6 +6543,24 @@ version = "0.5.0"
 dependencies = [
  "jiff",
  "serde",
+ "youtfast-i18n",
+]
+
+[[package]]
+name = "youtfast-desktop"
+version = "0.5.0"
+dependencies = [
+ "directories",
+ "egui",
+ "env_logger",
+ "fastframe-instance",
+ "log",
+ "serde",
+ "serde_json",
+ "sha2",
+ "ureq",
+ "url",
+ "youtfast-core",
  "youtfast-i18n",
 ]
 
@@ -6539,6 +6574,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "youtfast-logic"
+version = "0.5.0"
+dependencies = [
+ "jiff",
+ "youtfast-core",
+ "youtfast-i18n",
+ "youtfast-storage",
+]
+
+[[package]]
 name = "youtfast-mpv"
 version = "0.5.0"
 dependencies = [
@@ -6546,6 +6591,53 @@ dependencies = [
  "egui",
  "log",
  "serde_json",
+]
+
+[[package]]
+name = "youtfast-storage"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "apple-native-keyring-store",
+ "directories",
+ "egui",
+ "fastframe-theme",
+ "jiff",
+ "keyring-core",
+ "log",
+ "rustypipe",
+ "serde",
+ "serde_json",
+ "tokio",
+ "windows-native-keyring-store",
+ "youtfast-appearance",
+ "youtfast-core",
+ "youtfast-i18n",
+ "zbus-secret-service-keyring-store",
+]
+
+[[package]]
+name = "youtfast-youtube"
+version = "0.5.0"
+dependencies = [
+ "egui",
+ "ehttp",
+ "image",
+ "jiff",
+ "log",
+ "rand 0.10.3",
+ "reqwest",
+ "rustls",
+ "rustls-platform-verifier",
+ "rustypipe",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "ureq",
+ "url",
+ "youtfast-core",
+ "youtfast-storage",
 ]
 
 [[package]]

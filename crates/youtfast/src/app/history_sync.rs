@@ -1,7 +1,7 @@
 //! A report belongs to one playback and the session in which it started.
 use std::time::Duration;
 
-use crate::storage::settings::HistorySync;
+use youtfast_storage::settings::HistorySync;
 
 #[derive(Default)]
 pub(super) struct PlaybackReport {

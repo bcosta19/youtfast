@@ -390,7 +390,7 @@ mod tests {
         assert!(!media_state(&state, Some(&playing())).controls.next);
         state.up_next.remove(0);
         assert!(!media_state(&state, Some(&playing())).controls.previous);
-        state.playing_more = Some(crate::youtube::innertube::More {
+        state.playing_more = Some(youtfast_youtube::innertube::More {
             ctoken: "next".into(),
             endpoint: rustypipe::model::paginator::ContinuationEndpoint::Browse,
             visitor_data: None,

@@ -9,7 +9,7 @@ use youtfast_i18n::{format as trf, gettext as tr};
 use super::{results, widgets};
 use crate::app::Action;
 use crate::app::{AccountState, Page, State};
-use crate::appearance::theme;
+use youtfast_appearance::theme;
 use youtfast_core::model::{Channel, FeedFilter, Fetch, Listing, Source, Video, View};
 use youtfast_core::util;
 
@@ -41,7 +41,7 @@ fn controls(
                 .clicked()
             {
                 actions.push(Action::SetHistoryFilter(
-                    crate::logic::history::HistoryFilter::All,
+                    youtfast_logic::history::HistoryFilter::All,
                 ));
             }
             if widgets::chip(
@@ -53,7 +53,7 @@ fn controls(
             .clicked()
             {
                 actions.push(if merged {
-                    Action::SetHistoryFilter(crate::logic::history::HistoryFilter::Account)
+                    Action::SetHistoryFilter(youtfast_logic::history::HistoryFilter::Account)
                 } else {
                     Action::SetSource(Source::Account)
                 });
@@ -67,7 +67,7 @@ fn controls(
             .clicked()
             {
                 actions.push(if merged {
-                    Action::SetHistoryFilter(crate::logic::history::HistoryFilter::Device)
+                    Action::SetHistoryFilter(youtfast_logic::history::HistoryFilter::Device)
                 } else {
                     Action::SetSource(Source::Device)
                 });
@@ -732,7 +732,7 @@ const HISTORY_ROW: f32 = 106.0;
 fn history_row(
     ui: &mut Ui,
     state: &State,
-    row: &crate::logic::history::Row<'_>,
+    row: &youtfast_logic::history::Row<'_>,
     index: usize,
     controls: bool,
     now: i64,
@@ -792,7 +792,7 @@ fn history_row(
             if row.device.is_some() {
                 if widgets::icon_button(
                     ui,
-                    crate::appearance::icons::Icon::Close,
+                    youtfast_appearance::icons::Icon::Close,
                     16.0,
                     tr(locale, "Remove from this device's history").as_ref(),
                 )
@@ -1082,14 +1082,14 @@ mod tests {
 
     #[test]
     fn merged_history_controls_fit_narrow_and_wide_dark_and_light_pages() {
-        use crate::storage::library::Watched;
-        use crate::storage::settings::HistorySync;
         use youtfast_core::model::HistoryRow;
+        use youtfast_storage::library::Watched;
+        use youtfast_storage::settings::HistorySync;
         for width in [360.0, 900.0] {
             for palette in [theme::Palette::dark(), theme::Palette::light()] {
                 let ctx = egui::Context::default();
                 ctx.enable_accesskit();
-                crate::appearance::theme::install_fonts(&ctx);
+                youtfast_appearance::theme::install_fonts(&ctx);
                 let mut state = State {
                     view: View::History,
                     palette,
@@ -1152,13 +1152,13 @@ mod tests {
 
     #[test]
     fn merged_history_only_offers_local_removal_and_keeps_search_and_keyboard_in_step() {
-        use crate::logic::history::HistoryFilter;
-        use crate::storage::library::Watched;
-        use crate::storage::settings::HistorySync;
         use youtfast_core::model::HistoryRow;
+        use youtfast_logic::history::HistoryFilter;
+        use youtfast_storage::library::Watched;
+        use youtfast_storage::settings::HistorySync;
         let ctx = egui::Context::default();
         ctx.enable_accesskit();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let mut state = State {
             view: View::History,
             account: AccountState::SignedIn(1),
@@ -1218,11 +1218,11 @@ mod tests {
 
     #[test]
     fn history_remove_buttons_stay_aligned_and_inside_the_page() {
-        use crate::storage::library::Watched;
+        use youtfast_storage::library::Watched;
         for width in [480.0, 960.0, 1280.0] {
             let ctx = egui::Context::default();
             ctx.enable_accesskit();
-            crate::appearance::theme::install_fonts(&ctx);
+            youtfast_appearance::theme::install_fonts(&ctx);
             let mut state = State::default();
             state.library.history = (0..5)
                 .map(|index| Watched {
@@ -1272,7 +1272,7 @@ mod tests {
                 ),
             ] {
                 let ctx = egui::Context::default();
-                crate::appearance::theme::install_fonts(&ctx);
+                youtfast_appearance::theme::install_fonts(&ctx);
                 let mut state = State {
                     view,
                     account: AccountState::SignedIn(1),
@@ -1311,7 +1311,7 @@ mod tests {
     fn large_channel_playlist_and_feed_lists_request_only_visible_images() {
         for kind in 0..3 {
             let ctx = egui::Context::default();
-            crate::appearance::theme::install_fonts(&ctx);
+            youtfast_appearance::theme::install_fonts(&ctx);
             let mut state = State::default();
             if kind == 0 {
                 state.library.subscriptions = (0..20_000)
@@ -1374,10 +1374,10 @@ mod tests {
 
     #[test]
     fn the_history_rows_are_rebuilt_only_when_what_they_come_from_changes() {
-        use crate::logic::history::HistoryFilter;
-        use crate::storage::library::Watched;
-        use crate::storage::settings::HistorySync;
         use youtfast_core::model::HistoryRow;
+        use youtfast_logic::history::HistoryFilter;
+        use youtfast_storage::library::Watched;
+        use youtfast_storage::settings::HistorySync;
         let watched = |id: &str, title: &str, at: i64| {
             let mut video = Video::from_id(id.into());
             video.title = title.into();

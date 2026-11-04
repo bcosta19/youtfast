@@ -41,18 +41,33 @@ fn tracking_url(player: &Value, cpn: &str) -> Option<Url> {
     Some(url)
 }
 
+/// A playback report that did not go through. It carries nothing on
+/// purpose: dependency messages, URLs and response bodies can hold the
+/// session or other private data.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NotReported;
+
+impl std::fmt::Display for NotReported {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the playback report failed")
+    }
+}
+
+impl std::error::Error for NotReported {}
+
 /// Reports one playback using the same session that requested the player.
-/// Errors intentionally carry neither dependency messages nor private data.
-pub async fn mark_watched(rp: &RustyPipe, id: &str) -> Result<(), ()> {
+pub async fn mark_watched(rp: &RustyPipe, id: &str) -> Result<(), NotReported> {
     let raw = rp
         .query()
         .authenticated()
         .raw(ClientType::Desktop, "player", &json!({ "videoId": id }))
         .await
-        .map_err(|_| ())?;
-    let player: Value = serde_json::from_str(&raw).map_err(|_| ())?;
-    let url = tracking_url(&player, &cpn()).ok_or(())?;
-    rp.history_tracking_get(url.as_str()).await.map_err(|_| ())
+        .map_err(|_| NotReported)?;
+    let player: Value = serde_json::from_str(&raw).map_err(|_| NotReported)?;
+    let url = tracking_url(&player, &cpn()).ok_or(NotReported)?;
+    rp.history_tracking_get(url.as_str())
+        .await
+        .map_err(|_| NotReported)
 }
 
 #[cfg(test)]

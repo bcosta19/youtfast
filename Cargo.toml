@@ -5,6 +5,12 @@ members = [
     "crates/youtfast-i18n",
     "crates/youtfast-mpv",
     "crates/youtfast-core",
+    "crates/youtfast-appearance",
+    "crates/youtfast-storage",
+    "crates/youtfast-logic",
+    "crates/youtfast-youtube",
+    "crates/youtfast-cast",
+    "crates/youtfast-desktop",
 ]
 
 [workspace.package]
@@ -20,6 +26,12 @@ publish = false
 youtfast-i18n = { path = "crates/youtfast-i18n" }
 youtfast-mpv = { path = "crates/youtfast-mpv" }
 youtfast-core = { path = "crates/youtfast-core" }
+youtfast-appearance = { path = "crates/youtfast-appearance" }
+youtfast-storage = { path = "crates/youtfast-storage" }
+youtfast-logic = { path = "crates/youtfast-logic" }
+youtfast-youtube = { path = "crates/youtfast-youtube" }
+youtfast-cast = { path = "crates/youtfast-cast" }
+youtfast-desktop = { path = "crates/youtfast-desktop" }
 
 anyhow = "1"
 clap = { version = "4.5", features = ["derive"] }
@@ -33,7 +45,7 @@ env_logger = "0.11"
 eframe = { version = "0.36", default-features = false, features = ["accesskit", "glow", "default_fonts", "wayland", "x11", "persistence"] }
 egui = "0.36"
 # `http` fetches thumbnails from i.ytimg.com through egui's image loaders;
-# `file` answers the ones the disk cache already kept (crates/youtfast/src/youtube/thumbs.rs).
+# `file` answers the ones the disk cache already kept (crates/youtfast-youtube/src/thumbs.rs).
 # `svg` draws the icons.
 egui_extras = { version = "0.36", features = ["file", "http", "image", "svg"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif"] }

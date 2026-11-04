@@ -8,6 +8,8 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+# libmpv is linked from the system (src/ffi.rs). On Arch it comes with the
+# `mpv` package; Debian and Ubuntu need `libmpv-dev` to build.
 [dependencies]
 eframe.workspace = true
 egui.workspace = true

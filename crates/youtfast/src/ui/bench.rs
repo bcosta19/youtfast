@@ -16,12 +16,12 @@ use egui::vec2;
 
 use super::show;
 use crate::app::{AccountState, State};
-use crate::logic::history::HistoryFilter;
-use crate::storage::library::Watched;
-use crate::storage::settings::HistorySync;
 use youtfast_core::model::{
     Channel, CommentRow, Details, FeedFilter, Fetch, HistoryRow, Listing, Span, Video, View,
 };
+use youtfast_logic::history::HistoryFilter;
+use youtfast_storage::library::Watched;
+use youtfast_storage::settings::HistorySync;
 
 /// Counts allocations so a run can report them next to the time.
 struct Counting;
@@ -242,7 +242,7 @@ fn frame(ctx: &egui::Context, state: &mut State, index: usize) {
 
 fn measure(name: &str, mut state: State) {
     let ctx = egui::Context::default();
-    crate::appearance::theme::install_fonts(&ctx);
+    youtfast_appearance::theme::install_fonts(&ctx);
     for index in 0..WARM_UP {
         frame(&ctx, &mut state, index);
     }

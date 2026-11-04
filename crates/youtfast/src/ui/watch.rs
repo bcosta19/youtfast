@@ -11,8 +11,8 @@ use super::player::{self, Mode};
 use super::{results, widgets};
 use crate::app::Action;
 use crate::app::State;
-use crate::appearance::icons::Icon;
-use crate::appearance::theme::{self, Palette};
+use youtfast_appearance::icons::Icon;
+use youtfast_appearance::theme::{self, Palette};
 use youtfast_core::model::{Channel, CommentRow, Fetch, Rating, Video};
 use youtfast_core::util;
 use youtfast_i18n::{Locale, format as trf, gettext as tr};
@@ -1603,7 +1603,7 @@ mod tests {
     #[test]
     fn short_actions_scroll_to_details_without_switching_video_in_a_small_window() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let mut video = Video::from_id("aaaaaaaaaaa".into());
         video.short = true;
         video.title = "Um título longo que precisa deixar o vídeo visível ".repeat(8);
@@ -1740,7 +1740,7 @@ mod tests {
             };
             state.settings.theater = theater;
             let ctx = egui::Context::default();
-            crate::appearance::theme::install_fonts(&ctx);
+            youtfast_appearance::theme::install_fonts(&ctx);
             ctx.options_mut(|options| options.warn_on_id_clash = true);
             for _ in 0..3 {
                 let mut output = ctx.run_ui(
@@ -1779,7 +1779,7 @@ mod tests {
         }
         for (width, theater) in [(1280.0, false), (600.0, false), (1280.0, true)] {
             let ctx = egui::Context::default();
-            crate::appearance::theme::install_fonts(&ctx);
+            youtfast_appearance::theme::install_fonts(&ctx);
             let mut state = State {
                 view: youtfast_core::model::View::Watch,
                 watching: Some(Video::from_id("synthetic".into())),
@@ -1864,7 +1864,7 @@ mod tests {
     #[test]
     fn cached_comment_heights_preserve_scroll_geometry_without_requesting_offscreen_avatars() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let state = State::default();
         let comments: Vec<_> = (0..1000)
             .map(|index| {
@@ -1941,7 +1941,7 @@ mod tests {
             state.settings.theater = theater;
             let ctx = egui::Context::default();
             // The app's named weights, as `App::new` installs them.
-            crate::appearance::theme::install_fonts(&ctx);
+            youtfast_appearance::theme::install_fonts(&ctx);
             let input = egui::RawInput {
                 screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(width, 3000.0))),
                 ..Default::default()

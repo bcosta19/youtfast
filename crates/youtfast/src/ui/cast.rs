@@ -3,7 +3,7 @@
 
 use crate::app::Action;
 use crate::app::State;
-use crate::desktop::cast::{Action as CastAction, Control};
+use youtfast_cast::{Action as CastAction, Control};
 use youtfast_i18n::{gettext as tr, message};
 
 pub fn show(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
@@ -34,7 +34,7 @@ fn body(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
     ui.add_space(8.0);
     if let Some(error) = cast.error {
         ui.colored_label(state.palette.accent, message(locale, error.message()));
-        if error == crate::desktop::cast::Error::MissingHelper {
+        if error == youtfast_cast::Error::MissingHelper {
             ui.hyperlink_to(
                 tr(locale, "Install catt"),
                 "https://github.com/skorokithakis/catt#installation",
@@ -116,7 +116,7 @@ fn body(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                     {
                         actions.push(Action::Cast(CastAction::Start(device.clone())));
                     }
-                    if !matches!(device.protocol, crate::desktop::cast::Protocol::Linked { .. }) {
+                    if !matches!(device.protocol, youtfast_cast::Protocol::Linked { .. }) {
                         ui.small(device.host.to_string());
                     }
                 }
@@ -154,13 +154,13 @@ fn body(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::desktop::cast::{Device, Error, Reply, Request};
+    use youtfast_cast::{Device, Error, Reply, Request};
     use youtfast_core::model::Video;
     use youtfast_i18n::Locale;
 
     fn device() -> Device {
         Device {
-            protocol: crate::desktop::cast::Protocol::GoogleCast,
+            protocol: youtfast_cast::Protocol::GoogleCast,
             host: "192.168.1.20".parse().unwrap(),
             name: "Living room TV".into(),
         }
@@ -319,11 +319,11 @@ mod tests {
                     let mut state = fixture();
                     state.settings.language = locale;
                     state.palette = if light {
-                        crate::appearance::theme::Palette::light()
+                        youtfast_appearance::theme::Palette::light()
                     } else {
-                        crate::appearance::theme::Palette::dark()
+                        youtfast_appearance::theme::Palette::dark()
                     };
-                    crate::appearance::theme::apply(&ctx, &state.palette);
+                    youtfast_appearance::theme::apply(&ctx, &state.palette);
                     state.cast.devices.clear();
                     state.cast.error = error;
                     let mut actions = Vec::new();

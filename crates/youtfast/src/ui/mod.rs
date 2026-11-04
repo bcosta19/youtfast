@@ -34,11 +34,11 @@ use egui::{
 
 use crate::app::Action;
 use crate::app::{AccountState, State};
-use crate::appearance::icons::Icon;
-use crate::appearance::theme::{self, RADIUS};
-use crate::storage::settings::SidebarButton;
+use youtfast_appearance::icons::Icon;
+use youtfast_appearance::theme::{self, RADIUS};
 use youtfast_core::model::{ChannelTab, Fetch, View};
 use youtfast_mpv::{Status, VideoSurface};
+use youtfast_storage::settings::SidebarButton;
 
 /// The search field's widget id, so `/` can focus it.
 fn command_line_id() -> egui::Id {
@@ -221,7 +221,7 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                         );
                     }
                     if cast_button.clicked() {
-                        actions.push(Action::Cast(crate::desktop::cast::Action::Open));
+                        actions.push(Action::Cast(youtfast_cast::Action::Open));
                     }
                     let hint = trf(
                         locale,
@@ -533,7 +533,7 @@ fn sidebar_items(state: &State) -> Vec<(Icon, View, Cow<'_, str>, Option<usize>)
                 SidebarButton::Settings => {
                     let update_badge = matches!(
                         state.update,
-                        crate::desktop::updater::UpdateState::Available(_)
+                        youtfast_desktop::updater::UpdateState::Available(_)
                     )
                     .then_some(1);
                     item(Icon::Settings, View::Settings, "Settings", update_badge)
@@ -645,7 +645,7 @@ fn notice_toast(ctx: &egui::Context, state: &State, actions: &mut Vec<Action>) {
                                 | "A new major version of YouTFast is available."
                         ) && matches!(
                             state.update,
-                            crate::desktop::updater::UpdateState::Available(_)
+                            youtfast_desktop::updater::UpdateState::Available(_)
                         ) {
                             let raised = widgets::on_card(palette);
                             if widgets::button(
@@ -685,9 +685,11 @@ fn cursor_count(state: &State) -> usize {
     match state.view {
         View::Home => state.visible_feed().len(),
         View::Results => match state.search_options.kind {
-            crate::youtube::innertube::SearchKind::Videos => state.results.items().len(),
-            crate::youtube::innertube::SearchKind::Channels => state.results_channels.items().len(),
-            crate::youtube::innertube::SearchKind::Playlists => {
+            youtfast_youtube::innertube::SearchKind::Videos => state.results.items().len(),
+            youtfast_youtube::innertube::SearchKind::Channels => {
+                state.results_channels.items().len()
+            }
+            youtfast_youtube::innertube::SearchKind::Playlists => {
                 state.results_playlists.items().len()
             }
         },
@@ -723,14 +725,14 @@ fn open_at(state: &State, index: usize) -> Option<Action> {
             .get(index)
             .map(|video| Action::Open((*video).clone())),
         View::Results => match state.search_options.kind {
-            crate::youtube::innertube::SearchKind::Videos => video(state.results.items()),
-            crate::youtube::innertube::SearchKind::Channels => state
+            youtfast_youtube::innertube::SearchKind::Videos => video(state.results.items()),
+            youtfast_youtube::innertube::SearchKind::Channels => state
                 .results_channels
                 .items()
                 .get(index)
                 .cloned()
                 .map(Action::OpenChannel),
-            crate::youtube::innertube::SearchKind::Playlists => state
+            youtfast_youtube::innertube::SearchKind::Playlists => state
                 .results_playlists
                 .items()
                 .get(index)
@@ -901,8 +903,8 @@ fn key_pill(ui: &mut egui::Ui, palette: &theme::Palette, key: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::settings::{SidebarEntry, default_sidebar, sanitize_sidebar};
     use youtfast_core::model::{Listing, Video};
+    use youtfast_storage::settings::{SidebarEntry, default_sidebar, sanitize_sidebar};
 
     fn views(state: &State) -> Vec<View> {
         sidebar_items(state)
@@ -1046,7 +1048,7 @@ mod tests {
     #[test]
     fn editing_search_clears_stale_suggestions_before_the_next_response() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let mut state = State {
             query: "old".into(),
             suggestions: vec!["old suggestion".into()],
@@ -1076,11 +1078,11 @@ mod tests {
     #[test]
     fn the_watch_page_rail_yields_to_the_toggle() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let mut state = State {
             view: View::Watch,
             watching: Some(Video::from_id("aaaaaaaaaaa".into())),
-            settings: crate::storage::settings::Settings {
+            settings: youtfast_storage::settings::Settings {
                 sidebar_collapsed: true,
                 ..Default::default()
             },
@@ -1112,7 +1114,7 @@ mod tests {
         assert!(label.is_some(), "the sidebar opens on the watch page");
 
         let restart_ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&restart_ctx);
+        youtfast_appearance::theme::install_fonts(&restart_ctx);
         let mut restarted = State {
             view: View::Watch,
             settings: state.settings.clone(),
@@ -1168,7 +1170,7 @@ mod tests {
     #[test]
     fn the_first_toggle_on_wide_home_folds_and_the_next_opens() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let mut state = State::default();
         let mut actions = Vec::new();
 
@@ -1199,7 +1201,7 @@ mod tests {
     #[test]
     fn first_sidebar_toggle_opens_the_automatic_rail_in_a_narrow_window() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let mut state = State::default();
         let mut actions = Vec::new();
 
@@ -1223,7 +1225,7 @@ mod tests {
     #[test]
     fn wheel_notches_scroll_at_the_platform_step() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let mut state = State::default();
         let mut actions = Vec::new();
         let mut output = ctx.run_ui(
@@ -1248,7 +1250,7 @@ mod tests {
     #[test]
     fn arrow_keys_scroll_the_active_page_vertically_without_moving_the_card_cursor() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1280.0, 600.0));
         let videos: Vec<Video> = (0..40)
             .map(|i| Video {

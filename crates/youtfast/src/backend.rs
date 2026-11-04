@@ -14,12 +14,13 @@ use rustypipe::client::RustyPipe;
 use tokio::sync::mpsc as async_mpsc;
 use tokio::sync::watch;
 
-use crate::storage::library::Account;
-use crate::storage::library::Library;
-use crate::storage::paths::Dirs;
-use crate::storage::settings::Settings;
-use crate::{storage::account, storage::takeout, youtube::innertube};
 use youtfast_core::model::{AccountSource, PageItems, Video};
+use youtfast_storage::library::Account;
+use youtfast_storage::library::Library;
+use youtfast_storage::paths::Dirs;
+use youtfast_storage::settings::Settings;
+use youtfast_storage::{account, takeout};
+use youtfast_youtube::innertube;
 
 mod protocol;
 pub use protocol::{Command, CommentsKey, Event, Payload, Request, SignInMethod, Slot};
@@ -129,7 +130,7 @@ impl Backend {
             rss: Arc::new(std::sync::Mutex::new(HashMap::new())),
             thumb_pending: Arc::new(std::sync::Mutex::new(HashSet::new())),
             thumb_sem: Arc::new(tokio::sync::Semaphore::new(
-                crate::youtube::thumbs::DOWNLOADS,
+                youtfast_youtube::thumbs::DOWNLOADS,
             )),
             thumb_disk_sem: Arc::new(tokio::sync::Semaphore::new(THUMB_DISK_READS)),
         };
@@ -150,7 +151,7 @@ impl Backend {
                     {
                         // The thumbnail cache is bounded once per run.
                         let dir = context.dirs.cache.join("thumbnails");
-                        tokio::task::spawn_blocking(move || crate::youtube::thumbs::prune(&dir));
+                        tokio::task::spawn_blocking(move || youtfast_youtube::thumbs::prune(&dir));
                     }
                     tokio::spawn(writer(
                         context.clone(),
@@ -459,7 +460,7 @@ async fn handle(command: Command, context: Context) {
             id,
             language,
         } => {
-            let result = crate::youtube::extras::load(&context.rp, &id, &language).await;
+            let result = youtfast_youtube::extras::load(&context.rp, &id, &language).await;
             context.send(Event::Extras { generation, result });
         }
         Command::LoadComments {
@@ -486,7 +487,7 @@ async fn handle(command: Command, context: Context) {
         Command::LoadSegments(id) => {
             let lookup = id.clone();
             match tokio::task::spawn_blocking(move || {
-                crate::youtube::sponsorblock::segments(&lookup)
+                youtfast_youtube::sponsorblock::segments(&lookup)
             })
             .await
             {
@@ -668,7 +669,7 @@ async fn handle(command: Command, context: Context) {
         Command::Notify { videos, language } => {
             // notify-rust's zbus backend blocks on D-Bus; off the runtime.
             tokio::task::spawn_blocking(move || {
-                let (summary, body) = crate::logic::alerts::notify_text(&videos, language);
+                let (summary, body) = youtfast_logic::alerts::notify_text(&videos, language);
                 if let Err(error) = notify_rust::Notification::new()
                     .appname("YouTFast")
                     .summary(&summary)
@@ -687,7 +688,7 @@ async fn handle(command: Command, context: Context) {
             context.settings_saves.send_replace(Some(*settings));
         }
         Command::CheckForUpdates { manual } => {
-            let result = tokio::task::spawn_blocking(crate::desktop::updater::check_latest)
+            let result = tokio::task::spawn_blocking(youtfast_desktop::updater::check_latest)
                 .await
                 .unwrap_or_else(|_| Err("Could not check for updates. Retry later.".to_owned()));
             if result.is_err() {
@@ -699,7 +700,7 @@ async fn handle(command: Command, context: Context) {
             let cache_dir = context.dirs.cache.clone();
             let to_install = release.clone();
             let result = tokio::task::spawn_blocking(move || {
-                crate::desktop::updater::install_release(&to_install, &cache_dir)
+                youtfast_desktop::updater::install_release(&to_install, &cache_dir)
             })
             .await
             .unwrap_or_else(|_| Err("Could not install the update on this system.".to_owned()));
@@ -721,7 +722,7 @@ async fn handle(command: Command, context: Context) {
             language,
         } => {
             tokio::task::spawn_blocking(move || {
-                let (summary, body) = crate::desktop::updater::notify_update_text(
+                let (summary, body) = youtfast_desktop::updater::notify_update_text(
                     &version,
                     kind,
                     auto_installed,
@@ -744,7 +745,7 @@ async fn handle(command: Command, context: Context) {
                 if !context.thumb_pending.lock().unwrap().insert(url.clone()) {
                     continue;
                 }
-                let path = crate::youtube::thumbs::path(&dir, &url);
+                let path = youtfast_youtube::thumbs::path(&dir, &url);
                 let dir = dir.clone();
                 let context = context.clone();
                 tokio::spawn(async move {
@@ -759,7 +760,7 @@ async fn handle(command: Command, context: Context) {
                         let _turn = context.thumb_disk_sem.acquire().await;
                         tokio::task::spawn_blocking(move || {
                             let _ = std::fs::create_dir_all(&dir);
-                            crate::youtube::thumbs::cached(&path)
+                            youtfast_youtube::thumbs::cached(&path)
                         })
                         .await
                         .ok()
@@ -773,10 +774,10 @@ async fn handle(command: Command, context: Context) {
                             let dir = dir.clone();
                             tokio::task::spawn_blocking(move || {
                                 let _ = std::fs::create_dir_all(&dir);
-                                crate::youtube::thumbs::load_or_fetch(&task, &path, refresh)
+                                youtfast_youtube::thumbs::load_or_fetch(&task, &path, refresh)
                             })
                             .await
-                            .unwrap_or(Err(crate::youtube::thumbs::Failure::Network))
+                            .unwrap_or(Err(youtfast_youtube::thumbs::Failure::Network))
                         }
                     };
                     if let Err(reason) = &result {
@@ -830,8 +831,8 @@ async fn writer<T: Clone + Send + Sync + 'static>(
 /// details fail is skipped.
 async fn local_recommendations(
     rp: &RustyPipe,
-    seeds: Vec<crate::logic::recommend::Seed>,
-    taste: &crate::logic::recommend::Taste,
+    seeds: Vec<youtfast_logic::recommend::Seed>,
+    taste: &youtfast_logic::recommend::Taste,
 ) -> Vec<Video> {
     let mut tasks = tokio::task::JoinSet::new();
     for seed in seeds {
@@ -853,7 +854,7 @@ async fn local_recommendations(
     }
     // The order the answers came in is not the seeds': keep it stable.
     related.sort_by(|a, b| b.0.total_cmp(&a.0));
-    crate::logic::recommend::rank(&related, taste)
+    youtfast_logic::recommend::rank(&related, taste)
 }
 
 async fn load(context: &Context, request: Request) -> Result<Payload, String> {
@@ -1572,7 +1573,7 @@ mod tests {
             old_gate.write(false, || {
                 started.send(()).unwrap();
                 wait.recv().unwrap();
-                crate::storage::paths::write_atomic(&old_path, b"old")
+                youtfast_storage::paths::write_atomic(&old_path, b"old")
             })
         });
         ready
@@ -1582,14 +1583,14 @@ mod tests {
         let final_path = path.clone();
         let final_write = std::thread::spawn(move || {
             final_gate.write(true, || {
-                crate::storage::paths::write_atomic(&final_path, b"final")
+                youtfast_storage::paths::write_atomic(&final_path, b"final")
             })
         });
         release.send(()).unwrap();
         old.join().unwrap().unwrap();
         final_write.join().unwrap().unwrap();
         gate.write(false, || {
-            crate::storage::paths::write_atomic(&path, b"queued-old")
+            youtfast_storage::paths::write_atomic(&path, b"queued-old")
         })
         .unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), b"final");
@@ -1713,7 +1714,7 @@ mod tests {
             cache: root.join("cache"),
         };
         let url = "https://i.ytimg.com/vi/synthetic/mqdefault.jpg".to_owned();
-        let kept = crate::youtube::thumbs::path(&dirs.cache.join("thumbnails"), &url);
+        let kept = youtfast_youtube::thumbs::path(&dirs.cache.join("thumbnails"), &url);
         std::fs::create_dir_all(kept.parent().unwrap()).unwrap();
         let mut png = Vec::new();
         image::ImageEncoder::write_image(
@@ -1740,7 +1741,7 @@ mod tests {
             rss: Arc::default(),
             thumb_pending: Arc::default(),
             thumb_sem: Arc::new(tokio::sync::Semaphore::new(
-                crate::youtube::thumbs::DOWNLOADS,
+                youtfast_youtube::thumbs::DOWNLOADS,
             )),
             thumb_disk_sem: Arc::new(tokio::sync::Semaphore::new(THUMB_DISK_READS)),
         };
@@ -1748,7 +1749,7 @@ mod tests {
         let _turns = context
             .thumb_sem
             .clone()
-            .acquire_many_owned(crate::youtube::thumbs::DOWNLOADS as u32)
+            .acquire_many_owned(youtfast_youtube::thumbs::DOWNLOADS as u32)
             .await
             .unwrap();
         handle(

@@ -1,12 +1,12 @@
 //! TV controls are separate from libmpv, the queue and account history sync.
 //! A pending handoff never pauses a different or newly opened local playback.
 
-use crate::desktop::cast::{Action, Control, Device, Error, Reply, Request, Worker};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
 use std::time::{Duration, Instant};
+use youtfast_cast::{Action, Control, Device, Error, Reply, Request, Worker};
 use youtfast_core::model::{Segment, Video};
 
 #[derive(Default)]
@@ -387,11 +387,11 @@ impl super::App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::desktop::cast::Sponsor;
+    use youtfast_cast::Sponsor;
 
     fn device() -> Device {
         Device {
-            protocol: crate::desktop::cast::Protocol::GoogleCast,
+            protocol: youtfast_cast::Protocol::GoogleCast,
             host: "192.168.1.20".parse().unwrap(),
             name: "Living room".into(),
         }
@@ -501,7 +501,7 @@ mod tests {
         let linked = Device {
             host: std::net::Ipv4Addr::UNSPECIFIED.into(),
             name: "Living room".into(),
-            protocol: crate::desktop::cast::Protocol::Linked {
+            protocol: youtfast_cast::Protocol::Linked {
                 screen: "synthetic".into(),
             },
         };

@@ -1,0 +1,15 @@
+[package]
+name = "youtfast-logic"
+description = "YouTFast's pure decisions over video lists: new-upload alerts, history, recommendations, tabs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+youtfast-core.workspace = true
+youtfast-i18n.workspace = true
+youtfast-storage.workspace = true
+jiff.workspace = true

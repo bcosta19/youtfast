@@ -7,12 +7,12 @@ use egui::{Align, Color32, CornerRadius, Layout, Response, RichText, Sense, Ui, 
 use super::{results, widgets};
 use crate::app::Action;
 use crate::app::State;
-use crate::appearance::icons::Icon;
-use crate::appearance::theme::{self, InterfaceFont, Palette};
-use crate::storage::settings::{
+use youtfast_appearance::icons::Icon;
+use youtfast_appearance::theme::{self, InterfaceFont, Palette};
+use youtfast_i18n::{Locale, format as trf, gettext as tr};
+use youtfast_storage::settings::{
     HistorySync, PlaybackBuffer, SidebarButton, ThemeChoice, default_sidebar,
 };
-use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 /// The widest the settings read well.
 const WIDTH: f32 = 760.0;
@@ -590,8 +590,8 @@ fn notifications(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 /// The About group: installed version, update notifications, automatic
 /// minor/patch updates, manual major update button, and changelog notes.
 fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
-    use crate::appearance::icons::Icon;
-    use crate::desktop::updater::{self, UpdateState};
+    use youtfast_appearance::icons::Icon;
+    use youtfast_desktop::updater::{self, UpdateState};
 
     let locale = state.settings.language;
     let palette = &state.palette;
@@ -1210,7 +1210,7 @@ mod tests {
             }
         }
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let mut state = State::default();
         let mut actions = Vec::new();
         for (locale, expected_title) in [
@@ -1308,7 +1308,7 @@ mod tests {
     #[test]
     fn the_font_notice_shows_only_when_the_systems_face_fell_back_to_inter() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         for (font, missing, shown) in [
             (InterfaceFont::System, false, false),
             (InterfaceFont::System, true, true),
@@ -1330,7 +1330,7 @@ mod tests {
     #[test]
     fn report_this_asks_to_open_the_issue_and_nothing_else() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let state = State {
             system_font_missing: true,
             ..State::default()
@@ -1350,7 +1350,7 @@ mod tests {
     #[test]
     fn the_interface_font_menu_emits_the_chosen_face() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let mut state = State::default();
         let mut actions = Vec::new();
         let labels = draw_appearance(&ctx, &state, Vec::new(), &mut actions);
@@ -1498,7 +1498,7 @@ mod tests {
 
     #[test]
     fn about_section_shows_version_auto_update_changelog_and_major_manual_button() {
-        use crate::desktop::updater::{CURRENT_VERSION, ReleaseInfo, UpdateKind, UpdateState};
+        use youtfast_desktop::updater::{CURRENT_VERSION, ReleaseInfo, UpdateKind, UpdateState};
 
         let ctx = egui::Context::default();
         theme::install_fonts(&ctx);

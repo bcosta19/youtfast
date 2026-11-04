@@ -17,13 +17,13 @@ use rustypipe::param::ChannelVideoTab;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
-use crate::storage::account::CacheFile;
-use crate::storage::paths::Dirs;
 use youtfast_core::model::{
     Channel, ChannelAbout, ChannelHeader, ChannelTab, Chapter, CommentRow, Details, HistoryRow,
     PlaylistSummary, Span, Video,
 };
 use youtfast_core::util;
+use youtfast_storage::account::CacheFile;
+use youtfast_storage::paths::Dirs;
 
 mod discovery;
 mod edit;
@@ -70,7 +70,7 @@ pub fn client(dirs: &Dirs) -> Result<RustyPipe, Error> {
 /// own verifier needs them, so until something else (a browser) had
 /// reached Google, every request failed. Without the platform verifier,
 /// reqwest's own (the native roots) is kept.
-pub(crate) fn http() -> reqwest::ClientBuilder {
+pub fn http() -> reqwest::ClientBuilder {
     let builder = reqwest::ClientBuilder::new();
     match platform_tls() {
         Some(config) => builder.use_preconfigured_tls(config),

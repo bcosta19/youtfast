@@ -10,7 +10,7 @@ const KEEP: usize = 2000;
 const MAX_BYTES: u64 = 4 * 1024 * 1024;
 const DISK_BYTES: u64 = 128 * 1024 * 1024;
 /// How many thumbnails download at once; each keeps its connection open
-/// for the next one (see [`agent`]).
+/// for the next one (see `agent`).
 pub const DOWNLOADS: usize = 4;
 static DISK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -99,7 +99,7 @@ pub fn fetch(url: &str, path: &Path) -> Result<std::sync::Arc<[u8]>, Failure> {
     let (bytes, store) = download(url)?;
     let _disk = DISK.lock().unwrap();
     if store
-        && crate::storage::paths::write_atomic(path, &bytes).is_ok()
+        && youtfast_storage::paths::write_atomic(path, &bytes).is_ok()
         && let Some(dir) = path.parent()
     {
         prune_locked(dir, KEEP, DISK_BYTES);
@@ -193,7 +193,7 @@ fn validate(bytes: &[u8]) -> Result<(), Failure> {
     Ok(())
 }
 
-/// Keeps the newest [`KEEP`] files; the rest, oldest first, are deleted.
+/// Keeps the newest `KEEP` files; the rest, oldest first, are deleted.
 /// Runs once, off the interface thread, at startup.
 pub fn prune(dir: &Path) {
     let _disk = DISK.lock().unwrap();

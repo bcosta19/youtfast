@@ -9,7 +9,7 @@ use youtfast_i18n::{Locale, format as trf, gettext as tr};
 use super::{results, widgets};
 use crate::app::Action;
 use crate::app::State;
-use crate::appearance::theme;
+use youtfast_appearance::theme;
 use youtfast_core::model::{Channel, ChannelAbout, ChannelHeader, ChannelTab, Fetch, Listing};
 use youtfast_core::util;
 
@@ -109,7 +109,7 @@ pub fn show(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Act
                     ChannelTab::Videos | ChannelTab::Shorts | ChannelTab::Live
                 ) {
                     ui.horizontal_wrapped(|ui| {
-                        for &order in crate::youtube::innertube::ChannelOrder::ALL {
+                        for &order in youtfast_youtube::innertube::ChannelOrder::ALL {
                             if widgets::chip(
                                 ui,
                                 &state.palette,
@@ -657,7 +657,7 @@ mod tests {
     #[test]
     fn narrow_channel_keeps_tabs_and_search_in_the_available_width() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let state = State {
             channel_header: Some(ChannelHeader {
                 has_shorts: true,
@@ -719,7 +719,7 @@ mod tests {
     #[test]
     fn mouse_wheel_outside_video_box_scrolls_channel() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 720.0));
         let channel = Channel {
             id: "UC123".into(),

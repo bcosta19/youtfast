@@ -1,0 +1,20 @@
+[package]
+name = "youtfast-appearance"
+description = "YouTFast's palette, icons and fonts, and the desktop's theme and font settings"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+# Palette colours and font choices are saved in the settings.
+egui = { workspace = true, features = ["serde"] }
+fastframe-fonts.workspace = true
+fastframe-icons.workspace = true
+fastframe-text.workspace = true
+fastframe-theme.workspace = true
+log.workspace = true
+serde.workspace = true
+url.workspace = true

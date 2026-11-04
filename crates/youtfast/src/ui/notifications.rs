@@ -7,7 +7,7 @@ use youtfast_i18n::{Locale, format as trf, gettext as tr};
 use super::{results, widgets};
 use crate::app::Action;
 use crate::app::State;
-use crate::appearance::theme;
+use youtfast_appearance::theme;
 use youtfast_core::util::{self, AgeBucket};
 
 pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {

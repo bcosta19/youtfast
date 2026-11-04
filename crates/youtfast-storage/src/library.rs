@@ -84,7 +84,7 @@ impl Library {
     /// Reads the library. A missing file is an empty library; an unreadable
     /// one is moved aside rather than overwritten by the next save.
     pub fn load(path: &Path) -> std::io::Result<Self> {
-        let mut library: Library = crate::storage::paths::load_json(path, "library")?;
+        let mut library: Library = crate::paths::load_json(path, "library")?;
         // Older files' single `account` becomes account 1.
         if library.accounts.is_empty()
             && let Some(source) = library.account.take()
@@ -123,7 +123,7 @@ impl Library {
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        crate::storage::paths::save_json(path, self)
+        crate::paths::save_json(path, self)
     }
 
     /// The account with this id.

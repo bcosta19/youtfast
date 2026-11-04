@@ -4,12 +4,12 @@
 mod animation;
 pub use animation::install as install_animation_loader;
 
-use crate::youtube::thumbs::Failure;
 use egui::{Context, Id, Image, Ui};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use youtfast_i18n::{Locale, gettext as tr};
+use youtfast_youtube::thumbs::Failure;
 
 const KEEP: f64 = 60.0;
 #[derive(Clone, Default)]
@@ -152,7 +152,7 @@ pub(crate) fn drawn_count(ctx: &Context) -> usize {
 fn memory_uri(dir: &std::path::Path, url: &str) -> String {
     format!(
         "bytes://thumbnail/{}",
-        crate::youtube::thumbs::path(dir, url)
+        youtfast_youtube::thumbs::path(dir, url)
             .file_name()
             .unwrap()
             .to_string_lossy()

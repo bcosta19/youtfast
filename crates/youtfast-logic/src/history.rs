@@ -1,8 +1,8 @@
 //! History's local merge. Account day headings are display text, not timestamps.
 use std::collections::{HashMap, HashSet};
 
-use crate::storage::library::Watched;
 use youtfast_core::model::{HistoryRow, Video};
+use youtfast_storage::library::Watched;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum HistoryFilter {

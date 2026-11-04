@@ -11,7 +11,7 @@ use std::io::{BufRead, Read};
 
 use serde::Deserialize;
 
-use crate::storage::library::{Import, Watched};
+use crate::library::{Import, Watched};
 use youtfast_core::model::{Channel, Video};
 
 const MAX_SUBSCRIPTION_ROW_BYTES: usize = 1024 * 1024;
@@ -246,7 +246,7 @@ fn history<R: Read>(reader: R) -> Result<Vec<Watched>, String> {
         ) -> Result<Self::Value, A::Error> {
             let mut rows: Vec<Watched> = Vec::new();
             let mut known: HashMap<String, usize> = HashMap::new();
-            let limit = crate::storage::library::HISTORY_LIMIT;
+            let limit = crate::library::HISTORY_LIMIT;
             while let Some(entry) = seq.next_element::<Entry>()? {
                 let Some(row) = watched(entry) else {
                     continue;
@@ -359,7 +359,7 @@ mod tests {
         })).collect();
         let json = serde_json::to_vec(&entries).unwrap();
         let import = parse(&json).unwrap();
-        assert_eq!(import.history.len(), crate::storage::library::HISTORY_LIMIT);
+        assert_eq!(import.history.len(), crate::library::HISTORY_LIMIT);
         assert_eq!(import.history[0].at, 1_700_004_999);
         assert_eq!(import.history.last().unwrap().at, 1_700_004_000);
     }

@@ -7,21 +7,23 @@ use anyhow::Context as _;
 use eframe::glow;
 use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 
-use crate::appearance::theme::{self, Palette};
 use crate::backend::{Backend, Command, CommentsKey, Event, Payload, Request, SignInMethod, Slot};
-use crate::desktop::instance::{self, Queue as RemoteQueue};
-use crate::storage::library::{Account, Import, Library};
-use crate::storage::paths::Dirs;
-use crate::storage::settings::{Settings, ThemeChoice};
-use crate::youtube::innertube;
-use crate::{logic::alerts, storage::account, youtube::ytdlp};
+use youtfast_appearance::theme::{self, Palette};
 use youtfast_core::model::{
     AccountSource, Channel, ChannelAbout, ChannelHeader, ChannelTab, CommentRow, Details,
     FeedFilter, Fetch, HistoryRow, Listing, PageItems, PlaylistSummary, Quality, Rating,
     Resolution, Results, SaveTarget, Segment, Source, Video, View,
 };
 use youtfast_core::util;
+use youtfast_desktop::instance::{self, Queue as RemoteQueue};
+use youtfast_logic::alerts;
 use youtfast_mpv::{self as mpv, Mpv, NativeDisplay, VideoSurface};
+use youtfast_storage::account;
+use youtfast_storage::library::{Account, Import, Library};
+use youtfast_storage::paths::Dirs;
+use youtfast_storage::settings::{Settings, ThemeChoice};
+use youtfast_youtube::innertube;
+use youtfast_youtube::ytdlp;
 
 pub use action::Action;
 
@@ -105,14 +107,14 @@ impl HistoryKey {
 #[derive(Debug)]
 pub struct HistoryCache {
     key: HistoryKey,
-    pub entries: Vec<crate::logic::history::Entry>,
-    pub runs: Vec<crate::logic::history::Run>,
+    pub entries: Vec<youtfast_logic::history::Entry>,
+    pub runs: Vec<youtfast_logic::history::Run>,
 }
 
 /// What the views draw from.
 #[derive(Default)]
 pub struct State {
-    pub video_tabs: crate::logic::video_tabs::VideoTabs<PlayingContext>,
+    pub video_tabs: youtfast_logic::video_tabs::VideoTabs<PlayingContext>,
     pub cast: cast::State,
     pub view: View,
     /// The search field's text.
@@ -123,7 +125,7 @@ pub struct State {
     pub results_channels: Listing<Channel>,
     pub results_playlists: Listing<PlaylistSummary>,
     pub history_query: String,
-    pub history_filter: crate::logic::history::HistoryFilter,
+    pub history_filter: youtfast_logic::history::HistoryFilter,
     pub history_needs_refresh: bool,
     pub history_requested_at: Option<i64>,
     pub channel_order: innertube::ChannelOrder,
@@ -322,7 +324,7 @@ pub struct State {
     /// A return from the mini player reveals the inline video again.
     pub watch_scroll_to_video: bool,
     pub playback_loop: bool,
-    pub extras: Fetch<crate::youtube::extras::Extras>,
+    pub extras: Fetch<youtfast_youtube::extras::Extras>,
     pub transcript_open: bool,
     pub transcript_query: String,
     pub transcript_follow: bool,
@@ -333,7 +335,7 @@ pub struct State {
     /// The wheel step, touchpad scale and glide, and axis lock for scrolling.
     pub scrolling: fastframe_scroll::Scrolling,
     /// Status of checking for or installing a YouTFast release update.
-    pub update: crate::desktop::updater::UpdateState,
+    pub update: youtfast_desktop::updater::UpdateState,
     /// Whether the full installed changelog is expanded in Settings → About.
     pub full_changelog_open: bool,
 }
@@ -415,12 +417,12 @@ impl State {
     /// History has its own filter in merged modes; other pages keep `source`.
     pub fn merged_history(&self) -> bool {
         self.signed_in()
-            && self.settings.history_sync != crate::storage::settings::HistorySync::Separate
+            && self.settings.history_sync != youtfast_storage::settings::HistorySync::Separate
     }
 
     /// None denotes All, available only to signed-in merged history.
     pub fn history_source(&self) -> Option<Source> {
-        use crate::logic::history::HistoryFilter;
+        use youtfast_logic::history::HistoryFilter;
         if !self.merged_history() {
             return Some(self.source());
         }
@@ -431,8 +433,8 @@ impl State {
         }
     }
 
-    fn build_history_rows(&self) -> Vec<crate::logic::history::Row<'_>> {
-        use crate::logic::history;
+    fn build_history_rows(&self) -> Vec<youtfast_logic::history::Row<'_>> {
+        use youtfast_logic::history;
         let mut rows = match self.history_source() {
             None => history::merge(
                 self.account_history.items(),
@@ -480,12 +482,12 @@ impl State {
             .is_some_and(|cache| cache.key.is_current(self));
         if !current {
             let rows = self.build_history_rows();
-            let entries = crate::logic::history::entries(
+            let entries = youtfast_logic::history::entries(
                 &rows,
                 self.account_history.items(),
                 &self.library.history,
             );
-            let runs = crate::logic::history::runs(&entries);
+            let runs = youtfast_logic::history::runs(&entries);
             *self.history_cache.borrow_mut() = Some(HistoryCache {
                 key: HistoryKey::of(self),
                 entries,
@@ -500,9 +502,9 @@ impl State {
     /// The cached entry as a row over the lists it indexes.
     pub fn history_row(
         &self,
-        entry: &crate::logic::history::Entry,
-    ) -> crate::logic::history::Row<'_> {
-        use crate::logic::history::Origin;
+        entry: &youtfast_logic::history::Entry,
+    ) -> youtfast_logic::history::Row<'_> {
+        use youtfast_logic::history::Origin;
         let device = entry
             .device
             .and_then(|index| self.library.history.get(index));
@@ -510,7 +512,7 @@ impl State {
             Origin::Device(index) => &self.library.history[index].video,
             Origin::Account(index) => &self.account_history.items()[index].video,
         };
-        crate::logic::history::Row {
+        youtfast_logic::history::Row {
             video,
             when: entry.when.clone(),
             device,
@@ -519,7 +521,7 @@ impl State {
 
     /// All of History's rows; prefer [`State::history_cache`] where a frame
     /// draws only some of them.
-    pub fn history_rows(&self) -> Vec<crate::logic::history::Row<'_>> {
+    pub fn history_rows(&self) -> Vec<youtfast_logic::history::Row<'_>> {
         self.history_cache()
             .entries
             .iter()
@@ -601,7 +603,7 @@ const RATINGS_KEPT: usize = 200;
 const RATING_FRESH: i64 = 30 * 60;
 
 pub struct App {
-    cast_worker: Option<crate::desktop::cast::Worker>,
+    cast_worker: Option<youtfast_cast::Worker>,
     local_playback_generation: u64,
     state: State,
     backend: Backend,
@@ -682,7 +684,7 @@ impl App {
         let fonts = (!fonts.install(ctx)).then_some(fonts);
         egui_extras::install_image_loaders(ctx);
         images::install_animation_loader(ctx);
-        fastframe_icons::install::<crate::appearance::icons::Icon>(ctx);
+        fastframe_icons::install::<youtfast_appearance::icons::Icon>(ctx);
         let dirs = Dirs::new().context("could not make the data folders")?;
         images::init(dirs.cache.join("thumbnails"));
         let backend =
@@ -794,13 +796,15 @@ impl App {
             &app.state.settings.last_updated_version,
             &app.state.settings.last_updated_changelog,
         ) && !changelog.is_empty()
-            && crate::desktop::updater::Version::parse(version)
-                >= crate::desktop::updater::Version::parse(crate::desktop::updater::CURRENT_VERSION)
+            && youtfast_desktop::updater::Version::parse(version)
+                >= youtfast_desktop::updater::Version::parse(
+                    youtfast_desktop::updater::CURRENT_VERSION,
+                )
         {
             app.state.full_changelog_open = true;
         }
         if app.state.settings.update_notifications || app.state.settings.auto_update {
-            app.state.update = crate::desktop::updater::UpdateState::Checking;
+            app.state.update = youtfast_desktop::updater::UpdateState::Checking;
             app.backend.send(Command::CheckForUpdates { manual: false });
         }
         if let Some(active) = app.state.library.active_account
@@ -1044,7 +1048,7 @@ impl App {
                 self.save_settings();
             }
             Action::SetSidebar(entries) => {
-                self.state.settings.sidebar = crate::storage::settings::sanitize_sidebar(entries);
+                self.state.settings.sidebar = youtfast_storage::settings::sanitize_sidebar(entries);
                 self.save_settings();
             }
             Action::SetPlaybackBuffer(buffer) => {
@@ -1112,7 +1116,7 @@ impl App {
             }
             Action::SetHistorySync(sync) => {
                 self.state.settings.history_sync = sync;
-                self.state.history_filter = crate::logic::history::HistoryFilter::All;
+                self.state.history_filter = youtfast_logic::history::HistoryFilter::All;
                 self.state.cursor = 0;
                 self.save_settings();
             }
@@ -1222,7 +1226,7 @@ impl App {
                 let _ = std::thread::Builder::new()
                     .name("youtfast-font-report".into())
                     .spawn(move || {
-                        let url = crate::appearance::font_report::Report::gather().issue_url();
+                        let url = youtfast_appearance::font_report::Report::gather().issue_url();
                         ctx.open_url(egui::OpenUrl::new_tab(url));
                         ctx.request_repaint();
                     });
@@ -1360,20 +1364,20 @@ impl App {
             Action::CheckForUpdates => {
                 if !matches!(
                     self.state.update,
-                    crate::desktop::updater::UpdateState::Checking
-                        | crate::desktop::updater::UpdateState::Installing(_)
+                    youtfast_desktop::updater::UpdateState::Checking
+                        | youtfast_desktop::updater::UpdateState::Installing(_)
                 ) {
-                    self.state.update = crate::desktop::updater::UpdateState::Checking;
+                    self.state.update = youtfast_desktop::updater::UpdateState::Checking;
                     self.backend.send(Command::CheckForUpdates { manual: true });
                 }
             }
             Action::InstallUpdate => {
-                if let crate::desktop::updater::UpdateState::Available(release) =
+                if let youtfast_desktop::updater::UpdateState::Available(release) =
                     self.state.update.clone()
                 {
                     if release.can_self_update() {
                         self.state.update =
-                            crate::desktop::updater::UpdateState::Installing(release.clone());
+                            youtfast_desktop::updater::UpdateState::Installing(release.clone());
                         self.backend.send(Command::InstallUpdate {
                             release,
                             auto: false,
@@ -1389,10 +1393,10 @@ impl App {
                 if on
                     && matches!(
                         self.state.update,
-                        crate::desktop::updater::UpdateState::Idle
+                        youtfast_desktop::updater::UpdateState::Idle
                     )
                 {
-                    self.state.update = crate::desktop::updater::UpdateState::Checking;
+                    self.state.update = youtfast_desktop::updater::UpdateState::Checking;
                     self.backend
                         .send(Command::CheckForUpdates { manual: false });
                 }
@@ -1401,22 +1405,22 @@ impl App {
                 self.state.settings.auto_update = on;
                 self.save_settings();
                 if on {
-                    if let crate::desktop::updater::UpdateState::Available(release) =
+                    if let youtfast_desktop::updater::UpdateState::Available(release) =
                         self.state.update.clone()
-                        && crate::desktop::updater::should_auto_update(true, release.kind)
+                        && youtfast_desktop::updater::should_auto_update(true, release.kind)
                         && release.can_self_update()
                     {
                         self.state.update =
-                            crate::desktop::updater::UpdateState::Installing(release.clone());
+                            youtfast_desktop::updater::UpdateState::Installing(release.clone());
                         self.backend.send(Command::InstallUpdate {
                             release,
                             auto: true,
                         });
                     } else if matches!(
                         self.state.update,
-                        crate::desktop::updater::UpdateState::Idle
+                        youtfast_desktop::updater::UpdateState::Idle
                     ) {
-                        self.state.update = crate::desktop::updater::UpdateState::Checking;
+                        self.state.update = youtfast_desktop::updater::UpdateState::Checking;
                         self.backend
                             .send(Command::CheckForUpdates { manual: false });
                     }
@@ -1430,10 +1434,10 @@ impl App {
 
     fn on_update_checked(
         &mut self,
-        result: Result<Option<crate::desktop::updater::ReleaseInfo>, String>,
+        result: Result<Option<youtfast_desktop::updater::ReleaseInfo>, String>,
         manual: bool,
     ) {
-        use crate::desktop::updater::{UpdateState, should_auto_update};
+        use youtfast_desktop::updater::{UpdateState, should_auto_update};
         match result {
             Ok(Some(release)) => {
                 if should_auto_update(self.state.settings.auto_update, release.kind)
@@ -1482,11 +1486,11 @@ impl App {
 
     fn on_update_installed(
         &mut self,
-        release: crate::desktop::updater::ReleaseInfo,
+        release: youtfast_desktop::updater::ReleaseInfo,
         auto: bool,
         result: Result<(), String>,
     ) {
-        use crate::desktop::updater::UpdateState;
+        use youtfast_desktop::updater::UpdateState;
         match result {
             Ok(()) => {
                 self.state.settings.last_updated_version = Some(release.version.clone());

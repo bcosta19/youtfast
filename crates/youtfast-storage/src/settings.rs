@@ -5,7 +5,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::appearance::theme::{CustomTheme, Palette};
+use youtfast_appearance::theme::{CustomTheme, Palette};
 use youtfast_core::model::Quality;
 
 fn on() -> bool {
@@ -74,7 +74,7 @@ pub struct Settings {
     pub language: youtfast_i18n::Locale,
     /// The face that draws the interface; older settings use the system's.
     #[serde(default)]
-    pub interface_font: crate::appearance::theme::InterfaceFont,
+    pub interface_font: youtfast_appearance::theme::InterfaceFont,
     /// Applies only while signed in; older files keep separate histories.
     #[serde(default)]
     pub history_sync: HistorySync,
@@ -280,7 +280,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             language: youtfast_i18n::Locale::default(),
-            interface_font: crate::appearance::theme::InterfaceFont::default(),
+            interface_font: youtfast_appearance::theme::InterfaceFont::default(),
             history_sync: HistorySync::default(),
             playback_buffer: PlaybackBuffer::default(),
             quality: Quality::default(),
@@ -313,11 +313,11 @@ impl Settings {
     /// Reads the settings. A missing file is the defaults; an unreadable
     /// one is moved aside rather than overwritten by the next save.
     pub fn load(path: &Path) -> std::io::Result<Self> {
-        crate::storage::paths::load_json(path, "settings")
+        crate::paths::load_json(path, "settings")
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        crate::storage::paths::save_json(path, self)
+        crate::paths::save_json(path, self)
     }
 
     /// The colours the interface draws with now: the selected palette's
@@ -467,7 +467,7 @@ mod tests {
 
     #[test]
     fn the_interface_font_defaults_to_the_systems_and_is_kept() {
-        use crate::appearance::theme::InterfaceFont;
+        use youtfast_appearance::theme::InterfaceFont;
         assert_eq!(Settings::default().interface_font, InterfaceFont::System);
         let settings: Settings = serde_json::from_str(r#"{"interface_font":"inter"}"#).unwrap();
         assert_eq!(settings.interface_font, InterfaceFont::Inter);
@@ -485,7 +485,7 @@ mod tests {
         assert_eq!(settings.language, youtfast_i18n::Locale::English);
         assert_eq!(
             settings.interface_font,
-            crate::appearance::theme::InterfaceFont::System
+            youtfast_appearance::theme::InterfaceFont::System
         );
         assert!(settings.custom_theme_cache.is_none());
         assert!(settings.system_theme_cache.is_none());

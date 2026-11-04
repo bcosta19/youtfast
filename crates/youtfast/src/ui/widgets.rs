@@ -14,11 +14,11 @@ use egui::{
 
 use crate::app::Action;
 use crate::app::State;
-use crate::appearance::icons::Icon;
-use crate::appearance::theme::{self, Palette, RADIUS, RADIUS_SMALL};
-use crate::storage::library::Library;
+use youtfast_appearance::icons::Icon;
+use youtfast_appearance::theme::{self, Palette, RADIUS, RADIUS_SMALL};
 use youtfast_core::model::{Channel, Fetch, PlaylistSummary, Span, Video};
 use youtfast_core::util;
+use youtfast_storage::library::Library;
 
 /// The height of one line of body text.
 pub fn line(ui: &Ui) -> f32 {
@@ -1430,7 +1430,7 @@ mod tests {
     fn search_clear_button_has_a_localized_accessible_name() {
         let ctx = egui::Context::default();
         ctx.enable_accesskit();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let mut query = "texto".to_owned();
         let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
             search_field(
@@ -1589,7 +1589,7 @@ mod tests {
             (egui::PointerButton::Primary, egui::Modifiers::COMMAND),
         ] {
             let ctx = egui::Context::default();
-            crate::appearance::theme::install_fonts(&ctx);
+            youtfast_appearance::theme::install_fonts(&ctx);
             let state = State::default();
             let videos = action_videos(1);
             let (cards, _) = draw_action_cards(&ctx, &state, &videos, 1, 480.0, Vec::new());
@@ -1624,7 +1624,7 @@ mod tests {
         for light in [false, true] {
             for (width, columns) in [(480.0, 1), (960.0, 3), (1512.0, 4)] {
                 let ctx = egui::Context::default();
-                crate::appearance::theme::install_fonts(&ctx);
+                youtfast_appearance::theme::install_fonts(&ctx);
                 let state = State {
                     palette: if light {
                         Palette::light()
@@ -1633,7 +1633,7 @@ mod tests {
                     },
                     ..Default::default()
                 };
-                crate::appearance::theme::apply(&ctx, &state.palette);
+                youtfast_appearance::theme::apply(&ctx, &state.palette);
                 let videos = action_videos(columns * 2);
                 let (baseline, _) =
                     draw_action_cards(&ctx, &state, &videos, columns, width, Vec::new());
@@ -1675,7 +1675,7 @@ mod tests {
     fn video_targets_keep_their_own_actions_without_moving_siblings() {
         for target in ["later", "queue", "channel", "menu", "video"] {
             let ctx = egui::Context::default();
-            crate::appearance::theme::install_fonts(&ctx);
+            youtfast_appearance::theme::install_fonts(&ctx);
             let state = State::default();
             let videos = action_videos(3);
             let (baseline, _) = draw_action_cards(&ctx, &state, &videos, 3, 960.0, Vec::new());

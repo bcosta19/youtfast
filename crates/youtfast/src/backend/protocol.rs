@@ -6,13 +6,13 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use crate::storage::library::{Account, Import, Library};
-use crate::storage::settings::Settings;
-use crate::youtube::innertube;
 use youtfast_core::model::{
     Channel, ChannelAbout, ChannelHeader, HistoryRow, PageItems, PlaylistSummary, Rating,
     SaveTarget, Video,
 };
+use youtfast_storage::library::{Account, Import, Library};
+use youtfast_storage::settings::Settings;
+use youtfast_youtube::innertube;
 
 /// A file the user is choosing in the native dialog. Made on the interface
 /// thread (macOS requires it there) and awaited on the runtime.
@@ -74,20 +74,20 @@ pub enum Request {
     },
     /// The next page of the channel tab's or a playlist's list.
     More {
-        more: crate::youtube::innertube::More,
+        more: youtfast_youtube::innertube::More,
         /// `true` to continue the playlists tab, `false` a video list.
         playlists: bool,
     },
     /// The next page of the account's feed.
-    MoreFeed(crate::youtube::innertube::More),
+    MoreFeed(youtfast_youtube::innertube::More),
     /// The next page of the account's subscriptions.
-    MoreSubscriptions(crate::youtube::innertube::More),
+    MoreSubscriptions(youtfast_youtube::innertube::More),
     /// The next page of the account's history.
-    MoreHistory(crate::youtube::innertube::More),
+    MoreHistory(youtfast_youtube::innertube::More),
     /// The next page of an account video list (Watch later, liked).
-    MoreVideos(crate::youtube::innertube::More),
+    MoreVideos(youtfast_youtube::innertube::More),
     /// The next page of the account's playlists.
-    MorePlaylists(crate::youtube::innertube::More),
+    MorePlaylists(youtfast_youtube::innertube::More),
     /// The timer's check of the feed's sources.
     Alerts {
         channels: Vec<Channel>,
@@ -101,8 +101,8 @@ pub enum Request {
     /// it has some, else the seeds' related videos ranked by the taste.
     ForYou {
         account: bool,
-        seeds: Vec<crate::logic::recommend::Seed>,
-        taste: crate::logic::recommend::Taste,
+        seeds: Vec<youtfast_logic::recommend::Seed>,
+        taste: youtfast_logic::recommend::Taste,
     },
 }
 
@@ -120,34 +120,34 @@ pub enum Payload {
     /// The feed's first page and its continuation.
     Feed {
         videos: Vec<Video>,
-        more: Option<crate::youtube::innertube::More>,
+        more: Option<youtfast_youtube::innertube::More>,
     },
     /// A video list's first page and its continuation (Watch later,
     /// liked videos, a playlist's videos).
     VideoList {
         items: Vec<Video>,
-        more: Option<crate::youtube::innertube::More>,
+        more: Option<youtfast_youtube::innertube::More>,
     },
     /// The first page of the account's subscriptions and its continuation.
     Channels {
         items: Vec<Channel>,
-        more: Option<crate::youtube::innertube::More>,
+        more: Option<youtfast_youtube::innertube::More>,
     },
     /// The first page of the account's history and its continuation.
     History {
         items: Vec<HistoryRow>,
-        more: Option<crate::youtube::innertube::More>,
+        more: Option<youtfast_youtube::innertube::More>,
     },
     /// The first page of the account's playlists and its continuation.
     Playlists {
         items: Vec<PlaylistSummary>,
-        more: Option<crate::youtube::innertube::More>,
+        more: Option<youtfast_youtube::innertube::More>,
     },
     /// A channel tab's first page: the header plus videos or playlists.
     ChannelPage {
         header: ChannelHeader,
         items: PageItems,
-        more: Option<crate::youtube::innertube::More>,
+        more: Option<youtfast_youtube::innertube::More>,
     },
     /// A channel's About tab.
     About {
@@ -157,13 +157,13 @@ pub enum Payload {
     /// Home's For you, and whether it is the account's own.
     ForYou {
         videos: Vec<Video>,
-        more: Option<crate::youtube::innertube::More>,
+        more: Option<youtfast_youtube::innertube::More>,
         from_account: bool,
     },
     /// A continued page of a paged list.
     More {
         items: PageItems,
-        more: Option<crate::youtube::innertube::More>,
+        more: Option<youtfast_youtube::innertube::More>,
     },
 }
 
@@ -187,7 +187,7 @@ pub enum Command {
     LoadPlaylistMore {
         generation: u64,
         id: String,
-        more: crate::youtube::innertube::More,
+        more: youtfast_youtube::innertube::More,
     },
     LoadExtras {
         generation: u64,
@@ -271,13 +271,13 @@ pub enum Command {
     },
     /// Download, verify SHA-256 and install `release`.
     InstallUpdate {
-        release: crate::desktop::updater::ReleaseInfo,
+        release: youtfast_desktop::updater::ReleaseInfo,
         auto: bool,
     },
     /// Show a desktop notification about a new or automatically installed version.
     NotifyUpdate {
         version: String,
-        kind: crate::desktop::updater::UpdateKind,
+        kind: youtfast_desktop::updater::UpdateKind,
         auto_installed: bool,
         language: youtfast_i18n::Locale,
     },
@@ -297,11 +297,11 @@ pub enum Event {
     PlayingPlaylist {
         generation: u64,
         id: String,
-        result: Result<(Vec<Video>, Option<crate::youtube::innertube::More>), String>,
+        result: Result<(Vec<Video>, Option<youtfast_youtube::innertube::More>), String>,
     },
     Extras {
         generation: u64,
-        result: Result<crate::youtube::extras::Extras, String>,
+        result: Result<youtfast_youtube::extras::Extras, String>,
     },
     Loaded {
         slot: Slot,
@@ -380,7 +380,7 @@ pub enum Event {
     CheckAlerts,
     Thumbnail {
         url: String,
-        result: Result<Arc<[u8]>, crate::youtube::thumbs::Failure>,
+        result: Result<Arc<[u8]>, youtfast_youtube::thumbs::Failure>,
     },
     Suggestions {
         query: String,
@@ -391,11 +391,11 @@ pub enum Event {
         segments: Vec<youtfast_core::model::Segment>,
     },
     UpdateChecked {
-        result: Result<Option<crate::desktop::updater::ReleaseInfo>, String>,
+        result: Result<Option<youtfast_desktop::updater::ReleaseInfo>, String>,
         manual: bool,
     },
     UpdateInstalled {
-        release: crate::desktop::updater::ReleaseInfo,
+        release: youtfast_desktop::updater::ReleaseInfo,
         auto: bool,
         result: Result<(), String>,
     },

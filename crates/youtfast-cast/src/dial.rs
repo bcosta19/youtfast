@@ -31,7 +31,7 @@ pub(super) fn valid_endpoint(endpoint: &Url, host: IpAddr) -> bool {
 }
 
 fn client() -> Result<Client, Error> {
-    crate::youtube::innertube::http()
+    youtfast_youtube::innertube::http()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(2))
@@ -600,9 +600,7 @@ mod tests {
             unreachable!()
         };
         let screen = launch(&endpoint, host).await.unwrap();
-        let mut lounge = crate::desktop::cast::lounge::Session::connect(&screen)
-            .await
-            .unwrap();
+        let mut lounge = crate::lounge::Session::connect(&screen).await.unwrap();
         lounge.play("jNQXAC9IVRw", 0).await.unwrap();
         eprintln!("Requested video confirmed playing");
         lounge.control(super::super::Control::Pause).await.unwrap();

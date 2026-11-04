@@ -6,8 +6,8 @@ use youtfast_i18n::{Locale, gettext as tr};
 use super::{library, results, widgets};
 use crate::app::Action;
 use crate::app::State;
-use crate::youtube::innertube::{SearchDate, SearchKind, SearchLength, SearchOrder};
 use youtfast_core::model::Listing;
+use youtfast_youtube::innertube::{SearchDate, SearchKind, SearchLength, SearchOrder};
 
 pub fn filters(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;

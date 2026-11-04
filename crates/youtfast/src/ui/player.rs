@@ -18,8 +18,8 @@ use super::widgets;
 use crate::app::Action;
 use crate::app::player::{LIVE_BEHIND, SPEEDS, next_video, previous_video, speed_label};
 use crate::app::{PlayerMenu, State};
-use crate::appearance::icons::Icon;
-use crate::appearance::theme;
+use youtfast_appearance::icons::Icon;
+use youtfast_appearance::theme;
 use youtfast_core::model::{Fetch, Quality, Resolution, Segment, Video};
 use youtfast_core::util;
 use youtfast_i18n::{Locale, format as trf, gettext as tr};
@@ -695,7 +695,7 @@ fn buttons(
                 accent_line(ui, &cast, state.palette.accent);
             }
             if cast.clicked() {
-                actions.push(Action::Cast(crate::desktop::cast::Action::Open));
+                actions.push(Action::Cast(youtfast_cast::Action::Open));
             }
         }
         if let Some(speed) = speed {
@@ -1793,7 +1793,7 @@ mod tests {
             actions
         }
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let mut state = State {
             watching: Some(Video::from_id("aaaaaaaaaaa".into())),
             queue: vec![Video::from_id("bbbbbbbbbbb".into())],
@@ -1854,7 +1854,7 @@ mod tests {
     #[test]
     fn narrow_controls_stay_inside_the_video_and_keep_the_groups_apart() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let mut state = State {
             watching: Some(Video::from_id("aaaaaaaaaaa".into())),
             queue: vec![Video::from_id("bbbbbbbbbbb".into())],
@@ -1926,7 +1926,7 @@ mod tests {
     #[test]
     fn a_long_press_restores_the_original_speed_without_pausing_on_release() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let mut state = State {
             view: youtfast_core::model::View::Watch,
             watching: Some(Video::from_id("aaaaaaaaaaa".into())),
@@ -1977,7 +1977,7 @@ mod tests {
     fn single_and_double_clicks_have_distinct_playback_effects() {
         for double in [false, true] {
             let ctx = egui::Context::default();
-            crate::appearance::theme::install_fonts(&ctx);
+            youtfast_appearance::theme::install_fonts(&ctx);
             let mut state = State {
                 view: youtfast_core::model::View::Watch,
                 watching: Some(Video::from_id("aaaaaaaaaaa".into())),
@@ -2041,7 +2041,7 @@ mod tests {
     #[test]
     fn keyboard_focus_reveals_playing_video_controls() {
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let mut state = State {
             view: youtfast_core::model::View::Watch,
             watching: Some(Video::from_id("aaaaaaaaaaa".into())),
@@ -2238,7 +2238,7 @@ mod tests {
             PlayerMenu::CaptionStyle,
         ];
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         for size in [vec2(1600.0, 900.0), vec2(320.0, 180.0)] {
             for live in [false, true] {
                 for audio_only in [false, true] {
@@ -2314,7 +2314,7 @@ mod tests {
             ..State::default()
         };
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         for width in [900.0, 1600.0] {
             let input = egui::RawInput {
                 screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(width, 1000.0))),
@@ -2363,7 +2363,7 @@ mod tests {
             ..Status::default()
         };
         let ctx = egui::Context::default();
-        crate::appearance::theme::install_fonts(&ctx);
+        youtfast_appearance::theme::install_fonts(&ctx);
         let screen = Rect::from_min_size(pos2(0.0, 0.0), vec2(1280.0, 800.0));
         let mut mini_shapes = Vec::new();
         for _ in 0..2 {

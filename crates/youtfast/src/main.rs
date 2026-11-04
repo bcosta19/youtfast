@@ -3,18 +3,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
-mod appearance;
 mod backend;
 #[cfg(feature = "demo")]
 mod demo;
-mod desktop;
-mod logic;
-mod storage;
 mod ui;
-mod youtube;
 
-use appearance::theme;
-use desktop::{diagnostics, instance};
+use youtfast_appearance::theme;
+use youtfast_desktop::{diagnostics, instance};
 
 use std::sync::Arc;
 
@@ -158,8 +153,8 @@ fn needs_opengl(error: &eframe::Error) -> bool {
 
 /// The settings as saved, read without moving or writing them, for what is
 /// needed before the app loads them: `None` when they cannot be read.
-fn saved_settings() -> Option<storage::settings::Settings> {
-    storage::paths::Dirs::locate()
+fn saved_settings() -> Option<youtfast_storage::settings::Settings> {
+    youtfast_storage::paths::Dirs::locate()
         .and_then(|dirs| std::fs::read(dirs.settings()).ok())
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
 }
@@ -215,8 +210,8 @@ fn render_mark(mark: &[u8], size: u32) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::desktop::diagnostics::redact_log;
     use youtfast_core::privacy::{UNTRUSTED_CERTIFICATE, safe_error};
+    use youtfast_desktop::diagnostics::redact_log;
 
     #[test]
     fn controlled_keyring_errors_keep_their_recovery_instructions() {

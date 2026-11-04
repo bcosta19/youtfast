@@ -53,7 +53,7 @@ pub struct Session {
 
 impl Session {
     pub async fn connect(screen: &str) -> Result<Self, Error> {
-        let client = crate::youtube::innertube::http()
+        let client = youtfast_youtube::innertube::http()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(12))
@@ -402,7 +402,7 @@ pub async fn link(code: &str) -> Result<(String, String), Error> {
     if code.len() != 12 || !code.bytes().all(|c| c.is_ascii_digit()) {
         return Err(Error::InvalidCode);
     }
-    let client = crate::youtube::innertube::http()
+    let client = youtfast_youtube::innertube::http()
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(12))
@@ -606,7 +606,7 @@ mod tests {
 
     #[test]
     fn playback_confirmation_requires_an_actual_tv_event_not_just_a_successful_post() {
-        let client = crate::youtube::innertube::http().build().unwrap();
+        let client = youtfast_youtube::innertube::http().build().unwrap();
         let mut session = Session {
             client,
             screen: String::new(),

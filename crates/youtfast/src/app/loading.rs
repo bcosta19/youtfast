@@ -280,13 +280,13 @@ impl App {
     fn load_for_you(&mut self) {
         let state = &self.state;
         let signed_in = state.signed_in();
-        let seeds = crate::logic::recommend::seeds(&state.library.history);
+        let seeds = youtfast_logic::recommend::seeds(&state.library.history);
         if seeds.is_empty() && !signed_in {
             self.state.for_you = Listing::Ready(Vec::new());
             return;
         }
         let taste =
-            crate::logic::recommend::taste(&state.library.history, &state.library.subscriptions);
+            youtfast_logic::recommend::taste(&state.library.history, &state.library.subscriptions);
         self.request(
             Slot::ForYou,
             Request::ForYou {

@@ -633,7 +633,7 @@ mod tests {
             state
                 .library
                 .accounts
-                .push(crate::storage::library::Account {
+                .push(youtfast_storage::library::Account {
                     id,
                     name: format!("account {id}"),
                     source: youtfast_core::model::AccountSource::Browser("chromium".to_owned()),
@@ -680,7 +680,7 @@ mod tests {
 
     #[test]
     fn number_keys_follow_the_buttons_the_sidebar_shows() {
-        use crate::storage::settings::{SidebarButton, SidebarEntry};
+        use youtfast_storage::settings::{SidebarButton, SidebarEntry};
         let mut state = State::default();
         // Default order, signed out: Liked and Playlists are not drawn, so
         // 5 is Notifications.
@@ -694,7 +694,7 @@ mod tests {
         );
         assert!(press(&mut state, Key::Num8, egui::Modifiers::NONE).is_empty());
         // Hide Home and move Settings first.
-        state.settings.sidebar = crate::storage::settings::sanitize_sidebar(vec![
+        state.settings.sidebar = youtfast_storage::settings::sanitize_sidebar(vec![
             SidebarEntry {
                 button: SidebarButton::Settings,
                 visible: true,

@@ -23,7 +23,7 @@ pub(super) struct Location {
     page_more: Option<innertube::More>,
     playlist_details: Option<innertube::PlaylistDetails>,
     source: Source,
-    history_filter: crate::logic::history::HistoryFilter,
+    history_filter: youtfast_logic::history::HistoryFilter,
     filter: FeedFilter,
     cursor: usize,
     watching: Option<Video>,
@@ -370,9 +370,9 @@ pub fn cursor_key(state: &State) -> usize {
         }
         View::Home => tag(&state.feed) + 10 * state.feed_filter as usize,
         View::Results => match state.search_options.kind {
-            crate::youtube::innertube::SearchKind::Videos => tag(&state.results),
-            crate::youtube::innertube::SearchKind::Channels => tag(&state.results_channels),
-            crate::youtube::innertube::SearchKind::Playlists => tag(&state.results_playlists),
+            youtfast_youtube::innertube::SearchKind::Videos => tag(&state.results),
+            youtfast_youtube::innertube::SearchKind::Channels => tag(&state.results_channels),
+            youtfast_youtube::innertube::SearchKind::Playlists => tag(&state.results_playlists),
         },
         View::Subscriptions => tag(&state.account_subscriptions) + source,
         View::History => tag(&state.account_history) + 10 * state.history_filter as usize + source,
@@ -499,7 +499,7 @@ mod tests {
     #[test]
     fn transcript_failures_retry_and_refresh_does_not_strand_an_inflight_request() {
         let mut s = State {
-            extras: Fetch::Ready(crate::youtube::extras::Extras {
+            extras: Fetch::Ready(youtfast_youtube::extras::Extras {
                 preview: None,
                 language: "en".into(),
                 transcript: Err("unavailable".into()),
@@ -511,7 +511,7 @@ mod tests {
         assert!(!s.extras_need_request());
         s.reset_watch_fetches();
         assert!(s.extras_need_request());
-        s.extras = Fetch::Ready(crate::youtube::extras::Extras {
+        s.extras = Fetch::Ready(youtfast_youtube::extras::Extras {
             preview: None,
             language: "en".into(),
             transcript: Ok(Vec::new()),

@@ -2,9 +2,9 @@
 //! media controls or single-instance channel are created here.
 use crate::{
     app::{Action, Page, State, apply_sidebar_action},
-    appearance::theme,
     ui,
 };
+use youtfast_appearance::theme;
 use youtfast_core::model::*;
 use youtfast_i18n::{Locale, gettext as tr};
 use youtfast_mpv::Status;
@@ -46,7 +46,7 @@ pub fn run(cli: &crate::Cli) -> eframe::Result {
         options,
         Box::new(move |cc| {
             theme::install_fonts(&cc.egui_ctx);
-            fastframe_icons::install::<crate::appearance::icons::Icon>(&cc.egui_ctx);
+            fastframe_icons::install::<youtfast_appearance::icons::Icon>(&cc.egui_ctx);
             egui_extras::install_image_loaders(&cc.egui_ctx);
             cc.egui_ctx
                 .data_mut(|d| d.insert_temp(egui::Id::new("synthetic-images"), true));
@@ -135,11 +135,11 @@ pub(crate) fn fixture(page: &str) -> State {
     state.watching = Some(videos[0].clone());
     state.queue = videos[1..4].to_vec();
     state.details=Fetch::Ready(Details{id:videos[0].id.clone(),title:videos[0].title.clone(),channel,subscribers:Some(120_000),views:12500,likes:Some(340),description:vec![Span::Text("A demo description with chapters, content and video information. All data in this window is synthetic.".into())],chapters:vec![Chapter{name:"Introduction".into(),seconds:0},Chapter{name:"Exploring the details".into(),seconds:60},Chapter{name:"Practical examples".into(),seconds:180}],related:videos[4..].to_vec(),..Default::default()});
-    state.extras = Fetch::Ready(crate::youtube::extras::Extras {
+    state.extras = Fetch::Ready(youtfast_youtube::extras::Extras {
         preview: None,
         language: "English".into(),
         transcript: Ok((0..50)
-            .map(|i| crate::youtube::extras::Cue {
+            .map(|i| youtfast_youtube::extras::Cue {
                 seconds: i as f64 * 12.0,
                 text: format!(
                     "Section {} of the demo transcript, synchronized with the video.",
@@ -165,7 +165,7 @@ pub(crate) fn fixture(page: &str) -> State {
         state
             .library
             .accounts
-            .push(crate::storage::library::Account {
+            .push(youtfast_storage::library::Account {
                 id: 1,
                 name: "Demo account".into(),
                 source: AccountSource::File,
@@ -176,7 +176,7 @@ pub(crate) fn fixture(page: &str) -> State {
             id: "PLdemo".into(),
             name: "Demo playlist".into(),
         });
-        state.playlist_details = Some(crate::youtube::innertube::PlaylistDetails {
+        state.playlist_details = Some(youtfast_youtube::innertube::PlaylistDetails {
             name: "Demo playlist".into(),
             thumbnail: Some("https://synthetic/playlist".into()),
             channel: Some("Demo channel".into()),
@@ -201,9 +201,9 @@ pub(crate) fn fixture(page: &str) -> State {
         state.mini_closed = false;
     }
     if matches!(page, "cast" | "cast-connected" | "cast-missing") {
-        use crate::desktop::cast::{Action, Device, Error, Reply};
+        use youtfast_cast::{Action, Device, Error, Reply};
         let device = Device {
-            protocol: crate::desktop::cast::Protocol::GoogleCast,
+            protocol: youtfast_cast::Protocol::GoogleCast,
             host: "192.168.1.20".parse().unwrap(),
             name: "Demo TV — Google Cast".into(),
         };
@@ -261,7 +261,7 @@ impl eframe::App for Demo {
                 Action::Cast(action) => {
                     // Keep the demo entirely offline: no helper, discovery or
                     // YouTube request is ever started from this harness.
-                    use crate::desktop::cast::{Device, Reply, Request};
+                    use youtfast_cast::{Device, Reply, Request};
                     if let Some(request) = self.state.cast.prepare(
                         action,
                         self.state.watching.as_ref(),
@@ -276,7 +276,7 @@ impl eframe::App for Demo {
                             Request::FindYouTube(host) => Reply::Devices(Ok(vec![Device {
                                 host,
                                 name: "Demo Samsung TV".into(),
-                                protocol: crate::desktop::cast::Protocol::YouTube {
+                                protocol: youtfast_cast::Protocol::YouTube {
                                     endpoint: url::Url::parse(&format!(
                                         "http://{host}:8080/ws/apps/YouTube"
                                     ))
@@ -284,14 +284,14 @@ impl eframe::App for Demo {
                                 },
                             }])),
                             Request::Link(_) => Reply::Devices(Ok(vec![Device {
-                                protocol: crate::desktop::cast::Protocol::Linked {
+                                protocol: youtfast_cast::Protocol::Linked {
                                     screen: "demo-screen".into(),
                                 },
                                 host: std::net::Ipv4Addr::UNSPECIFIED.into(),
                                 name: "Demo TV — linked with a code".into(),
                             }])),
                             Request::Scan => Reply::Devices(Ok(vec![Device {
-                                protocol: crate::desktop::cast::Protocol::GoogleCast,
+                                protocol: youtfast_cast::Protocol::GoogleCast,
                                 host: "192.168.1.20".parse().unwrap(),
                                 name: "Demo TV — Google Cast".into(),
                             }])),
