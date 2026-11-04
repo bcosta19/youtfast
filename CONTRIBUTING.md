@@ -22,8 +22,11 @@ cargo build --locked
 Runtime playback needs a current yt-dlp and libmpv built with Lua support.
 Keep `Cargo.lock` committed and use `--locked`. mise/mbx is optional; a normal
 rustup/Cargo checkout must work independently of sibling repositories.
-Read [AGENTS.md](AGENTS.md) for architecture and privacy constraints and
-[README.md](README.md) for runtime requirements.
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the code is laid
+out (a Cargo workspace of `youtfast-*` crates in `crates/`), [AGENTS.md](AGENTS.md)
+for the architecture and privacy constraints and [README.md](README.md) for
+runtime requirements. While working on one crate, `cargo test -p <crate>`
+builds and tests only that crate and the ones it depends on.
 
 ## Issues and pull requests
 

@@ -6,6 +6,11 @@
 //! decodes them (in hardware where it can) and keeps sound and picture in
 //! step. [`VideoSurface`] draws its picture inside the egui window.
 
+#![allow(
+    unsafe_code,
+    reason = "libmpv's client API is C; this crate is its safe wrapper"
+)]
+
 pub mod ffi;
 mod render;
 

@@ -12,3 +12,6 @@ publish.workspace = true
 youtfast-i18n.workspace = true
 jiff.workspace = true
 serde.workspace = true
+
+[lints]
+workspace = true

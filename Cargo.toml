@@ -126,6 +126,11 @@ zbus-secret-service-keyring-store = { version = "1.0.1", features = ["rt-tokio-c
 apple-native-keyring-store = { version = "1.0.2", features = ["keychain"] }
 windows-native-keyring-store = { version = "1.1", default-features = false }
 
+[workspace.lints.rust]
+# libmpv's C API (crates/youtfast-mpv) is the one place for unsafe code; the
+# frame-cost benchmark's counting allocator is the one test-only exception.
+unsafe_code = "deny"
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

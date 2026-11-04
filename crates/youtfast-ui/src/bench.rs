@@ -7,6 +7,10 @@
 //! network, no player. The thumbnail cache is never installed in tests, so
 //! images stay pending and nothing is requested. Only CPU time spent on the
 //! interface thread is measured; nothing is rasterised or uploaded.
+#![allow(
+    unsafe_code,
+    reason = "a counting global allocator, in a test-only module"
+)]
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicU64, Ordering};

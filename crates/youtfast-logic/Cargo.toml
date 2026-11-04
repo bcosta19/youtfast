@@ -13,3 +13,6 @@ youtfast-core.workspace = true
 youtfast-i18n.workspace = true
 youtfast-storage.workspace = true
 jiff.workspace = true
+
+[lints]
+workspace = true

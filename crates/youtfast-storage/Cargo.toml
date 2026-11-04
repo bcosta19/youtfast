@@ -34,3 +34,6 @@ windows-native-keyring-store.workspace = true
 
 [dev-dependencies]
 egui.workspace = true
+
+[lints]
+workspace = true

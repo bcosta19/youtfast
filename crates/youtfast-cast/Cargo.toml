@@ -22,3 +22,6 @@ serde_json.workspace = true
 socket2.workspace = true
 tokio.workspace = true
 url.workspace = true
+
+[lints]
+workspace = true

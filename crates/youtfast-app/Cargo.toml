@@ -37,3 +37,6 @@ rfd.workspace = true
 
 [dev-dependencies]
 rustypipe.workspace = true
+
+[lints]
+workspace = true

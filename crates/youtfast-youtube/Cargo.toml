@@ -32,3 +32,6 @@ url.workspace = true
 # The fork's `client::regression` hooks, for the response-format regression
 # tests (tests/youtube_api.rs). Only test builds enable it.
 rustypipe = { workspace = true, features = ["regression"] }
+
+[lints]
+workspace = true

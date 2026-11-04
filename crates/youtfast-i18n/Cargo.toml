@@ -17,3 +17,6 @@ serde_json.workspace = true
 
 [build-dependencies]
 fastframe-i18n = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true

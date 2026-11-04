@@ -42,3 +42,6 @@ rustypipe.workspace = true
 url.workspace = true
 rfd.workspace = true
 resvg.workspace = true
+
+[lints]
+workspace = true

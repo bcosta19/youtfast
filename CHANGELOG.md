@@ -8,6 +8,20 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Changed
+
+- The source is now a Cargo workspace of focused crates under `crates/`
+  (shared types, languages, player, appearance, storage, logic, YouTube, cast,
+  desktop, backend, application and views), with the architecture described
+  in `docs/ARCHITECTURE.md`. The application's behaviour, files and settings
+  are unchanged.
+- rustypipe is taken from YouTFast's published fork
+  ([bcosta19/rustypipe](https://github.com/bcosta19/rustypipe), pinned by
+  commit) instead of a copy in `vendor/rustypipe`, which removes about 37,000
+  lines from the repository and the source archive.
+- fastframe moves to v0.15.5, on the egui 0.36.2 fork shared with the sibling
+  apps.
+
 ## [0.5.0] - 2026-10-30
 
 ### Added
