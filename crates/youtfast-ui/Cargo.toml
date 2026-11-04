@@ -1,0 +1,31 @@
+[package]
+name = "youtfast-ui"
+description = "YouTFast's views, drawn with egui from the application's state"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+demo = []
+
+[dependencies]
+youtfast-app.workspace = true
+youtfast-appearance.workspace = true
+youtfast-cast.workspace = true
+youtfast-core.workspace = true
+youtfast-desktop.workspace = true
+youtfast-i18n.workspace = true
+youtfast-logic.workspace = true
+youtfast-mpv.workspace = true
+youtfast-storage.workspace = true
+youtfast-youtube.workspace = true
+egui.workspace = true
+fastframe-scroll.workspace = true
+fastframe-theme.workspace = true
+jiff.workspace = true
+
+[dev-dependencies]
+rustypipe.workspace = true

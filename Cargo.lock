@@ -6473,8 +6473,35 @@ dependencies = [
 name = "youtfast"
 version = "0.5.0"
 dependencies = [
- "anyhow",
  "clap",
+ "eframe",
+ "egui",
+ "egui_extras",
+ "fastframe-icons",
+ "image",
+ "log",
+ "resvg",
+ "rfd",
+ "rustypipe",
+ "serde_json",
+ "url",
+ "youtfast-app",
+ "youtfast-appearance",
+ "youtfast-cast",
+ "youtfast-core",
+ "youtfast-desktop",
+ "youtfast-i18n",
+ "youtfast-mpv",
+ "youtfast-storage",
+ "youtfast-ui",
+ "youtfast-youtube",
+]
+
+[[package]]
+name = "youtfast-app"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
  "eframe",
  "egui",
  "egui_extras",
@@ -6483,17 +6510,12 @@ dependencies = [
  "fastframe-scroll",
  "fastframe-theme",
  "image",
- "jiff",
  "log",
- "notify-rust",
  "raw-window-handle",
- "resvg",
  "rfd",
  "rustypipe",
- "serde_json",
- "tokio",
- "url",
  "youtfast-appearance",
+ "youtfast-backend",
  "youtfast-cast",
  "youtfast-core",
  "youtfast-desktop",
@@ -6516,6 +6538,26 @@ dependencies = [
  "log",
  "serde",
  "url",
+]
+
+[[package]]
+name = "youtfast-backend"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "egui",
+ "image",
+ "log",
+ "notify-rust",
+ "rfd",
+ "rustypipe",
+ "tokio",
+ "youtfast-core",
+ "youtfast-desktop",
+ "youtfast-i18n",
+ "youtfast-logic",
+ "youtfast-storage",
+ "youtfast-youtube",
 ]
 
 [[package]]
@@ -6614,6 +6656,27 @@ dependencies = [
  "youtfast-core",
  "youtfast-i18n",
  "zbus-secret-service-keyring-store",
+]
+
+[[package]]
+name = "youtfast-ui"
+version = "0.5.0"
+dependencies = [
+ "egui",
+ "fastframe-scroll",
+ "fastframe-theme",
+ "jiff",
+ "rustypipe",
+ "youtfast-app",
+ "youtfast-appearance",
+ "youtfast-cast",
+ "youtfast-core",
+ "youtfast-desktop",
+ "youtfast-i18n",
+ "youtfast-logic",
+ "youtfast-mpv",
+ "youtfast-storage",
+ "youtfast-youtube",
 ]
 
 [[package]]

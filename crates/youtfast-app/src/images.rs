@@ -142,8 +142,9 @@ pub fn drain_expired() -> Vec<(String, bool)> {
 fn id() -> Id {
     Id::new("youtfast-remote-images")
 }
-#[cfg(test)]
-pub(crate) fn drawn_count(ctx: &Context) -> usize {
+/// How many remote images are kept as drawn this minute: what the views'
+/// tests check to see that only visible rows ask for thumbnails.
+pub fn drawn_count(ctx: &Context) -> usize {
     ctx.data(|data| {
         data.get_temp::<Drawn>(id())
             .map_or(0, |drawn| drawn.0.len())
@@ -168,7 +169,7 @@ pub fn remote<'a>(ui: &Ui, url: &'a str) -> Image<'a> {
     {
         return Image::from_bytes(
             "bytes://youtfast-demo.svg",
-            include_bytes!("../../../../assets/demo-thumbnail.svg"),
+            include_bytes!("../../../assets/demo-thumbnail.svg"),
         );
     }
     let ctx = ui.ctx();

@@ -8,8 +8,8 @@ use egui::{Align, Layout, RichText, Ui};
 use youtfast_i18n::{format as trf, gettext as tr};
 
 use super::widgets;
-use crate::app::Action;
-use crate::app::State;
+use youtfast_app::Action;
+use youtfast_app::State;
 use youtfast_appearance::theme;
 use youtfast_core::model::{Listing, Video};
 
@@ -527,7 +527,7 @@ mod tests {
                     previous = rects;
                 }
                 assert_eq!(
-                    crate::app::images::drawn_count(&ctx),
+                    youtfast_app::images::drawn_count(&ctx),
                     0,
                     "placeholders must not request real thumbnails"
                 );
@@ -600,7 +600,7 @@ mod tests {
     fn playlist_with_metadata_exposes_play_all_as_an_action() {
         let state = State {
             view: youtfast_core::model::View::Playlist,
-            page: Some(crate::app::Page::Playlist {
+            page: Some(youtfast_app::Page::Playlist {
                 id: "synthetic-playlist".into(),
                 name: "Título anterior".into(),
             }),
@@ -720,7 +720,7 @@ mod tests {
         );
         let playlist = State {
             view: youtfast_core::model::View::Playlist,
-            page: Some(crate::app::Page::Playlist {
+            page: Some(youtfast_app::Page::Playlist {
                 id: "synthetic-playlist".into(),
                 name: "Playlist sintética".into(),
             }),
@@ -812,7 +812,7 @@ mod tests {
             },
         );
         output.textures_delta.clear();
-        let drawn = crate::app::images::drawn_count(&ctx);
+        let drawn = youtfast_app::images::drawn_count(&ctx);
         assert!(drawn > 0 && drawn < 10, "drawn thumbnails: {drawn}");
     }
 

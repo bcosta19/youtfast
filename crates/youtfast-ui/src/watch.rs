@@ -9,8 +9,8 @@ use egui::{
 
 use super::player::{self, Mode};
 use super::{results, widgets};
-use crate::app::Action;
-use crate::app::State;
+use youtfast_app::Action;
+use youtfast_app::State;
 use youtfast_appearance::icons::Icon;
 use youtfast_appearance::theme::{self, Palette};
 use youtfast_core::model::{Channel, CommentRow, Fetch, Rating, Video};
@@ -201,12 +201,12 @@ fn shorts(
     );
     rail.set_clip_rect(rail_rect.intersect(ui.clip_rect()));
     let previous =
-        crate::app::player::previous_video(state.watching.as_ref(), &state.up_next).is_some();
+        youtfast_app::player::previous_video(state.watching.as_ref(), &state.up_next).is_some();
     let related = state
         .details
         .ready()
         .map_or(&[][..], |details| details.related.as_slice());
-    let next = crate::app::player::next_video(
+    let next = youtfast_app::player::next_video(
         state.watching.as_ref(),
         &state.queue,
         &state.up_next,
@@ -1271,7 +1271,7 @@ fn comment_image(ui: &mut Ui, url: &str, locale: Locale) {
     let size = vec2(ui.available_width().min(320.0), 200.0);
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
     if ui.is_rect_visible(rect) {
-        crate::app::images::attachment(ui, url, rect, locale);
+        youtfast_app::images::attachment(ui, url, rect, locale);
     }
 }
 
@@ -1904,7 +1904,7 @@ mod tests {
                 .all(|height| (height - heights[0]).abs() < 1.0),
             "comment heights drifted: {heights:?}"
         );
-        let drawn = crate::app::images::drawn_count(&ctx);
+        let drawn = youtfast_app::images::drawn_count(&ctx);
         assert!(drawn > 0 && drawn < 10, "drawn avatars: {drawn}");
     }
 

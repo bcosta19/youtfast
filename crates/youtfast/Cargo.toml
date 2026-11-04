@@ -16,19 +16,20 @@ name = "youtfast"
 path = "src/main.rs"
 
 [features]
-demo = []
+# The offline UI harness (src/demo.rs) and the synthetic images it draws.
+demo = ["youtfast-app/demo", "youtfast-ui/demo"]
 
 [dependencies]
+youtfast-app.workspace = true
+youtfast-ui.workspace = true
 youtfast-desktop.workspace = true
 youtfast-cast.workspace = true
 youtfast-youtube.workspace = true
-youtfast-logic.workspace = true
 youtfast-storage.workspace = true
 youtfast-appearance.workspace = true
 youtfast-core.workspace = true
 youtfast-mpv.workspace = true
 youtfast-i18n.workspace = true
-anyhow.workspace = true
 clap.workspace = true
 serde_json.workspace = true
 log.workspace = true
@@ -36,15 +37,8 @@ eframe.workspace = true
 egui.workspace = true
 egui_extras.workspace = true
 image.workspace = true
-raw-window-handle.workspace = true
-tokio.workspace = true
 fastframe-icons.workspace = true
-fastframe-theme.workspace = true
-fastframe-now-playing.workspace = true
-fastframe-scroll.workspace = true
 rustypipe.workspace = true
-jiff.workspace = true
 url.workspace = true
-notify-rust.workspace = true
 rfd.workspace = true
 resvg.workspace = true

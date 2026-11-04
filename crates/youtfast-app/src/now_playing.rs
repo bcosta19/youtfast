@@ -6,9 +6,9 @@ use std::time::{Duration, Instant};
 
 use fastframe_now_playing as np;
 
-use crate::app::Action;
-use crate::app::State;
-use crate::app::player::{next_video, previous_video};
+use crate::Action;
+use crate::State;
+use crate::player::{next_video, previous_video};
 use youtfast_mpv::Status;
 
 /// A desktop command mapped onto what the app does with it.

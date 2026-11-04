@@ -12,8 +12,8 @@ use egui::{
     pos2, vec2,
 };
 
-use crate::app::Action;
-use crate::app::State;
+use youtfast_app::Action;
+use youtfast_app::State;
 use youtfast_appearance::icons::Icon;
 use youtfast_appearance::theme::{self, Palette, RADIUS, RADIUS_SMALL};
 use youtfast_core::model::{Channel, Fetch, PlaylistSummary, Span, Video};
@@ -427,7 +427,7 @@ pub fn avatar(ui: &Ui, palette: &Palette, url: Option<&str>, name: &str, rect: R
     }
     let radius = CornerRadius::same((rect.width() / 2.0).min(255.0) as u8);
     match url {
-        Some(url) => crate::app::images::remote(ui, url)
+        Some(url) => youtfast_app::images::remote(ui, url)
             .fit_to_exact_size(rect.size())
             .corner_radius(radius)
             .paint_at(ui, rect),
@@ -549,7 +549,7 @@ fn thumbnail(
     }
     let radius = CornerRadius::same(RADIUS);
     ui.painter().rect_filled(rect, radius, palette.surface);
-    crate::app::images::remote(ui, &video.thumbnail())
+    youtfast_app::images::remote(ui, &video.thumbnail())
         .fit_to_exact_size(rect.size())
         .corner_radius(radius)
         .paint_at(ui, rect);
@@ -960,7 +960,7 @@ pub fn playlist_row(
     ui.painter()
         .rect_filled(thumb_rect, radius, palette.surface);
     if let Some(url) = &playlist.thumbnail {
-        crate::app::images::remote(ui, url)
+        youtfast_app::images::remote(ui, url)
             .fit_to_exact_size(size)
             .corner_radius(radius)
             .paint_at(ui, thumb_rect);

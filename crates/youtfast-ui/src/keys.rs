@@ -22,7 +22,7 @@ pub(super) fn handle(
     if ctx.text_edit_focused() || egui::Popup::is_any_open(ctx) {
         return;
     }
-    if !state.keys_open && state.player_menu == crate::app::PlayerMenu::Closed {
+    if !state.keys_open && state.player_menu == youtfast_app::PlayerMenu::Closed {
         let handled = ctx.input_mut(|input| {
             if let Some(first) = consume_once(input, egui::Modifiers::COMMAND, Key::W) {
                 if first && let Some(id) = state.video_tabs.active() {
@@ -71,7 +71,7 @@ pub(super) fn handle(
     });
     let controls_focused = focused && !player_focused;
     let search_shortcut = !state.keys_open
-        && state.player_menu == crate::app::PlayerMenu::Closed
+        && state.player_menu == youtfast_app::PlayerMenu::Closed
         && ctx.input(|input| {
             input.key_pressed(Key::Slash)
                 && !input.modifiers.ctrl
@@ -107,9 +107,9 @@ pub(super) fn handle(
             actions.push(Action::Forward);
             return;
         }
-        if state.player_menu != crate::app::PlayerMenu::Closed {
+        if state.player_menu != youtfast_app::PlayerMenu::Closed {
             if input.consume_key(egui::Modifiers::NONE, Key::Escape) {
-                state.player_menu = crate::app::PlayerMenu::Closed;
+                state.player_menu = youtfast_app::PlayerMenu::Closed;
             }
             return;
         }
@@ -321,10 +321,10 @@ pub(super) fn handle(
         for event in &input.events {
             if let egui::Event::Text(text) = event {
                 match text.as_str() {
-                    "<" => actions.push(Action::SetSpeed(crate::app::player::step_speed(
+                    "<" => actions.push(Action::SetSpeed(youtfast_app::player::step_speed(
                         speed, false,
                     ))),
-                    ">" => actions.push(Action::SetSpeed(crate::app::player::step_speed(
+                    ">" => actions.push(Action::SetSpeed(youtfast_app::player::step_speed(
                         speed, true,
                     ))),
                     "," => actions.push(Action::FrameStep(false)),
@@ -713,7 +713,7 @@ mod tests {
             vec![Action::Navigate(View::Subscriptions)]
         );
         // Signed in, Liked and Playlists count again.
-        state.account = crate::app::AccountState::SignedIn(1);
+        state.account = youtfast_app::AccountState::SignedIn(1);
         assert_eq!(
             press(&mut state, Key::Num5, egui::Modifiers::NONE),
             vec![Action::Navigate(View::Liked)]

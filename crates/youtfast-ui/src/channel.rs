@@ -7,8 +7,8 @@ use egui::{RichText, Sense, Ui, pos2, vec2};
 use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 use super::{results, widgets};
-use crate::app::Action;
-use crate::app::State;
+use youtfast_app::Action;
+use youtfast_app::State;
 use youtfast_appearance::theme;
 use youtfast_core::model::{Channel, ChannelAbout, ChannelHeader, ChannelTab, Fetch, Listing};
 use youtfast_core::util;
@@ -88,7 +88,7 @@ pub fn show(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Act
                     let width = ui.available_width();
                     let height = (width / 6.0).clamp(80.0, 200.0);
                     let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
-                    let mut image = crate::app::images::remote(ui, url);
+                    let mut image = youtfast_app::images::remote(ui, url);
                     if let Ok(texture) = image.load_for_size(ui.ctx(), rect.size())
                         && let Some(size) = texture.size()
                     {
@@ -728,7 +728,7 @@ mod tests {
         };
         let state = State {
             view: youtfast_core::model::View::Channel,
-            page: Some(crate::app::Page::Channel(channel.clone())),
+            page: Some(youtfast_app::Page::Channel(channel.clone())),
             channel_header: Some(ChannelHeader {
                 name: "Test Channel".into(),
                 banner: Some("https://example.com/banner.jpg".into()),

@@ -1,13 +1,11 @@
 //! Deliberately isolated UI harness. No backend, keyring, user files, network,
 //! media controls or single-instance channel are created here.
-use crate::{
-    app::{Action, Page, State, apply_sidebar_action},
-    ui,
-};
+use youtfast_app::{Action, Page, State, apply_sidebar_action};
 use youtfast_appearance::theme;
 use youtfast_core::model::*;
 use youtfast_i18n::{Locale, gettext as tr};
 use youtfast_mpv::Status;
+use youtfast_ui as ui;
 
 pub fn run(cli: &crate::Cli) -> eframe::Result {
     let size = cli

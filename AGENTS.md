@@ -34,7 +34,7 @@ on it, and follow [YouTube response formats](#youtube-response-formats).
 The repository is a Cargo workspace: the root `Cargo.toml` holds the shared
 package fields, dependency versions, profiles and patches, and each crate in
 `crates/` inherits them (`.workspace = true`). The application is
-`crates/youtfast`, on top of these crates:
+`crates/youtfast`, on top of these crates, listed from the bottom up:
 
 | Crate | Holds |
 |---|---|
@@ -47,22 +47,20 @@ package fields, dependency versions, profiles and patches, and each crate in
 | `youtfast-youtube` | the network: InnerTube (`innertube`), yt-dlp (`ytdlp`), SponsorBlock, captions and storyboards (`extras`), the thumbnails' cache; the response-format tests (`tests/youtube_api.rs`) |
 | `youtfast-cast` | casting to TVs: Google Cast, DIAL (`dial`) and YouTube's Lounge API (`lounge`) |
 | `youtfast-desktop` | single instance, local logs and their redactor, release updater |
+| `youtfast-backend` | the runtime thread; `protocol` is its `Command`s and `Event`s |
+| `youtfast-app` | the state, the actions the views push (`Action`), the remote images the views draw (`images`), the desktop's media controls (`now_playing`) |
+| `youtfast-ui` | the views; `frame` draws one frame |
 
 No crate depends on one above it.
 
-`crates/youtfast/src/` is grouped by domain. A new module goes in the group that matches
-its job, not at the root:
+`crates/youtfast` itself is the binary: the command line, the window's
+startup (`src/main.rs`) and the offline demo harness (`src/demo.rs`). A new
+module goes in the crate that matches its job.
 
-| Folder | Holds |
-|---|---|
-| `ui/` | the views; `ui::frame` draws one frame |
-| `app.rs`, `app/` | the state, the actions the views push (`app::Action`), the remote images the views draw (`app::images`), the desktop's media controls (`now_playing`) |
-| `backend.rs`, `backend/` | the runtime thread; `protocol.rs` is its `Command`s and `Event`s |
-
-- `crates/youtfast/src/ui/` draws views from `app::State` and the player's `mpv::Status`, and
-  pushes `app::Action`s. `crates/youtfast/src/app.rs` applies them after the frame,
-  through its children in `crates/youtfast/src/app/` (loading, watch, accounts,
-  notifications, themes). `crates/youtfast/src/app/history_sync.rs` gates one report per
+- `crates/youtfast-ui/src/` draws views from `app::State` and the player's `mpv::Status`, and
+  pushes `app::Action`s. `crates/youtfast-app/src/lib.rs` applies them after the frame,
+  through its children in `crates/youtfast-app/src/` (loading, watch, accounts,
+  notifications, themes). `crates/youtfast-app/src/history_sync.rs` gates one report per
   playback on two seconds of active play and the session active at its start. A view only changes its own state (search text,
   the seek bar while dragged).
   The application does not depend on the views: `App::new` is handed
@@ -71,9 +69,9 @@ its job, not at the root:
   Remote images go through `app::images::remote`, which lets egui forget
   the ones not drawn for a minute; the watch page's details are kept for
   the last 50 videos (`App::details_cache`), for half an hour.
-- `crates/youtfast/src/backend.rs` is the interface's handle to a tokio runtime on its own
+- `crates/youtfast-backend/src/lib.rs` is the interface's handle to a tokio runtime on its own
   thread. The two sides talk only through `Command` and `Event`
-  (`crates/youtfast/src/backend/protocol.rs`), and every event wakes the window. Nothing blocks the interface thread.
+  (`crates/youtfast-backend/src/protocol.rs`), and every event wakes the window. Nothing blocks the interface thread.
 - `crates/youtfast-storage/src/library.rs` is what this computer keeps, with or without an
   account: subscriptions, history (with resume positions) and Watch later,
   in one JSON file (`paths::Dirs::library`). Saves go to the backend
@@ -146,7 +144,7 @@ its job, not at the root:
 - `crates/youtfast-logic/src/alerts.rs` is the new-upload check's brain: a pure split of a
   feed's videos into unseen (`alerts_seen_at`) and not-yet-notified
   (`alerts_notified_at`) stamps the library keeps. A tokio timer in
-  `crates/youtfast/src/backend.rs` (restarted by `Command::SetAlertsEvery`; the feed's own
+  `crates/youtfast-backend/src/lib.rs` (restarted by `Command::SetAlertsEvery`; the feed's own
   load runs the same computation without a request) fires
   `Event::CheckAlerts`, and `Command::Notify` shows the result through
   notify-rust on a blocking thread. YouTube's real notifications have no
@@ -206,14 +204,14 @@ its job, not at the root:
   The optional `Settings::scroll_miniplayer` also shows it when the inline
   video scrolls completely above the watch page's clip. Returning from it
   sets `State::watch_scroll_to_video` to reveal the inline player.
-- `crates/youtfast/src/ui/player.rs` is the player as YouTube draws it: the controls over
+- `crates/youtfast-ui/src/player.rs` is the player as YouTube draws it: the controls over
   the video's bottom edge (shown while the pointer moves, kept while
   paused), the seek bar with chapters and SponsorBlock's segments, the
   settings menu (speed, quality, captions, autoplay), notes over the
   picture, the countdown to the next video and the live badge. A live
   stream has no timeline: mpv only seeks inside its cache (some 25 s), so
   it gets the badge and "back to live" instead of a DVR bar. Shorts are
-  drawn upright and loop (`loop-file`). `crates/youtfast/src/app/player.rs` is the logic
+  drawn upright and loop (`loop-file`). `crates/youtfast-app/src/player.rs` is the logic
   behind them: what plays next (the queue, Up next, then related), the
   kept captions language, the skips. mpv runs with `keep-open`, so the end
   of a video is `eof-reached` turning on, not an end-file event.
@@ -243,7 +241,7 @@ its job, not at the root:
   second launch hands `show`, `open <text>` or `reload-themes` to the
   window already open and exits; the handler only parses and queues, `App`
   drains the queue.
-- `crates/youtfast/src/app/now_playing.rs` is the desktop's media controls
+- `crates/youtfast-app/src/now_playing.rs` is the desktop's media controls
   (fastframe-now-playing; MPRIS on Linux): it maps their commands onto
   `Action`s and reports what mpv plays; the units differ (`SeekBy` is
   milliseconds, `SetVolume` is 0..1).
@@ -270,7 +268,7 @@ deserialize through `MapResult`/`VecSkipError`), so a tab comes back empty or
 a field takes another's value without any error.
 
 - Before changing anything that builds requests to YouTube or reads its
-  responses (the rustypipe fork, `crates/youtfast-youtube/src/innertube*`, `crates/youtfast/src/backend.rs`
+  responses (the rustypipe fork, `crates/youtfast-youtube/src/innertube*`, `crates/youtfast-backend/src/lib.rs`
   loads), and whenever a listing comes back empty, wrong or refused, read
   [docs/youtube-api-format.md](docs/youtube-api-format.md). Check the known
   changes (`YT-n`) first: a new symptom is often an old one in another place.

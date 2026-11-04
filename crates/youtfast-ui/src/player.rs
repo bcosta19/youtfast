@@ -15,9 +15,9 @@ use egui::{
 };
 
 use super::widgets;
-use crate::app::Action;
-use crate::app::player::{LIVE_BEHIND, SPEEDS, next_video, previous_video, speed_label};
-use crate::app::{PlayerMenu, State};
+use youtfast_app::Action;
+use youtfast_app::player::{LIVE_BEHIND, SPEEDS, next_video, previous_video, speed_label};
+use youtfast_app::{PlayerMenu, State};
 use youtfast_appearance::icons::Icon;
 use youtfast_appearance::theme;
 use youtfast_core::model::{Fetch, Quality, Resolution, Segment, Video};
@@ -426,7 +426,7 @@ fn picture_rounded(
     ui.painter().rect_filled(rect, radius, Color32::BLACK);
     if state.audio_only {
         if let Some(video) = &state.watching {
-            crate::app::images::remote(ui, &video.thumbnail())
+            youtfast_app::images::remote(ui, &video.thumbnail())
                 .fit_to_exact_size(rect.size())
                 .corner_radius(radius)
                 .paint_at(ui, rect);
@@ -464,7 +464,7 @@ fn picture_rounded(
                 .data(|d| d.get_temp::<bool>(egui::Id::new("synthetic-images")))
                 .unwrap_or(false)
         {
-            crate::app::images::remote(ui, "demo")
+            youtfast_app::images::remote(ui, "demo")
                 .fit_to_exact_size(rect.size())
                 .corner_radius(radius)
                 .paint_at(ui, rect);

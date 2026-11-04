@@ -8,8 +8,8 @@ use egui::{
 };
 
 use super::{results, widgets};
-use crate::app::Action;
-use crate::app::{AccountState, State};
+use youtfast_app::Action;
+use youtfast_app::{AccountState, State};
 use youtfast_appearance::icons::Icon;
 use youtfast_appearance::theme::{self, Palette, RADIUS};
 use youtfast_core::model::browser_label;

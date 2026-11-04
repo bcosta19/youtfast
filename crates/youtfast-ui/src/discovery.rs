@@ -4,8 +4,8 @@ use egui::{ComboBox, Ui};
 use youtfast_i18n::{Locale, gettext as tr};
 
 use super::{library, results, widgets};
-use crate::app::Action;
-use crate::app::State;
+use youtfast_app::Action;
+use youtfast_app::State;
 use youtfast_core::model::Listing;
 use youtfast_youtube::innertube::{SearchDate, SearchKind, SearchLength, SearchOrder};
 

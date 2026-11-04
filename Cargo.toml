@@ -11,6 +11,9 @@ members = [
     "crates/youtfast-youtube",
     "crates/youtfast-cast",
     "crates/youtfast-desktop",
+    "crates/youtfast-backend",
+    "crates/youtfast-app",
+    "crates/youtfast-ui",
 ]
 
 [workspace.package]
@@ -32,6 +35,9 @@ youtfast-logic = { path = "crates/youtfast-logic" }
 youtfast-youtube = { path = "crates/youtfast-youtube" }
 youtfast-cast = { path = "crates/youtfast-cast" }
 youtfast-desktop = { path = "crates/youtfast-desktop" }
+youtfast-backend = { path = "crates/youtfast-backend" }
+youtfast-app = { path = "crates/youtfast-app" }
+youtfast-ui = { path = "crates/youtfast-ui" }
 
 anyhow = "1"
 clap = { version = "4.5", features = ["derive"] }

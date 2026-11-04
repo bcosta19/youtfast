@@ -1,8 +1,8 @@
 //! Native TV picker and remote. These controls explicitly target the TV;
 //! libmpv's controls and media keys continue to target this computer.
 
-use crate::app::Action;
-use crate::app::State;
+use youtfast_app::Action;
+use youtfast_app::State;
 use youtfast_cast::{Action as CastAction, Control};
 use youtfast_i18n::{gettext as tr, message};
 

@@ -7,8 +7,10 @@ use anyhow::Context as _;
 use eframe::glow;
 use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 
-use crate::backend::{Backend, Command, CommentsKey, Event, Payload, Request, SignInMethod, Slot};
 use youtfast_appearance::theme::{self, Palette};
+use youtfast_backend::{
+    Backend, Command, CommentsKey, Event, Payload, Request, SignInMethod, Slot,
+};
 use youtfast_core::model::{
     AccountSource, Channel, ChannelAbout, ChannelHeader, ChannelTab, CommentRow, Details,
     FeedFilter, Fetch, HistoryRow, Listing, PageItems, PlaylistSummary, Quality, Rating,
@@ -569,7 +571,7 @@ impl State {
 
 /// Applies the sidebar action through the shared state transition used by
 /// the app, demo and UI regression test.
-pub(crate) fn apply_sidebar_action(state: &mut State, action: Action, width: f32) -> bool {
+pub fn apply_sidebar_action(state: &mut State, action: Action, width: f32) -> bool {
     let Action::ToggleSidebar = action else {
         return false;
     };
@@ -580,7 +582,7 @@ pub(crate) fn apply_sidebar_action(state: &mut State, action: Action, width: f32
 
 /// Whether the current view/window would use the rail before the user
 /// overrides that automatic choice in this run.
-pub(crate) fn sidebar_uses_automatic_rail(state: &State, width: f32) -> bool {
+pub fn sidebar_uses_automatic_rail(state: &State, width: f32) -> bool {
     state.view == View::Watch || width < 900.0
 }
 

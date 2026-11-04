@@ -5,8 +5,8 @@
 use egui::{Align, Color32, CornerRadius, Layout, Response, RichText, Sense, Ui, pos2, vec2};
 
 use super::{results, widgets};
-use crate::app::Action;
-use crate::app::State;
+use youtfast_app::Action;
+use youtfast_app::State;
 use youtfast_appearance::icons::Icon;
 use youtfast_appearance::theme::{self, InterfaceFont, Palette};
 use youtfast_i18n::{Locale, format as trf, gettext as tr};

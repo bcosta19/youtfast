@@ -2,11 +2,8 @@
 // Release builds open no console window on Windows, like Spotifast and ZapFast.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod app;
-mod backend;
 #[cfg(feature = "demo")]
 mod demo;
-mod ui;
 
 use youtfast_appearance::theme;
 use youtfast_desktop::{diagnostics, instance};
@@ -120,7 +117,13 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| {
             creating.store(true, std::sync::atomic::Ordering::Relaxed);
-            Ok(Box::new(app::App::new(cc, open, guard, fonts, ui::frame)?))
+            Ok(Box::new(youtfast_app::App::new(
+                cc,
+                open,
+                guard,
+                fonts,
+                youtfast_ui::frame,
+            )?))
         }),
     );
     if let Err(error) = &result

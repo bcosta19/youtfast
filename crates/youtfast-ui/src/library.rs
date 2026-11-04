@@ -7,8 +7,8 @@ use egui::{Align2, CornerRadius, Rect, RichText, Sense, Ui, pos2, vec2};
 use youtfast_i18n::{format as trf, gettext as tr};
 
 use super::{results, widgets};
-use crate::app::Action;
-use crate::app::{AccountState, Page, State};
+use youtfast_app::Action;
+use youtfast_app::{AccountState, Page, State};
 use youtfast_appearance::theme;
 use youtfast_core::model::{Channel, FeedFilter, Fetch, Listing, Source, Video, View};
 use youtfast_core::util;
@@ -403,7 +403,7 @@ fn short_card(ui: &mut Ui, state: &State, video: &Video, actions: &mut Vec<Actio
     }
     let thumb_rect = Rect::from_min_size(rect.min, thumb);
     widgets::row_fill(ui, palette, rect.expand(4.0), &response, false);
-    crate::app::images::remote(ui, &video.thumbnail())
+    youtfast_app::images::remote(ui, &video.thumbnail())
         .uv(widgets::short_uv())
         .fit_to_exact_size(thumb)
         .corner_radius(CornerRadius::same(theme::RADIUS))
@@ -964,7 +964,7 @@ pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             if let Some(url) = details.and_then(|details| details.thumbnail.as_deref()) {
                 let width = (ui.available_width() * 0.3).clamp(96.0, 240.0);
                 ui.add(
-                    crate::app::images::remote(ui, url)
+                    youtfast_app::images::remote(ui, url)
                         .fit_to_exact_size(vec2(width, width * 9.0 / 16.0))
                         .corner_radius(egui::CornerRadius::same(theme::RADIUS)),
                 );
@@ -1367,7 +1367,7 @@ mod tests {
                 },
             );
             output.textures_delta.clear();
-            let drawn = crate::app::images::drawn_count(&ctx);
+            let drawn = youtfast_app::images::drawn_count(&ctx);
             assert!(drawn > 0 && drawn < 20, "list {kind} drew {drawn} images");
         }
     }

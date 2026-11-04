@@ -343,7 +343,7 @@ impl super::App {
                     self.state.cast.receive_segments(id, &self.state.segments);
                 }
                 self.backend
-                    .send(crate::backend::Command::LoadSegments(id.clone()));
+                    .send(youtfast_backend::Command::LoadSegments(id.clone()));
             }
             if let Some((id, generation)) = handoff
                 && self

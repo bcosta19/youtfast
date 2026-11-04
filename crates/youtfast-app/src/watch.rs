@@ -292,7 +292,7 @@ impl App {
         self.state.playback_loop = false;
         self.state.mini_closed = false;
         self.state.watch_scroll_to_video = true;
-        self.state.player_menu = crate::app::PlayerMenu::Closed;
+        self.state.player_menu = crate::PlayerMenu::Closed;
         self.state.segments.clear();
         self.state.skipped.clear();
         if self.state.audio_only || self.player.as_ref().is_some_and(|p| p.audio_only()) {
@@ -698,7 +698,7 @@ impl App {
     /// remembers where it was left.
     pub(super) fn leave_video(&mut self, ctx: &egui::Context) {
         self.set_fullscreen(ctx, false);
-        self.state.player_menu = crate::app::PlayerMenu::Closed;
+        self.state.player_menu = crate::PlayerMenu::Closed;
         if self.state.view == View::Watch {
             self.remember_position();
             if self.state.mini_closed {

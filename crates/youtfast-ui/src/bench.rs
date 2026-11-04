@@ -1,7 +1,7 @@
 //! What one frame costs on the busiest views.
 //!
 //! Run with:
-//! `cargo test --release --bin youtfast frame_cost -- --ignored --nocapture --test-threads=1`
+//! `cargo test --release -p youtfast-ui --lib frame_cost -- --ignored --nocapture --test-threads=1`
 //!
 //! Each scenario draws the whole window (`ui::show`) from synthetic data: no
 //! network, no player. The thumbnail cache is never installed in tests, so
@@ -15,7 +15,7 @@ use std::time::Instant;
 use egui::vec2;
 
 use super::show;
-use crate::app::{AccountState, State};
+use youtfast_app::{AccountState, State};
 use youtfast_core::model::{
     Channel, CommentRow, Details, FeedFilter, Fetch, HistoryRow, Listing, Span, Video, View,
 };

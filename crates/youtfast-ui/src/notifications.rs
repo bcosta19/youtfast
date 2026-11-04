@@ -5,8 +5,8 @@ use egui::{RichText, Ui};
 use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 use super::{results, widgets};
-use crate::app::Action;
-use crate::app::State;
+use youtfast_app::Action;
+use youtfast_app::State;
 use youtfast_appearance::theme;
 use youtfast_core::util::{self, AgeBucket};
 

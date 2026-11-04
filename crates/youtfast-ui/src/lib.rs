@@ -32,8 +32,8 @@ use egui::{
     Align, CornerRadius, Frame, Key, Layout, Margin, RichText, Sense, Stroke, UiBuilder, vec2,
 };
 
-use crate::app::Action;
-use crate::app::{AccountState, State};
+use youtfast_app::Action;
+use youtfast_app::{AccountState, State};
 use youtfast_appearance::icons::Icon;
 use youtfast_appearance::theme::{self, RADIUS};
 use youtfast_core::model::{ChannelTab, Fetch, View};
@@ -46,7 +46,7 @@ fn command_line_id() -> egui::Id {
 }
 
 /// One frame of the views: everything drawn, then a held speed-up released
-/// (the [`crate::app::Views`] the application calls).
+/// (the [`youtfast_app::Views`] the application calls).
 pub fn frame(
     ui: &mut egui::Ui,
     state: &mut State,
@@ -103,7 +103,7 @@ pub fn show(
             View::Playlist => library::page(ui, state, actions),
             View::Notifications => notifications::show(ui, state, actions),
             View::Channel => {
-                if let Some(crate::app::Page::Channel(channel)) = &state.page {
+                if let Some(youtfast_app::Page::Channel(channel)) = &state.page {
                     channel::show(ui, state, channel, actions);
                 }
             }
@@ -419,7 +419,7 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
     // The watch page and narrow windows start folded to the rail; from the
     // toggle's first press the saved choice rules every page (#25).
     let automatic_rail =
-        crate::app::sidebar_uses_automatic_rail(state, ui.ctx().content_rect().width());
+        youtfast_app::sidebar_uses_automatic_rail(state, ui.ctx().content_rect().width());
     let collapsed = state.settings.sidebar_collapsed || (!state.sidebar_toggled && automatic_rail);
     let palette = &state.palette;
     egui::Panel::left("sidebar")
@@ -558,7 +558,7 @@ fn sidebar_channels(ui: &mut egui::Ui, state: &State, collapsed: bool, actions: 
         return;
     }
     let open = match &state.page {
-        Some(crate::app::Page::Channel(channel)) if state.view == View::Channel => {
+        Some(youtfast_app::Page::Channel(channel)) if state.view == View::Channel => {
             Some(channel.id.as_str())
         }
         _ => None,
@@ -928,7 +928,7 @@ mod tests {
                 View::Settings,
             ]
         );
-        state.account = crate::app::AccountState::SignedIn(1);
+        state.account = youtfast_app::AccountState::SignedIn(1);
         assert_eq!(views(&state).len(), 9);
         assert_eq!(views(&state)[4..6], [View::Liked, View::Playlists]);
     }
@@ -953,7 +953,7 @@ mod tests {
             ]
         );
         // Shown in the setting, but still only for a signed-in account.
-        state.account = crate::app::AccountState::SignedIn(1);
+        state.account = youtfast_app::AccountState::SignedIn(1);
         assert!(views(&state).contains(&View::Liked));
         assert!(!views(&state).contains(&View::Subscriptions));
     }
@@ -1104,7 +1104,9 @@ mod tests {
             state.settings.sidebar_collapsed,
             "the flag waits for the action to apply"
         );
-        assert!(crate::app::apply_sidebar_action(&mut state, action, 1512.0));
+        assert!(youtfast_app::apply_sidebar_action(
+            &mut state, action, 1512.0
+        ));
         assert!(!state.settings.sidebar_collapsed);
         assert!(state.sidebar_toggled);
         let mut label = None;
@@ -1152,7 +1154,9 @@ mod tests {
         let action = actions
             .pop()
             .expect("the second `b` emits the toggle action");
-        assert!(crate::app::apply_sidebar_action(&mut state, action, 1512.0));
+        assert!(youtfast_app::apply_sidebar_action(
+            &mut state, action, 1512.0
+        ));
         assert!(state.settings.sidebar_collapsed);
         let mut label = Some(0.0);
         for frame in 10..12 {
@@ -1180,7 +1184,9 @@ mod tests {
         );
         sidebar_label_x(&ctx, &mut state, 1, toggle_press(), &mut actions);
         let action = actions.pop().expect("the `b` key emits the toggle action");
-        assert!(crate::app::apply_sidebar_action(&mut state, action, 1512.0));
+        assert!(youtfast_app::apply_sidebar_action(
+            &mut state, action, 1512.0
+        ));
         assert_eq!(
             sidebar_label_x(&ctx, &mut state, 2, Vec::new(), &mut actions),
             None,
@@ -1191,7 +1197,9 @@ mod tests {
         let action = actions
             .pop()
             .expect("the second `b` emits the toggle action");
-        assert!(crate::app::apply_sidebar_action(&mut state, action, 1512.0));
+        assert!(youtfast_app::apply_sidebar_action(
+            &mut state, action, 1512.0
+        ));
         assert!(
             sidebar_label_x(&ctx, &mut state, 4, Vec::new(), &mut actions).is_some(),
             "the second press opens it again"
@@ -1210,7 +1218,7 @@ mod tests {
             None,
             "a narrow window starts on the rail"
         );
-        assert!(crate::app::apply_sidebar_action(
+        assert!(youtfast_app::apply_sidebar_action(
             &mut state,
             Action::ToggleSidebar,
             800.0
