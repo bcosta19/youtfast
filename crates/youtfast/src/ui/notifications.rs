@@ -5,9 +5,9 @@ use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use egui::{RichText, Ui};
 
 use super::{results, widgets};
+use crate::app::Action;
 use crate::app::State;
 use crate::appearance::theme;
-use crate::model::Action;
 use crate::util::{self, AgeBucket};
 
 pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {

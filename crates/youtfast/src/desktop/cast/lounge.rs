@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-use crate::desktop::cast::{Control, Error, Sponsor};
+use super::{Control, Error, Sponsor};
 
 const BASE: &str = "https://www.youtube.com/api/lounge";
 const LIMIT: usize = 256 * 1024;
@@ -30,7 +30,7 @@ impl Status {
         if self.video.as_deref() != Some(video) || self.state != Some(1) || self.ad {
             return None;
         }
-        crate::desktop::cast::sponsor_target(self.seconds?, segments)
+        super::sponsor_target(self.seconds?, segments)
     }
 }
 
@@ -49,7 +49,7 @@ pub struct Session {
 
 impl Session {
     pub async fn connect(screen: &str) -> Result<Self, Error> {
-        let client = super::innertube::http()
+        let client = crate::youtube::innertube::http()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(12))
@@ -252,7 +252,7 @@ impl Session {
             .status
             .seconds
             .filter(|_| self.status.video.as_deref() == Some(video))
-            .and_then(|at| crate::desktop::cast::next_segment_in(at, segments));
+            .and_then(|at| super::next_segment_in(at, segments));
         let Some(end) = self.status.sponsor_target(video, segments) else {
             return Ok(Sponsor {
                 skipped: None,
@@ -268,7 +268,7 @@ impl Session {
         self.status.seconds = None;
         Ok(Sponsor {
             skipped: Some(end),
-            next_in: crate::desktop::cast::next_segment_in(end, segments),
+            next_in: super::next_segment_in(end, segments),
         })
     }
 
@@ -398,7 +398,7 @@ pub async fn link(code: &str) -> Result<(String, String), Error> {
     if code.len() != 12 || !code.bytes().all(|c| c.is_ascii_digit()) {
         return Err(Error::InvalidCode);
     }
-    let client = super::innertube::http()
+    let client = crate::youtube::innertube::http()
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(12))
@@ -602,7 +602,7 @@ mod tests {
 
     #[test]
     fn playback_confirmation_requires_an_actual_tv_event_not_just_a_successful_post() {
-        let client = super::super::innertube::http().build().unwrap();
+        let client = crate::youtube::innertube::http().build().unwrap();
         let mut session = Session {
             client,
             screen: String::new(),

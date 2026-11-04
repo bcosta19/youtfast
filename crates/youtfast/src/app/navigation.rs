@@ -262,7 +262,7 @@ impl App {
         } else {
             self.load(self.state.view, false);
         }
-        self.cursor_key = (self.state.view, ui::cursor_key(&self.state));
+        self.cursor_key = (self.state.view, cursor_key(&self.state));
     }
     /// Advancing a playing list must not replace its origin with the page
     /// currently browsed underneath the mini player.
@@ -348,6 +348,53 @@ pub(super) fn chapter_target(
             .find(|c| f64::from(c.seconds) < position - 3.0)
             .map(|c| f64::from(c.seconds))
             .or(Some(0.0))
+    }
+}
+
+/// The cursor's reset key: which view's listing it is on, and whether it
+/// is still coming in. A switch of view, source or listing state restarts
+/// it at the top.
+pub fn cursor_key(state: &State) -> usize {
+    fn tag<T>(listing: &Listing<T>) -> usize {
+        match listing {
+            Listing::Idle => 0,
+            Listing::Loading => 1,
+            Listing::Ready(_) => 2,
+            Listing::Failed(_) => 3,
+        }
+    }
+    let source = usize::from(state.source() == crate::model::Source::Device) * 10;
+    match state.view {
+        View::Home if state.feed_filter == crate::model::FeedFilter::ForYou => tag(&state.for_you),
+        View::Home => tag(&state.feed) + 10 * state.feed_filter as usize,
+        View::Results => match state.search_options.kind {
+            crate::youtube::innertube::SearchKind::Videos => tag(&state.results),
+            crate::youtube::innertube::SearchKind::Channels => tag(&state.results_channels),
+            crate::youtube::innertube::SearchKind::Playlists => tag(&state.results_playlists),
+        },
+        View::Subscriptions => tag(&state.account_subscriptions) + source,
+        View::History => tag(&state.account_history) + 10 * state.history_filter as usize + source,
+        View::WatchLater => tag(&state.account_watch_later) + source,
+        View::Liked => tag(&state.liked),
+        View::Playlists => tag(&state.playlists),
+        View::Playlist => tag(&state.page_videos),
+        View::Notifications => 80 + state.alerts_visit.len().min(1),
+        View::Channel => {
+            let tab = match state.channel_tab {
+                ChannelTab::Videos => 0,
+                ChannelTab::Shorts => 10,
+                ChannelTab::Live => 20,
+                ChannelTab::Playlists => 30,
+                ChannelTab::About => 40,
+                ChannelTab::Search(_) => 50,
+            };
+            match state.channel_tab {
+                ChannelTab::Playlists => tab + tag(&state.page_playlists),
+                ChannelTab::About => tab + matches!(state.channel_about, Fetch::Ready(_)) as usize,
+                _ => tab + tag(&state.page_videos),
+            }
+        }
+        _ => 0,
     }
 }
 

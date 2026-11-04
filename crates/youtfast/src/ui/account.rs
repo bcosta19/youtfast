@@ -8,11 +8,12 @@ use egui::{
 };
 
 use super::{results, widgets};
+use crate::app::Action;
 use crate::app::{AccountState, State};
 use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use crate::appearance::icons::Icon;
 use crate::appearance::theme::{self, Palette, RADIUS};
-use crate::model::{Action, browser_label};
+use crate::model::browser_label;
 use crate::storage::library::Account;
 
 /// The text column's width: long lines of explanation read badly wider.

@@ -5,11 +5,11 @@
 use egui::{Align, Color32, CornerRadius, Layout, Response, RichText, Sense, Ui, pos2, vec2};
 
 use super::{results, widgets};
+use crate::app::Action;
 use crate::app::State;
 use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use crate::appearance::icons::Icon;
 use crate::appearance::theme::{self, InterfaceFont, Palette};
-use crate::model::Action;
 use crate::storage::settings::{
     HistorySync, PlaybackBuffer, SidebarButton, ThemeChoice, default_sidebar,
 };

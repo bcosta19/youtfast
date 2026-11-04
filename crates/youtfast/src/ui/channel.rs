@@ -7,9 +7,10 @@ use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use egui::{RichText, Sense, Ui, pos2, vec2};
 
 use super::{results, widgets};
+use crate::app::Action;
 use crate::app::State;
 use crate::appearance::theme;
-use crate::model::{Action, Channel, ChannelAbout, ChannelHeader, ChannelTab, Fetch, Listing};
+use crate::model::{Channel, ChannelAbout, ChannelHeader, ChannelTab, Fetch, Listing};
 use crate::util;
 
 /// The smallest a video card gets before the grid drops a column.
@@ -87,7 +88,7 @@ pub fn show(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Act
                     let width = ui.available_width();
                     let height = (width / 6.0).clamp(80.0, 200.0);
                     let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
-                    let mut image = super::images::remote(ui, url);
+                    let mut image = crate::app::images::remote(ui, url);
                     if let Ok(texture) = image.load_for_size(ui.ctx(), rect.size())
                         && let Some(size) = texture.size()
                     {

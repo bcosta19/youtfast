@@ -7,9 +7,10 @@ use crate::appearance::i18n::{format as trf, gettext as tr};
 use egui::{Align2, CornerRadius, Rect, RichText, Sense, Ui, pos2, vec2};
 
 use super::{results, widgets};
+use crate::app::Action;
 use crate::app::{AccountState, Page, State};
 use crate::appearance::theme;
-use crate::model::{Action, Channel, FeedFilter, Fetch, Listing, Source, Video, View};
+use crate::model::{Channel, FeedFilter, Fetch, Listing, Source, Video, View};
 use crate::util;
 
 /// The Account / This device chips (when signed in) and a page's extra
@@ -402,7 +403,7 @@ fn short_card(ui: &mut Ui, state: &State, video: &Video, actions: &mut Vec<Actio
     }
     let thumb_rect = Rect::from_min_size(rect.min, thumb);
     widgets::row_fill(ui, palette, rect.expand(4.0), &response, false);
-    super::images::remote(ui, &video.thumbnail())
+    crate::app::images::remote(ui, &video.thumbnail())
         .uv(widgets::short_uv())
         .fit_to_exact_size(thumb)
         .corner_radius(CornerRadius::same(theme::RADIUS))
@@ -963,7 +964,7 @@ pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             if let Some(url) = details.and_then(|details| details.thumbnail.as_deref()) {
                 let width = (ui.available_width() * 0.3).clamp(96.0, 240.0);
                 ui.add(
-                    super::images::remote(ui, url)
+                    crate::app::images::remote(ui, url)
                         .fit_to_exact_size(vec2(width, width * 9.0 / 16.0))
                         .corner_radius(egui::CornerRadius::same(theme::RADIUS)),
                 );
@@ -1366,7 +1367,7 @@ mod tests {
                 },
             );
             output.textures_delta.clear();
-            let drawn = super::super::images::drawn_count(&ctx);
+            let drawn = crate::app::images::drawn_count(&ctx);
             assert!(drawn > 0 && drawn < 20, "list {kind} drew {drawn} images");
         }
     }

@@ -1,7 +1,7 @@
 //! Deliberately isolated UI harness. No backend, keyring, user files, network,
 //! media controls or single-instance channel are created here.
 use crate::{
-    app::{Page, State, apply_sidebar_action},
+    app::{Action, Page, State, apply_sidebar_action},
     appearance::i18n::{Locale, gettext as tr},
     appearance::theme,
     model::*,

@@ -1,10 +1,10 @@
 //! Native TV picker and remote. These controls explicitly target the TV;
 //! libmpv's controls and media keys continue to target this computer.
 
+use crate::app::Action;
 use crate::app::State;
 use crate::appearance::i18n::{gettext as tr, message};
 use crate::desktop::cast::{Action as CastAction, Control};
-use crate::model::Action;
 
 pub fn show(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
     let mut open = state.cast.open;

@@ -4,8 +4,9 @@ use crate::appearance::i18n::{Locale, gettext as tr};
 use egui::{ComboBox, Ui};
 
 use super::{library, results, widgets};
+use crate::app::Action;
 use crate::app::State;
-use crate::model::{Action, Listing};
+use crate::model::Listing;
 use crate::youtube::innertube::{SearchDate, SearchKind, SearchLength, SearchOrder};
 
 pub fn filters(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {

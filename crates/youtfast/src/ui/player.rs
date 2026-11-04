@@ -15,12 +15,13 @@ use egui::{
 };
 
 use super::widgets;
+use crate::app::Action;
 use crate::app::player::{LIVE_BEHIND, SPEEDS, next_video, previous_video, speed_label};
 use crate::app::{PlayerMenu, State};
 use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use crate::appearance::icons::Icon;
 use crate::appearance::theme;
-use crate::model::{Action, Fetch, Quality, Resolution, Segment, Video};
+use crate::model::{Fetch, Quality, Resolution, Segment, Video};
 use crate::mpv::{Status, VideoSurface};
 use crate::util;
 
@@ -424,7 +425,7 @@ fn picture_rounded(
     ui.painter().rect_filled(rect, radius, Color32::BLACK);
     if state.audio_only {
         if let Some(video) = &state.watching {
-            super::images::remote(ui, &video.thumbnail())
+            crate::app::images::remote(ui, &video.thumbnail())
                 .fit_to_exact_size(rect.size())
                 .corner_radius(radius)
                 .paint_at(ui, rect);
@@ -462,7 +463,7 @@ fn picture_rounded(
                 .data(|d| d.get_temp::<bool>(egui::Id::new("synthetic-images")))
                 .unwrap_or(false)
         {
-            super::images::remote(ui, "demo")
+            crate::app::images::remote(ui, "demo")
                 .fit_to_exact_size(rect.size())
                 .corner_radius(radius)
                 .paint_at(ui, rect);

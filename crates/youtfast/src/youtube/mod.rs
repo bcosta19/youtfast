@@ -4,7 +4,6 @@
 
 pub mod extras;
 pub mod innertube;
-pub mod lounge;
 pub mod sponsorblock;
 pub mod thumbs;
 pub mod ytdlp;

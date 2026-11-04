@@ -41,24 +41,27 @@ its job, not at the root:
 
 | Folder | Holds |
 |---|---|
-| `ui/` | the views |
-| `app.rs`, `app/` | the state and the actions the views push |
+| `ui/` | the views; `ui::frame` draws one frame |
+| `app.rs`, `app/` | the state, the actions the views push (`app::Action`), the remote images the views draw (`app::images`), the desktop's media controls (`now_playing`) |
 | `backend.rs`, `backend/` | the runtime thread; `protocol.rs` is its `Command`s and `Event`s |
 | `youtube/` | the network: InnerTube (`innertube`), yt-dlp (`ytdlp`), SponsorBlock, captions and storyboards (`extras`), the thumbnails' cache |
 | `storage/` | what stays on this computer: library, settings, sessions (`account`), Takeout, file paths |
 | `logic/` | pure decisions over video lists: new-upload alerts, local recommendations |
 | `mpv/` | the player |
-| `desktop/` | single instance, media controls, local logs, release updater |
+| `desktop/` | single instance, local logs and their redactor, release updater, casting to TVs (`cast`, with YouTube's Lounge API in `cast::lounge`) |
 | `appearance/` | palette, icons, interface languages |
-| `model.rs`, `util.rs` | the shared types and formatting helpers |
+| `model.rs`, `util.rs`, `links.rs`, `privacy.rs` | the shared types, formatting helpers, YouTube link parsing, and the fixed messages external errors become |
 
 - `crates/youtfast/src/ui/` draws views from `app::State` and the player's `mpv::Status`, and
-  pushes `model::Action`s. `crates/youtfast/src/app.rs` applies them after the frame,
+  pushes `app::Action`s. `crates/youtfast/src/app.rs` applies them after the frame,
   through its children in `crates/youtfast/src/app/` (loading, watch, accounts,
   notifications, themes). `crates/youtfast/src/app/history_sync.rs` gates one report per
   playback on two seconds of active play and the session active at its start. A view only changes its own state (search text,
   the seek bar while dragged).
-  Remote images go through `ui::images::remote`, which lets egui forget
+  The application does not depend on the views: `App::new` is handed
+  `ui::frame` (`app::Views`), and the dependencies between the folders
+  have no cycle.
+  Remote images go through `app::images::remote`, which lets egui forget
   the ones not drawn for a minute; the watch page's details are kept for
   the last 50 videos (`App::details_cache`), for half an hour.
 - `crates/youtfast/src/backend.rs` is the interface's handle to a tokio runtime on its own
@@ -233,7 +236,7 @@ its job, not at the root:
   second launch hands `show`, `open <text>` or `reload-themes` to the
   window already open and exits; the handler only parses and queues, `App`
   drains the queue.
-- `crates/youtfast/src/desktop/now_playing.rs` is the desktop's media controls
+- `crates/youtfast/src/app/now_playing.rs` is the desktop's media controls
   (fastframe-now-playing; MPRIS on Linux): it maps their commands onto
   `Action`s and reports what mpv plays; the units differ (`SeekBy` is
   milliseconds, `SetVolume` is 0..1).

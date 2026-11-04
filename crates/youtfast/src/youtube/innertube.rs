@@ -110,7 +110,7 @@ pub fn is_signed_out(error: &Error) -> bool {
 /// An error as text for the user and the log: reqwest's message can end in
 /// the request's URL ("... for url (...)"), which helps nobody.
 pub fn text(error: Error) -> String {
-    crate::safe_error(&error.to_string())
+    crate::privacy::safe_error(&error.to_string())
 }
 
 /// Starts using a session, checking it with YouTube first.
@@ -840,7 +840,10 @@ mod tests {
             .send()
             .await
             .unwrap_err();
-        assert_eq!(text(Error::from(error)), crate::UNTRUSTED_CERTIFICATE);
+        assert_eq!(
+            text(Error::from(error)),
+            crate::privacy::UNTRUSTED_CERTIFICATE
+        );
     }
 
     #[tokio::test]

@@ -19,7 +19,6 @@ mod extras;
 mod keys;
 pub use player::release_speed_hold;
 mod channel;
-pub mod images;
 mod library;
 mod notifications;
 mod player;
@@ -33,16 +32,30 @@ use egui::{
     Align, CornerRadius, Frame, Key, Layout, Margin, RichText, Sense, Stroke, UiBuilder, vec2,
 };
 
+use crate::app::Action;
 use crate::app::{AccountState, State};
 use crate::appearance::icons::Icon;
 use crate::appearance::theme::{self, RADIUS};
-use crate::model::{Action, ChannelTab, Fetch, Listing, View};
+use crate::model::{ChannelTab, Fetch, View};
 use crate::mpv::{Status, VideoSurface};
 use crate::storage::settings::SidebarButton;
 
 /// The search field's widget id, so `/` can focus it.
 fn command_line_id() -> egui::Id {
     egui::Id::new("command-line")
+}
+
+/// One frame of the views: everything drawn, then a held speed-up released
+/// (the [`crate::app::Views`] the application calls).
+pub fn frame(
+    ui: &mut egui::Ui,
+    state: &mut State,
+    status: Option<&Status>,
+    surface: Option<&VideoSurface>,
+    actions: &mut Vec<Action>,
+) {
+    show(ui, state, status, surface, actions);
+    release_speed_hold(ui.ctx(), state, actions);
 }
 
 pub fn show(
@@ -669,53 +682,6 @@ fn notice_toast(ctx: &egui::Context, state: &State, actions: &mut Vec<Action>) {
         });
 }
 
-/// The cursor's reset key: which view's listing it is on, and whether it
-/// is still coming in. A switch of view, source or listing state restarts
-/// it at the top.
-pub fn cursor_key(state: &State) -> usize {
-    fn tag<T>(listing: &Listing<T>) -> usize {
-        match listing {
-            Listing::Idle => 0,
-            Listing::Loading => 1,
-            Listing::Ready(_) => 2,
-            Listing::Failed(_) => 3,
-        }
-    }
-    let source = usize::from(state.source() == crate::model::Source::Device) * 10;
-    match state.view {
-        View::Home if state.feed_filter == crate::model::FeedFilter::ForYou => tag(&state.for_you),
-        View::Home => tag(&state.feed) + 10 * state.feed_filter as usize,
-        View::Results => match state.search_options.kind {
-            crate::youtube::innertube::SearchKind::Videos => tag(&state.results),
-            crate::youtube::innertube::SearchKind::Channels => tag(&state.results_channels),
-            crate::youtube::innertube::SearchKind::Playlists => tag(&state.results_playlists),
-        },
-        View::Subscriptions => tag(&state.account_subscriptions) + source,
-        View::History => tag(&state.account_history) + 10 * state.history_filter as usize + source,
-        View::WatchLater => tag(&state.account_watch_later) + source,
-        View::Liked => tag(&state.liked),
-        View::Playlists => tag(&state.playlists),
-        View::Playlist => tag(&state.page_videos),
-        View::Notifications => 80 + state.alerts_visit.len().min(1),
-        View::Channel => {
-            let tab = match state.channel_tab {
-                ChannelTab::Videos => 0,
-                ChannelTab::Shorts => 10,
-                ChannelTab::Live => 20,
-                ChannelTab::Playlists => 30,
-                ChannelTab::About => 40,
-                ChannelTab::Search(_) => 50,
-            };
-            match state.channel_tab {
-                ChannelTab::Playlists => tab + tag(&state.page_playlists),
-                ChannelTab::About => tab + matches!(state.channel_about, Fetch::Ready(_)) as usize,
-                _ => tab + tag(&state.page_videos),
-            }
-        }
-        _ => 0,
-    }
-}
-
 /// How many rows the current view's list has (0 = no cursor there).
 fn cursor_count(state: &State) -> usize {
     match state.view {
@@ -936,7 +902,7 @@ fn key_pill(ui: &mut egui::Ui, palette: &theme::Palette, key: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Video;
+    use crate::model::{Listing, Video};
     use crate::storage::settings::{SidebarEntry, default_sidebar, sanitize_sidebar};
 
     fn views(state: &State) -> Vec<View> {

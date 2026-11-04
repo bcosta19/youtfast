@@ -9,11 +9,12 @@ use egui::{
 
 use super::player::{self, Mode};
 use super::{results, widgets};
+use crate::app::Action;
 use crate::app::State;
 use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use crate::appearance::icons::Icon;
 use crate::appearance::theme::{self, Palette};
-use crate::model::{Action, Channel, CommentRow, Fetch, Rating, Video};
+use crate::model::{Channel, CommentRow, Fetch, Rating, Video};
 use crate::mpv::{Status, VideoSurface};
 use crate::util;
 
@@ -1270,7 +1271,7 @@ fn comment_image(ui: &mut Ui, url: &str, locale: Locale) {
     let size = vec2(ui.available_width().min(320.0), 200.0);
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
     if ui.is_rect_visible(rect) {
-        super::images::attachment(ui, url, rect, locale);
+        crate::app::images::attachment(ui, url, rect, locale);
     }
 }
 
@@ -1903,7 +1904,7 @@ mod tests {
                 .all(|height| (height - heights[0]).abs() < 1.0),
             "comment heights drifted: {heights:?}"
         );
-        let drawn = super::super::images::drawn_count(&ctx);
+        let drawn = crate::app::images::drawn_count(&ctx);
         assert!(drawn > 0 && drawn < 10, "drawn avatars: {drawn}");
     }
 

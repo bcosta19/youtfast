@@ -5,7 +5,7 @@ use rustypipe::model::{ChannelItem, PlaylistItem, VideoItem, richtext::ToPlainte
 use rustypipe::param::search_filter::{Feature, ItemType, Length, Order, SearchFilter, UploadDate};
 
 use super::{More, channel, largest, playlist, text, video};
-use crate::backend::PageItems;
+use crate::model::PageItems;
 
 macro_rules! choices {
     ($name:ident, $default:ident => $label:literal, $($variant:ident => $text:literal),+ $(,)?) => {

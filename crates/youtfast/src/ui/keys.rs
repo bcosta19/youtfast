@@ -377,6 +377,7 @@ fn consume_once(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::Listing;
     #[test]
     fn held_tab_shortcuts_act_once_and_close_needs_a_tab() {
         // egui tells a repeat by the key still being down from an earlier frame.

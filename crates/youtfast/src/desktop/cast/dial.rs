@@ -600,7 +600,7 @@ mod tests {
             unreachable!()
         };
         let screen = launch(&endpoint, host).await.unwrap();
-        let mut lounge = crate::youtube::lounge::Session::connect(&screen)
+        let mut lounge = crate::desktop::cast::lounge::Session::connect(&screen)
             .await
             .unwrap();
         lounge.play("jNQXAC9IVRw", 0).await.unwrap();

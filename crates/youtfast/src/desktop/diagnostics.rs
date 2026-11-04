@@ -29,13 +29,91 @@ pub fn init(filter: &str) -> Result<(), log::SetLoggerError> {
     Ok(())
 }
 
+/// What a log record may show: the message itself when the application
+/// wrote it with a controlled text, a fixed category otherwise.
+pub fn redact_log(
+    record: &log::Record<'_>,
+    message: &str,
+) -> Option<std::borrow::Cow<'static, str>> {
+    let startup = format!(
+        "Starting youtfast {} on {} ({})",
+        env!("CARGO_PKG_VERSION"),
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
+    if record.target() == "youtfast" && message == startup {
+        return None;
+    }
+    if record.target().starts_with("youtfast") && controlled(message) {
+        return None;
+    }
+    let category = if record.target() == "mpv" {
+        "mpv reported a playback diagnostic"
+    } else if record.target().starts_with("youtfast") {
+        [
+            "could not save the library",
+            "could not save the settings",
+            "the backend has stopped",
+            "loading comments failed",
+            "search suggestions failed",
+            "loading the rating",
+            "loading the save menu",
+            "loading the details",
+            "loading",
+            "rating",
+            "saving",
+            "the SponsorBlock lookup stopped",
+            "the desktop notification failed",
+            "a seed's related videos failed",
+            "a seed's lookup stopped",
+            "the account has no recommendations",
+            "the account's recommendations failed",
+            "signed in",
+            "sign-in failed",
+            "renewing the session",
+            "videos will play signed out",
+            "could not start mpv",
+            "the alerts check failed",
+            "refused signed out",
+            "opening video",
+            "signed-in playback retry enabled",
+            "quality set",
+            "mpv",
+            "reading browser cookies failed",
+            "not writing rustypipe's cache",
+            "could not write rustypipe's cache",
+            "could not restrict",
+            "the library file was unreadable",
+            "the settings file was unreadable",
+            "another copy is running",
+            "no running copy answered",
+            "could not reach the running copy",
+            "could not start the video renderer",
+            "could not make the video framebuffer",
+            "video renderer left",
+            "could not read yt-dlp's answer",
+            "a feed task failed",
+            "a shorts task failed",
+            "update check failed",
+            "update installation failed",
+            "updated youtfast",
+        ]
+        .into_iter()
+        .find(|prefix| message.starts_with(prefix))
+        .unwrap_or("application diagnostic (private detail omitted)")
+    } else {
+        "dependency diagnostic (private detail omitted)"
+    };
+    Some(std::borrow::Cow::Borrowed(category))
+}
+
 fn logger(filter: &str, file: Option<Rotating>) -> env_logger::Builder {
     let mut builder = env_logger::Builder::new();
     builder.parse_filters(filter);
     builder.target(env_logger::Target::Pipe(Box::new(Output { file })));
     builder.format(|out, record| {
         let raw = record.args().to_string();
-        let message = crate::redact_log(record, &raw).map_or(raw, |redacted| redacted.into_owned());
+        let message = redact_log(record, &raw).map_or(raw, |redacted| redacted.into_owned());
         writeln!(
             out,
             "[{} {} {}] {}",

@@ -8,9 +8,10 @@ use crate::appearance::i18n::{format as trf, gettext as tr};
 use egui::{Align, Layout, RichText, Ui};
 
 use super::widgets;
+use crate::app::Action;
 use crate::app::State;
 use crate::appearance::theme;
-use crate::model::{Action, Listing, Video};
+use crate::model::{Listing, Video};
 
 /// A page's central panel with DESIGN.md's padding: 24 px at the sides,
 /// 16 px at the top.
@@ -526,7 +527,7 @@ mod tests {
                     previous = rects;
                 }
                 assert_eq!(
-                    super::super::images::drawn_count(&ctx),
+                    crate::app::images::drawn_count(&ctx),
                     0,
                     "placeholders must not request real thumbnails"
                 );
@@ -811,7 +812,7 @@ mod tests {
             },
         );
         output.textures_delta.clear();
-        let drawn = super::super::images::drawn_count(&ctx);
+        let drawn = crate::app::images::drawn_count(&ctx);
         assert!(drawn > 0 && drawn < 10, "drawn thumbnails: {drawn}");
     }
 

@@ -132,7 +132,7 @@ pub(super) fn seek_preview(
         ))
         .show(ui.ctx(), |ui| {
             ui.add(
-                super::images::remote(ui, &url)
+                crate::app::images::remote(ui, &url)
                     .uv(uv)
                     .fit_to_exact_size(size)
                     .corner_radius(egui::CornerRadius::same(6)),

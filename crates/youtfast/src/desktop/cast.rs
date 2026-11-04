@@ -19,6 +19,7 @@ const START_DEADLINE: Duration = Duration::from_secs(150);
 const CONFIRM_WAIT: Duration = Duration::from_secs(60);
 
 mod dial;
+pub mod lounge;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Protocol {
@@ -256,7 +257,7 @@ async fn execute(program: &Path, request: Request) -> Reply {
 async fn execute_with_session(
     program: &Path,
     request: Request,
-    lounge: &mut Option<(Device, crate::youtube::lounge::Session)>,
+    lounge: &mut Option<(Device, lounge::Session)>,
     native_discovery: bool,
 ) -> Reply {
     match request {
@@ -332,7 +333,7 @@ async fn execute_with_session(
             Reply::Devices(dial::find(host).await.map(|device| vec![device]))
         }
         Request::Link(code) => Reply::Devices(
-            tokio::time::timeout(DEADLINE, crate::youtube::lounge::link(&code))
+            tokio::time::timeout(DEADLINE, lounge::link(&code))
                 .await
                 .unwrap_or(Err(Error::TimedOut))
                 .map(|(screen, name)| {
@@ -420,21 +421,21 @@ async fn execute_with_session(
 
 /// Joins a YouTube app already on screen, so the TV keeps what it shows;
 /// otherwise (or when that screen refuses a session) launches it fresh.
-async fn lounge_session(device: &Device) -> Result<crate::youtube::lounge::Session, Error> {
+async fn lounge_session(device: &Device) -> Result<lounge::Session, Error> {
     let endpoint = match &device.protocol {
         Protocol::Linked { screen } => {
-            return crate::youtube::lounge::Session::connect(screen).await;
+            return lounge::Session::connect(screen).await;
         }
         Protocol::YouTube { endpoint } => endpoint,
         Protocol::GoogleCast => return Err(Error::InvalidRequest),
     };
     if let Some(screen) = dial::running_screen(endpoint, device.host).await?
-        && let Ok(session) = crate::youtube::lounge::Session::connect(&screen).await
+        && let Ok(session) = lounge::Session::connect(&screen).await
     {
         return Ok(session);
     }
     let screen = dial::launch(endpoint, device.host).await?;
-    crate::youtube::lounge::Session::connect(&screen).await
+    lounge::Session::connect(&screen).await
 }
 
 /// The playing position of the requested video, if the TV reports one.
@@ -701,7 +702,7 @@ fn confirmed(json: &[u8], video: &str) -> Result<bool, Error> {
     }
     let info: Info = serde_json::from_slice(json).map_err(|_| Error::InvalidResponse)?;
     let same = info.content_id.as_deref().is_some_and(|id| {
-        id == video || crate::youtube::ytdlp::video_id_from_link(id).as_deref() == Some(video)
+        id == video || crate::links::video_id_from_link(id).as_deref() == Some(video)
     });
     Ok(same && info.player_state.as_deref() == Some("PLAYING"))
 }

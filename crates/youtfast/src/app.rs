@@ -8,21 +8,27 @@ use eframe::glow;
 use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 
 use crate::appearance::theme::{self, Palette};
-use crate::backend::{
-    Backend, Command, CommentsKey, Event, PageItems, Payload, Request, SignInMethod, Slot,
-};
+use crate::backend::{Backend, Command, CommentsKey, Event, Payload, Request, SignInMethod, Slot};
 use crate::desktop::instance::{self, Queue as RemoteQueue};
 use crate::model::{
-    AccountSource, Action, Channel, ChannelAbout, ChannelHeader, ChannelTab, CommentRow, Details,
-    FeedFilter, Fetch, HistoryRow, Listing, PlaylistSummary, Quality, Rating, Resolution, Results,
-    SaveTarget, Segment, Source, Video, View,
+    AccountSource, Channel, ChannelAbout, ChannelHeader, ChannelTab, CommentRow, Details,
+    FeedFilter, Fetch, HistoryRow, Listing, PageItems, PlaylistSummary, Quality, Rating,
+    Resolution, Results, SaveTarget, Segment, Source, Video, View,
 };
 use crate::mpv::{self, Mpv, NativeDisplay, VideoSurface};
 use crate::storage::library::{Account, Import, Library};
 use crate::storage::paths::Dirs;
 use crate::storage::settings::{Settings, ThemeChoice};
 use crate::youtube::innertube;
-use crate::{logic::alerts, storage::account, ui, util, youtube::ytdlp};
+use crate::{logic::alerts, storage::account, util, youtube::ytdlp};
+
+pub use action::Action;
+
+/// Draws one frame of the views and collects the actions they push: the
+/// interface's `ui::frame`. The application calls it without depending on
+/// the views, which depend on it.
+pub type Views =
+    fn(&mut egui::Ui, &mut State, Option<&mpv::Status>, Option<&VideoSurface>, &mut Vec<Action>);
 
 /// The signed-in account, as the interface shows it.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -652,12 +658,13 @@ pub struct App {
     /// What later launches ask the running copy, drained each frame.
     remote: RemoteQueue,
     /// The desktop's media controls.
-    media: crate::desktop::now_playing::MediaControls,
+    media: now_playing::MediaControls,
     /// The installed fonts for other scripts, until they are in.
     fonts: Option<theme::SystemFonts>,
     /// Held so the instance lock and channel outlive the app; the app
     /// creator closure is dropped once it has run.
     _instance: std::sync::Arc<instance::Guard>,
+    views: Views,
 }
 
 impl App {
@@ -667,15 +674,16 @@ impl App {
         open: Option<String>,
         guard: std::sync::Arc<instance::Guard>,
         fonts: theme::SystemFonts,
+        views: Views,
     ) -> anyhow::Result<Self> {
         let ctx = &cc.egui_ctx;
         guard.set_context(ctx);
         let fonts = (!fonts.install(ctx)).then_some(fonts);
         egui_extras::install_image_loaders(ctx);
-        ui::images::install_animation_loader(ctx);
+        images::install_animation_loader(ctx);
         fastframe_icons::install::<crate::appearance::icons::Icon>(ctx);
         let dirs = Dirs::new().context("could not make the data folders")?;
-        ui::images::init(dirs.cache.join("thumbnails"));
+        images::init(dirs.cache.join("thumbnails"));
         let backend =
             Backend::start(ctx.clone(), dirs.clone()).context("could not start the backend")?;
 
@@ -774,9 +782,10 @@ impl App {
             query_changed: None,
             captions_pending: false,
             remote: guard.commands(),
-            media: crate::desktop::now_playing::MediaControls::start(ctx),
+            media: now_playing::MediaControls::start(ctx),
             fonts,
             _instance: guard,
+            views,
         };
         app.set_alerts_timer();
         app.refresh_theme_list();
@@ -923,7 +932,7 @@ impl App {
             Event::SignedOut => self.on_signed_out(),
             Event::CheckAlerts => self.check_alerts(),
             Event::Thumbnail { url, result } => {
-                ui::images::completed(self.backend.context(), &url, result)
+                images::completed(self.backend.context(), &url, result)
             }
             Event::Suggestions { query, items } => {
                 if query == self.state.query.trim() {
@@ -955,12 +964,12 @@ impl App {
                 if text.is_empty() {
                     return;
                 }
-                if let Some(id) = ytdlp::video_id_from_link(text) {
+                if let Some(id) = crate::links::video_id_from_link(text) {
                     self.state.suggestions.clear();
                     self.open(Video::from_id(id));
                     return;
                 }
-                if let Some(channel) = ytdlp::channel_from_link(text) {
+                if let Some(channel) = crate::links::channel_from_link(text) {
                     self.state.suggestions.clear();
                     self.open_page(ctx, View::Channel, Page::Channel(channel));
                     return;
@@ -1527,12 +1536,12 @@ impl eframe::App for App {
         self.state.system_font_missing = theme::system_face_missing();
         self.poll();
         self.poll_cast(ctx);
-        ui::images::forget_unseen(ctx);
-        for (url, manual) in ui::images::drain_expired() {
+        images::forget_unseen(ctx);
+        for (url, manual) in images::drain_expired() {
             self.refresh_comment_image(url, manual);
         }
         // Thumbnails drawn from the network go to the disk cache.
-        let wanted = ui::images::drain_wanted();
+        let wanted = images::drain_wanted();
         if !wanted.is_empty() {
             self.backend.send(Command::CacheThumbnails(wanted));
         }
@@ -1556,17 +1565,15 @@ impl eframe::App for App {
         // What the desktop's media controls asked for, and what they show.
         for effect in self.media.commands(&self.state) {
             match effect {
-                crate::desktop::now_playing::Effect::Action(action) => self.apply(ctx, *action),
-                crate::desktop::now_playing::Effect::Raise => focus(ctx),
-                crate::desktop::now_playing::Effect::Quit => {
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Close)
-                }
+                now_playing::Effect::Action(action) => self.apply(ctx, *action),
+                now_playing::Effect::Raise => focus(ctx),
+                now_playing::Effect::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
             }
         }
         self.media
             .update(&self.state, self.player.as_ref().map(Mpv::status));
         // The keyboard cursor restarts at the top of a changed list.
-        let key = (self.state.view, ui::cursor_key(&self.state));
+        let key = (self.state.view, navigation::cursor_key(&self.state));
         if key != self.cursor_key {
             self.state.cursor = 0;
             self.cursor_key = key;
@@ -1590,14 +1597,13 @@ impl eframe::App for App {
         self.state.can_go_back = !self.back.is_empty();
         self.state.can_go_forward = !self.forward.is_empty();
         let status = self.player.as_ref().map(Mpv::status);
-        ui::show(
+        (self.views)(
             ui,
             &mut self.state,
             status,
             self.surface.as_ref(),
             &mut actions,
         );
-        ui::release_speed_hold(ui.ctx(), &self.state, &mut actions);
         self.theme_transition.paint(ui.ctx());
         let ctx = ui.ctx().clone();
         for action in actions {
@@ -1651,11 +1657,14 @@ fn native_display(cc: &eframe::CreationContext<'_>) -> NativeDisplay {
 }
 
 mod accounts;
+mod action;
 pub mod cast;
 mod history_sync;
+pub mod images;
 mod loading;
 mod navigation;
 mod notifications;
+pub mod now_playing;
 pub mod player;
 mod themes;
 mod video_actions;

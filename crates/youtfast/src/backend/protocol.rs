@@ -7,7 +7,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::model::{
-    Channel, ChannelAbout, ChannelHeader, HistoryRow, PlaylistSummary, Rating, SaveTarget, Video,
+    Channel, ChannelAbout, ChannelHeader, HistoryRow, PageItems, PlaylistSummary, Rating,
+    SaveTarget, Video,
 };
 use crate::storage::library::{Account, Import, Library};
 use crate::storage::settings::Settings;
@@ -164,14 +165,6 @@ pub enum Payload {
         items: PageItems,
         more: Option<crate::youtube::innertube::More>,
     },
-}
-
-/// What a paged list's rows are.
-pub enum PageItems {
-    Videos(Vec<Video>),
-    Channels(Vec<Channel>),
-    History(Vec<HistoryRow>),
-    Playlists(Vec<PlaylistSummary>),
 }
 
 /// Which comment list a [`Command::LoadComments`] fills.
@@ -441,10 +434,10 @@ impl Event {
         match &mut self {
             Self::PlayingPlaylist {
                 result: Err(error), ..
-            } => *error = crate::safe_error(error),
+            } => *error = crate::privacy::safe_error(error),
             Self::Extras {
                 result: Err(error), ..
-            } => *error = crate::safe_error(error),
+            } => *error = crate::privacy::safe_error(error),
             Self::Loaded {
                 result: Err(error), ..
             }
@@ -461,10 +454,10 @@ impl Event {
             | Self::SaveFailed { error, .. }
             | Self::SignInFailed(error)
             | Self::SessionExpired(error)
-            | Self::SessionUnavailable { error, .. } => *error = crate::safe_error(error),
+            | Self::SessionUnavailable { error, .. } => *error = crate::privacy::safe_error(error),
             Self::Details { result, .. } => {
                 if let Err(error) = result.as_mut() {
-                    *error = crate::safe_error(error);
+                    *error = crate::privacy::safe_error(error);
                 }
             }
             _ => {}

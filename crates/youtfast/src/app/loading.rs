@@ -1132,7 +1132,8 @@ mod tests {
 
     #[test]
     fn channel_header_completes_a_channel_opened_from_a_link() {
-        let linked = ytdlp::channel_from_link("https://www.youtube.com/@BlenderStudio").unwrap();
+        let linked =
+            crate::links::channel_from_link("https://www.youtube.com/@BlenderStudio").unwrap();
         let mut state = State {
             view: View::Channel,
             page: Some(Page::Channel(linked)),
@@ -1168,7 +1169,7 @@ mod tests {
             "https://youtube.com/c/ExampleChannel",
             "https://youtube.com/user/ExampleChannel",
         ] {
-            let linked = ytdlp::channel_from_link(link).unwrap();
+            let linked = crate::links::channel_from_link(link).unwrap();
             let mut state = State {
                 view: View::Channel,
                 page: Some(Page::Channel(linked.clone())),

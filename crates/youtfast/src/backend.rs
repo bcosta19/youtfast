@@ -14,7 +14,7 @@ use rustypipe::client::RustyPipe;
 use tokio::sync::mpsc as async_mpsc;
 use tokio::sync::watch;
 
-use crate::model::{AccountSource, Video};
+use crate::model::{AccountSource, PageItems, Video};
 use crate::storage::library::Account;
 use crate::storage::library::Library;
 use crate::storage::paths::Dirs;
@@ -22,7 +22,7 @@ use crate::storage::settings::Settings;
 use crate::{storage::account, storage::takeout, youtube::innertube};
 
 mod protocol;
-pub use protocol::{Command, CommentsKey, Event, PageItems, Payload, Request, SignInMethod, Slot};
+pub use protocol::{Command, CommentsKey, Event, Payload, Request, SignInMethod, Slot};
 
 #[derive(Default)]
 struct SaveGate(std::sync::Mutex<bool>);

@@ -6,11 +6,10 @@ use std::time::{Duration, Instant};
 
 use fastframe_now_playing as np;
 
+use crate::app::Action;
 use crate::app::State;
 use crate::app::player::{next_video, previous_video};
-use crate::model::Action;
 use crate::mpv::Status;
-use crate::youtube::ytdlp;
 
 /// A desktop command mapped onto what the app does with it.
 #[derive(Debug, PartialEq)]
@@ -153,7 +152,7 @@ fn effect(command: &np::Command, state: &State) -> Option<Effect> {
             }
         }
         np::Command::SetVolume(volume) => Action::SetVolume(volume.clamp(0.0, 1.0) * 100.0),
-        np::Command::OpenUri(uri) if ytdlp::video_id_from_link(uri).is_some() => {
+        np::Command::OpenUri(uri) if crate::links::video_id_from_link(uri).is_some() => {
             Action::Search(uri.clone())
         }
         np::Command::Raise => return Some(Effect::Raise),
