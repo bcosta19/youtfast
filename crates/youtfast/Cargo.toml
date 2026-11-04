@@ -19,6 +19,9 @@ path = "src/main.rs"
 demo = []
 
 [dependencies]
+youtfast-core.workspace = true
+youtfast-mpv.workspace = true
+youtfast-i18n.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 serde.workspace = true
@@ -75,6 +78,3 @@ windows-native-keyring-store.workspace = true
 # The fork's `client::regression` hooks, for the response-format regression
 # tests (tests/youtube_api.rs). Only test builds enable it.
 rustypipe = { workspace = true, features = ["regression"] }
-
-[build-dependencies]
-fastframe-i18n = { workspace = true, features = ["build"] }

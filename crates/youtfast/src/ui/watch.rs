@@ -11,12 +11,12 @@ use super::player::{self, Mode};
 use super::{results, widgets};
 use crate::app::Action;
 use crate::app::State;
-use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use crate::appearance::icons::Icon;
 use crate::appearance::theme::{self, Palette};
-use crate::model::{Channel, CommentRow, Fetch, Rating, Video};
-use crate::mpv::{Status, VideoSurface};
-use crate::util;
+use youtfast_core::model::{Channel, CommentRow, Fetch, Rating, Video};
+use youtfast_core::util;
+use youtfast_i18n::{Locale, format as trf, gettext as tr};
+use youtfast_mpv::{Status, VideoSurface};
 
 /// The "Up next" pane's width beside the video in a wide window.
 const SIDEBAR_WIDTH: f32 = 380.0;
@@ -514,7 +514,7 @@ fn channel_line(
     if let Fetch::Failed(error) = &state.details {
         ui.horizontal(|ui| {
             ui.label(
-                RichText::new(crate::appearance::i18n::message(locale, error))
+                RichText::new(youtfast_i18n::message(locale, error))
                     .font(theme::regular(14.0))
                     .color(palette.red),
             );
@@ -876,7 +876,7 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
                 Fetch::Loading => widgets::loading(ui, palette, "playlists", locale),
                 Fetch::Failed(error) => {
                     ui.label(
-                        RichText::new(crate::appearance::i18n::message(locale, error))
+                        RichText::new(youtfast_i18n::message(locale, error))
                             .font(theme::regular(14.0))
                             .color(palette.red),
                     );
@@ -1078,7 +1078,7 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     Fetch::Loading => widgets::loading(ui, &state.palette, "comments", locale),
                     Fetch::Failed(error) => {
                         ui.label(
-                            RichText::new(crate::appearance::i18n::message(locale, error))
+                            RichText::new(youtfast_i18n::message(locale, error))
                                 .font(theme::regular(14.0))
                                 .color(state.palette.red),
                         );
@@ -1598,7 +1598,7 @@ fn related(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Span;
+    use youtfast_core::model::Span;
 
     #[test]
     fn short_actions_scroll_to_details_without_switching_video_in_a_small_window() {
@@ -1609,7 +1609,7 @@ mod tests {
         video.title = "Um título longo que precisa deixar o vídeo visível ".repeat(8);
         video.channel = Some("Um canal com um nome muito longo para esta janela".into());
         let mut state = State {
-            view: crate::model::View::Watch,
+            view: youtfast_core::model::View::Watch,
             watching: Some(video.clone()),
             up_next: vec![video.clone(), video.clone()],
             ..State::default()
@@ -1727,11 +1727,11 @@ mod tests {
                 .map(|index| Video::from_id(format!("synthetic-{index}")))
                 .collect();
             let mut state = State {
-                view: crate::model::View::Watch,
+                view: youtfast_core::model::View::Watch,
                 watching: Some(videos[0].clone()),
                 queue: videos[1..].to_vec(),
                 up_next: videos.clone(),
-                details: Fetch::Ready(crate::model::Details {
+                details: Fetch::Ready(youtfast_core::model::Details {
                     related: videos[1..].to_vec(),
                     ..Default::default()
                 }),
@@ -1781,9 +1781,9 @@ mod tests {
             let ctx = egui::Context::default();
             crate::appearance::theme::install_fonts(&ctx);
             let mut state = State {
-                view: crate::model::View::Watch,
+                view: youtfast_core::model::View::Watch,
                 watching: Some(Video::from_id("synthetic".into())),
-                details: Fetch::Ready(crate::model::Details {
+                details: Fetch::Ready(youtfast_core::model::Details {
                     comment_count: Some(30),
                     ..Default::default()
                 }),
@@ -1923,9 +1923,9 @@ mod tests {
             top.text.clear();
             top.image = Some("https://example.invalid/top.gif".into());
             let mut state = State {
-                view: crate::model::View::Watch,
+                view: youtfast_core::model::View::Watch,
                 watching: Some(Video::from_id("aaaaaaaaaaa".to_owned())),
-                details: Fetch::Ready(crate::model::Details {
+                details: Fetch::Ready(youtfast_core::model::Details {
                     comments_token: Some("t".to_owned()),
                     comment_count: Some(1),
                     ..Default::default()

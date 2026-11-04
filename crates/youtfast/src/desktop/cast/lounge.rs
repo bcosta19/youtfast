@@ -26,7 +26,11 @@ impl Status {
         self.video.as_deref() == Some(video) && self.state == Some(1)
     }
 
-    fn sponsor_target(&self, video: &str, segments: &[crate::model::Segment]) -> Option<f64> {
+    fn sponsor_target(
+        &self,
+        video: &str,
+        segments: &[youtfast_core::model::Segment],
+    ) -> Option<f64> {
         if self.video.as_deref() != Some(video) || self.state != Some(1) || self.ad {
             return None;
         }
@@ -237,7 +241,7 @@ impl Session {
     pub async fn skip_sponsor(
         &mut self,
         video: &str,
-        segments: &[crate::model::Segment],
+        segments: &[youtfast_core::model::Segment],
         enabled: &std::sync::atomic::AtomicBool,
     ) -> Result<Sponsor, Error> {
         self.status.video = None;
@@ -563,7 +567,7 @@ mod tests {
 
     #[test]
     fn sponsor_target_requires_content_playback_and_suppresses_advertisements() {
-        let segment = crate::model::Segment {
+        let segment = youtfast_core::model::Segment {
             category: "sponsor".into(),
             start: 10.0,
             end: 30.0,

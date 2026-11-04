@@ -5,7 +5,7 @@ use rustypipe::model::{ChannelItem, PlaylistItem, VideoItem, richtext::ToPlainte
 use rustypipe::param::search_filter::{Feature, ItemType, Length, Order, SearchFilter, UploadDate};
 
 use super::{More, channel, largest, playlist, text, video};
-use crate::model::PageItems;
+use youtfast_core::model::PageItems;
 
 macro_rules! choices {
     ($name:ident, $default:ident => $label:literal, $($variant:ident => $text:literal),+ $(,)?) => {
@@ -135,7 +135,14 @@ pub struct PlaylistDetails {
 pub async fn playlist_details(
     rp: &RustyPipe,
     id: &str,
-) -> Result<(PlaylistDetails, Vec<crate::model::Video>, Option<More>), String> {
+) -> Result<
+    (
+        PlaylistDetails,
+        Vec<youtfast_core::model::Video>,
+        Option<More>,
+    ),
+    String,
+> {
     match rp.query().playlist(id).await {
         Ok(page) => {
             let details = PlaylistDetails {

@@ -1,6 +1,6 @@
 //! What the views ask the application to do.
 
-use crate::model::{Channel, ChannelTab, FeedFilter, Quality, Rating, Source, Video, View};
+use youtfast_core::model::{Channel, ChannelTab, FeedFilter, Quality, Rating, Source, Video, View};
 
 /// What a view asks the app to do. Views push these while drawing; the app
 /// applies them after the frame.
@@ -68,7 +68,7 @@ pub enum Action {
     ToggleAudioOnly,
     SetQuality(Quality),
     SetTheme(crate::storage::settings::ThemeChoice),
-    SetLanguage(crate::appearance::i18n::Locale),
+    SetLanguage(youtfast_i18n::Locale),
     /// Draw the interface with this face, now.
     SetInterfaceFont(crate::appearance::theme::InterfaceFont),
     /// Open a prefilled GitHub issue about the system font, in the browser.

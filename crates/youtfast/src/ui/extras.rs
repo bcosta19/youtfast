@@ -1,7 +1,7 @@
 //! Optional transcript and storyboard views, sharing the bounded image cache.
 use super::*;
-use crate::appearance::i18n::{Locale, gettext as tr};
-use crate::util;
+use youtfast_core::util;
+use youtfast_i18n::{Locale, gettext as tr};
 
 pub(super) fn transcript(
     ui: &mut egui::Ui,
@@ -51,7 +51,7 @@ pub(super) fn transcript(
             );
             match &extras.transcript {
                 Err(error) => {
-                    ui.label(crate::appearance::i18n::message(locale, error));
+                    ui.label(youtfast_i18n::message(locale, error));
                     if ui.button(tr(locale, "Retry")).clicked() {
                         actions.push(Action::LoadExtras);
                     }

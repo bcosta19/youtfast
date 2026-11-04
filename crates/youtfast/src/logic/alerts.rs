@@ -5,8 +5,8 @@
 //! YouTube's own notifications have no API; this checks subscriptions on
 //! a timer instead.
 
-use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
-use crate::model::Video;
+use youtfast_core::model::Video;
+use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 /// At most this many unseen uploads are kept.
 const ALERT_LIMIT: usize = 100;

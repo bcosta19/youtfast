@@ -7,10 +7,10 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
-use crate::appearance::i18n::{Locale, gettext as tr};
 use egui::{ColorImage, Context, Id, Rect, TextureHandle, Ui};
 use image::metadata::LoopCount;
 use image::{AnimationDecoder, ImageDecoder};
+use youtfast_i18n::{Locale, gettext as tr};
 
 const GLOBAL_BYTES: usize = 64 * 1024 * 1024;
 const CACHE_BYTES: usize = 8 * 1024 * 1024;

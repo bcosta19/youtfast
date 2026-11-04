@@ -489,8 +489,8 @@ impl App {
     pub(super) fn suggest_tick(&mut self, ctx: &egui::Context) {
         let query = self.state.query.trim().to_owned();
         if query.is_empty()
-            || crate::links::video_id_from_link(&query).is_some()
-            || crate::links::channel_from_link(&query).is_some()
+            || youtfast_core::links::video_id_from_link(&query).is_some()
+            || youtfast_core::links::channel_from_link(&query).is_some()
         {
             self.state.suggestions.clear();
             self.query_changed = None;

@@ -3,8 +3,8 @@
 
 use crate::app::Action;
 use crate::app::State;
-use crate::appearance::i18n::{gettext as tr, message};
 use crate::desktop::cast::{Action as CastAction, Control};
+use youtfast_i18n::{gettext as tr, message};
 
 pub fn show(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
     let mut open = state.cast.open;
@@ -154,9 +154,9 @@ fn body(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::appearance::i18n::Locale;
     use crate::desktop::cast::{Device, Error, Reply, Request};
-    use crate::model::Video;
+    use youtfast_core::model::Video;
+    use youtfast_i18n::Locale;
 
     fn device() -> Device {
         Device {

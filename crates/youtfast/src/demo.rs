@@ -2,12 +2,12 @@
 //! media controls or single-instance channel are created here.
 use crate::{
     app::{Action, Page, State, apply_sidebar_action},
-    appearance::i18n::{Locale, gettext as tr},
     appearance::theme,
-    model::*,
-    mpv::Status,
     ui,
 };
+use youtfast_core::model::*;
+use youtfast_i18n::{Locale, gettext as tr};
+use youtfast_mpv::Status;
 
 pub fn run(cli: &crate::Cli) -> eframe::Result {
     let size = cli
@@ -115,7 +115,9 @@ pub(crate) fn fixture(page: &str) -> State {
     };
     state.library.subscriptions.push(channel.clone());
     for v in videos.iter().take(8) {
-        state.library.record_watch(v.clone(), crate::util::now());
+        state
+            .library
+            .record_watch(v.clone(), youtfast_core::util::now());
     }
     state.library.watch_later = videos.iter().take(3).cloned().collect();
     state.channel_header = Some(ChannelHeader {

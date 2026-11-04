@@ -8,14 +8,9 @@ mod backend;
 #[cfg(feature = "demo")]
 mod demo;
 mod desktop;
-mod links;
 mod logic;
-mod model;
-mod mpv;
-mod privacy;
 mod storage;
 mod ui;
-mod util;
 mod youtube;
 
 use appearance::theme;
@@ -142,7 +137,7 @@ fn main() -> eframe::Result {
         rfd::MessageDialog::new()
             .set_level(rfd::MessageLevel::Error)
             .set_title("YouTFast")
-            .set_description(appearance::i18n::message(saved_language(), NEEDS_OPENGL))
+            .set_description(youtfast_i18n::message(saved_language(), NEEDS_OPENGL))
             .set_buttons(rfd::MessageButtons::Ok)
             .show();
     }
@@ -171,7 +166,7 @@ fn saved_settings() -> Option<storage::settings::Settings> {
 
 /// The interface language for a message shown before any window: English
 /// when the settings cannot be read.
-fn saved_language() -> appearance::i18n::Locale {
+fn saved_language() -> youtfast_i18n::Locale {
     saved_settings().unwrap_or_default().language
 }
 
@@ -221,7 +216,7 @@ fn render_mark(mark: &[u8], size: u32) -> Option<Vec<u8>> {
 mod tests {
     use super::*;
     use crate::desktop::diagnostics::redact_log;
-    use crate::privacy::{UNTRUSTED_CERTIFICATE, safe_error};
+    use youtfast_core::privacy::{UNTRUSTED_CERTIFICATE, safe_error};
 
     #[test]
     fn controlled_keyring_errors_keep_their_recovery_instructions() {
@@ -316,11 +311,11 @@ mod tests {
             UNTRUSTED_CERTIFICATE
         );
         for message in [UNTRUSTED_CERTIFICATE, NEEDS_OPENGL] {
-            for locale in appearance::i18n::Locale::ALL {
-                let translated = appearance::i18n::message(*locale, message);
+            for locale in youtfast_i18n::Locale::ALL {
+                let translated = youtfast_i18n::message(*locale, message);
                 assert_eq!(
                     translated == message,
-                    *locale == appearance::i18n::Locale::English,
+                    *locale == youtfast_i18n::Locale::English,
                     "{locale:?}"
                 );
             }

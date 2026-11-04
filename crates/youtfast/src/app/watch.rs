@@ -554,7 +554,7 @@ impl App {
         let state = &self.state;
         let account = state.source() == Source::Account;
         match state.view {
-            View::Home if state.feed_filter == crate::model::FeedFilter::ForYou => {
+            View::Home if state.feed_filter == youtfast_core::model::FeedFilter::ForYou => {
                 state.for_you.items().to_vec()
             }
             View::Home => state.feed.items().to_vec(),
@@ -612,9 +612,9 @@ impl App {
         self.state.audio_only = audio_only;
         let locale = self.state.settings.language;
         let osd = if audio_only {
-            crate::appearance::i18n::gettext(locale, "Audio only")
+            youtfast_i18n::gettext(locale, "Audio only")
         } else {
-            crate::appearance::i18n::gettext(locale, "Video mode")
+            youtfast_i18n::gettext(locale, "Video mode")
         };
         self.show_osd(osd.into_owned());
         let Some(player) = &mut self.player else {

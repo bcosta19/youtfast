@@ -10,17 +10,18 @@ use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 use crate::appearance::theme::{self, Palette};
 use crate::backend::{Backend, Command, CommentsKey, Event, Payload, Request, SignInMethod, Slot};
 use crate::desktop::instance::{self, Queue as RemoteQueue};
-use crate::model::{
-    AccountSource, Channel, ChannelAbout, ChannelHeader, ChannelTab, CommentRow, Details,
-    FeedFilter, Fetch, HistoryRow, Listing, PageItems, PlaylistSummary, Quality, Rating,
-    Resolution, Results, SaveTarget, Segment, Source, Video, View,
-};
-use crate::mpv::{self, Mpv, NativeDisplay, VideoSurface};
 use crate::storage::library::{Account, Import, Library};
 use crate::storage::paths::Dirs;
 use crate::storage::settings::{Settings, ThemeChoice};
 use crate::youtube::innertube;
-use crate::{logic::alerts, storage::account, util, youtube::ytdlp};
+use crate::{logic::alerts, storage::account, youtube::ytdlp};
+use youtfast_core::model::{
+    AccountSource, Channel, ChannelAbout, ChannelHeader, ChannelTab, CommentRow, Details,
+    FeedFilter, Fetch, HistoryRow, Listing, PageItems, PlaylistSummary, Quality, Rating,
+    Resolution, Results, SaveTarget, Segment, Source, Video, View,
+};
+use youtfast_core::util;
+use youtfast_mpv::{self as mpv, Mpv, NativeDisplay, VideoSurface};
 
 pub use action::Action;
 
@@ -964,12 +965,12 @@ impl App {
                 if text.is_empty() {
                     return;
                 }
-                if let Some(id) = crate::links::video_id_from_link(text) {
+                if let Some(id) = youtfast_core::links::video_id_from_link(text) {
                     self.state.suggestions.clear();
                     self.open(Video::from_id(id));
                     return;
                 }
-                if let Some(channel) = crate::links::channel_from_link(text) {
+                if let Some(channel) = youtfast_core::links::channel_from_link(text) {
                     self.state.suggestions.clear();
                     self.open_page(ctx, View::Channel, Page::Channel(channel));
                     return;
@@ -1242,12 +1243,12 @@ impl App {
             }
             Action::ImportTakeout => {
                 let picked = rfd::AsyncFileDialog::new()
-                    .set_title(crate::appearance::i18n::gettext(
+                    .set_title(youtfast_i18n::gettext(
                         self.state.settings.language,
                         "Import from Google Takeout",
                     ))
                     .add_filter(
-                        crate::appearance::i18n::gettext(
+                        youtfast_i18n::gettext(
                             self.state.settings.language,
                             "Takeout subscriptions or history",
                         ),

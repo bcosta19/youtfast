@@ -6514,7 +6514,38 @@ dependencies = [
  "ureq",
  "url",
  "windows-native-keyring-store",
+ "youtfast-core",
+ "youtfast-i18n",
+ "youtfast-mpv",
  "zbus-secret-service-keyring-store",
+]
+
+[[package]]
+name = "youtfast-core"
+version = "0.5.0"
+dependencies = [
+ "jiff",
+ "serde",
+ "youtfast-i18n",
+]
+
+[[package]]
+name = "youtfast-i18n"
+version = "0.5.0"
+dependencies = [
+ "fastframe-i18n",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "youtfast-mpv"
+version = "0.5.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "log",
+ "serde_json",
 ]
 
 [[package]]

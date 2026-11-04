@@ -377,7 +377,7 @@ fn consume_once(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Listing;
+    use youtfast_core::model::Listing;
     #[test]
     fn held_tab_shortcuts_act_once_and_close_needs_a_tab() {
         // egui tells a repeat by the key still being down from an earlier frame.
@@ -413,10 +413,10 @@ mod tests {
             let mut state = State::default();
             state
                 .video_tabs
-                .open(crate::model::Video::from_id("a".into()));
+                .open(youtfast_core::model::Video::from_id("a".into()));
             state
                 .video_tabs
-                .add(crate::model::Video::from_id("b".into()));
+                .add(youtfast_core::model::Video::from_id("b".into()));
             let ctx = egui::Context::default();
             assert_eq!(press(&ctx, &mut state, key, modifiers).len(), 1);
             assert!(
@@ -449,13 +449,13 @@ mod tests {
             let mut state = State::default();
             state
                 .video_tabs
-                .open(crate::model::Video::from_id("a".into()));
+                .open(youtfast_core::model::Video::from_id("a".into()));
             state
                 .video_tabs
-                .add(crate::model::Video::from_id("b".into()));
+                .add(youtfast_core::model::Video::from_id("b".into()));
             state
                 .video_tabs
-                .add(crate::model::Video::from_id("c".into()));
+                .add(youtfast_core::model::Video::from_id("c".into()));
             let mut actions = Vec::new();
             let mut out = ctx.run_ui(
                 egui::RawInput {
@@ -489,7 +489,7 @@ mod tests {
             }
             let mut state = State {
                 view: View::Watch,
-                watching: Some(crate::model::Video::from_id("aaaaaaaaaaa".into())),
+                watching: Some(youtfast_core::model::Video::from_id("aaaaaaaaaaa".into())),
                 ..State::default()
             };
             let mut actions = Vec::new();
@@ -599,7 +599,7 @@ mod tests {
     #[test]
     fn mini_player_controls_do_not_steal_the_lists_k_binding() {
         let mut state = State {
-            watching: Some(crate::model::Video::from_id("aaaaaaaaaaa".into())),
+            watching: Some(youtfast_core::model::Video::from_id("aaaaaaaaaaa".into())),
             ..State::default()
         };
         assert_eq!(
@@ -615,7 +615,7 @@ mod tests {
     #[test]
     fn shift_a_toggles_audio_only_while_playing() {
         let mut state = State {
-            watching: Some(crate::model::Video::from_id("aaaaaaaaaaa".into())),
+            watching: Some(youtfast_core::model::Video::from_id("aaaaaaaaaaa".into())),
             ..State::default()
         };
         assert_eq!(
@@ -626,7 +626,7 @@ mod tests {
     #[test]
     fn shift_a_does_not_also_switch_accounts_while_browsing() {
         let mut state = State {
-            watching: Some(crate::model::Video::from_id("aaaaaaaaaaa".into())),
+            watching: Some(youtfast_core::model::Video::from_id("aaaaaaaaaaa".into())),
             ..State::default()
         };
         for id in [1, 2] {
@@ -636,7 +636,7 @@ mod tests {
                 .push(crate::storage::library::Account {
                     id,
                     name: format!("account {id}"),
-                    source: crate::model::AccountSource::Browser("chromium".to_owned()),
+                    source: youtfast_core::model::AccountSource::Browser("chromium".to_owned()),
                 });
         }
         state.library.active_account = Some(1);
@@ -648,8 +648,8 @@ mod tests {
     #[test]
     fn arrow_up_and_down_request_vertical_page_scroll_while_j_and_k_move_the_cursor() {
         let videos = vec![
-            crate::model::Video::from_id("aaaaaaaaaaa".into()),
-            crate::model::Video::from_id("bbbbbbbbbbb".into()),
+            youtfast_core::model::Video::from_id("aaaaaaaaaaa".into()),
+            youtfast_core::model::Video::from_id("bbbbbbbbbbb".into()),
         ];
         let mut state = State {
             for_you: Listing::Ready(videos),

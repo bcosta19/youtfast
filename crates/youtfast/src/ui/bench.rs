@@ -17,11 +17,11 @@ use egui::vec2;
 use super::show;
 use crate::app::{AccountState, State};
 use crate::logic::history::HistoryFilter;
-use crate::model::{
-    Channel, CommentRow, Details, FeedFilter, Fetch, HistoryRow, Listing, Span, Video, View,
-};
 use crate::storage::library::Watched;
 use crate::storage::settings::HistorySync;
+use youtfast_core::model::{
+    Channel, CommentRow, Details, FeedFilter, Fetch, HistoryRow, Listing, Span, Video, View,
+};
 
 /// Counts allocations so a run can report them next to the time.
 struct Counting;
@@ -71,7 +71,7 @@ fn video(index: usize, published_at: Option<i64>) -> Video {
 
 /// `count` videos, newest first, `step` seconds apart, from now.
 fn videos(count: usize, step: i64) -> Vec<Video> {
-    let now = crate::util::now();
+    let now = youtfast_core::util::now();
     (0..count)
         .map(|index| video(index, Some(now - index as i64 * step)))
         .collect()
@@ -87,7 +87,7 @@ fn state(view: View) -> State {
 }
 
 fn history(query: &str) -> State {
-    let now = crate::util::now();
+    let now = youtfast_core::util::now();
     let mut state = state(View::History);
     state.account = AccountState::SignedIn(1);
     state.settings.history_sync = HistorySync::Merged;
@@ -160,7 +160,7 @@ fn spans(count: usize) -> Vec<Span> {
 
 fn watch() -> State {
     let mut state = state(View::Watch);
-    let watching = video(1, Some(crate::util::now() - 5 * HOUR));
+    let watching = video(1, Some(youtfast_core::util::now() - 5 * HOUR));
     let channel = Channel {
         id: "UC0000000000000000000001".to_owned(),
         name: "Channel 1".to_owned(),

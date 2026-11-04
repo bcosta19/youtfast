@@ -4,14 +4,14 @@
 //! states in its place. Also the page frame the list pages share: the
 //! page padding and the bold page title.
 
-use crate::appearance::i18n::{format as trf, gettext as tr};
 use egui::{Align, Layout, RichText, Ui};
+use youtfast_i18n::{format as trf, gettext as tr};
 
 use super::widgets;
 use crate::app::Action;
 use crate::app::State;
 use crate::appearance::theme;
-use crate::model::{Listing, Video};
+use youtfast_core::model::{Listing, Video};
 
 /// A page's central panel with DESIGN.md's padding: 24 px at the sides,
 /// 16 px at the top.
@@ -37,7 +37,7 @@ pub fn title(ui: &mut Ui, state: &State, title: &str, count: Option<usize>) {
         );
         if let Some(count) = count {
             ui.label(
-                RichText::new(crate::util::thousands(count as u64))
+                RichText::new(youtfast_core::util::thousands(count as u64))
                     .font(theme::regular(14.0))
                     .color(state.palette.secondary),
             );
@@ -314,7 +314,7 @@ pub fn loading_content(ui: &mut Ui, state: &State, what: &'static str) {
 }
 
 fn loading_placeholders(ui: &mut Ui, state: &State) -> Vec<egui::Rect> {
-    use crate::model::{ChannelTab, View};
+    use youtfast_core::model::{ChannelTab, View};
     let cards = state.view == View::Home
         || (state.view == View::Channel
             && matches!(
@@ -449,7 +449,7 @@ pub fn failed(ui: &mut Ui, state: &State, error: &str, actions: &mut Vec<Action>
 
     centered(ui, |ui| {
         ui.label(
-            RichText::new(crate::appearance::i18n::message(locale, error).as_ref())
+            RichText::new(youtfast_i18n::message(locale, error).as_ref())
                 .font(theme::regular(14.0))
                 .color(state.palette.red),
         );
@@ -482,11 +482,11 @@ mod tests {
     fn loading_placeholders_keep_stable_geometry_at_phone_and_desktop_widths() {
         for width in [480.0, 1280.0] {
             for view in [
-                crate::model::View::Home,
-                crate::model::View::Results,
-                crate::model::View::Channel,
-                crate::model::View::Subscriptions,
-                crate::model::View::Playlist,
+                youtfast_core::model::View::Home,
+                youtfast_core::model::View::Results,
+                youtfast_core::model::View::Channel,
+                youtfast_core::model::View::Subscriptions,
+                youtfast_core::model::View::Playlist,
             ] {
                 let ctx = egui::Context::default();
                 crate::appearance::theme::install_fonts(&ctx);
@@ -587,7 +587,7 @@ mod tests {
     #[test]
     fn retry_on_failed_typed_search_requests_a_refresh() {
         let mut state = State {
-            view: crate::model::View::Results,
+            view: youtfast_core::model::View::Results,
             search_query: "Rust".into(),
             ..Default::default()
         };
@@ -599,7 +599,7 @@ mod tests {
     #[test]
     fn playlist_with_metadata_exposes_play_all_as_an_action() {
         let state = State {
-            view: crate::model::View::Playlist,
+            view: youtfast_core::model::View::Playlist,
             page: Some(crate::app::Page::Playlist {
                 id: "synthetic-playlist".into(),
                 name: "Título anterior".into(),
@@ -704,14 +704,14 @@ mod tests {
             ours: false,
         };
         let mut channels = State {
-            view: crate::model::View::Results,
+            view: youtfast_core::model::View::Results,
             results_more: Some(more.clone()),
             ..Default::default()
         };
         channels.search_options.kind = crate::youtube::innertube::SearchKind::Channels;
         channels.results_channels = Listing::Ready(
             (0..60)
-                .map(|index| crate::model::Channel {
+                .map(|index| youtfast_core::model::Channel {
                     id: format!("UC{index:022}"),
                     name: format!("Canal {index}"),
                     avatar: None,
@@ -719,7 +719,7 @@ mod tests {
                 .collect(),
         );
         let playlist = State {
-            view: crate::model::View::Playlist,
+            view: youtfast_core::model::View::Playlist,
             page: Some(crate::app::Page::Playlist {
                 id: "synthetic-playlist".into(),
                 name: "Playlist sintética".into(),
@@ -736,7 +736,7 @@ mod tests {
             scroll_to_footer_and_click(&channels, width, show);
             scroll_to_footer_and_click(&playlist, width, super::super::library::page);
             let mut empty = State {
-                view: crate::model::View::Playlist,
+                view: youtfast_core::model::View::Playlist,
                 page: playlist.page.clone(),
                 page_videos: Listing::Ready(Vec::new()),
                 ..State::default()

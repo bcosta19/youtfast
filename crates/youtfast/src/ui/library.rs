@@ -3,15 +3,15 @@
 //! playlist's videos. Pages that exist both ways switch between the
 //! signed-in account and this device with chips under their title.
 
-use crate::appearance::i18n::{format as trf, gettext as tr};
 use egui::{Align2, CornerRadius, Rect, RichText, Sense, Ui, pos2, vec2};
+use youtfast_i18n::{format as trf, gettext as tr};
 
 use super::{results, widgets};
 use crate::app::Action;
 use crate::app::{AccountState, Page, State};
 use crate::appearance::theme;
-use crate::model::{Channel, FeedFilter, Fetch, Listing, Source, Video, View};
-use crate::util;
+use youtfast_core::model::{Channel, FeedFilter, Fetch, Listing, Source, Video, View};
+use youtfast_core::util;
 
 /// The Account / This device chips (when signed in) and a page's extra
 /// buttons, on one line under the page title.
@@ -198,7 +198,7 @@ fn feed_grid(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         ),
         Listing::Ready(_) => {
             feed_chips(ui, state, actions);
-            let today = crate::util::Today::at(crate::util::now());
+            let today = youtfast_core::util::Today::at(youtfast_core::util::now());
             let videos = state.visible_feed();
             let buckets: Vec<_> = videos
                 .iter()
@@ -1082,9 +1082,9 @@ mod tests {
 
     #[test]
     fn merged_history_controls_fit_narrow_and_wide_dark_and_light_pages() {
-        use crate::model::HistoryRow;
         use crate::storage::library::Watched;
         use crate::storage::settings::HistorySync;
+        use youtfast_core::model::HistoryRow;
         for width in [360.0, 900.0] {
             for palette in [theme::Palette::dark(), theme::Palette::light()] {
                 let ctx = egui::Context::default();
@@ -1153,9 +1153,9 @@ mod tests {
     #[test]
     fn merged_history_only_offers_local_removal_and_keeps_search_and_keyboard_in_step() {
         use crate::logic::history::HistoryFilter;
-        use crate::model::HistoryRow;
         use crate::storage::library::Watched;
         use crate::storage::settings::HistorySync;
+        use youtfast_core::model::HistoryRow;
         let ctx = egui::Context::default();
         ctx.enable_accesskit();
         crate::appearance::theme::install_fonts(&ctx);
@@ -1257,7 +1257,7 @@ mod tests {
 
     #[test]
     fn empty_account_subscriptions_and_watch_later_use_the_explicit_locale() {
-        use crate::appearance::i18n::Locale;
+        use youtfast_i18n::Locale;
         for locale in [Locale::English, Locale::PortugueseBrazil] {
             for (view, english, portuguese) in [
                 (
@@ -1324,7 +1324,7 @@ mod tests {
             } else if kind == 1 {
                 state.playlists = Listing::Ready(
                     (0..1000)
-                        .map(|index| crate::model::PlaylistSummary {
+                        .map(|index| youtfast_core::model::PlaylistSummary {
                             id: format!("playlist-{index}"),
                             name: format!("Playlist {index}"),
                             thumbnail: Some(format!(
@@ -1375,9 +1375,9 @@ mod tests {
     #[test]
     fn the_history_rows_are_rebuilt_only_when_what_they_come_from_changes() {
         use crate::logic::history::HistoryFilter;
-        use crate::model::HistoryRow;
         use crate::storage::library::Watched;
         use crate::storage::settings::HistorySync;
+        use youtfast_core::model::HistoryRow;
         let watched = |id: &str, title: &str, at: i64| {
             let mut video = Video::from_id(id.into());
             video.title = title.into();

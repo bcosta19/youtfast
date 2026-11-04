@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use super::More;
 use super::edit::{collect, find, post, text};
-use crate::model::Video;
+use youtfast_core::model::Video;
 
 /// What YouTube recommends to the account, and the next page. An account
 /// with its history paused gets an empty page, not an error.

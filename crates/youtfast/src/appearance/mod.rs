@@ -3,6 +3,5 @@
 
 pub mod desktop_font;
 pub mod font_report;
-pub mod i18n;
 pub mod icons;
 pub mod theme;

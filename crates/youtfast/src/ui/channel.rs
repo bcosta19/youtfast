@@ -3,15 +3,15 @@
 //! search at its right, and the tab: a grid of video cards, playlist rows,
 //! or the About cards.
 
-use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use egui::{RichText, Sense, Ui, pos2, vec2};
+use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 use super::{results, widgets};
 use crate::app::Action;
 use crate::app::State;
 use crate::appearance::theme;
-use crate::model::{Channel, ChannelAbout, ChannelHeader, ChannelTab, Fetch, Listing};
-use crate::util;
+use youtfast_core::model::{Channel, ChannelAbout, ChannelHeader, ChannelTab, Fetch, Listing};
+use youtfast_core::util;
 
 /// The smallest a video card gets before the grid drops a column.
 const CARD_WIDTH: f32 = 280.0;
@@ -200,13 +200,9 @@ fn channel_count(
     plural: &'static str,
     locale: Locale,
 ) -> String {
-    let phrase = crate::appearance::i18n::ngettext(
-        locale,
-        singular,
-        plural,
-        count.min(u32::MAX as u64) as u32,
-    );
-    crate::appearance::i18n::interpolate(&phrase, &[("count", util::compact(count))])
+    let phrase =
+        youtfast_i18n::ngettext(locale, singular, plural, count.min(u32::MAX as u64) as u32);
+    youtfast_i18n::interpolate(&phrase, &[("count", util::compact(count))])
 }
 
 /// The tab's name in the bar.
@@ -580,7 +576,7 @@ fn about_cards(ui: &mut Ui, state: &State, about: &ChannelAbout, actions: &mut V
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Video;
+    use youtfast_core::model::Video;
 
     #[test]
     fn banner_cover_crops_the_centre_without_stretching() {
@@ -731,7 +727,7 @@ mod tests {
             avatar: None,
         };
         let state = State {
-            view: crate::model::View::Channel,
+            view: youtfast_core::model::View::Channel,
             page: Some(crate::app::Page::Channel(channel.clone())),
             channel_header: Some(ChannelHeader {
                 name: "Test Channel".into(),

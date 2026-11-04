@@ -2,12 +2,12 @@
 //! A pending handoff never pauses a different or newly opened local playback.
 
 use crate::desktop::cast::{Action, Control, Device, Error, Reply, Request, Worker};
-use crate::model::{Segment, Video};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
 use std::time::{Duration, Instant};
+use youtfast_core::model::{Segment, Video};
 
 #[derive(Default)]
 pub struct State {

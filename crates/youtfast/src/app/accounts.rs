@@ -152,7 +152,7 @@ impl App {
             return;
         };
         let picked = rfd::AsyncFileDialog::new()
-            .set_title(crate::appearance::i18n::gettext(
+            .set_title(youtfast_i18n::gettext(
                 self.state.settings.language,
                 "Choose the cookies.txt exported from YouTube",
             ))
@@ -172,7 +172,7 @@ impl App {
         if !profile.is_empty() {
             spec = format!("{spec}:{profile}");
         }
-        let suggested = crate::model::browser_label(&self.state.browser);
+        let suggested = youtfast_core::model::browser_label(&self.state.browser);
         let Some(account) = self.new_account(AccountSource::Browser(spec), &suggested) else {
             return;
         };
@@ -325,7 +325,7 @@ mod tests {
                 name: "Private".into(),
                 saved: true,
             }]),
-            channel_header: Some(crate::model::ChannelHeader {
+            channel_header: Some(youtfast_core::model::ChannelHeader {
                 name: "private-channel".into(),
                 ..Default::default()
             }),

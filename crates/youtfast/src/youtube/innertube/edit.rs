@@ -8,7 +8,7 @@ use rustypipe::client::{ClientType, RustyPipe};
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::model::{Rating, SaveTarget};
+use youtfast_core::model::{Rating, SaveTarget};
 
 /// Sends `body` to an InnerTube endpoint as the signed-in web client.
 pub(super) async fn post(

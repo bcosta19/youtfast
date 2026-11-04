@@ -183,7 +183,7 @@ async fn extract(spec: &str, what: &str) -> Result<String, String> {
         // for the known failures below but never logged, since what it
         // carries besides them is not ours to vouch for.
         log::warn!("reading browser cookies failed");
-        let browser = crate::model::browser_label(&browser);
+        let browser = youtfast_core::model::browser_label(&browser);
         return Err(if stderr.contains("No module named 'yt_dlp'") {
             "yt-dlp is not installed for Python, so the browser cannot be read.".to_owned()
         } else if stderr.contains("secretstorage not available") {
@@ -211,7 +211,7 @@ pub fn installed_browsers() -> Vec<&'static str> {
 }
 
 fn installed_browsers_in(dirs: &BrowserDirs) -> Vec<&'static str> {
-    crate::model::BROWSERS
+    youtfast_core::model::BROWSERS
         .into_iter()
         .filter(|browser| dirs.roots(browser).iter().any(|root| root.exists()))
         .collect()
@@ -341,7 +341,7 @@ impl BrowserProfile {
             || self.name.starts_with("Profile ")
             || self.name.starts_with("default");
         if placeholder {
-            crate::model::browser_label(self.browser)
+            youtfast_core::model::browser_label(self.browser)
         } else {
             self.name.clone()
         }
@@ -1034,12 +1034,12 @@ mod tests {
 
     #[test]
     fn the_label_names_the_browser_and_profile() {
-        assert_eq!(crate::model::browser_label("chromium"), "Chromium");
+        assert_eq!(youtfast_core::model::browser_label("chromium"), "Chromium");
         assert_eq!(
-            crate::model::browser_label("chromium:Profile 1"),
+            youtfast_core::model::browser_label("chromium:Profile 1"),
             "Chromium (Profile 1)"
         );
-        assert_eq!(crate::model::browser_label("firefox"), "Firefox");
+        assert_eq!(youtfast_core::model::browser_label("firefox"), "Firefox");
     }
 
     const COOKIES: &str = "# Netscape HTTP Cookie File\n\

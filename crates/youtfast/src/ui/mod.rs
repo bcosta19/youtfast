@@ -9,7 +9,7 @@
 
 use std::borrow::Cow;
 
-use crate::appearance::i18n::{format as trf, gettext as tr};
+use youtfast_i18n::{format as trf, gettext as tr};
 mod account;
 #[cfg(test)]
 mod bench;
@@ -36,9 +36,9 @@ use crate::app::Action;
 use crate::app::{AccountState, State};
 use crate::appearance::icons::Icon;
 use crate::appearance::theme::{self, RADIUS};
-use crate::model::{ChannelTab, Fetch, View};
-use crate::mpv::{Status, VideoSurface};
 use crate::storage::settings::SidebarButton;
+use youtfast_core::model::{ChannelTab, Fetch, View};
+use youtfast_mpv::{Status, VideoSurface};
 
 /// The search field's widget id, so `/` can focus it.
 fn command_line_id() -> egui::Id {
@@ -632,11 +632,9 @@ fn notice_toast(ctx: &egui::Context, state: &State, actions: &mut Vec<Action>) {
                             ui.set_max_width(320.0);
                             ui.add(
                                 egui::Label::new(
-                                    RichText::new(
-                                        crate::appearance::i18n::message(locale, notice).as_ref(),
-                                    )
-                                    .font(theme::medium(13.5))
-                                    .color(palette.text),
+                                    RichText::new(youtfast_i18n::message(locale, notice).as_ref())
+                                        .font(theme::medium(13.5))
+                                        .color(palette.text),
                                 )
                                 .wrap(),
                             );
@@ -694,13 +692,13 @@ fn cursor_count(state: &State) -> usize {
             }
         },
         View::Subscriptions => match state.source() {
-            crate::model::Source::Account => state.account_subscriptions.items().len(),
-            crate::model::Source::Device => state.library.subscriptions.len(),
+            youtfast_core::model::Source::Account => state.account_subscriptions.items().len(),
+            youtfast_core::model::Source::Device => state.library.subscriptions.len(),
         },
         View::History => state.history_rows().len(),
         View::WatchLater => match state.source() {
-            crate::model::Source::Account => state.account_watch_later.items().len(),
-            crate::model::Source::Device => state.library.watch_later.len(),
+            youtfast_core::model::Source::Account => state.account_watch_later.items().len(),
+            youtfast_core::model::Source::Device => state.library.watch_later.len(),
         },
         View::Liked => state.liked.items().len(),
         View::Playlists => state.playlists.items().len(),
@@ -717,7 +715,8 @@ fn cursor_count(state: &State) -> usize {
 
 /// What Enter does on the cursor's row.
 fn open_at(state: &State, index: usize) -> Option<Action> {
-    let video = |videos: &[crate::model::Video]| videos.get(index).cloned().map(Action::Open);
+    let video =
+        |videos: &[youtfast_core::model::Video]| videos.get(index).cloned().map(Action::Open);
     match state.view {
         View::Home => state
             .visible_feed()
@@ -741,13 +740,13 @@ fn open_at(state: &State, index: usize) -> Option<Action> {
                 }),
         },
         View::Subscriptions => match state.source() {
-            crate::model::Source::Account => state
+            youtfast_core::model::Source::Account => state
                 .account_subscriptions
                 .items()
                 .get(index)
                 .cloned()
                 .map(Action::OpenChannel),
-            crate::model::Source::Device => state
+            youtfast_core::model::Source::Device => state
                 .library
                 .subscriptions
                 .get(index)
@@ -759,8 +758,8 @@ fn open_at(state: &State, index: usize) -> Option<Action> {
             .get(index)
             .map(|row| Action::Open(row.video.clone())),
         View::WatchLater => match state.source() {
-            crate::model::Source::Account => video(state.account_watch_later.items()),
-            crate::model::Source::Device => video(&state.library.watch_later),
+            youtfast_core::model::Source::Account => video(state.account_watch_later.items()),
+            youtfast_core::model::Source::Device => video(&state.library.watch_later),
         },
         View::Liked => video(state.liked.items()),
         View::Playlists => {
@@ -902,8 +901,8 @@ fn key_pill(ui: &mut egui::Ui, palette: &theme::Palette, key: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Listing, Video};
     use crate::storage::settings::{SidebarEntry, default_sidebar, sanitize_sidebar};
+    use youtfast_core::model::{Listing, Video};
 
     fn views(state: &State) -> Vec<View> {
         sidebar_items(state)
@@ -1264,11 +1263,14 @@ mod tests {
             feed_shown: 40,
             ..State::default()
         };
-        state.library.subscriptions.push(crate::model::Channel {
-            id: "UC123".into(),
-            name: "Channel".into(),
-            avatar: None,
-        });
+        state
+            .library
+            .subscriptions
+            .push(youtfast_core::model::Channel {
+                id: "UC123".into(),
+                name: "Channel".into(),
+                avatar: None,
+            });
         let mut actions = Vec::new();
         let card_top = |output: &egui::FullOutput| {
             output.shapes.iter().find_map(|shape| match &shape.shape {

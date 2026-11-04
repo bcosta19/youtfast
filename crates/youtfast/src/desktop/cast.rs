@@ -109,7 +109,7 @@ pub enum Request {
         enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
         device: Device,
         video: String,
-        segments: Vec<crate::model::Segment>,
+        segments: Vec<youtfast_core::model::Segment>,
     },
     Scan,
     Disconnect,
@@ -448,7 +448,10 @@ fn cast_position(json: &[u8], video: &str) -> Result<Option<f64>, Error> {
 }
 
 /// Seconds until the next skippable segment starts, to space out checks.
-pub(crate) fn next_segment_in(position: f64, segments: &[crate::model::Segment]) -> Option<f64> {
+pub(crate) fn next_segment_in(
+    position: f64,
+    segments: &[youtfast_core::model::Segment],
+) -> Option<f64> {
     if !position.is_finite() || position < 0.0 {
         return None;
     }
@@ -466,7 +469,7 @@ pub(crate) fn next_segment_in(position: f64, segments: &[crate::model::Segment])
 fn cast_sponsor_target(
     json: &[u8],
     video: &str,
-    segments: &[crate::model::Segment],
+    segments: &[youtfast_core::model::Segment],
 ) -> Result<Option<f64>, Error> {
     let info: serde_json::Value =
         serde_json::from_slice(json).map_err(|_| Error::InvalidResponse)?;
@@ -483,7 +486,10 @@ fn cast_sponsor_target(
         .and_then(|position| sponsor_target(position, segments)))
 }
 
-pub(crate) fn sponsor_target(position: f64, segments: &[crate::model::Segment]) -> Option<f64> {
+pub(crate) fn sponsor_target(
+    position: f64,
+    segments: &[youtfast_core::model::Segment],
+) -> Option<f64> {
     if !position.is_finite() || position < 0.0 {
         return None;
     }
@@ -702,7 +708,7 @@ fn confirmed(json: &[u8], video: &str) -> Result<bool, Error> {
     }
     let info: Info = serde_json::from_slice(json).map_err(|_| Error::InvalidResponse)?;
     let same = info.content_id.as_deref().is_some_and(|id| {
-        id == video || crate::links::video_id_from_link(id).as_deref() == Some(video)
+        id == video || youtfast_core::links::video_id_from_link(id).as_deref() == Some(video)
     });
     Ok(same && info.player_state.as_deref() == Some("PLAYING"))
 }
@@ -720,8 +726,8 @@ mod tests {
         }
     }
 
-    fn sponsor() -> crate::model::Segment {
-        crate::model::Segment {
+    fn sponsor() -> youtfast_core::model::Segment {
+        youtfast_core::model::Segment {
             category: "sponsor".into(),
             start: 10.0,
             end: 30.25,

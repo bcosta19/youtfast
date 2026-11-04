@@ -6,13 +6,13 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use crate::model::{
-    Channel, ChannelAbout, ChannelHeader, HistoryRow, PageItems, PlaylistSummary, Rating,
-    SaveTarget, Video,
-};
 use crate::storage::library::{Account, Import, Library};
 use crate::storage::settings::Settings;
 use crate::youtube::innertube;
+use youtfast_core::model::{
+    Channel, ChannelAbout, ChannelHeader, HistoryRow, PageItems, PlaylistSummary, Rating,
+    SaveTarget, Video,
+};
 
 /// A file the user is choosing in the native dialog. Made on the interface
 /// thread (macOS requires it there) and awaited on the runtime.
@@ -64,7 +64,7 @@ pub enum Request {
     /// playlists, or its search.
     ChannelTab {
         id: String,
-        tab: crate::model::ChannelTab,
+        tab: youtfast_core::model::ChannelTab,
         order: innertube::ChannelOrder,
     },
     /// A channel page's About pane.
@@ -210,7 +210,7 @@ pub enum Command {
     /// Put new uploads on the desktop.
     Notify {
         videos: Vec<Video>,
-        language: crate::appearance::i18n::Locale,
+        language: youtfast_i18n::Locale,
     },
     /// A page of comments or replies.
     LoadComments {
@@ -279,7 +279,7 @@ pub enum Command {
         version: String,
         kind: crate::desktop::updater::UpdateKind,
         auto_installed: bool,
-        language: crate::appearance::i18n::Locale,
+        language: youtfast_i18n::Locale,
     },
 }
 
@@ -310,13 +310,13 @@ pub enum Event {
     },
     Details {
         generation: u64,
-        result: Box<Result<crate::model::Details, String>>,
+        result: Box<Result<youtfast_core::model::Details, String>>,
     },
     Comments {
         generation: u64,
         key: CommentsKey,
         token: String,
-        result: Result<(Vec<crate::model::CommentRow>, Option<String>), String>,
+        result: Result<(Vec<youtfast_core::model::CommentRow>, Option<String>), String>,
     },
     Imported(Result<Import, String>),
     ImportMerged {
@@ -388,7 +388,7 @@ pub enum Event {
     },
     Segments {
         id: String,
-        segments: Vec<crate::model::Segment>,
+        segments: Vec<youtfast_core::model::Segment>,
     },
     UpdateChecked {
         result: Result<Option<crate::desktop::updater::ReleaseInfo>, String>,
@@ -434,10 +434,10 @@ impl Event {
         match &mut self {
             Self::PlayingPlaylist {
                 result: Err(error), ..
-            } => *error = crate::privacy::safe_error(error),
+            } => *error = youtfast_core::privacy::safe_error(error),
             Self::Extras {
                 result: Err(error), ..
-            } => *error = crate::privacy::safe_error(error),
+            } => *error = youtfast_core::privacy::safe_error(error),
             Self::Loaded {
                 result: Err(error), ..
             }
@@ -454,10 +454,12 @@ impl Event {
             | Self::SaveFailed { error, .. }
             | Self::SignInFailed(error)
             | Self::SessionExpired(error)
-            | Self::SessionUnavailable { error, .. } => *error = crate::privacy::safe_error(error),
+            | Self::SessionUnavailable { error, .. } => {
+                *error = youtfast_core::privacy::safe_error(error)
+            }
             Self::Details { result, .. } => {
                 if let Err(error) = result.as_mut() {
-                    *error = crate::privacy::safe_error(error);
+                    *error = youtfast_core::privacy::safe_error(error);
                 }
             }
             _ => {}

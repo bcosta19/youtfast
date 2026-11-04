@@ -18,12 +18,12 @@ use super::widgets;
 use crate::app::Action;
 use crate::app::player::{LIVE_BEHIND, SPEEDS, next_video, previous_video, speed_label};
 use crate::app::{PlayerMenu, State};
-use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use crate::appearance::icons::Icon;
 use crate::appearance::theme;
-use crate::model::{Fetch, Quality, Resolution, Segment, Video};
-use crate::mpv::{Status, VideoSurface};
-use crate::util;
+use youtfast_core::model::{Fetch, Quality, Resolution, Segment, Video};
+use youtfast_core::util;
+use youtfast_i18n::{Locale, format as trf, gettext as tr};
+use youtfast_mpv::{Status, VideoSurface};
 
 /// How long the controls stay after the pointer stops moving.
 const CONTROLS_FOR: Duration = Duration::from_millis(2500);
@@ -124,7 +124,8 @@ pub fn release_speed_hold(ctx: &egui::Context, state: &State, actions: &mut Vec<
     if ctx
         .data(|data| data.get_temp::<PendingClick>(click_id()))
         .is_some_and(|click| {
-            watching != Some(click.video.as_str()) || state.view != crate::model::View::Watch
+            watching != Some(click.video.as_str())
+                || state.view != youtfast_core::model::View::Watch
         })
     {
         ctx.data_mut(|data| data.remove::<PendingClick>(click_id()));
@@ -134,7 +135,7 @@ pub fn release_speed_hold(ctx: &egui::Context, state: &State, actions: &mut Vec<
         .filter(|hold| {
             !held
                 || watching != Some(hold.video.as_str())
-                || state.view != crate::model::View::Watch
+                || state.view != youtfast_core::model::View::Watch
         });
     if let Some(hold) = stop {
         ctx.data_mut(|data| data.remove::<SpeedHold>(hold_id()));
@@ -471,7 +472,7 @@ fn picture_rounded(
     }
     if let Some(error) = &state.player_error {
         let galley = ui.painter().layout(
-            crate::appearance::i18n::message(locale, error).into_owned(),
+            youtfast_i18n::message(locale, error).into_owned(),
             theme::regular(16.0),
             Color32::WHITE,
             (rect.width() - 32.0).max(1.0),
@@ -1010,7 +1011,7 @@ fn osd(ui: &Ui, rect: Rect, state: &State) {
     if let Some((text, _)) = &state.osd {
         let top = pos2(rect.center().x, rect.top() + 24.0);
         let galley = ui.painter().layout_no_wrap(
-            crate::appearance::i18n::message(locale, text).into_owned(),
+            youtfast_i18n::message(locale, text).into_owned(),
             theme::semibold(15.0),
             Color32::WHITE,
         );
@@ -1746,8 +1747,8 @@ pub fn mini(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Chapter, Details};
-    use crate::mpv::Subtitle;
+    use youtfast_core::model::{Chapter, Details};
+    use youtfast_mpv::Subtitle;
 
     #[test]
     fn next_hint_translates_interface_text_and_preserves_the_video_title() {
@@ -1927,7 +1928,7 @@ mod tests {
         let ctx = egui::Context::default();
         crate::appearance::theme::install_fonts(&ctx);
         let mut state = State {
-            view: crate::model::View::Watch,
+            view: youtfast_core::model::View::Watch,
             watching: Some(Video::from_id("aaaaaaaaaaa".into())),
             ..State::default()
         };
@@ -1978,7 +1979,7 @@ mod tests {
             let ctx = egui::Context::default();
             crate::appearance::theme::install_fonts(&ctx);
             let mut state = State {
-                view: crate::model::View::Watch,
+                view: youtfast_core::model::View::Watch,
                 watching: Some(Video::from_id("aaaaaaaaaaa".into())),
                 ..State::default()
             };
@@ -2042,7 +2043,7 @@ mod tests {
         let ctx = egui::Context::default();
         crate::appearance::theme::install_fonts(&ctx);
         let mut state = State {
-            view: crate::model::View::Watch,
+            view: youtfast_core::model::View::Watch,
             watching: Some(Video::from_id("aaaaaaaaaaa".into())),
             ..State::default()
         };
@@ -2096,7 +2097,7 @@ mod tests {
     fn keyboard_focus_reveals_and_keeps_miniplayer_controls() {
         let ctx = egui::Context::default();
         let state = State {
-            view: crate::model::View::Home,
+            view: youtfast_core::model::View::Home,
             watching: Some(Video::from_id("aaaaaaaaaaa".into())),
             ..State::default()
         };
@@ -2167,7 +2168,7 @@ mod tests {
     fn leaving_the_watch_page_releases_a_speed_hold_even_with_mouse_down() {
         let ctx = egui::Context::default();
         let mut state = State {
-            view: crate::model::View::Home,
+            view: youtfast_core::model::View::Home,
             watching: Some(Video::from_id("aaaaaaaaaaa".into())),
             ..State::default()
         };
@@ -2197,7 +2198,7 @@ mod tests {
         );
         output.textures_delta.clear();
         assert_eq!(actions, [Action::SetSpeed(0.75)]);
-        state.view = crate::model::View::Watch;
+        state.view = youtfast_core::model::View::Watch;
         release_speed_hold(&ctx, &state, &mut actions);
         assert_eq!(actions.len(), 1);
     }
@@ -2307,7 +2308,7 @@ mod tests {
         let mut short = Video::from_id("sssssssssss".to_owned());
         short.short = true;
         let mut state = State {
-            view: crate::model::View::Watch,
+            view: youtfast_core::model::View::Watch,
             watching: Some(short),
             queue: vec![Video::from_id("qqqqqqqqqqq".to_owned())],
             ..State::default()

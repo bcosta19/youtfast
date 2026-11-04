@@ -34,7 +34,15 @@ on it, and follow [YouTube response formats](#youtube-response-formats).
 The repository is a Cargo workspace: the root `Cargo.toml` holds the shared
 package fields, dependency versions, profiles and patches, and each crate in
 `crates/` inherits them (`.workspace = true`). The application is
-`crates/youtfast`.
+`crates/youtfast`, on top of these crates:
+
+| Crate | Holds |
+|---|---|
+| `youtfast-core` | the shared types (`model`), formatting helpers (`util`), YouTube link parsing (`links`) and the fixed messages external errors become (`privacy`); no IO |
+| `youtfast-i18n` | the interface languages, their catalogs compiled from `assets/i18n` by its build script |
+| `youtfast-mpv` | the player (libmpv), the only crate with FFI |
+
+No crate depends on one above it.
 
 `crates/youtfast/src/` is grouped by domain. A new module goes in the group that matches
 its job, not at the root:
@@ -47,10 +55,8 @@ its job, not at the root:
 | `youtube/` | the network: InnerTube (`innertube`), yt-dlp (`ytdlp`), SponsorBlock, captions and storyboards (`extras`), the thumbnails' cache |
 | `storage/` | what stays on this computer: library, settings, sessions (`account`), Takeout, file paths |
 | `logic/` | pure decisions over video lists: new-upload alerts, local recommendations |
-| `mpv/` | the player |
 | `desktop/` | single instance, local logs and their redactor, release updater, casting to TVs (`cast`, with YouTube's Lounge API in `cast::lounge`) |
-| `appearance/` | palette, icons, interface languages |
-| `model.rs`, `util.rs`, `links.rs`, `privacy.rs` | the shared types, formatting helpers, YouTube link parsing, and the fixed messages external errors become |
+| `appearance/` | palette, icons, fonts |
 
 - `crates/youtfast/src/ui/` draws views from `app::State` and the player's `mpv::Status`, and
   pushes `app::Action`s. `crates/youtfast/src/app.rs` applies them after the frame,
@@ -170,15 +176,15 @@ its job, not at the root:
   account's session (`Mpv::retry_signed_in`: yt-dlp reads the browser
   itself, `cookies-from-browser`, naming the keyring that opened it:
   `account::ytdl_browser`); a cookies.txt account has no such retry.
-- `crates/youtfast/src/mpv/ffi.rs` declares the libmpv functions used, by hand (client API
-  2.x). `crates/youtfast/src/mpv/mod.rs` wraps them: `Mpv` owns the player, observes the
+- `crates/youtfast-mpv/src/ffi.rs` declares the libmpv functions used, by hand (client API
+  2.x). `crates/youtfast-mpv/src/lib.rs` wraps them: `Mpv` owns the player, observes the
   properties the interface shows, and is polled once per frame from
   `App::logic`; its wakeup callback only requests a repaint.
 - mpv's network cache (the demuxer cache) defaults in `Mpv::new` to mpv's
   standard 150 MiB ahead and 50 MiB behind (`PlaybackBuffer::Standard`), and
   `Settings::playback_buffer` can switch it to 50 MiB ahead and 20 MiB behind
   (`PlaybackBuffer::Compact`) to keep the process near 200 MB on long videos.
-- `crates/youtfast/src/mpv/render.rs` draws the picture inside the egui window. libmpv's
+- `crates/youtfast-mpv/src/render.rs` draws the picture inside the egui window. libmpv's
   OpenGL render API draws into a framebuffer of ours, sized to the video's
   rectangle in physical pixels; an `egui_glow::CallbackFn` blits it onto
   egui's target. The render context is made lazily inside the paint callback
@@ -289,7 +295,7 @@ a field takes another's value without any error.
 ## Definition of done
 
 - Add focused tests for changed behaviour (see `crates/youtfast/src/youtube/ytdlp.rs` and
-  `crates/youtfast/src/util.rs`).
+  `crates/youtfast-core/src/util.rs`).
 - A bug caused by a YouTube format change also gets its `YT-n` entry and
   regression tests ([YouTube response formats](#youtube-response-formats)).
 - Run the checks before finishing:

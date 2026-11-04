@@ -17,13 +17,13 @@ use rustypipe::param::ChannelVideoTab;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
-use crate::model::{
+use crate::storage::account::CacheFile;
+use crate::storage::paths::Dirs;
+use youtfast_core::model::{
     Channel, ChannelAbout, ChannelHeader, ChannelTab, Chapter, CommentRow, Details, HistoryRow,
     PlaylistSummary, Span, Video,
 };
-use crate::storage::account::CacheFile;
-use crate::storage::paths::Dirs;
-use crate::util;
+use youtfast_core::util;
 
 mod discovery;
 mod edit;
@@ -110,7 +110,7 @@ pub fn is_signed_out(error: &Error) -> bool {
 /// An error as text for the user and the log: reqwest's message can end in
 /// the request's URL ("... for url (...)"), which helps nobody.
 pub fn text(error: Error) -> String {
-    crate::privacy::safe_error(&error.to_string())
+    youtfast_core::privacy::safe_error(&error.to_string())
 }
 
 /// Starts using a session, checking it with YouTube first.
@@ -842,7 +842,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             text(Error::from(error)),
-            crate::privacy::UNTRUSTED_CERTIFICATE
+            youtfast_core::privacy::UNTRUSTED_CERTIFICATE
         );
     }
 

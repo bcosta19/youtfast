@@ -332,7 +332,7 @@ impl App {
 }
 
 pub(super) fn chapter_target(
-    chapters: &[crate::model::Chapter],
+    chapters: &[youtfast_core::model::Chapter],
     position: f64,
     forward: bool,
 ) -> Option<f64> {
@@ -363,9 +363,11 @@ pub fn cursor_key(state: &State) -> usize {
             Listing::Failed(_) => 3,
         }
     }
-    let source = usize::from(state.source() == crate::model::Source::Device) * 10;
+    let source = usize::from(state.source() == youtfast_core::model::Source::Device) * 10;
     match state.view {
-        View::Home if state.feed_filter == crate::model::FeedFilter::ForYou => tag(&state.for_you),
+        View::Home if state.feed_filter == youtfast_core::model::FeedFilter::ForYou => {
+            tag(&state.for_you)
+        }
         View::Home => tag(&state.feed) + 10 * state.feed_filter as usize,
         View::Results => match state.search_options.kind {
             crate::youtube::innertube::SearchKind::Videos => tag(&state.results),
@@ -547,11 +549,11 @@ mod tests {
     #[test]
     fn chapters_go_forward_and_restart_a_chapter_before_going_back() {
         let c = [
-            crate::model::Chapter {
+            youtfast_core::model::Chapter {
                 name: "a".into(),
                 seconds: 0,
             },
-            crate::model::Chapter {
+            youtfast_core::model::Chapter {
                 name: "b".into(),
                 seconds: 60,
             },

@@ -9,7 +9,7 @@ use fastframe_now_playing as np;
 use crate::app::Action;
 use crate::app::State;
 use crate::app::player::{next_video, previous_video};
-use crate::mpv::Status;
+use youtfast_mpv::Status;
 
 /// A desktop command mapped onto what the app does with it.
 #[derive(Debug, PartialEq)]
@@ -152,7 +152,7 @@ fn effect(command: &np::Command, state: &State) -> Option<Effect> {
             }
         }
         np::Command::SetVolume(volume) => Action::SetVolume(volume.clamp(0.0, 1.0) * 100.0),
-        np::Command::OpenUri(uri) if crate::links::video_id_from_link(uri).is_some() => {
+        np::Command::OpenUri(uri) if youtfast_core::links::video_id_from_link(uri).is_some() => {
             Action::Search(uri.clone())
         }
         np::Command::Raise => return Some(Effect::Raise),
@@ -215,7 +215,7 @@ fn media_state(state: &State, status: Option<&Status>) -> np::State {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Video;
+    use youtfast_core::model::Video;
 
     fn watching() -> State {
         State {
@@ -264,15 +264,15 @@ mod tests {
         let mut status = playing();
         status.paused = true;
         state.up_next.pop();
-        state.details = crate::model::Fetch::Ready(crate::model::Details {
+        state.details = youtfast_core::model::Fetch::Ready(youtfast_core::model::Details {
             related: vec![Video::from_id("ccccccccccc".into())],
-            ..crate::model::Details::default()
+            ..youtfast_core::model::Details::default()
         });
         let shown = media_state(&state, Some(&status));
         assert_eq!(shown.playback, np::Playback::Paused);
         assert!(shown.controls.next);
         // And with no related videos either, Next greys out.
-        state.details = crate::model::Fetch::Idle;
+        state.details = youtfast_core::model::Fetch::Idle;
         let shown = media_state(&state, Some(&status));
         assert!(!shown.controls.next);
     }

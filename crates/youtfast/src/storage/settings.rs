@@ -6,7 +6,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::appearance::theme::{CustomTheme, Palette};
-use crate::model::Quality;
+use youtfast_core::model::Quality;
 
 fn on() -> bool {
     true
@@ -71,7 +71,7 @@ impl PlaybackBuffer {
 pub struct Settings {
     /// The interface language; older settings start in English too.
     #[serde(default)]
-    pub language: crate::appearance::i18n::Locale,
+    pub language: youtfast_i18n::Locale,
     /// The face that draws the interface; older settings use the system's.
     #[serde(default)]
     pub interface_font: crate::appearance::theme::InterfaceFont,
@@ -279,7 +279,7 @@ pub fn clamp_alerts_every(minutes: u32) -> u32 {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            language: crate::appearance::i18n::Locale::default(),
+            language: youtfast_i18n::Locale::default(),
             interface_font: crate::appearance::theme::InterfaceFont::default(),
             history_sync: HistorySync::default(),
             playback_buffer: PlaybackBuffer::default(),
@@ -351,7 +351,10 @@ mod tests {
         let dir = std::env::var("CARGO_TARGET_TMPDIR")
             .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../target").to_owned());
         std::fs::create_dir_all(&dir).unwrap();
-        Path::new(&dir).join(format!("youtfast-{name}-{}.json", crate::util::now()))
+        Path::new(&dir).join(format!(
+            "youtfast-{name}-{}.json",
+            youtfast_core::util::now()
+        ))
     }
 
     #[test]
@@ -411,7 +414,7 @@ mod tests {
     fn round_trip() {
         let path = path("settings");
         let settings = Settings {
-            language: crate::appearance::i18n::Locale::PortugueseBrazil,
+            language: youtfast_i18n::Locale::PortugueseBrazil,
             quality: Quality::Max(720),
             volume: 40.0,
             scroll_miniplayer: true,
@@ -479,7 +482,7 @@ mod tests {
         let settings: Settings =
             serde_json::from_str(r#"{"quality":{"Max":720},"volume":40}"#).unwrap();
         assert_eq!(settings.theme, ThemeChoice::Auto);
-        assert_eq!(settings.language, crate::appearance::i18n::Locale::English);
+        assert_eq!(settings.language, youtfast_i18n::Locale::English);
         assert_eq!(
             settings.interface_font,
             crate::appearance::theme::InterfaceFont::System

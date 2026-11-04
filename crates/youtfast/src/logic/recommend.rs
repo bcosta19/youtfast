@@ -10,8 +10,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::model::{Channel, Video};
 use crate::storage::library::Watched;
+use youtfast_core::model::{Channel, Video};
 
 /// How many watched videos seed the list: each costs a details request.
 pub const SEEDS: usize = 12;

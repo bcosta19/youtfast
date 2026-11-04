@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use super::edit::{collect, post_as, text};
 use super::home::{from_lockup, from_renderer};
 use super::{More, PlaylistDetails};
-use crate::model::Video;
+use youtfast_core::model::Video;
 
 /// The first page of a playlist's videos and the next page's directions.
 pub async fn videos(rp: &RustyPipe, id: &str) -> Result<(Vec<Video>, Option<More>), String> {

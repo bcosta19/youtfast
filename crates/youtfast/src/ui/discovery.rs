@@ -1,13 +1,13 @@
 //! Search filters and typed result lists.
 
-use crate::appearance::i18n::{Locale, gettext as tr};
 use egui::{ComboBox, Ui};
+use youtfast_i18n::{Locale, gettext as tr};
 
 use super::{library, results, widgets};
 use crate::app::Action;
 use crate::app::State;
-use crate::model::Listing;
 use crate::youtube::innertube::{SearchDate, SearchKind, SearchLength, SearchOrder};
+use youtfast_core::model::Listing;
 
 pub fn filters(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;

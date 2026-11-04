@@ -156,7 +156,7 @@ fn preserve_unreadable(path: &Path, bytes: &[u8]) -> std::io::Result<PathBuf> {
         let mut aside = path.as_os_str().to_owned();
         aside.push(format!(
             ".unreadable-{}-{}-{}",
-            crate::util::now(),
+            youtfast_core::util::now(),
             std::process::id(),
             BACKUPS.fetch_add(1, Ordering::Relaxed)
         ));
@@ -298,7 +298,8 @@ mod tests {
         let dir = std::env::var("CARGO_TARGET_TMPDIR")
             .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../target").to_owned());
         std::fs::create_dir_all(&dir).unwrap();
-        let path = Path::new(&dir).join(format!("youtfast-race-{}.json", crate::util::now()));
+        let path =
+            Path::new(&dir).join(format!("youtfast-race-{}.json", youtfast_core::util::now()));
         let writers: Vec<_> = (0..4u8)
             .map(|writer| {
                 let path = path.clone();
@@ -330,7 +331,8 @@ mod tests {
         let dir = std::env::var("CARGO_TARGET_TMPDIR")
             .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../target").to_owned());
         std::fs::create_dir_all(&dir).unwrap();
-        let path = Path::new(&dir).join(format!("youtfast-mode-{}.json", crate::util::now()));
+        let path =
+            Path::new(&dir).join(format!("youtfast-mode-{}.json", youtfast_core::util::now()));
         write_atomic(&path, b"data").unwrap();
         let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600);

@@ -7,7 +7,7 @@
 
 use sha2::{Digest, Sha256};
 
-use crate::model::Segment;
+use youtfast_core::model::Segment;
 
 /// What the request asks for: every category YouTFast names, segments to
 /// skip only (not the "full video is a sponsor" labels).

@@ -14,12 +14,12 @@ use rustypipe::client::RustyPipe;
 use tokio::sync::mpsc as async_mpsc;
 use tokio::sync::watch;
 
-use crate::model::{AccountSource, PageItems, Video};
 use crate::storage::library::Account;
 use crate::storage::library::Library;
 use crate::storage::paths::Dirs;
 use crate::storage::settings::Settings;
 use crate::{storage::account, storage::takeout, youtube::innertube};
+use youtfast_core::model::{AccountSource, PageItems, Video};
 
 mod protocol;
 pub use protocol::{Command, CommentsKey, Event, Payload, Request, SignInMethod, Slot};
@@ -971,7 +971,7 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
             }
         }
         Request::ChannelTab { id, tab, order } => match tab {
-            crate::model::ChannelTab::Playlists => {
+            youtfast_core::model::ChannelTab::Playlists => {
                 let (header, items, more) = innertube::channel_playlists_page(rp, &id).await?;
                 Payload::ChannelPage {
                     header,
@@ -1167,7 +1167,7 @@ fn signed_in(context: &Context, account: &Account) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Channel, Rating};
+    use youtfast_core::model::{Channel, Rating};
 
     #[tokio::test]
     async fn a_load_that_panics_still_answers_with_a_controlled_failure() {
@@ -1562,7 +1562,7 @@ mod tests {
             .join(format!(
                 "final-save-{}-{}.json",
                 std::process::id(),
-                crate::util::now()
+                youtfast_core::util::now()
             ));
         let (started, ready) = mpsc::channel();
         let (release, wait) = mpsc::channel();

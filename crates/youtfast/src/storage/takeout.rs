@@ -11,8 +11,8 @@ use std::io::{BufRead, Read};
 
 use serde::Deserialize;
 
-use crate::model::{Channel, Video};
 use crate::storage::library::{Import, Watched};
+use youtfast_core::model::{Channel, Video};
 
 const MAX_SUBSCRIPTION_ROW_BYTES: usize = 1024 * 1024;
 
@@ -285,7 +285,7 @@ fn history<R: Read>(reader: R) -> Result<Vec<Watched>, String> {
 
 fn watched(entry: Entry) -> Option<Watched> {
     // Ads and removed videos have no link to a video.
-    let id = crate::links::video_id_from_link(entry.title_url.as_deref()?)?;
+    let id = youtfast_core::links::video_id_from_link(entry.title_url.as_deref()?)?;
     let at = entry
         .time
         .as_deref()

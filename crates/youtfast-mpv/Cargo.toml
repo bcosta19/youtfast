@@ -1,0 +1,15 @@
+[package]
+name = "youtfast-mpv"
+description = "libmpv for YouTFast: the player, its properties and its OpenGL picture"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+eframe.workspace = true
+egui.workspace = true
+log.workspace = true
+serde_json.workspace = true

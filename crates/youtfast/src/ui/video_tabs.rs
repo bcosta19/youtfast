@@ -52,7 +52,7 @@ pub(super) fn show(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) 
 
 fn new_tab_button(
     ui: &mut egui::Ui,
-    language: crate::appearance::i18n::Locale,
+    language: youtfast_i18n::Locale,
     actions: &mut Vec<Action>,
 ) -> egui::Response {
     let response = widgets::icon_button(ui, Icon::Plus, 14.0, tr(language, "New tab").as_ref());
@@ -82,12 +82,7 @@ mod tests {
                     ..Default::default()
                 },
                 |ui| {
-                    rect = new_tab_button(
-                        ui,
-                        crate::appearance::i18n::Locale::default(),
-                        &mut actions,
-                    )
-                    .rect;
+                    rect = new_tab_button(ui, youtfast_i18n::Locale::default(), &mut actions).rect;
                 },
             );
             output.textures_delta.clear();

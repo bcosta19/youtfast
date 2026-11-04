@@ -139,7 +139,7 @@ impl State {
             return false;
         }
         self.library = library;
-        self.notice = Some(crate::appearance::i18n::format(
+        self.notice = Some(youtfast_i18n::format(
             self.settings.language,
             "Imported {subscriptions} new subscriptions and {history} new videos of history.",
             &[
@@ -1133,7 +1133,8 @@ mod tests {
     #[test]
     fn channel_header_completes_a_channel_opened_from_a_link() {
         let linked =
-            crate::links::channel_from_link("https://www.youtube.com/@BlenderStudio").unwrap();
+            youtfast_core::links::channel_from_link("https://www.youtube.com/@BlenderStudio")
+                .unwrap();
         let mut state = State {
             view: View::Channel,
             page: Some(Page::Channel(linked)),
@@ -1169,7 +1170,7 @@ mod tests {
             "https://youtube.com/c/ExampleChannel",
             "https://youtube.com/user/ExampleChannel",
         ] {
-            let linked = crate::links::channel_from_link(link).unwrap();
+            let linked = youtfast_core::links::channel_from_link(link).unwrap();
             let mut state = State {
                 view: View::Channel,
                 page: Some(Page::Channel(linked.clone())),

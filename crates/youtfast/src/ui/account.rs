@@ -10,11 +10,11 @@ use egui::{
 use super::{results, widgets};
 use crate::app::Action;
 use crate::app::{AccountState, State};
-use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use crate::appearance::icons::Icon;
 use crate::appearance::theme::{self, Palette, RADIUS};
-use crate::model::browser_label;
 use crate::storage::library::Account;
+use youtfast_core::model::browser_label;
+use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 /// The text column's width: long lines of explanation read badly wider.
 const WIDTH: f32 = 640.0;
@@ -67,7 +67,7 @@ fn accounts(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 Icon::Alert.image(palette.red, 16.0).paint_at(ui, rect);
                 ui.add(
                     egui::Label::new(
-                        RichText::new(crate::appearance::i18n::message(locale, error))
+                        RichText::new(youtfast_i18n::message(locale, error))
                             .font(theme::regular(14.0))
                             .color(palette.red),
                     )
@@ -156,10 +156,10 @@ fn account_row(ui: &mut Ui, state: &State, account: &Account, actions: &mut Vec<
             }
             ui.label(
                 RichText::new(match &account.source {
-                    crate::model::AccountSource::File => {
+                    youtfast_core::model::AccountSource::File => {
                         tr(locale, "a cookies.txt file").into_owned()
                     }
-                    crate::model::AccountSource::Browser(_) => account.source.label(),
+                    youtfast_core::model::AccountSource::Browser(_) => account.source.label(),
                 })
                 .font(theme::regular(13.0))
                 .color(palette.secondary),
@@ -404,11 +404,9 @@ fn profile_row(
     let palette = &state.palette;
     let raised = widgets::on_card(palette);
     let spec = profile.spec();
-    let added = state
-        .library
-        .accounts
-        .iter()
-        .any(|account| account.source == crate::model::AccountSource::Browser(spec.clone()));
+    let added = state.library.accounts.iter().any(|account| {
+        account.source == youtfast_core::model::AccountSource::Browser(spec.clone())
+    });
     let title = if profile.name.is_empty() {
         browser_label(profile.browser)
     } else {
@@ -631,8 +629,8 @@ fn field(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::AccountSource;
     use crate::storage::account::BrowserProfile;
+    use youtfast_core::model::AccountSource;
 
     #[test]
     fn account_row_actions_fit_narrow_window_in_every_state() {

@@ -9,7 +9,7 @@ use std::cmp::Reverse;
 
 use serde::Deserialize;
 
-use crate::model::{Resolution, Video};
+use youtfast_core::model::{Resolution, Video};
 
 #[derive(Deserialize)]
 struct Entry {
@@ -31,7 +31,7 @@ struct Entry {
 impl Entry {
     /// The video this entry describes, when it is one.
     fn into_video(self) -> Option<Video> {
-        let id = self.id.filter(|id| crate::links::is_video_id(id))?;
+        let id = self.id.filter(|id| youtfast_core::links::is_video_id(id))?;
         Some(Video {
             id,
             title: self.title.unwrap_or_default(),

@@ -13,7 +13,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
+use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const RELEASES_URL: &str = "https://github.com/bcosta19/youtfast/releases";
@@ -452,7 +452,7 @@ pub fn install_archive(
     let staging = staging_root.join(format!(
         "update-{version}-{}-{}",
         std::process::id(),
-        crate::util::now()
+        youtfast_core::util::now()
     ));
     std::fs::create_dir_all(&staging)
         .map_err(|_| "Could not install the update on this system.".to_owned())?;

@@ -1,6 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["crates/youtfast"]
+members = [
+    "crates/youtfast",
+    "crates/youtfast-i18n",
+    "crates/youtfast-mpv",
+    "crates/youtfast-core",
+]
 
 [workspace.package]
 version = "0.5.0"
@@ -11,6 +16,11 @@ repository = "https://github.com/bcosta19/youtfast"
 publish = false
 
 [workspace.dependencies]
+# Inter-crate dependencies.
+youtfast-i18n = { path = "crates/youtfast-i18n" }
+youtfast-mpv = { path = "crates/youtfast-mpv" }
+youtfast-core = { path = "crates/youtfast-core" }
+
 anyhow = "1"
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }

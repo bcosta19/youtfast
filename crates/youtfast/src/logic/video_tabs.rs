@@ -1,7 +1,7 @@
 //! Session-only video tabs. Background tabs never start playback or record history.
 //! Where each video was left stays in the library's history, whose resume rule
 //! (restart near the start or end) the tabs share.
-use crate::model::Video;
+use youtfast_core::model::Video;
 
 #[derive(Debug)]
 struct Tab<C> {

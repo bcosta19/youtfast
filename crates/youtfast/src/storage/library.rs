@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{AccountSource, Channel, Video};
+use youtfast_core::model::{AccountSource, Channel, Video};
 
 /// History keeps the most recent this many videos.
 pub(crate) const HISTORY_LIMIT: usize = 1000;
@@ -488,7 +488,10 @@ mod tests {
         let dir = std::env::var("CARGO_TARGET_TMPDIR")
             .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../target").to_owned());
         std::fs::create_dir_all(&dir).unwrap();
-        let path = Path::new(&dir).join(format!("library-migrate-{}.json", crate::util::now()));
+        let path = Path::new(&dir).join(format!(
+            "library-migrate-{}.json",
+            youtfast_core::util::now()
+        ));
         std::fs::write(
             &path,
             r#"{"subscriptions":[],"history":[],"watch_later":[],"account":{"Browser":"chromium"}}"#,

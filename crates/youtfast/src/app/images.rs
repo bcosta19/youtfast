@@ -4,12 +4,12 @@
 mod animation;
 pub use animation::install as install_animation_loader;
 
-use crate::appearance::i18n::{Locale, gettext as tr};
 use crate::youtube::thumbs::Failure;
 use egui::{Context, Id, Image, Ui};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use youtfast_i18n::{Locale, gettext as tr};
 
 const KEEP: f64 = 60.0;
 #[derive(Clone, Default)]

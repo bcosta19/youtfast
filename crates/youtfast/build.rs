@@ -2,8 +2,6 @@ use std::path::Path;
 use std::process::Command;
 
 fn main() {
-    // The catalogs, like the icons, stay at the repository root.
-    fastframe_i18n::build::compile_catalogs("../../assets/i18n");
     windows_icon();
 }
 

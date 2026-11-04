@@ -3,8 +3,8 @@
 //! sidebar's items, round avatars, rounded thumbnails, the video as a row
 //! or a card, the playlist as a row, the search field, and rich text.
 
-use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use std::sync::Arc;
+use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 use egui::text::LayoutJob;
 use egui::{
@@ -16,9 +16,9 @@ use crate::app::Action;
 use crate::app::State;
 use crate::appearance::icons::Icon;
 use crate::appearance::theme::{self, Palette, RADIUS, RADIUS_SMALL};
-use crate::model::{Channel, Fetch, PlaylistSummary, Span, Video};
 use crate::storage::library::Library;
-use crate::util;
+use youtfast_core::model::{Channel, Fetch, PlaylistSummary, Span, Video};
+use youtfast_core::util;
 
 /// The height of one line of body text.
 pub fn line(ui: &Ui) -> f32 {
@@ -1003,13 +1003,13 @@ pub fn playlist_row(
 
 /// Count phrases use the selected catalog's plural rules, independently of content.
 pub fn video_count_label(count: u64, locale: Locale) -> String {
-    let label = crate::appearance::i18n::ngettext(
+    let label = youtfast_i18n::ngettext(
         locale,
         "{count} video",
         "{count} videos",
         count.min(u32::MAX as u64) as u32,
     );
-    crate::appearance::i18n::interpolate(&label, &[("count", util::thousands(count))])
+    youtfast_i18n::interpolate(&label, &[("count", util::thousands(count))])
 }
 
 /// One of the chips over a list, YouTube's way: a pill on `surface`,
@@ -1359,7 +1359,7 @@ pub fn more_row(
         Fetch::Failed(error) => {
             ui.horizontal(|ui| {
                 ui.label(
-                    egui::RichText::new(crate::appearance::i18n::message(locale, error).as_ref())
+                    egui::RichText::new(youtfast_i18n::message(locale, error).as_ref())
                         .color(palette.red),
                 );
                 if button(

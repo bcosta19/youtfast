@@ -7,12 +7,12 @@ use egui::{Align, Color32, CornerRadius, Layout, Response, RichText, Sense, Ui, 
 use super::{results, widgets};
 use crate::app::Action;
 use crate::app::State;
-use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use crate::appearance::icons::Icon;
 use crate::appearance::theme::{self, InterfaceFont, Palette};
 use crate::storage::settings::{
     HistorySync, PlaybackBuffer, SidebarButton, ThemeChoice, default_sidebar,
 };
+use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 /// The widest the settings read well.
 const WIDTH: f32 = 760.0;
@@ -118,12 +118,9 @@ fn appearance(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             if !state.theme_status.is_empty() {
                 ui.add_space(8.0);
                 ui.label(
-                    RichText::new(crate::appearance::i18n::message(
-                        locale,
-                        &state.theme_status,
-                    ))
-                    .font(theme::regular(13.0))
-                    .color(palette.secondary),
+                    RichText::new(youtfast_i18n::message(locale, &state.theme_status))
+                        .font(theme::regular(13.0))
+                        .color(palette.secondary),
                 );
             }
             ui.add_space(8.0);
@@ -646,9 +643,7 @@ fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     "Updated to v{version}. Restart YouTFast to use the new version.",
                     &[("version", version.clone())],
                 ),
-                UpdateState::Failed(error) => {
-                    crate::appearance::i18n::message(locale, error).into_owned()
-                }
+                UpdateState::Failed(error) => youtfast_i18n::message(locale, error).into_owned(),
             };
             setting_row(
                 ui,

@@ -1,14 +1,14 @@
 //! The Notifications page: uploads newer than the last visit, in the
 //! usual rows grouped by day, with Check now and Mark all as seen.
 
-use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 use egui::{RichText, Ui};
+use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 use super::{results, widgets};
 use crate::app::Action;
 use crate::app::State;
 use crate::appearance::theme;
-use crate::util::{self, AgeBucket};
+use youtfast_core::util::{self, AgeBucket};
 
 pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;

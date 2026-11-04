@@ -1,0 +1,19 @@
+[package]
+name = "youtfast-i18n"
+description = "YouTFast's interface languages, with catalogs compiled in at build time"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+fastframe-i18n.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[build-dependencies]
+fastframe-i18n = { workspace = true, features = ["build"] }
