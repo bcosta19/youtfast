@@ -3,7 +3,7 @@
 //! Each test pins one entry of `docs/youtube-api-format.md` (`YT-n`): the
 //! format YouTube sends now is read or built, and the format it stopped
 //! accepting or sending is not what the code goes back to. They run the
-//! vendored rustypipe's own parsing and token code through its
+//! rustypipe fork's own parsing and token code through its
 //! `client::regression` hooks; the JSON below is trimmed from real responses,
 //! with synthetic ids and URLs.
 

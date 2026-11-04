@@ -115,7 +115,7 @@ apple-native-keyring-store = { version = "1.0.2", features = ["keychain"] }
 windows-native-keyring-store = { version = "1.1", default-features = false }
 
 [dev-dependencies]
-# The vendored copy's `client::regression` hooks, for the response-format
+# The fork's `client::regression` hooks, for the response-format
 # regression tests (tests/youtube_api.rs). Only test builds enable it.
 rustypipe = { version = "0.11.4", default-features = false, features = ["regression"] }
 
@@ -156,18 +156,15 @@ egui_extras = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b0
 egui_glow = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
 emath = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
 epaint = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
-# rustypipe 0.11.4 with ThetaDev/rustypipe PR #80 applied (codeberg.org):
-# comment authors' avatars, which YouTube now sends as
-# `author.avatarThumbnailUrl`, and the comment count from the engagement
-# panel, plus image/GIF attachments on comments. It also returns a failed
-# visitor-data fetch as an error: upstream unwraps it, and a panic aborts the
-# release build (`panic = "abort"`). Channel pages follow YouTube's October
-# 2026 layout: the sort chips' continuation token, the Shorts items'
-# `thumbnailViewModel` (without which every Short was dropped), the Playlists
-# tab's new `params`, podcasts kept as playlists, header counts read past an
-# `accessibilityLabel`, and abbreviated video counts. It is also moved to
-# reqwest 0.13, with rustls and ring as the process crypto provider. Drop the
-# copy once a release carries these changes.
-rustypipe = { path = "vendor/rustypipe" }
+# rustypipe 0.11.4 from YouTFast's fork (github.com/bcosta19/rustypipe, branch
+# `youtfast`; its README lists the changes and each commit names the YouTFast
+# change it comes from): ThetaDev/rustypipe PR #80 (comment authors' avatars,
+# the comment count, image/GIF attachments), a failed visitor-data fetch
+# returned as an error instead of a panic (`panic = "abort"` would end the
+# release build), channel pages in YouTube's October 2026 layout, history
+# playback reports, reqwest 0.13 with rustls and ring, and the `regression`
+# hooks. Move `rev` to fix a YouTube format there; drop the fork once an
+# upstream release carries these changes.
+rustypipe = { git = "https://github.com/bcosta19/rustypipe", rev = "d6073def4a320929c08fc18b345812f540853c50" }
 epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
 winit = { git = "https://github.com/crmne/winit", rev = "59ebfb727b8c83fcd28f8ca59c3733e32b4b4e9b" }

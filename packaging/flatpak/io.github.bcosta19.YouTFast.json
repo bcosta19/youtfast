@@ -170,7 +170,7 @@
         "install -Dm644 LICENSE /app/share/licenses/youtfast/LICENSE",
         "install -Dm644 assets/icons/LICENSE.txt /app/share/licenses/youtfast/icons/LICENSE.txt",
         "install -Dm644 THIRD_PARTY_NOTICES.md /app/share/licenses/youtfast/THIRD_PARTY_NOTICES.md",
-        "install -Dm644 vendor/rustypipe/LICENSE /app/share/licenses/rustypipe/LICENSE"
+        "install -Dm644 assets/licenses/rustypipe/LICENSE /app/share/licenses/rustypipe/LICENSE"
       ],
       "sources": [
         {

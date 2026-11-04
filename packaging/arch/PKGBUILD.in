@@ -43,7 +43,7 @@ package() {
     install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/youtfast/LICENSE"
     install -Dm644 THIRD_PARTY_NOTICES.md "${pkgdir}/usr/share/licenses/youtfast/THIRD_PARTY_NOTICES.md"
     install -Dm644 assets/icons/LICENSE.txt "${pkgdir}/usr/share/licenses/youtfast/icons/LICENSE.txt"
-    install -Dm644 vendor/rustypipe/LICENSE "${pkgdir}/usr/share/licenses/youtfast/rustypipe/LICENSE"
+    install -Dm644 assets/licenses/rustypipe/LICENSE "${pkgdir}/usr/share/licenses/youtfast/rustypipe/LICENSE"
     install -Dm644 README.md "${pkgdir}/usr/share/doc/youtfast/README.md"
     install -Dm644 CHANGELOG.md "${pkgdir}/usr/share/doc/youtfast/CHANGELOG.md"
 }

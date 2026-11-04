@@ -94,13 +94,14 @@ its job, not at the root:
   and each write is shown at once and undone if YouTube refuses it.
   Opt-in History sync reports started playbacks through
   `src/youtube/innertube/history_sync.rs`: an authenticated raw `player`
-  request supplies the playback tracking URL, and the vendored client's
+  request supplies the playback tracking URL, and the forked client's
   `history_tracking` transport sends it with the same session, only to
   HTTPS YouTube hosts and without redirects. This does not change mpv's
   signed-out extraction. Tracking errors have one fixed local message;
   URLs, cookies and response bodies never reach the interface or logs.
-  rustypipe is a copy in `vendor/rustypipe` (`[patch.crates-io]`): 0.11.4
-  with upstream PR #80 (codeberg.org/ThetaDev/rustypipe) applied, for
+  rustypipe is YouTFast's fork (github.com/bcosta19/rustypipe, branch
+  `youtfast`, pinned by `rev` in `[patch.crates-io]`): 0.11.4 with upstream
+  PR #80 (codeberg.org/ThetaDev/rustypipe) applied, for
   comment authors' avatars and the comment count, and with a failed
   visitor-data fetch returned as an error instead of unwrapped (a panic
   aborts the release build), reqwest errors kept with their causes (the
@@ -112,7 +113,7 @@ its job, not at the root:
   lockups count as playlists, and header metadata parts are told apart by
   their field (`MetadataPart` is untagged). The `regression` feature (a
   dev-dependency feature only) exposes `client::regression`, the hooks
-  `tests/youtube_api.rs` calls. Drop the copy once a release carries these
+  `tests/youtube_api.rs` calls. Drop the fork once a release carries these
   changes.
 - rustypipe's reqwest client checks certificates through the operating
   system (`innertube::http`, rustls-platform-verifier). Do not go back to a
@@ -254,7 +255,7 @@ deserialize through `MapResult`/`VecSkipError`), so a tab comes back empty or
 a field takes another's value without any error.
 
 - Before changing anything that builds requests to YouTube or reads its
-  responses (`vendor/rustypipe`, `src/youtube/innertube*`, `src/backend.rs`
+  responses (the rustypipe fork, `src/youtube/innertube*`, `src/backend.rs`
   loads), and whenever a listing comes back empty, wrong or refused, read
   [docs/youtube-api-format.md](docs/youtube-api-format.md). Check the known
   changes (`YT-n`) first: a new symptom is often an old one in another place.
@@ -265,13 +266,15 @@ a field takes another's value without any error.
   2. add regression tests named `ytn_…` to `tests/youtube_api.rs` that pass
      on the new format and fail on the old one. Prove the second part: put
      the old behaviour back for a moment and watch the test fail.
-- `tests/youtube_api.rs` reaches the vendored code through
+- `tests/youtube_api.rs` reaches the fork's code through
   `rustypipe::client::regression`; add a hook there when a test needs a code
   path it does not reach yet. Keep the JSON trimmed and synthetic: no raw
   responses, real tokens of accounts, or personal data.
-- Unit tests inside `vendor/rustypipe` do not run in CI: the crate is not a
-  workspace member and its fixtures are not vendored. A guarantee that must
-  hold belongs in `tests/youtube_api.rs`.
+- A fix inside rustypipe is a commit on the fork's `youtfast` branch, then
+  `rev` in `Cargo.toml` (and Cargo.lock) moved to it in the same PR as its
+  `YT-n` entry and tests. rustypipe's own unit tests do not run in this
+  repository's CI: a guarantee that must hold belongs in
+  `tests/youtube_api.rs`.
 - Confirm a fix live, with a request to YouTube outside the app, before
   calling it done: recorded fixtures keep passing after YouTube changes.
 

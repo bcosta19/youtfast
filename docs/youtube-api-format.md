@@ -1,7 +1,9 @@
 # YouTube response formats
 
 YouTFast reads YouTube through InnerTube, the internal JSON API that
-youtube.com itself calls, by way of the rustypipe copy in `vendor/rustypipe`.
+youtube.com itself calls, by way of YouTFast's rustypipe fork
+([bcosta19/rustypipe](https://github.com/bcosta19/rustypipe), branch
+`youtfast`), pinned by `rev` in `Cargo.toml`.
 InnerTube has no public contract: YouTube changes request parameters and
 response layouts without notice. This file records every such change that broke
 YouTFast, so the next one is recognised quickly and none of them comes back.
@@ -23,14 +25,13 @@ fails if the code goes back to the old one.
   than the one asked for.
 
 rustypipe's own unit tests use recorded responses and keep passing after
-YouTube changes. They also do not run in CI: the vendored crate is not a
-workspace member, and its `testfiles/` fixtures are not vendored. Only a live
-request shows a new format.
+YouTube changes. They also do not run in YouTFast's CI, which builds the fork
+only as a dependency. Only a live request shows a new format.
 
 ## How to investigate
 
-1. Reproduce with the vendored rustypipe outside the app: a scratch crate that
-   depends on `vendor/rustypipe` by path. Call the query (for example
+1. Reproduce with the fork outside the app: a scratch crate that depends by
+   path on a checkout of the fork's `youtfast` branch. Call the query (for example
    `channel_playlists`), and also fetch the raw response with
    `RustyPipeQuery::raw(ClientType::Desktop, "browse", &body)`. Keep raw
    responses out of the repository.
@@ -41,10 +42,14 @@ request shows a new format.
    - the continuation tokens of the sort chips (`chipViewModel.tapCommand`);
    - the keys of each list item.
 3. Continuation tokens and `params` are base64 protobuf: decode them field by
-   field, and compare with what `vendor/rustypipe/src/client/channel.rs` builds.
-4. Fix the vendored code, then add the entry below and its regression test in
-   the same PR. If the test needs a code path the hooks do not reach yet, add
-   one to `vendor/rustypipe/src/client/regression.rs`.
+   field, and compare with what the fork's `src/client/channel.rs` builds.
+4. Fix the fork: commit on its `youtfast` branch, push it, and move `rev` in
+   YouTFast's `Cargo.toml` to that commit (Cargo.lock follows). Add the entry
+   below and its regression test in the same YouTFast PR. If the test needs a
+   code path the hooks do not reach yet, add one to the fork's
+   `src/client/regression.rs`. While working on both, build YouTFast against
+   the local checkout with
+   `cargo --config 'patch.crates-io.rustypipe.path="../rustypipe"' test`.
 
 ## Known changes
 
@@ -59,7 +64,7 @@ request shows a new format.
 - **New format:** the tab's field holds one message, `{1: <uuid>, 3: <order>}`,
   under field 8 (Videos, Live) or 7 (Shorts). Orders: Latest/Popular/Oldest =
   4/2/5 (Videos, Shorts), 12/14/13 (Live).
-- **Fix:** `order_ctoken` in `vendor/rustypipe/src/client/channel.rs`.
+- **Fix:** `order_ctoken` in the fork's `src/client/channel.rs`.
 - **Tests:** `yt1_sort_tokens_match_the_chips_youtube_sends`,
   `yt1_sort_tokens_use_the_envelope_not_the_refused_fields`,
   `yt1_each_order_of_each_tab_has_its_own_token`.
@@ -74,7 +79,7 @@ request shows a new format.
   `thumbnailViewModel.thumbnailViewModel.image.sources`. Without the required
   field, every item failed to deserialize and was skipped.
 - **Fix:** `ShortsLockupViewModel` in
-  `vendor/rustypipe/src/client/response/video_item.rs` reads both; `thumbnail`
+  the fork's `src/client/response/video_item.rs` reads both; `thumbnail`
   is optional.
 - **Tests:** `yt2_a_short_with_only_a_thumbnail_view_model_is_kept`,
   `yt2_a_short_with_the_older_thumbnail_is_still_kept`.
@@ -87,7 +92,7 @@ request shows a new format.
   playlist grid.
 - **New format:** `params = "EglwbGF5bGlzdHPyBgoKCEIGCgIQaCIA"`, the value
   youtube.com's Playlists tab sends. Videos, Live and Search kept theirs.
-- **Fix:** `ChannelTab::Playlists` in `vendor/rustypipe/src/client/channel.rs`.
+- **Fix:** `ChannelTab::Playlists` in the fork's `src/client/channel.rs`.
 - **Tests:** `yt3_the_playlists_tab_sends_the_params_youtube_uses`,
   `yt3_the_playlists_tab_never_sends_the_params_that_return_home`,
   `yt3_the_other_tabs_keep_the_params_youtube_uses`.
@@ -102,7 +107,7 @@ request shows a new format.
   `LOCKUP_CONTENT_TYPE_PODCAST`, with a `PL…` id like any playlist. The unknown
   type mapped to nothing.
 - **Fix:** `LockupContentType` in
-  `vendor/rustypipe/src/client/response/video_item.rs` reads the podcast type
+  the fork's `src/client/response/video_item.rs` reads the podcast type
   as a playlist.
 - **Test:** `yt4_a_podcast_is_listed_as_a_playlist`.
 
@@ -116,9 +121,9 @@ request shows a new format.
   externally tagged `MetadataPart` enum rejected a part with two keys, the list
   skipped it, and the video count took its place. Separately, the video count
   was parsed digit by digit.
-- **Fix:** `MetadataPart` in `vendor/rustypipe/src/client/response/mod.rs` is
+- **Fix:** `MetadataPart` in the fork's `src/client/response/mod.rs` is
   untagged and told apart by its field; `header_counts` in
-  `vendor/rustypipe/src/client/channel.rs` parses abbreviated video counts.
+  the fork's `src/client/channel.rs` parses abbreviated video counts.
 - **Tests:** `yt5_a_subscriber_part_with_an_accessibility_label_is_read`,
   `yt5_an_abbreviated_video_count_is_not_read_digit_by_digit`.
 
@@ -135,7 +140,7 @@ request shows a new format.
   lockup type had no `image` field, so serde dropped it on every later page.
 - **Fix:** `from_lockup` and `from_renderer` in
   `src/youtube/innertube/home.rs`; `LockupViewModelMetadataInner` and
-  `map_lockup` in `vendor/rustypipe/src/client/response/video_item.rs`.
+  `map_lockup` in the fork's `src/client/response/video_item.rs`.
 - **Tests:** `yt6_a_video_lockup_keeps_its_channels_avatar`,
   `yt6_a_video_lockup_with_another_image_is_still_read`.
 
