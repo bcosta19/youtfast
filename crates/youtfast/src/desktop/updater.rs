@@ -18,7 +18,7 @@ use crate::appearance::i18n::{Locale, format as trf, gettext as tr};
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const RELEASES_URL: &str = "https://github.com/bcosta19/youtfast/releases";
 const LATEST_RELEASE_API: &str = "https://api.github.com/repos/bcosta19/youtfast/releases/latest";
-const BUNDLED_CHANGELOG: &str = include_str!("../../CHANGELOG.md");
+const BUNDLED_CHANGELOG: &str = include_str!("../../../../CHANGELOG.md");
 
 const MAX_API_BYTES: usize = 256 * 1024;
 const MAX_CHECKSUMS_BYTES: usize = 64 * 1024;
@@ -885,7 +885,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn install_archive_replaces_target_binary_atomically() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        let root = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("updater-install-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);

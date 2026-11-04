@@ -13,7 +13,7 @@ from site_locale import portuguese_page
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "dist" / "site"
 ORIGIN = "https://youtfast.pages.dev"
-VERSION = tomllib.loads((ROOT / "Cargo.toml").read_text())["package"]["version"]
+VERSION = tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]["package"]["version"]
 _released = re.search(rf"^## \[{re.escape(VERSION)}\] - (\d{{4}}-\d{{2}}-\d{{2}})$",
                       (ROOT / "CHANGELOG.md").read_text(), re.M)
 if not _released:

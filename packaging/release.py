@@ -19,8 +19,13 @@ PUBLIC_FILES = [
 ]
 
 
+def workspace_package(root=ROOT):
+    """The workspace's shared package fields (version, license, rust-version)."""
+    return tomllib.loads((root / "Cargo.toml").read_text())["workspace"]["package"]
+
+
 def version(root=ROOT):
-    return tomllib.loads((root / "Cargo.toml").read_text())["package"]["version"]
+    return workspace_package(root)["version"]
 
 
 def validate_tag(tag, package_version):
@@ -74,7 +79,7 @@ def check(root=ROOT, tag=None, candidate=False):
     for section in ["## Included", "## Not included", "## Known limitations"]:
         if section not in notes:
             raise ValueError("Release notes must describe included features, exclusions and limitations")
-    if tomllib.loads((root / "Cargo.toml").read_text())["package"]["license"] != "GPL-3.0-only":
+    if workspace_package(root)["license"] != "GPL-3.0-only":
         raise ValueError("Project license must match release documentation")
     if not (root / "LICENSE").is_file():
         raise ValueError("LICENSE is required")

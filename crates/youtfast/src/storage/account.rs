@@ -851,7 +851,7 @@ mod tests {
 
     #[test]
     fn browser_roots_and_profiles_follow_each_platform() {
-        let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        let base = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("browser-platforms-{}", std::process::id()));
         for (platform, name, chrome, firefox) in [
@@ -1074,7 +1074,7 @@ mod tests {
     #[test]
     fn legacy_cache_credentials_cannot_restore_an_unselected_account() {
         use rustypipe::cache::CacheStorage;
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        let path = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("legacy-cache-{}.json", std::process::id()));
         std::fs::write(&path, br#"{"clients":{"desktop":{"version":"2.2026"}},"auth_cookie":"SAPISID=synthetic-secret","oauth_token":{"access_token":"ya29.synthetic-secret"}}"#).unwrap();

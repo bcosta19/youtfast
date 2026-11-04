@@ -1,24 +1,16 @@
-[package]
-name = "youtfast"
+[workspace]
+resolver = "3"
+members = ["crates/youtfast"]
+
+[workspace.package]
 version = "0.5.0"
 edition = "2024"
 rust-version = "1.98"
 license = "GPL-3.0-only"
-description = "A native YouTube client built with Rust, egui and libmpv"
 repository = "https://github.com/bcosta19/youtfast"
-readme = "README.md"
 publish = false
-keywords = ["youtube", "video", "egui", "mpv", "player"]
-categories = ["multimedia::video"]
 
-[[bin]]
-name = "youtfast"
-path = "src/main.rs"
-
-[features]
-demo = []
-
-[dependencies]
+[workspace.dependencies]
 anyhow = "1"
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
@@ -31,7 +23,7 @@ env_logger = "0.11"
 eframe = { version = "0.36", default-features = false, features = ["accesskit", "glow", "default_fonts", "wayland", "x11", "persistence"] }
 egui = "0.36"
 # `http` fetches thumbnails from i.ytimg.com through egui's image loaders;
-# `file` answers the ones the disk cache already kept (src/youtube/thumbs.rs).
+# `file` answers the ones the disk cache already kept (crates/youtfast/src/youtube/thumbs.rs).
 # `svg` draws the icons.
 egui_extras = { version = "0.36", features = ["file", "http", "image", "svg"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif"] }
@@ -101,26 +93,10 @@ sha2 = "0.11"
 reqwest = { version = "0.13", default-features = false, features = ["form", "query"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 rustls-platform-verifier = "0.6"
-
-# libmpv is linked from the system (src/mpv/ffi.rs). On Arch it comes with the
-# `mpv` package; Debian and Ubuntu need `libmpv-dev` to build.
-
-[target.'cfg(target_os = "linux")'.dependencies]
+# Each target's native credential store provider for keyring-core.
 zbus-secret-service-keyring-store = { version = "1.0.1", features = ["rt-tokio-crypto-rust"] }
-
-[target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store = { version = "1.0.2", features = ["keychain"] }
-
-[target.'cfg(windows)'.dependencies]
 windows-native-keyring-store = { version = "1.1", default-features = false }
-
-[dev-dependencies]
-# The fork's `client::regression` hooks, for the response-format
-# regression tests (tests/youtube_api.rs). Only test builds enable it.
-rustypipe = { version = "0.11.4", default-features = false, features = ["regression"] }
-
-[build-dependencies]
-fastframe-i18n = { git = "https://github.com/crmne/fastframe", tag = "v0.15.5", features = ["build"] }
 
 [profile.release]
 lto = "thin"

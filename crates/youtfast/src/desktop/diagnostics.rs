@@ -204,7 +204,7 @@ mod tests {
 
     #[test]
     fn logs_rotate_without_growing_past_the_two_file_budget() {
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        let dir = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("diagnostic-rotation-{}", std::process::id()));
         let mut log = Rotating::open(dir.clone(), 64).unwrap();
@@ -220,7 +220,7 @@ mod tests {
 
     #[test]
     fn an_oversized_existing_log_is_capped_and_still_appended() {
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        let dir = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("diagnostic-oversized-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -251,7 +251,7 @@ mod tests {
     #[test]
     fn persisted_records_are_redacted_before_writing_and_owner_only() {
         use log::Log;
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        let dir = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("diagnostic-privacy-{}", std::process::id()));
         let file = Rotating::open(dir.clone(), 1024).unwrap();

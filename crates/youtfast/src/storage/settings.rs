@@ -349,7 +349,7 @@ mod tests {
     /// A fresh file under the build tree (never /tmp).
     fn path(name: &str) -> PathBuf {
         let dir = std::env::var("CARGO_TARGET_TMPDIR")
-            .unwrap_or_else(|_| format!("{}/target", env!("CARGO_MANIFEST_DIR")));
+            .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../target").to_owned());
         std::fs::create_dir_all(&dir).unwrap();
         Path::new(&dir).join(format!("youtfast-{name}-{}.json", crate::util::now()))
     }

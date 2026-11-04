@@ -1,0 +1,80 @@
+[package]
+name = "youtfast"
+description = "A native YouTube client built with Rust, egui and libmpv"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+readme = "../../README.md"
+keywords = ["youtube", "video", "egui", "mpv", "player"]
+categories = ["multimedia::video"]
+
+[[bin]]
+name = "youtfast"
+path = "src/main.rs"
+
+[features]
+demo = []
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+env_logger.workspace = true
+eframe.workspace = true
+egui.workspace = true
+egui_extras.workspace = true
+image.workspace = true
+raw-window-handle.workspace = true
+tokio.workspace = true
+mdns-sd.workspace = true
+if-addrs.workspace = true
+socket2.workspace = true
+quick-xml.workspace = true
+fastframe-icons.workspace = true
+fastframe-fonts.workspace = true
+fastframe-text.workspace = true
+fastframe-i18n.workspace = true
+fastframe-theme.workspace = true
+fastframe-instance.workspace = true
+fastframe-now-playing.workspace = true
+fastframe-scroll.workspace = true
+rustypipe.workspace = true
+directories.workspace = true
+jiff.workspace = true
+rand.workspace = true
+url.workspace = true
+notify-rust.workspace = true
+rfd.workspace = true
+keyring-core.workspace = true
+ehttp.workspace = true
+ureq.workspace = true
+resvg.workspace = true
+sha2.workspace = true
+reqwest.workspace = true
+rustls.workspace = true
+rustls-platform-verifier.workspace = true
+
+# libmpv is linked from the system (src/mpv/ffi.rs). On Arch it comes with the
+# `mpv` package; Debian and Ubuntu need `libmpv-dev` to build.
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus-secret-service-keyring-store.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-native-keyring-store.workspace = true
+
+[dev-dependencies]
+# The fork's `client::regression` hooks, for the response-format regression
+# tests (tests/youtube_api.rs). Only test builds enable it.
+rustypipe = { workspace = true, features = ["regression"] }
+
+[build-dependencies]
+fastframe-i18n = { workspace = true, features = ["build"] }

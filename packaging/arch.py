@@ -3,10 +3,9 @@
 import argparse
 import hashlib
 import tarfile
-import tomllib
 from pathlib import Path
 
-from release import ROOT, check
+from release import ROOT, check, workspace_package
 
 
 def render(archive, output, root=ROOT):
@@ -16,7 +15,7 @@ def render(archive, output, root=ROOT):
         raise ValueError(f"Expected the final {expected} source asset")
     with archive.open("rb") as source:
         digest = hashlib.file_digest(source, "sha256").hexdigest()
-    package = tomllib.loads((root / "Cargo.toml").read_text())["package"]
+    package = workspace_package(root)
     text = (root / "packaging/arch/PKGBUILD.in").read_text()
     for placeholder, value in {
         "@VERSION@": current,

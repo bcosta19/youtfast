@@ -36,7 +36,7 @@ pub fn run(cli: &crate::Cli) -> eframe::Result {
         renderer: eframe::Renderer::Glow,
         persist_window: false,
         persistence_path: Some(
-            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
                 .join("target/ux-validation/demo.ron"),
         ),
         ..Default::default()

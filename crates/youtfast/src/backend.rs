@@ -1557,7 +1557,7 @@ mod tests {
     #[test]
     fn the_final_save_waits_for_an_old_write_and_rejects_later_old_snapshots() {
         let gate = Arc::new(SaveGate::default());
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let path = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!(
                 "final-save-{}-{}.json",
@@ -1704,7 +1704,7 @@ mod tests {
 
     #[tokio::test]
     async fn kept_thumbnails_answer_while_downloads_hold_every_turn() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("kept-thumbnail-turns-{}", std::process::id()));
         let dirs = Dirs {

@@ -8,7 +8,7 @@ InnerTube has no public contract: YouTube changes request parameters and
 response layouts without notice. This file records every such change that broke
 YouTFast, so the next one is recognised quickly and none of them comes back.
 
-Every entry has a regression test in [`tests/youtube_api.rs`](../tests/youtube_api.rs)
+Every entry has a regression test in [`crates/youtfast/tests/youtube_api.rs`](../crates/youtfast/tests/youtube_api.rs)
 named after it (`yt<n>_…`). The test passes on the format YouTube uses now and
 fails if the code goes back to the old one.
 
@@ -139,7 +139,7 @@ only as a dependency. Only a live request shows a new format.
   Our own reader of the first Home page never read an avatar, and rustypipe's
   lockup type had no `image` field, so serde dropped it on every later page.
 - **Fix:** `from_lockup` and `from_renderer` in
-  `src/youtube/innertube/home.rs`; `LockupViewModelMetadataInner` and
+  `crates/youtfast/src/youtube/innertube/home.rs`; `LockupViewModelMetadataInner` and
   `map_lockup` in the fork's `src/client/response/video_item.rs`.
 - **Tests:** `yt6_a_video_lockup_keeps_its_channels_avatar`,
   `yt6_a_video_lockup_with_another_image_is_still_read`.
@@ -155,5 +155,5 @@ Copy this outline. Number entries in order, and never reuse a number.
 - **Old format:** what YouTube used to send or accept.
 - **New format:** what it sends or accepts now, and why the old code failed.
 - **Fix:** file and function.
-- **Tests:** `ytn_…` in tests/youtube_api.rs.
+- **Tests:** `ytn_…` in crates/youtfast/tests/youtube_api.rs.
 ```

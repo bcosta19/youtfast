@@ -289,7 +289,7 @@ mod tests {
     #[test]
     fn an_oversized_response_is_rejected_without_a_partial_file() {
         let (url, worker) = server(vec![(200, vec![0; MAX_BYTES as usize + 100])]);
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let path = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("oversized-thumbnail-{}", std::process::id()));
         assert!(fetch(&url, &path).is_err());
@@ -301,7 +301,7 @@ mod tests {
     fn transient_failures_retry_and_one_download_supplies_display_and_disk() {
         let image = png();
         let (url, worker) = server(vec![(503, Vec::new()), (200, image.clone())]);
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let path = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("retry-thumbnail-{}", std::process::id()));
         assert!(fetch(&url, &path).is_err());
@@ -316,7 +316,7 @@ mod tests {
     #[test]
     fn disk_failures_do_not_discard_the_display_bytes() {
         let (url, worker) = server(vec![(200, png())]);
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let dir = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("thumbnail-write-failure-{}", std::process::id()));
         std::fs::create_dir(&dir).unwrap();
@@ -328,7 +328,7 @@ mod tests {
 
     #[test]
     fn pruning_enforces_both_file_count_and_total_bytes() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let dir = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("prune-thumbnails-{}", std::process::id()));
         std::fs::create_dir(&dir).unwrap();
@@ -366,7 +366,7 @@ mod tests {
     fn corrupt_cache_is_repaired_but_valid_cache_needs_no_network() {
         let bytes = png();
         let (url, worker) = server(vec![(200, bytes.clone())]);
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let path = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("corrupt-thumbnail-{}", std::process::id()));
         std::fs::write(&path, b"broken").unwrap();
@@ -382,7 +382,7 @@ mod tests {
     }
     #[test]
     fn http_failures_are_classified_and_retry_after_supports_dates() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let path = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("failed-thumbnail-{}", std::process::id()));
         for (code, expected) in [
@@ -409,7 +409,7 @@ mod tests {
     }
     #[test]
     fn only_a_regular_file_within_the_limits_that_decodes_is_kept() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let dir = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("kept-thumbnails-{}", std::process::id()));
         std::fs::create_dir(&dir).unwrap();
@@ -467,7 +467,7 @@ mod tests {
     fn downloads_reuse_their_connection() {
         let image = png();
         let (url, worker) = keep_alive_server(vec![image.clone(), image.clone()]);
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let dir = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("keep-alive-thumbnails-{}", std::process::id()));
         std::fs::create_dir(&dir).unwrap();
@@ -486,7 +486,7 @@ mod tests {
             vec![(200, image.clone()), (429, Vec::new())],
             "Cache-Control: no-store\r\nRetry-After: 120\r\n",
         );
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let path = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("no-store-thumbnail-{}", std::process::id()));
         assert_eq!(fetch(&url, &path).unwrap().as_ref(), image);

@@ -307,8 +307,8 @@ fn saved_language() -> appearance::i18n::Locale {
 
 /// The app's mark, the one the desktop entry names: the full drawing, or
 /// its flat variant when small enough that the shading would blur.
-const MARK: &[u8] = include_bytes!("../packaging/icons/youtfast.svg");
-const SMALL_MARK: &[u8] = include_bytes!("../packaging/icons/youtfast-small.svg");
+const MARK: &[u8] = include_bytes!("../../../packaging/icons/youtfast.svg");
+const SMALL_MARK: &[u8] = include_bytes!("../../../packaging/icons/youtfast-small.svg");
 const SMALL_BELOW: u32 = 40;
 
 /// The window's icon at `size` pixels, an empty one if the drawing cannot

@@ -486,7 +486,7 @@ mod tests {
     #[test]
     fn a_single_account_file_migrates_to_named_accounts() {
         let dir = std::env::var("CARGO_TARGET_TMPDIR")
-            .unwrap_or_else(|_| format!("{}/target", env!("CARGO_MANIFEST_DIR")));
+            .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../target").to_owned());
         std::fs::create_dir_all(&dir).unwrap();
         let path = Path::new(&dir).join(format!("library-migrate-{}.json", crate::util::now()));
         std::fs::write(

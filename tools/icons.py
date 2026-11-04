@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Regenerates the platform icons from packaging/icons/*.svg.
 
-youtfast.ico is embedded in the Windows executable (build.rs) and
+youtfast.ico is embedded in the Windows executable (crates/youtfast/build.rs) and
 youtfast.icns in the macOS bundle (packaging/bundle.py). Both carry PNG
 images; below 40 pixels they draw the flat mark, as the window icon does
-(`SMALL_BELOW` in src/main.rs). Needs rsvg-convert. Run it after changing
+(`SMALL_BELOW` in crates/youtfast/src/main.rs). Needs rsvg-convert. Run it after changing
 either SVG and commit the results.
 """
 import struct

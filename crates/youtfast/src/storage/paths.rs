@@ -193,7 +193,7 @@ mod tests {
 
     fn test_path(name: &str) -> PathBuf {
         static NEXT: AtomicU64 = AtomicU64::new(0);
-        Path::new(env!("CARGO_MANIFEST_DIR"))
+        Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!(
                 "review-{name}-{}-{}",
@@ -275,7 +275,7 @@ mod tests {
 
     #[test]
     fn read_errors_are_not_treated_as_missing_files() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target");
+        let dir = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).join("target");
         assert!(load_json::<serde_json::Value>(&dir, "test").is_err());
     }
 
@@ -296,7 +296,7 @@ mod tests {
     #[test]
     fn writes_racing_on_one_file_all_land_whole() {
         let dir = std::env::var("CARGO_TARGET_TMPDIR")
-            .unwrap_or_else(|_| format!("{}/target", env!("CARGO_MANIFEST_DIR")));
+            .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../target").to_owned());
         std::fs::create_dir_all(&dir).unwrap();
         let path = Path::new(&dir).join(format!("youtfast-race-{}.json", crate::util::now()));
         let writers: Vec<_> = (0..4u8)
@@ -328,7 +328,7 @@ mod tests {
     fn writes_are_the_owners_alone() {
         use std::os::unix::fs::PermissionsExt;
         let dir = std::env::var("CARGO_TARGET_TMPDIR")
-            .unwrap_or_else(|_| format!("{}/target", env!("CARGO_MANIFEST_DIR")));
+            .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../target").to_owned());
         std::fs::create_dir_all(&dir).unwrap();
         let path = Path::new(&dir).join(format!("youtfast-mode-{}.json", crate::util::now()));
         write_atomic(&path, b"data").unwrap();

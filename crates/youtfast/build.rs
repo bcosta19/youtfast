@@ -2,7 +2,8 @@ use std::path::Path;
 use std::process::Command;
 
 fn main() {
-    fastframe_i18n::build::compile_catalogs("assets/i18n");
+    // The catalogs, like the icons, stay at the repository root.
+    fastframe_i18n::build::compile_catalogs("../../assets/i18n");
     windows_icon();
 }
 
@@ -21,7 +22,7 @@ fn windows_icon() {
         println!("cargo:warning=The icon is only embedded for the GNU target.");
         return;
     }
-    let icon = Path::new(&var("CARGO_MANIFEST_DIR")).join("packaging/icons/youtfast.ico");
+    let icon = Path::new(&var("CARGO_MANIFEST_DIR")).join("../../packaging/icons/youtfast.ico");
     println!("cargo:rerun-if-changed={}", icon.display());
     println!("cargo:rerun-if-env-changed=WINDRES");
     let out = Path::new(&var("OUT_DIR")).to_owned();

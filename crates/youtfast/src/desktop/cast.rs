@@ -964,11 +964,12 @@ mod tests {
         impl Fixture {
             fn new(body: &str) -> Self {
                 static NEXT: AtomicU64 = AtomicU64::new(0);
-                let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
-                    "target/cast-test-{}-{}",
-                    std::process::id(),
-                    NEXT.fetch_add(1, Ordering::Relaxed)
-                ));
+                let dir =
+                    PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).join(format!(
+                        "target/cast-test-{}-{}",
+                        std::process::id(),
+                        NEXT.fetch_add(1, Ordering::Relaxed)
+                    ));
                 std::fs::create_dir_all(&dir).unwrap();
                 let source = dir.join("catt.py");
                 std::fs::write(&source, format!("#!/usr/bin/env python3\n{body}\n")).unwrap();

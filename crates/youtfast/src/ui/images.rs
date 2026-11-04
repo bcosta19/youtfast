@@ -168,7 +168,7 @@ pub fn remote<'a>(ui: &Ui, url: &'a str) -> Image<'a> {
     {
         return Image::from_bytes(
             "bytes://youtfast-demo.svg",
-            include_bytes!("../../assets/demo-thumbnail.svg"),
+            include_bytes!("../../../../assets/demo-thumbnail.svg"),
         );
     }
     let ctx = ui.ctx();
