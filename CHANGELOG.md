@@ -8,6 +8,8 @@ are the distribution record.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-05
+
 ### Changed
 
 - The source is now a Cargo workspace of focused crates under `crates/`
@@ -286,7 +288,8 @@ macOS Apple Silicon. Interactive Windows/macOS qualification is still pending.
 These exclusions are scope decisions, not completed features promised for a
 specific next version. See [ROADMAP.md](ROADMAP.md) for follow-up gates.
 
-[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/bcosta19/youtfast/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/bcosta19/youtfast/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/bcosta19/youtfast/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/bcosta19/youtfast/compare/v0.2.0...v0.3.0
