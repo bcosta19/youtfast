@@ -956,7 +956,6 @@ mod tests {
     #[cfg(unix)]
     mod process {
         use super::*;
-        use std::os::unix::fs::PermissionsExt;
         use std::path::PathBuf;
         use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -971,9 +970,19 @@ mod tests {
                     NEXT.fetch_add(1, Ordering::Relaxed)
                 ));
                 std::fs::create_dir_all(&dir).unwrap();
-                let helper = dir.join("catt");
-                std::fs::write(&helper, format!("#!/usr/bin/env python3\n{body}\n")).unwrap();
-                std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o700)).unwrap();
+                let source = dir.join("catt.py");
+                std::fs::write(&source, format!("#!/usr/bin/env python3\n{body}\n")).unwrap();
+                // The executable is written by another process. A write
+                // descriptor held here would be inherited by any child a
+                // parallel test forks meanwhile, and running the helper
+                // would then fail with ETXTBSY ("text file busy").
+                let installed = std::process::Command::new("install")
+                    .args(["-m", "700"])
+                    .arg(&source)
+                    .arg(dir.join("catt"))
+                    .status()
+                    .unwrap();
+                assert!(installed.success());
                 Self(dir)
             }
 
