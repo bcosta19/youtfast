@@ -120,7 +120,7 @@ sha2 = "0.11"
 # rustls and its ring provider are the ones reqwest already builds.
 reqwest = { version = "0.13", default-features = false, features = ["form", "query"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
-rustls-platform-verifier = "0.6"
+rustls-platform-verifier = "0.7"
 # Each target's native credential store provider for keyring-core.
 zbus-secret-service-keyring-store = { version = "1.0.1", features = ["rt-tokio-crypto-rust"] }
 apple-native-keyring-store = { version = "1.0.2", features = ["keychain"] }
