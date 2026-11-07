@@ -429,7 +429,7 @@ impl App {
     /// Re-request exactly the page which produced this attachment. A failed or
     /// unchanged source leaves the comment intact and stops automatic renewal.
     pub(super) fn refresh_comment_image(&mut self, old_url: String, manual: bool) {
-        let Some(video_id) = self.state.watching.as_ref().map(|video| video.id.clone()) else {
+        let Some(video_id) = self.watching_id().map(str::to_owned) else {
             return;
         };
         let row = self
@@ -463,7 +463,7 @@ impl App {
 
     /// Asks for the next comments page.
     pub(super) fn load_more_comments(&mut self) {
-        let Some(video_id) = self.state.watching.as_ref().map(|video| video.id.clone()) else {
+        let Some(video_id) = self.watching_id().map(str::to_owned) else {
             return;
         };
         // Take the token so a second click asks for the same page
@@ -491,7 +491,7 @@ impl App {
 
     /// Opens a comment's replies, asking for them, or closes them.
     pub(super) fn toggle_replies(&mut self, id: String) {
-        let Some(video_id) = self.state.watching.as_ref().map(|video| video.id.clone()) else {
+        let Some(video_id) = self.watching_id().map(str::to_owned) else {
             return;
         };
         if self.state.replies.contains_key(&id) {
