@@ -216,6 +216,7 @@ pub enum Command {
     LoadComments {
         generation: u64,
         key: CommentsKey,
+        video_id: String,
         token: String,
         visitor_data: Option<String>,
     },

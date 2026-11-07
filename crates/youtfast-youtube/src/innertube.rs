@@ -640,16 +640,23 @@ pub async fn comments(
     rp: &RustyPipe,
     ctoken: &str,
     visitor_data: Option<&str>,
+    watching_id: &str,
 ) -> Result<(Vec<CommentRow>, Option<String>), String> {
     let page = rp
         .query()
         .video_comments(ctoken, visitor_data)
         .await
         .map_err(text)?;
-    Ok((page.items.iter().map(comment).collect(), page.ctoken))
+    Ok((
+        page.items
+            .iter()
+            .map(|item| comment(item, watching_id))
+            .collect(),
+        page.ctoken,
+    ))
 }
 
-fn comment(item: &Comment) -> CommentRow {
+fn comment(item: &Comment, watching_id: &str) -> CommentRow {
     CommentRow {
         id: item.id.clone(),
         author: item.author.as_ref().map(|author| author.name.clone()),
@@ -662,7 +669,7 @@ fn comment(item: &Comment) -> CommentRow {
             .text
             .0
             .iter()
-            .map(|component| span(component, ""))
+            .map(|component| span(component, watching_id))
             .collect(),
         image: at_least(&item.image, 320),
         published: item.publish_date_txt.clone(),
@@ -687,12 +694,10 @@ fn span(component: &TextComponent, watching_id: &str) -> Span {
             url: url.clone(),
         },
         TextComponent::YouTube { target, .. } => match target {
-            UrlTarget::Video { id, start_time } if id == watching_id && *start_time > 0 => {
-                Span::Seek {
-                    text,
-                    seconds: *start_time,
-                }
-            }
+            UrlTarget::Video { id, start_time } if id == watching_id => Span::Seek {
+                text,
+                seconds: *start_time,
+            },
             UrlTarget::Video { id, .. } => Span::Video {
                 text,
                 id: id.clone(),
@@ -895,15 +900,18 @@ mod tests {
                 id: "bbbbbbbbbbb".to_owned()
             }
         );
-        // And the same video at its start is not a timestamp.
+    }
+
+    #[test]
+    fn a_timestamp_at_the_start_seeks_without_reopening() {
         let component = from_json(
             r#"{"YouTube":{"text":"0:00","target":{"Video":{"id":"aaaaaaaaaaa","start_time":0}}}}"#,
         );
         assert_eq!(
             span(&component, "aaaaaaaaaaa"),
-            Span::Video {
+            Span::Seek {
                 text: "0:00".to_owned(),
-                id: "aaaaaaaaaaa".to_owned()
+                seconds: 0,
             }
         );
     }
@@ -985,6 +993,48 @@ mod tests {
     }
 
     #[test]
+    fn comment_timestamps_seek_only_within_the_watched_video() {
+        let item: Comment = serde_json::from_value(serde_json::json!({
+            "id": "synthetic-comment",
+            "text": [
+                {"YouTube": {"text": "0:47", "target": {"Video": {
+                    "id": "aaaaaaaaaaa", "start_time": 47
+                }}}},
+                {"Text": {"text": " great moment\n"}},
+                {"YouTube": {"text": "0:00", "target": {"Video": {
+                    "id": "aaaaaaaaaaa", "start_time": 0
+                }}}},
+                {"YouTube": {"text": "another video", "target": {"Video": {
+                    "id": "bbbbbbbbbbb", "start_time": 47
+                }}}}
+            ],
+            "author": null, "publish_date": null, "publish_date_txt": "1 day ago",
+            "like_count": 0, "reply_count": 0,
+            "replies": {"items": [], "ctoken": null, "count": 0, "endpoint": "browse"},
+            "by_owner": false, "pinned": false, "hearted": false
+        }))
+        .unwrap();
+        assert_eq!(
+            comment(&item, "aaaaaaaaaaa").text,
+            [
+                Span::Seek {
+                    text: "0:47".into(),
+                    seconds: 47
+                },
+                Span::Text(" great moment\n".into()),
+                Span::Seek {
+                    text: "0:00".into(),
+                    seconds: 0
+                },
+                Span::Video {
+                    text: "another video".into(),
+                    id: "bbbbbbbbbbb".into()
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn comment_attachments_keep_text_and_choose_a_small_display_source() {
         let mut json = serde_json::json!({
             "id": "synthetic-comment", "text": [{"Text": {"text": "hello"}}],
@@ -994,14 +1044,14 @@ mod tests {
             "by_owner": false, "pinned": false, "hearted": false
         });
         let old: Comment = serde_json::from_value(json.clone()).unwrap();
-        assert_eq!(comment(&old).image, None);
+        assert_eq!(comment(&old, "aaaaaaaaaaa").image, None);
         json["image"] = serde_json::json!([
             {"url": "//example.invalid/large.gif", "width": 1280, "height": 720},
             {"url": "//example.invalid/display.gif", "width": 320, "height": 180},
             {"url": "//example.invalid/tiny.gif", "width": 100, "height": 56}
         ]);
         let with_image: Comment = serde_json::from_value(json.clone()).unwrap();
-        let mapped = comment(&with_image);
+        let mapped = comment(&with_image, "aaaaaaaaaaa");
         assert_eq!(mapped.text, [Span::Text("hello".into())]);
         assert_eq!(
             mapped.image.as_deref(),
@@ -1009,8 +1059,8 @@ mod tests {
         );
         json["text"] = serde_json::json!([]);
         let image_only: Comment = serde_json::from_value(json).unwrap();
-        assert!(comment(&image_only).text.is_empty());
-        assert!(comment(&image_only).image.is_some());
+        assert!(comment(&image_only, "aaaaaaaaaaa").text.is_empty());
+        assert!(comment(&image_only, "aaaaaaaaaaa").image.is_some());
     }
 
     #[test]

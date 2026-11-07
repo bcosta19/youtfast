@@ -429,6 +429,9 @@ impl App {
     /// Re-request exactly the page which produced this attachment. A failed or
     /// unchanged source leaves the comment intact and stops automatic renewal.
     pub(super) fn refresh_comment_image(&mut self, old_url: String, manual: bool) {
+        let Some(video_id) = self.state.watching.as_ref().map(|video| video.id.clone()) else {
+            return;
+        };
         let row = self
             .state
             .comments
@@ -451,6 +454,7 @@ impl App {
             self.backend.send(Command::LoadComments {
                 generation: self.details_generation,
                 key: CommentsKey::ImageRefresh { comment, old_url },
+                video_id,
                 token: token.clone(),
                 visitor_data: self.state.comments_visitor_data.clone(),
             });
@@ -459,6 +463,9 @@ impl App {
 
     /// Asks for the next comments page.
     pub(super) fn load_more_comments(&mut self) {
+        let Some(video_id) = self.state.watching.as_ref().map(|video| video.id.clone()) else {
+            return;
+        };
         // Take the token so a second click asks for the same page
         // again only after a retry.
         if matches!(self.state.comments_more, Fetch::Loading) {
@@ -475,6 +482,7 @@ impl App {
             self.backend.send(Command::LoadComments {
                 generation: self.details_generation,
                 key: CommentsKey::Top,
+                video_id,
                 token,
                 visitor_data: self.state.comments_visitor_data.clone(),
             });
@@ -483,6 +491,9 @@ impl App {
 
     /// Opens a comment's replies, asking for them, or closes them.
     pub(super) fn toggle_replies(&mut self, id: String) {
+        let Some(video_id) = self.state.watching.as_ref().map(|video| video.id.clone()) else {
+            return;
+        };
         if self.state.replies.contains_key(&id) {
             self.state.replies.remove(&id);
         } else {
@@ -497,6 +508,7 @@ impl App {
                 self.backend.send(Command::LoadComments {
                     generation: self.details_generation,
                     key: CommentsKey::Replies(id),
+                    video_id,
                     token,
                     visitor_data: self.state.comments_visitor_data.clone(),
                 });
@@ -542,6 +554,7 @@ impl App {
             self.backend.send(Command::LoadComments {
                 generation: self.details_generation,
                 key: CommentsKey::Top,
+                video_id: details.id.clone(),
                 token,
                 visitor_data: details.visitor_data.clone(),
             });
