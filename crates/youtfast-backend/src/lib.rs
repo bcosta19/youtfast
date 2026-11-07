@@ -466,10 +466,12 @@ async fn handle(command: Command, context: Context) {
         Command::LoadComments {
             generation,
             key,
+            video_id,
             token,
             visitor_data,
         } => {
-            let result = innertube::comments(&context.rp, &token, visitor_data.as_deref()).await;
+            let result =
+                innertube::comments(&context.rp, &token, visitor_data.as_deref(), &video_id).await;
             if let Err(error) = &result {
                 log::warn!("loading comments failed: {error}");
             }

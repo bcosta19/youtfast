@@ -1216,10 +1216,7 @@ fn span_at<'a>(
 ) -> Option<&'a (std::ops::Range<usize>, usize)> {
     for row in &galley.rows {
         for glyph in &row.row.glyphs {
-            let rect = Rect::from_min_size(
-                row.pos + glyph.pos.to_vec2(),
-                vec2(glyph.advance_width, glyph.line_height),
-            );
+            let rect = glyph.logical_rect().translate(row.pos.to_vec2());
             if rect.contains(at) {
                 let byte = glyph.cluster as usize;
                 return links.iter().find(|(range, _)| range.contains(&byte));
@@ -1313,12 +1310,11 @@ pub fn rich_text(
                 if !range.contains(&(glyph.cluster as usize)) {
                     continue;
                 }
-                let base = rect.min + row.pos.to_vec2() + glyph.pos.to_vec2();
+                let rect = glyph
+                    .logical_rect()
+                    .translate(rect.min.to_vec2() + row.pos.to_vec2());
                 ui.painter().line_segment(
-                    [
-                        pos2(base.x, base.y + glyph.font_height),
-                        pos2(base.x + glyph.advance_width, base.y + glyph.font_height),
-                    ],
+                    [rect.left_bottom(), rect.right_bottom()],
                     Stroke::new(1.0, palette.blue),
                 );
             }
@@ -1425,6 +1421,78 @@ fn meta(video: &Video, locale: Locale) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clicking_the_visible_timestamp_glyphs_seeks() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let palette = Palette::dark();
+        let spans = [
+            Span::Text("Comentário de alguém\n".into()),
+            Span::Seek {
+                text: "0:47".into(),
+                seconds: 47,
+            },
+            Span::Text(" ótimo momento".into()),
+        ];
+        let mut targets = Vec::new();
+        for _ in 0..2 {
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                rich_text(ui, &palette, &spans, None, Locale::English);
+            });
+            targets.clear();
+            for shape in &output.shapes {
+                if let egui::Shape::Text(text) = &shape.shape {
+                    for row in &text.galley.rows {
+                        for glyph in &row.row.glyphs {
+                            let byte = glyph.cluster as usize;
+                            let start = spans[0].text().len();
+                            if (start..start + spans[1].text().len()).contains(&byte) {
+                                targets.push(
+                                    text.pos
+                                        + row.pos.to_vec2()
+                                        + glyph.logical_rect().center().to_vec2(),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            output.textures_delta.clear();
+        }
+        assert_eq!(targets.len(), 4, "all timestamp glyphs must be visible");
+        for target in targets {
+            let mut actions = Vec::new();
+            for pressed in [true, false] {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        events: vec![
+                            egui::Event::PointerMoved(target),
+                            egui::Event::PointerButton {
+                                pos: target,
+                                button: egui::PointerButton::Primary,
+                                pressed,
+                                modifiers: egui::Modifiers::NONE,
+                            },
+                        ],
+                        ..Default::default()
+                    },
+                    |ui| {
+                        actions.extend(rich_text(ui, &palette, &spans, None, Locale::English));
+                    },
+                );
+                output.textures_delta.clear();
+            }
+            assert_eq!(
+                actions,
+                [Action::SeekTo {
+                    seconds: 47.0,
+                    exact: true
+                }],
+                "click at {target:?}"
+            );
+        }
+    }
 
     #[test]
     fn search_clear_button_has_a_localized_accessible_name() {

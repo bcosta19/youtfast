@@ -8,6 +8,13 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Fixed
+
+- Timestamps in comments and replies seek within the current video instead
+  of reopening it, including timestamps at `0:00`.
+- Timestamp and rich-text links respond across the visible text instead of
+  requiring clicks below the letters; hover underlines use the same bounds.
+
 ## [0.5.1] - 2026-11-05
 
 ### Changed
