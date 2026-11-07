@@ -1717,8 +1717,8 @@ dependencies = [
 
 [[package]]
 name = "fastframe-scroll"
-version = "0.15.5"
-source = "git+https://github.com/crmne/fastframe?tag=v0.15.5#a44efc58d7142642ec46db7aaa671f98bd8c4ce2"
+version = "0.15.3"
+source = "git+https://github.com/crmne/fastframe?tag=v0.15.3#a6a913933d89718f7e5880f0611b0504fa6a5d7d"
 dependencies = [
  "egui",
 ]
