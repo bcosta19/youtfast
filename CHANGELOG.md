@@ -14,6 +14,9 @@ are the distribution record.
   of reopening it, including timestamps at `0:00`.
 - Timestamp and rich-text links respond across the visible text instead of
   requiring clicks below the letters; hover underlines use the same bounds.
+- Enable the native browser integration so formatted web links in descriptions,
+  comments and replies actually open in the default browser when left-clicked.
+  The right-click Copy menu remains available.
 
 ## [0.5.1] - 2026-11-05
 

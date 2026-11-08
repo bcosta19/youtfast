@@ -48,7 +48,8 @@ log = "0.4"
 env_logger = "0.11"
 # The whole UI, as in Spotifast and ZapFast. glow, not wgpu: the video is
 # drawn by libmpv's OpenGL renderer into a texture egui_glow blits on screen.
-eframe = { version = "0.36", default-features = false, features = ["accesskit", "glow", "default_fonts", "wayland", "x11", "persistence"] }
+# `links` lets the native integration open browser URLs emitted by the UI.
+eframe = { version = "0.36", default-features = false, features = ["accesskit", "glow", "default_fonts", "links", "wayland", "x11", "persistence"] }
 egui = "0.36"
 # `http` fetches thumbnails from i.ytimg.com through egui's image loaders;
 # `file` answers the ones the disk cache already kept (crates/youtfast-youtube/src/thumbs.rs).

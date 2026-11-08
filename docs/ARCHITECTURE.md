@@ -336,9 +336,13 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
   it when the inline video scrolls completely above the watch page's clip.
   Returning from it sets `State::watch_scroll_to_video` to reveal the inline
   player.
-- `src/widgets.rs` lays out rich-text spans in descriptions and comments.
+- `src/widgets.rs` lays out rich-text spans in descriptions, comments and
+  replies. Clicking a web link sends `Action::OpenUrl`, whose existing scheme
+  restrictions apply; timestamps seek, and the context menu copies the text.
   Link hit testing and hover underlines use each glyph's logical rectangle,
   translated by its row; glyph positions alone denote the font baseline.
+  The shared `eframe` dependency enables `links`: without it the native
+  integration ignores `OpenUrl` commands instead of opening the browser.
 - `src/bench.rs` measures what one frame costs on the busiest views:
   `cargo test --release -p youtfast-ui --lib frame_cost -- --ignored
   --nocapture --test-threads=1`.
