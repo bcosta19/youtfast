@@ -105,7 +105,9 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
 - `src/ffi.rs` declares the libmpv functions used, by hand (client API 2.x).
   `src/lib.rs` wraps them: `Mpv` owns the player, observes the properties the
   interface shows, and is polled once per frame from `App::logic`; its wakeup
-  callback only requests a repaint. libmpv is linked from the system.
+  callback only requests a repaint. `Status::video_aspect` is the displayed
+  aspect (`video-out-params/aspect`, after autorotate), which the watch page
+  uses to size the picture. libmpv is linked from the system.
 - mpv's network cache (the demuxer cache) defaults in `Mpv::new` to mpv's
   standard 150 MiB ahead and 50 MiB behind (`PlaybackBuffer::Standard`), and
   `Settings::playback_buffer` can switch it to 50 MiB ahead and 20 MiB behind
@@ -326,7 +328,17 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
   to the next video and the live badge. A live stream has no timeline: mpv
   only seeks inside its cache (some 25 s), so it gets the badge and "back to
   live" instead of a DVR bar. Shorts are drawn upright and loop
-  (`loop-file`).
+  (`loop-file`). `src/watch.rs` sizes the watch page's video box to the
+  displayed aspect (square and portrait videos use a 16:9 box), capped at
+  1280 px. It reserves 72 px for the title and a 24 px bottom inset (channel
+  info and actions scroll below; a window too short for the minimum player
+  height scrolls), targets YouTube's short-window minimums (360 px for 16:9
+  and narrower, 240 px for wider) when the column allows, and gives Up next
+  the remaining 380–600 px with large rows. Theater mode fills the content
+  width with mpv letterboxing and keeps YouTube's 113 px metadata strip below
+  the player, leaving room for the title and channel row above the fold when
+  the window is tall enough; metadata and Up next keep their columns beneath
+  it in a wide window.
 - Leaving the watch page hands the video to the mini player
   (`player::mini`), which keeps drawing it: an undrawn render-API video
   output stalls. Closing the mini player pauses the video; playing again from

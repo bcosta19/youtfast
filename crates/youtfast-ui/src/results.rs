@@ -107,6 +107,17 @@ pub fn video_rows<'a>(
     rows(ui, state, videos, false, false, actions);
 }
 
+/// [`video_rows`] with the larger thumbnail and taller row the watch page's
+/// widened Up next column uses.
+pub fn video_rows_large<'a>(
+    ui: &mut Ui,
+    state: &State,
+    videos: impl IntoIterator<Item = &'a Video>,
+    actions: &mut Vec<Action>,
+) {
+    rows(ui, state, videos, true, false, actions);
+}
+
 /// [`video_rows`]; `large` draws search's big thumbnails, and `more` ends
 /// the list with the continuation's row.
 fn rows<'a>(

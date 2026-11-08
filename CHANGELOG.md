@@ -8,6 +8,21 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Fixed
+
+- The watch page player now sizes to the video's actual aspect ratio (16:9,
+  4:3, 21:9 and other landscape shapes) instead of leaving black bars inside
+  a fixed pane; square and portrait videos keep YouTube's standard 16:9 box.
+- The Up next column widens to take the remaining space, up to 600 px, with
+  large thumbnails when the video is narrower than the column.
+- Player sizing gives the picture the viewport space by keeping only the title
+  and a 24 px bottom inset above the fold when the window is tall enough, and
+  targets YouTube's minimum heights on short windows when the column allows.
+- Theater mode uses the full content width for the video and keeps YouTube's
+  113 px metadata strip below it, leaving room for the title and channel row
+  above the fold; the metadata and Up next columns remain beneath it in a wide
+  window.
+
 ## [0.5.1] - 2026-11-05
 
 ### Changed

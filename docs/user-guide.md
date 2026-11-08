@@ -105,12 +105,16 @@ For synthetic UI previews, build with `--features demo` and run:
 cargo run --locked --features demo -- --demo --demo-view watch --demo-size 1280x800
 cargo run --locked --features demo -- --demo --demo-view home --demo-light
 cargo run --locked --features demo -- --demo --demo-view settings --demo-language pt-BR
+cargo run --locked --features demo -- --demo --demo-view theater --demo-maximized
 ```
 
 Demo mode opens an isolated window without accounts, user files, network,
 playback or desktop media registration. It renders fixture states, not every
 backend interaction. `--demo-capture target/example.png` captures that window
-and closes it. The playback bindings follow
+and closes it. `--demo-maximized` starts the preview maximized. In the watch
+view, `--demo-aspect 4:3` (also `16:9` or `21:9`) stretches the synthetic
+artwork to another shape; `9:16` uses the portrait fallback. The `watch`,
+`theater` and `fullscreen` views show those layouts. The playback bindings follow
 [YouTube's published shortcuts](https://support.google.com/youtube/answer/7631406),
 with the list and Shorts adaptations described above.
 

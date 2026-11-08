@@ -32,6 +32,12 @@ struct Cli {
     #[arg(long, default_value = "1280x800")]
     demo_size: String,
     #[cfg(feature = "demo")]
+    #[arg(long, default_value = "16:9", value_parser = ["16:9", "4:3", "21:9", "9:16"])]
+    demo_aspect: String,
+    #[cfg(feature = "demo")]
+    #[arg(long)]
+    demo_maximized: bool,
+    #[cfg(feature = "demo")]
     #[arg(long)]
     demo_capture: Option<std::path::PathBuf>,
     /// A YouTube link to open, or something to search for.
