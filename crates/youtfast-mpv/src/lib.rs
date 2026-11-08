@@ -47,6 +47,7 @@ const SPEED: u64 = 15;
 const MUTE: u64 = 16;
 const TRACKS: u64 = 17;
 const EOF_REACHED: u64 = 18;
+const VIDEO_ASPECT: u64 = 19;
 
 #[derive(Debug)]
 pub struct Error {
@@ -126,6 +127,10 @@ pub struct Status {
     /// The decoded picture's size in pixels, or zero before the first frame.
     pub video_width: i64,
     pub video_height: i64,
+    /// The displayed picture's width/height, after rotation and aspect
+    /// correction, or zero before the first frame, after [`Mpv::load`] or
+    /// after `stop`; a reload or signed-in retry keeps the previous aspect.
+    pub video_aspect: f64,
     /// Frames per second the file declares, or zero when unknown.
     pub fps: f64,
     /// The video codec, as mpv names it: "vp9", "av1", "h264".
@@ -413,7 +418,7 @@ impl Mpv {
         // SAFETY: valid handle, options set, not yet initialized.
         check(unsafe { ffi::mpv_initialize(handle.ptr()) }, "starting mpv")?;
 
-        let observed: [(u64, &CStr, ffi::mpv_format); 18] = [
+        let observed = [
             (TIME_POS, c"time-pos", ffi::MPV_FORMAT_DOUBLE),
             (DURATION, c"duration", ffi::MPV_FORMAT_DOUBLE),
             (PAUSE, c"pause", ffi::MPV_FORMAT_FLAG),
@@ -424,6 +429,13 @@ impl Mpv {
             (CACHED_UNTIL, c"demuxer-cache-time", ffi::MPV_FORMAT_DOUBLE),
             (VIDEO_WIDTH, c"video-params/w", ffi::MPV_FORMAT_INT64),
             (VIDEO_HEIGHT, c"video-params/h", ffi::MPV_FORMAT_INT64),
+            // After the autorotate filter, so a phone video's portrait shape
+            // is what the watch page sees.
+            (
+                VIDEO_ASPECT,
+                c"video-out-params/aspect",
+                ffi::MPV_FORMAT_DOUBLE,
+            ),
             (FPS, c"container-fps", ffi::MPV_FORMAT_DOUBLE),
             (CODEC, c"video-format", ffi::MPV_FORMAT_STRING),
             (HWDEC, c"hwdec-current", ffi::MPV_FORMAT_STRING),
@@ -492,6 +504,9 @@ impl Mpv {
             Some(start) => self.load_with(url, &format!("start={start:.3}"))?,
             None => self.replace(&["loadfile", url, "replace"])?,
         }
+        // Clear after `replace` drains earlier observations, so the previous
+        // video's queued aspect cannot be applied to this load.
+        self.status.video_aspect = 0.0;
         self.set_paused(false)
     }
 
@@ -536,6 +551,7 @@ impl Mpv {
     /// Unloads the video when its last tab closes and discards pending playback events.
     pub fn stop(&mut self) -> Result<(), Error> {
         self.replace(&["stop"])?;
+        self.status.video_aspect = 0.0;
         // Nothing left for a signed-in retry to reload.
         self.current = None;
         self.status.buffering = false;
@@ -922,6 +938,11 @@ impl Mpv {
             MEDIA_TITLE => status.title = string,
             VIDEO_WIDTH => status.video_width = integer.unwrap_or(0),
             VIDEO_HEIGHT => status.video_height = integer.unwrap_or(0),
+            VIDEO_ASPECT => {
+                status.video_aspect = double
+                    .filter(|aspect| aspect.is_finite() && *aspect > 0.0)
+                    .unwrap_or(0.0);
+            }
             FPS => status.fps = double.unwrap_or(0.0),
             CODEC => status.codec = string,
             // "no" (or nothing) while the CPU decodes.

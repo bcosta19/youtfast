@@ -135,9 +135,23 @@ The video rectangle is always black.
 
 ## The watch page
 
-- The video takes the main column (theater mode: the window's content width),
-  with controls over its lower edge. Wide windows keep the queue and related
-  videos in the right column; narrow windows stack them below the video.
+- The video is sized to its own aspect ratio, with controls over its lower
+  edge; square and portrait videos use YouTube's 16:9 box. Its width is capped
+  at 1280 px, and 72 px is reserved for the title, its gap and a 24 px bottom
+  inset (channel details and actions scroll below) to maximise picture space
+  without touching the window edge; a window too short for the minimum player
+  height scrolls. On short windows it targets YouTube's minimum heights
+  (360 px for 16:9 and narrower, 240 px for wider) when the column is wide
+  enough to hold them; the page uses the standard 24/16/0 padding (Shorts
+  keeps its own 24 px frame) and a 24 px bottom inset. Wide windows give the
+  remaining
+  width to Up next, between 380 and 600 px, and centre the video and sidebar
+  together; narrow windows stack it below the video. Theater mode spans the
+  full content width and lets mpv letterbox inside its black surround; as on
+  YouTube, the player keeps a 113 px metadata strip below it, leaving room for
+  the title and channel row above the fold when the window is tall enough, and
+  the metadata and Up next keep their side-by-side columns beneath it in a
+  wide window.
 - Under it: the title in 20 bold, then the channel's line —
   its round avatar, the name in semibold over `11M subscribers` in
   `secondary`, `Subscribe` as the primary pill — and at the right the
@@ -157,11 +171,13 @@ The video rectangle is always black.
   then the likes, the creator's heart and the replies' toggle; replies
   indented under it with smaller avatars.
 - **Up next** and **Related** to the right in a wide window (under in a
-  narrow one), as rows. Queue entries offer drag reordering and explicit
-  move/remove controls. The mini player is a compact frameless 16:9 rounded
-  video box (`280×157.5`) anchored to the bottom-right corner, showing
-  Play/Pause and Close controls on hover and returning to the watch page when
-  clicked.
+  narrow one), as rows; when the watch page widens the sidebar, they switch to
+  the large thumbnail layout (thumbnail spanning half the column, up to
+  360 px). Queue entries keep the compact rows and offer drag reordering and
+  explicit move/remove controls. The mini player is a compact frameless
+  16:9 rounded video box (`280×157.5`) anchored to the bottom-right corner,
+  showing Play/Pause and Close controls on hover and returning to the watch
+  page when clicked.
 - **Shorts**: a portrait stage, an action rail and next/previous navigation;
   wheel events are throttled to avoid skipping multiple videos at once.
 

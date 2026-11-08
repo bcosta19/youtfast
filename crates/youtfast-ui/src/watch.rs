@@ -3,8 +3,8 @@
 //! description, chapters and comments, and the Up next pane beside them.
 
 use egui::{
-    Align, Color32, CornerRadius, Frame, Layout, Margin, Rect, Response, RichText, Sense, Stroke,
-    Ui, pos2, vec2,
+    Align, Color32, CornerRadius, Frame, Layout, Rect, Response, RichText, Sense, Stroke, Ui, pos2,
+    vec2,
 };
 
 use super::player::{self, Mode};
@@ -18,10 +18,122 @@ use youtfast_core::util;
 use youtfast_i18n::{Locale, format as trf, gettext as tr};
 use youtfast_mpv::{Status, VideoSurface};
 
-/// The "Up next" pane's width beside the video in a wide window.
+/// The "Up next" pane's narrowest width beside the video in a wide window.
 const SIDEBAR_WIDTH: f32 = 380.0;
+/// The widest the pane grows when the video is narrower than the column.
+const SIDEBAR_MAX: f32 = 600.0;
+/// A floated sidebar width just over the minimum would otherwise flip the
+/// rows to the large layout.
+const LARGE_ROWS_AFTER: f32 = SIDEBAR_WIDTH + 0.5;
+/// The 16:9 box used for square, portrait and unknown videos.
+const DEFAULT_ASPECT: f64 = 16.0 / 9.0;
+/// The widest the video is drawn, as YouTube caps it.
+const MAX_PLAYER_WIDTH: f32 = 1280.0;
+/// Wider than any real video; a corrupt property falls back to 16:9 instead
+/// of collapsing the player to a sliver.
+const MAX_ASPECT: f32 = 10.0;
+/// The title line, the gap above it, and a 24 px bottom inset: what the
+/// normal watch page keeps for metadata above the fold. The channel and
+/// actions follow below the fold so the picture gets the rest.
+const METADATA_RESERVE: f32 = 72.0;
+/// Theater keeps YouTube's whole metadata strip above the fold. YouTube sizes
+/// its theater player to `100vh - 169px`: a 56 px masthead and 113 px for the
+/// title, channel row and bottom inset. This page's content area already
+/// excludes the masthead, so the player keeps the 113 px below it.
+const THEATER_METADATA_RESERVE: f32 = 113.0;
+/// YouTube's short-window minimum for 16:9 and narrower videos.
+const MIN_VIDEO_HEIGHT: f32 = 360.0;
+/// The shorter minimum for videos wider than 16:9.
+const MIN_WIDE_VIDEO_HEIGHT: f32 = 240.0;
+/// The gap between the video column and Up next.
+const GAP: f32 = 24.0;
 /// Narrower than this, the pane moves under the video.
 const WIDE: f32 = 860.0;
+
+/// The normal watch page's video box, Up next width and the inset that
+/// centres the pair when Up next has reached its widest.
+#[derive(Debug)]
+struct WatchColumns {
+    video: egui::Vec2,
+    sidebar: f32,
+    indent: f32,
+    large: bool,
+}
+
+/// The largest box of `aspect` (width/height) that fits `available`.
+/// Square and portrait videos use YouTube's 16:9 box instead. The short-window
+/// target is 360 px for 16:9 and narrower, 240 px for wider; a narrower column
+/// sets the size instead. On a short window the box may deliberately be taller
+/// than `available.y`.
+fn video_box(available: egui::Vec2, aspect: f64) -> egui::Vec2 {
+    let aspect = aspect as f32;
+    let aspect = if aspect.is_finite() && aspect > 0.0 && aspect <= MAX_ASPECT {
+        aspect
+    } else {
+        DEFAULT_ASPECT as f32
+    };
+    let ratio = if aspect > 1.0 {
+        aspect
+    } else {
+        DEFAULT_ASPECT as f32
+    };
+    let minimum = if aspect > DEFAULT_ASPECT as f32 {
+        MIN_WIDE_VIDEO_HEIGHT
+    } else {
+        MIN_VIDEO_HEIGHT
+    };
+    let height = available.y.max(minimum);
+    let width = available.x.min(height * ratio).max(0.0);
+    vec2(width, width / ratio)
+}
+
+/// YouTube's normal watch layout: a 1280 px player cap, 72 px kept for the
+/// title and its bottom inset, and an Up next column between 380 and 600 px
+/// wide. The pair is centred once that column cannot grow further.
+fn watch_columns(available: egui::Vec2, aspect: f64) -> WatchColumns {
+    let height = (available.y - METADATA_RESERVE).max(1.0);
+    let main = (available.x - SIDEBAR_WIDTH - GAP).clamp(1.0, MAX_PLAYER_WIDTH);
+    let video = video_box(vec2(main, height), aspect);
+    let sidebar = (available.x - GAP - video.x).clamp(SIDEBAR_WIDTH, SIDEBAR_MAX);
+    let indent = ((available.x - video.x - GAP - sidebar) / 2.0).max(0.0);
+    WatchColumns {
+        video,
+        sidebar,
+        indent,
+        large: sidebar > LARGE_ROWS_AFTER,
+    }
+}
+
+/// YouTube's theater layout: the player across the content width, with the
+/// title and channel row still above the fold. The metadata and Up next keep
+/// their normal columns below it.
+fn theater_columns(available: egui::Vec2) -> WatchColumns {
+    WatchColumns {
+        video: vec2(
+            available.x.max(1.0),
+            (available.y - THEATER_METADATA_RESERVE).max(1.0),
+        ),
+        sidebar: SIDEBAR_WIDTH,
+        indent: 0.0,
+        large: false,
+    }
+}
+
+/// The aspect the watch page should draw the picture at. Audio-only's
+/// thumbnail is 16:9, and an idle player or a missing/invalid aspect falls
+/// back to the default box.
+fn watch_aspect(state: &State, status: Option<&Status>) -> f64 {
+    if state.audio_only {
+        return DEFAULT_ASPECT;
+    }
+    status.map_or(DEFAULT_ASPECT, |status| {
+        if status.idle || !status.video_aspect.is_finite() || status.video_aspect <= 0.0 {
+            DEFAULT_ASPECT
+        } else {
+            status.video_aspect
+        }
+    })
+}
 
 pub fn show(
     ui: &mut Ui,
@@ -30,78 +142,102 @@ pub fn show(
     surface: Option<&VideoSurface>,
     actions: &mut Vec<Action>,
 ) {
-    egui::CentralPanel::default()
-        .frame(Frame::central_panel(ui.style()).inner_margin(Margin::same(24)))
-        .show(ui, |ui| {
-            if state.watching_short() {
-                shorts(ui, state, status, surface, actions);
-                return;
-            }
-            // The video never takes more than most of the window's height, so
-            // its controls stay in view.
-            let max_video_height = ui.available_height() * 0.75;
-            let Some(watching) = state.watching.clone() else {
-                return;
-            };
-            let theater = state.settings.theater;
-            let mut scrolled_past_video = false;
-            let mut scroll = egui::ScrollArea::vertical()
-                .id_salt("watch-page")
-                .auto_shrink(false);
-            if std::mem::take(&mut state.watch_scroll_to_video) {
-                scroll = scroll.vertical_scroll_offset(0.0);
-            }
-            scroll.show(ui, |ui| {
-                // Theater mode: the video across the window, the columns
-                // under it.
-                if theater {
-                    scrolled_past_video =
-                        video_pane(ui, state, status, surface, max_video_height, actions);
-                }
+    if state.watching_short() {
+        // Shorts keeps the watch page's original 24 px frame; the other watch
+        // views use the shared 24/16/0 panel.
+        egui::CentralPanel::default()
+            .frame(Frame::central_panel(ui.style()).inner_margin(egui::Margin::same(24)))
+            .show(ui, |ui| shorts(ui, state, status, surface, actions));
+        return;
+    }
+    results::panel(ui, |ui| {
+        // The normal layout keeps the title visible under the video when the
+        // window is tall enough; the channel line and actions may follow below
+        // the fold, as on a short YouTube page. Theater keeps the title and
+        // channel row visible when there is room.
+        let content_height = ui.available_height();
+        let height_budget = (content_height - METADATA_RESERVE).max(1.0);
+        let aspect = watch_aspect(state, status);
+        let Some(watching) = state.watching.clone() else {
+            return;
+        };
+        let theater = state.settings.theater;
+        let mut scrolled_past_video = false;
+        let mut scroll = egui::ScrollArea::vertical()
+            .id_salt("watch-page")
+            .auto_shrink(false);
+        if std::mem::take(&mut state.watch_scroll_to_video) {
+            scroll = scroll.vertical_scroll_offset(0.0);
+        }
+        scroll.show(ui, |ui| {
+            if theater {
+                let columns = theater_columns(vec2(ui.available_width(), content_height));
+                scrolled_past_video =
+                    video_pane(ui, state, status, surface, columns.video, actions);
                 if ui.available_width() >= WIDE {
+                    let sidebar = columns.sidebar;
+                    let main = (ui.available_width() - sidebar - GAP).max(1.0);
                     ui.horizontal_top(|ui| {
-                        let gap = 24.0;
-                        let main_width = ui.available_width() - SIDEBAR_WIDTH - gap;
                         ui.vertical(|ui| {
-                            ui.set_width(main_width);
-                            if !theater {
-                                scrolled_past_video = video_pane(
-                                    ui,
-                                    state,
-                                    status,
-                                    surface,
-                                    max_video_height,
-                                    actions,
-                                );
-                            }
+                            ui.set_width(main);
                             about_video(ui, state, &watching, status, actions);
                         });
-                        ui.add_space(gap);
+                        ui.add_space((GAP - ui.spacing().item_spacing.x).max(0.0));
                         ui.vertical(|ui| {
-                            ui.set_width(SIDEBAR_WIDTH);
+                            ui.set_width(sidebar);
                             queue(ui, state, actions);
-                            up_next(ui, state, actions);
+                            up_next(ui, state, false, actions);
                             ui.add_space(24.0);
-                            related(ui, state, actions);
+                            related(ui, state, false, actions);
                         });
                     });
+                    ui.add_space(24.0);
                 } else {
-                    if !theater {
-                        scrolled_past_video =
-                            video_pane(ui, state, status, surface, max_video_height, actions);
-                    }
                     about_video(ui, state, &watching, status, actions);
                     ui.add_space(24.0);
                     queue(ui, state, actions);
-                    up_next(ui, state, actions);
+                    up_next(ui, state, false, actions);
                     ui.add_space(24.0);
-                    related(ui, state, actions);
+                    related(ui, state, false, actions);
+                    ui.add_space(24.0);
                 }
-            });
-            if scrolled_past_video && state.settings.scroll_miniplayer && !state.mini_closed {
-                player::mini(ui.ctx(), state, status, surface, actions);
+            } else if ui.available_width() >= WIDE {
+                let columns = watch_columns(vec2(ui.available_width(), content_height), aspect);
+                ui.horizontal_top(|ui| {
+                    ui.add_space(columns.indent);
+                    ui.vertical(|ui| {
+                        ui.set_width(columns.video.x);
+                        scrolled_past_video =
+                            video_pane(ui, state, status, surface, columns.video, actions);
+                        about_video(ui, state, &watching, status, actions);
+                    });
+                    ui.add_space((GAP - ui.spacing().item_spacing.x).max(0.0));
+                    ui.vertical(|ui| {
+                        ui.set_width(columns.sidebar);
+                        let large = columns.large;
+                        queue(ui, state, actions);
+                        up_next(ui, state, large, actions);
+                        ui.add_space(24.0);
+                        related(ui, state, large, actions);
+                    });
+                });
+                ui.add_space(24.0);
+            } else {
+                let size = video_box(vec2(ui.available_width(), height_budget), aspect);
+                scrolled_past_video = video_pane(ui, state, status, surface, size, actions);
+                about_video(ui, state, &watching, status, actions);
+                ui.add_space(24.0);
+                queue(ui, state, actions);
+                up_next(ui, state, false, actions);
+                ui.add_space(24.0);
+                related(ui, state, false, actions);
+                ui.add_space(24.0);
             }
         });
+        if scrolled_past_video && state.settings.scroll_miniplayer && !state.mini_closed {
+            player::mini(ui.ctx(), state, status, surface, actions);
+        }
+    });
 }
 
 /// Shorts have their own upright stage and action rail. Details and
@@ -357,30 +493,19 @@ pub fn fullscreen(
         });
 }
 
-/// The video with its controls over it: 16:9 across the column, or a
-/// Short upright in the middle of it.
+/// The video, `size` large, centred in the column with its controls over it.
+/// Theater mode passes the whole content width and lets mpv letterbox the
+/// picture inside it.
 fn video_pane(
     ui: &mut Ui,
     state: &mut State,
     status: Option<&Status>,
     surface: Option<&VideoSurface>,
-    max_video_height: f32,
+    size: egui::Vec2,
     actions: &mut Vec<Action>,
 ) -> bool {
-    let width = ui.available_width();
-    let (row, _) = if state.watching_short() {
-        let height = max_video_height.max(320.0);
-        ui.allocate_exact_size(vec2(width, height), Sense::hover())
-    } else {
-        let height = (width * 9.0 / 16.0).min(max_video_height);
-        ui.allocate_exact_size(vec2(width, height), Sense::hover())
-    };
-    let rect = if state.watching_short() {
-        let short_width = (row.height() * 9.0 / 16.0).min(width);
-        Rect::from_center_size(row.center(), vec2(short_width, row.height()))
-    } else {
-        row
-    };
+    let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), size.y), Sense::hover());
+    let rect = Rect::from_center_size(row.center(), size);
     player::player(ui, rect, state, status, surface, Mode::Page, actions);
     ui.add_space(16.0);
     rect.bottom() <= ui.clip_rect().top()
@@ -1543,7 +1668,7 @@ fn queue(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     ui.add_space(24.0);
 }
 
-fn up_next(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+fn up_next(ui: &mut Ui, state: &State, large: bool, actions: &mut Vec<Action>) {
     let locale: Locale = state.settings.language;
     let watching = state.watching.as_ref().map(|video| video.id.as_str());
     let next: Vec<&Video> = state
@@ -1561,14 +1686,18 @@ fn up_next(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         Some(next.len()),
         |ui| {
             ui.push_id("watch-up-next", |ui| {
-                results::video_rows(ui, state, next, actions);
+                if large {
+                    results::video_rows_large(ui, state, next, actions);
+                } else {
+                    results::video_rows(ui, state, next, actions);
+                }
             });
         },
     );
 }
 
 /// The recommended videos rustypipe sent with the details.
-fn related(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+fn related(ui: &mut Ui, state: &State, large: bool, actions: &mut Vec<Action>) {
     let locale: Locale = state.settings.language;
     let Fetch::Ready(details) = &state.details else {
         return;
@@ -1589,7 +1718,11 @@ fn related(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         Some(related.len()),
         |ui| {
             ui.push_id("watch-related", |ui| {
-                results::video_rows(ui, state, related, actions);
+                if large {
+                    results::video_rows_large(ui, state, related, actions);
+                } else {
+                    results::video_rows(ui, state, related, actions);
+                }
             });
         },
     );
@@ -1959,6 +2092,284 @@ mod tests {
                     output.textures_delta.clear();
                 }
             }
+        }
+    }
+
+    fn largest_black_rect(shape: &egui::Shape) -> Option<Rect> {
+        match shape {
+            egui::Shape::Rect(rect) if rect.fill == Color32::BLACK => Some(rect.rect),
+            egui::Shape::Vec(shapes) => shapes
+                .iter()
+                .filter_map(largest_black_rect)
+                .max_by(|a, b| (a.width() * a.height()).total_cmp(&(b.width() * b.height()))),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn the_video_box_keeps_every_landscape_aspect_and_uses_16_9_for_portrait() {
+        for aspect in [
+            16.0 / 9.0,
+            16.0 / 10.0,
+            3.0 / 2.0,
+            4.0 / 3.0,
+            5.0 / 4.0,
+            1.85,
+            2.0,
+            2.35,
+            2.39,
+            21.0 / 9.0,
+        ] {
+            let video = video_box(vec2(1280.0, 708.0), aspect);
+            assert!(
+                (video.x / video.y - aspect as f32).abs() < 0.001,
+                "aspect {aspect} became {}x{}",
+                video.x,
+                video.y
+            );
+        }
+        for aspect in [1.0, 4.0 / 5.0, 9.0 / 16.0] {
+            let video = video_box(vec2(1280.0, 708.0), aspect);
+            assert!(
+                (video.x / video.y - 16.0 / 9.0).abs() < 0.001,
+                "square or portrait aspect {aspect} must use the 16:9 box"
+            );
+        }
+        for aspect in [0.0, -1.0, f64::NAN, f64::INFINITY, 1e20, f64::MAX] {
+            let video = video_box(vec2(1280.0, 708.0), aspect);
+            assert!((video.x / video.y - 16.0 / 9.0).abs() < 0.001);
+        }
+        // YouTube's 360 px short-window target keeps 16:9 and 4:3 readable
+        // when the column is wide enough; wider videos only get 240 px.
+        let short = video_box(vec2(639.6, 305.5), 16.0 / 9.0);
+        assert!((short.y - 360.0).abs() < 0.3);
+        let four_three = video_box(vec2(639.6, 305.5), 4.0 / 3.0);
+        assert!((four_three.x - 480.0).abs() < 0.1 && (four_three.y - 360.0).abs() < 0.1);
+        let ultrawide = video_box(vec2(639.6, 200.0), 21.0 / 9.0);
+        assert!((ultrawide.x - 560.0).abs() < 0.1 && (ultrawide.y - 240.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn watch_columns_match_youtubes_aspect_cap_reserve_and_sidebar() {
+        let wide = vec2(1757.0, 844.0);
+        let sixteen_nine = watch_columns(wide, 16.0 / 9.0);
+        assert!((sixteen_nine.video.x - 1280.0).abs() < 0.1);
+        assert!((sixteen_nine.video.y - 720.0).abs() < 0.1);
+        assert!((sixteen_nine.sidebar - 453.0).abs() < 0.1);
+        assert!(sixteen_nine.indent.abs() < 0.1);
+        assert!(sixteen_nine.large);
+
+        let four_three = watch_columns(wide, 4.0 / 3.0);
+        assert!((four_three.video.x - 1029.33).abs() < 0.1);
+        assert!((four_three.video.y - 772.0).abs() < 0.1);
+        assert!((four_three.sidebar - 600.0).abs() < 0.1);
+        assert!((four_three.indent - 51.83).abs() < 0.1);
+        assert!(four_three.large);
+
+        let ultrawide = watch_columns(wide, 21.0 / 9.0);
+        assert!((ultrawide.video.x - 1280.0).abs() < 0.1);
+        assert!((ultrawide.video.y - 548.57).abs() < 0.1);
+        assert!((ultrawide.sidebar - 453.0).abs() < 0.1);
+        assert!(ultrawide.indent.abs() < 0.1);
+
+        let portrait = watch_columns(wide, 9.0 / 16.0);
+        assert!((portrait.video.x / portrait.video.y - 16.0 / 9.0).abs() < 0.001);
+
+        let capped = watch_columns(vec2(2200.0, 1600.0), 16.0 / 9.0);
+        assert!((capped.video.x - 1280.0).abs() < 0.1);
+        assert!((capped.video.y - 720.0).abs() < 0.1);
+        assert!((capped.sidebar - 600.0).abs() < 0.1);
+        assert!((capped.indent - 148.0).abs() < 0.1);
+
+        // A synthetic content area where the 380 px sidebar leaves 639.6 px
+        // for the video. The 72 px reserve leaves 401.5 px: 16:9 is
+        // width-limited, while 4:3 rises to 535x401.
+        let small = vec2(1043.6, 473.5);
+        let small_sixteen_nine = watch_columns(small, 16.0 / 9.0);
+        assert!((small_sixteen_nine.video.x - 639.6).abs() < 0.2);
+        assert!((small_sixteen_nine.video.y - 360.0).abs() < 0.3);
+        assert!((small_sixteen_nine.sidebar - 380.0).abs() < 0.1);
+        assert!(small_sixteen_nine.indent.abs() < 0.1);
+        assert!(!small_sixteen_nine.large);
+
+        let small_four_three = watch_columns(small, 4.0 / 3.0);
+        assert!((small_four_three.video.x - 535.33).abs() < 0.2);
+        assert!((small_four_three.video.y - 401.5).abs() < 0.2);
+        assert!((small_four_three.sidebar - 484.27).abs() < 0.2);
+        assert!(small_four_three.indent.abs() < 0.1);
+        assert!(small_four_three.large);
+
+        let small_ultrawide = watch_columns(small, 21.0 / 9.0);
+        assert!((small_ultrawide.video.x - 639.6).abs() < 0.2);
+        assert!((small_ultrawide.video.y - 274.1).abs() < 0.2);
+        assert!((small_ultrawide.sidebar - 380.0).abs() < 0.1);
+        assert!(small_ultrawide.indent.abs() < 0.1);
+        assert!(!small_ultrawide.large);
+    }
+
+    #[test]
+    fn narrow_wide_layouts_are_width_limited_below_the_height_targets() {
+        // At 1000 px the wide layout leaves 596 px for the video, narrower
+        // than 16:9 at 360 px, so the width sets 335 px. The target applies
+        // when the column permits it.
+        let columns = watch_columns(vec2(1000.0, 300.0), 16.0 / 9.0);
+        assert!((columns.video.x - 596.0).abs() < 0.1);
+        assert!((columns.video.y - 335.25).abs() < 0.1);
+        // Theater follows YouTube's viewport formula without a minimum.
+        let theater = theater_columns(vec2(1000.0, 300.0));
+        assert!((theater.video.x - 1000.0).abs() < 0.1);
+        assert!((theater.video.y - 187.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn theater_keeps_the_channel_row_above_the_fold_and_the_up_next_sidebar() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let related = Video::from_id("bbbbbbbbbbb".to_owned());
+        let next = Video::from_id("ccccccccccc".to_owned());
+        let mut state = State {
+            view: youtfast_core::model::View::Watch,
+            watching: Some(Video::from_id("aaaaaaaaaaa".to_owned())),
+            up_next: vec![next],
+            details: Fetch::Ready(youtfast_core::model::Details {
+                channel: Channel {
+                    id: "UCdemo".to_owned(),
+                    name: "Demo Channel".to_owned(),
+                    avatar: None,
+                },
+                subscribers: Some(1_234),
+                related: vec![related],
+                ..Default::default()
+            }),
+            ..State::default()
+        };
+        state.settings.theater = true;
+        let status = Status {
+            paused: true,
+            video_aspect: 16.0 / 9.0,
+            ..Status::default()
+        };
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1280.0, 800.0))),
+                ..Default::default()
+            },
+            |ui| {
+                let mut actions = Vec::new();
+                show(ui, &mut state, Some(&status), None, &mut actions);
+            },
+        );
+        let video = output
+            .shapes
+            .iter()
+            .filter_map(|shape| largest_black_rect(&shape.shape))
+            .max_by(|a, b| (a.width() * a.height()).total_cmp(&(b.width() * b.height())))
+            .expect("the theater picture must be black");
+
+        fn text_rect(shape: &egui::Shape, wanted: &str) -> Option<Rect> {
+            match shape {
+                egui::Shape::Text(text) if text.galley.text() == wanted => {
+                    Some(Rect::from_min_size(text.pos, text.galley.size()))
+                }
+                egui::Shape::Text(_) => None,
+                egui::Shape::Vec(shapes) => {
+                    shapes.iter().find_map(|shape| text_rect(shape, wanted))
+                }
+                _ => None,
+            }
+        }
+        let channel = output
+            .shapes
+            .iter()
+            .find_map(|shape| text_rect(&shape.shape, "Demo Channel"))
+            .expect("the channel row must be drawn");
+        let up_next = output
+            .shapes
+            .iter()
+            .find_map(|shape| text_rect(&shape.shape, "Up next"))
+            .expect("theater must keep the Up next sidebar");
+        output.textures_delta.clear();
+        assert!((video.width() - 1232.0).abs() < 0.5);
+        // The 1280x800 screen leaves 784 px after the panel's top margin;
+        // theater keeps YouTube's 113 px strip below the picture.
+        assert!((video.height() - 671.0).abs() < 0.5);
+        assert!(
+            channel.bottom() <= 800.0 - 20.0,
+            "the channel row must stay above the fold, not at {channel:?}"
+        );
+        // The 380 px sidebar starts after the 828 px metadata column, not
+        // under the full-width player.
+        assert!(
+            up_next.min.x > 800.0,
+            "Up next must stay in the right column, not at {up_next:?}"
+        );
+    }
+
+    #[test]
+    fn audio_only_keeps_the_thumbnail_at_16_9() {
+        let status = Status {
+            video_aspect: 4.0 / 3.0,
+            ..Status::default()
+        };
+        let mut state = State::default();
+        assert!((watch_aspect(&state, Some(&status)) - 4.0 / 3.0).abs() < 0.001);
+        state.audio_only = true;
+        assert!((watch_aspect(&state, Some(&status)) - 16.0 / 9.0).abs() < 0.001);
+
+        state.audio_only = false;
+        let idle = Status {
+            video_aspect: 4.0 / 3.0,
+            idle: true,
+            ..Status::default()
+        };
+        assert!((watch_aspect(&state, Some(&idle)) - 16.0 / 9.0).abs() < 0.001);
+        let unknown = Status::default();
+        assert!((watch_aspect(&state, Some(&unknown)) - 16.0 / 9.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn the_watch_page_draws_the_video_at_its_reported_aspect() {
+        for aspect in [16.0 / 9.0, 4.0 / 3.0, 21.0 / 9.0] {
+            let ctx = egui::Context::default();
+            theme::install_fonts(&ctx);
+            let mut state = State {
+                view: youtfast_core::model::View::Watch,
+                watching: Some(Video::from_id("aaaaaaaaaaa".to_owned())),
+                details: Fetch::Ready(youtfast_core::model::Details::default()),
+                ..State::default()
+            };
+            let status = Status {
+                paused: true,
+                video_aspect: aspect,
+                ..Status::default()
+            };
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1280.0, 800.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    let mut actions = Vec::new();
+                    show(ui, &mut state, Some(&status), None, &mut actions);
+                },
+            );
+            let video = output
+                .shapes
+                .iter()
+                .filter_map(|shape| largest_black_rect(&shape.shape))
+                .max_by(|a, b| (a.width() * a.height()).total_cmp(&(b.width() * b.height())))
+                .expect("the video pane must be black");
+            output.textures_delta.clear();
+            assert!(
+                (video.width() / video.height() - aspect as f32).abs() < 0.01,
+                "aspect {aspect} drew a {}x{} pane",
+                video.width(),
+                video.height()
+            );
+            assert!(
+                video.width() <= 1232.0 - SIDEBAR_WIDTH - GAP + 0.5,
+                "the video must fit beside the Up next column"
+            );
         }
     }
 }

@@ -25,12 +25,20 @@ pub fn run(cli: &crate::Cli) -> eframe::Result {
         Locale::English
     };
     let light = cli.demo_light;
+    let maximized = cli.demo_maximized;
+    let aspect = match cli.demo_aspect.as_str() {
+        "4:3" => 4.0 / 3.0,
+        "21:9" => 21.0 / 9.0,
+        "9:16" => 9.0 / 16.0,
+        _ => 16.0 / 9.0,
+    };
     let capture = cli.demo_capture.clone();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title(tr(locale, "YouTFast — demo").into_owned())
             .with_app_id("youtfast-demo")
-            .with_inner_size(size),
+            .with_inner_size(size)
+            .with_maximized(maximized),
         renderer: eframe::Renderer::Glow,
         persist_window: false,
         persistence_path: Some(
@@ -64,6 +72,7 @@ pub fn run(cli: &crate::Cli) -> eframe::Result {
                     speed: 1.0,
                     paused: true,
                     volume: 65.0,
+                    video_aspect: aspect,
                     ..Default::default()
                 },
                 capture,
@@ -149,8 +158,8 @@ pub(crate) fn fixture(page: &str) -> State {
     state.comments = Fetch::Ready(Vec::new());
     state.mini_closed = true;
     state.view = match page {
-        "watch" | "transcript" | "shorts" | "fullscreen" | "cast" | "cast-connected"
-        | "cast-missing" => View::Watch,
+        "watch" | "transcript" | "shorts" | "fullscreen" | "theater" | "cast"
+        | "cast-connected" | "cast-missing" => View::Watch,
         "results" => View::Results,
         "channel" => View::Channel,
         "playlist" => View::Playlist,
@@ -189,6 +198,7 @@ pub(crate) fn fixture(page: &str) -> State {
         }
     }
     state.fullscreen = page == "fullscreen";
+    state.settings.theater = page == "theater";
     state.keys_open = page == "help";
     state.transcript_open = page == "transcript";
     state.transcript_follow = true;
