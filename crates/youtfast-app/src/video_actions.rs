@@ -228,7 +228,8 @@ impl App {
         self.load_rating();
     }
 
-    fn watching_id(&self) -> Option<&str> {
+    /// The watched video's identity for comment requests and account actions.
+    pub(super) fn watching_id(&self) -> Option<&str> {
         self.state.watching.as_ref().map(|video| video.id.as_str())
     }
 }

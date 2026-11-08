@@ -1216,10 +1216,7 @@ fn span_at<'a>(
 ) -> Option<&'a (std::ops::Range<usize>, usize)> {
     for row in &galley.rows {
         for glyph in &row.row.glyphs {
-            let rect = Rect::from_min_size(
-                row.pos + glyph.pos.to_vec2(),
-                vec2(glyph.advance_width, glyph.line_height),
-            );
+            let rect = glyph.logical_rect().translate(row.pos.to_vec2());
             if rect.contains(at) {
                 let byte = glyph.cluster as usize;
                 return links.iter().find(|(range, _)| range.contains(&byte));
@@ -1313,12 +1310,11 @@ pub fn rich_text(
                 if !range.contains(&(glyph.cluster as usize)) {
                     continue;
                 }
-                let base = rect.min + row.pos.to_vec2() + glyph.pos.to_vec2();
+                let rect = glyph
+                    .logical_rect()
+                    .translate(rect.min.to_vec2() + row.pos.to_vec2());
                 ui.painter().line_segment(
-                    [
-                        pos2(base.x, base.y + glyph.font_height),
-                        pos2(base.x + glyph.advance_width, base.y + glyph.font_height),
-                    ],
+                    [rect.left_bottom(), rect.right_bottom()],
                     Stroke::new(1.0, palette.blue),
                 );
             }
@@ -1425,6 +1421,233 @@ fn meta(video: &Video, locale: Locale) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clicking_wrapped_link_glyphs_opens_the_exact_url_and_copy_still_works() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let palette = Palette::dark();
+        let url = "https://example.com/path?q=one%20two#part";
+        let spans = [
+            Span::Text("Plain text before ".into()),
+            Span::Link {
+                text: "a long formatted link that wraps across several lines".into(),
+                url: url.into(),
+            },
+            Span::Text(" plain text after".into()),
+        ];
+        let draw = |ui: &mut Ui, actions: &mut Vec<Action>| {
+            ui.set_width(120.0);
+            actions.extend(rich_text(ui, &palette, &spans, None, Locale::English));
+        };
+        let mut targets = Vec::new();
+        let mut plain = None;
+        for _ in 0..2 {
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                draw(ui, &mut Vec::new());
+            });
+            targets.clear();
+            for shape in &output.shapes {
+                if let egui::Shape::Text(text) = &shape.shape {
+                    for (row_index, row) in text.galley.rows.iter().enumerate() {
+                        for glyph in &row.row.glyphs {
+                            let byte = glyph.cluster as usize;
+                            let pos = text.pos
+                                + row.pos.to_vec2()
+                                + glyph.logical_rect().center().to_vec2();
+                            if byte < spans[0].text().len() {
+                                plain = Some(pos);
+                            } else if byte < spans[0].text().len() + spans[1].text().len() {
+                                targets.push((row_index, pos));
+                            }
+                        }
+                    }
+                }
+            }
+            output.textures_delta.clear();
+        }
+        assert!(
+            targets.iter().any(|(row, _)| *row != targets[0].0),
+            "the link must wrap across rows"
+        );
+        for (_, target) in &targets {
+            let mut actions = Vec::new();
+            for pressed in [true, false] {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        events: vec![
+                            egui::Event::PointerMoved(*target),
+                            egui::Event::PointerButton {
+                                pos: *target,
+                                button: egui::PointerButton::Primary,
+                                pressed,
+                                modifiers: egui::Modifiers::NONE,
+                            },
+                        ],
+                        ..Default::default()
+                    },
+                    |ui| draw(ui, &mut actions),
+                );
+                output.textures_delta.clear();
+            }
+            assert_eq!(
+                actions,
+                [Action::OpenUrl(url.into())],
+                "click at {target:?}"
+            );
+        }
+        let plain = plain.expect("plain text must have a visible glyph");
+        let mut actions = Vec::new();
+        for pressed in [true, false] {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    events: vec![
+                        egui::Event::PointerMoved(plain),
+                        egui::Event::PointerButton {
+                            pos: plain,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| draw(ui, &mut actions),
+            );
+            output.textures_delta.clear();
+        }
+        assert!(actions.is_empty(), "plain text must not open a link");
+
+        let target = targets[0].1;
+        for pressed in [true, false] {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    events: vec![
+                        egui::Event::PointerMoved(target),
+                        egui::Event::PointerButton {
+                            pos: target,
+                            button: egui::PointerButton::Secondary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| draw(ui, &mut actions),
+            );
+            output.textures_delta.clear();
+        }
+        assert!(actions.is_empty(), "right-click must not open a link");
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| draw(ui, &mut actions));
+        let copy = output
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.job.text == "Copy" => {
+                    Some(text.pos + text.galley.size() * 0.5)
+                }
+                _ => None,
+            })
+            .expect("right-click must show Copy");
+        output.textures_delta.clear();
+        let mut copied = false;
+        for pressed in [true, false] {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    events: vec![
+                        egui::Event::PointerMoved(copy),
+                        egui::Event::PointerButton {
+                            pos: copy,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| draw(ui, &mut actions),
+            );
+            copied |= output.platform_output.commands.iter().any(|command| {
+                matches!(command, egui::OutputCommand::CopyText(text)
+                    if text == "Plain text before a long formatted link that wraps across several lines plain text after")
+            });
+            output.textures_delta.clear();
+        }
+        assert!(copied, "Copy must copy the displayed text");
+        assert!(actions.is_empty(), "copying must not open a link");
+    }
+
+    #[test]
+    fn clicking_the_visible_timestamp_glyphs_seeks() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let palette = Palette::dark();
+        let spans = [
+            Span::Text("Comentário de alguém\n".into()),
+            Span::Seek {
+                text: "0:47".into(),
+                seconds: 47,
+            },
+            Span::Text(" ótimo momento".into()),
+        ];
+        let mut targets = Vec::new();
+        for _ in 0..2 {
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                rich_text(ui, &palette, &spans, None, Locale::English);
+            });
+            targets.clear();
+            for shape in &output.shapes {
+                if let egui::Shape::Text(text) = &shape.shape {
+                    for row in &text.galley.rows {
+                        for glyph in &row.row.glyphs {
+                            let byte = glyph.cluster as usize;
+                            let start = spans[0].text().len();
+                            if (start..start + spans[1].text().len()).contains(&byte) {
+                                targets.push(
+                                    text.pos
+                                        + row.pos.to_vec2()
+                                        + glyph.logical_rect().center().to_vec2(),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            output.textures_delta.clear();
+        }
+        assert_eq!(targets.len(), 4, "all timestamp glyphs must be visible");
+        for target in targets {
+            let mut actions = Vec::new();
+            for pressed in [true, false] {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        events: vec![
+                            egui::Event::PointerMoved(target),
+                            egui::Event::PointerButton {
+                                pos: target,
+                                button: egui::PointerButton::Primary,
+                                pressed,
+                                modifiers: egui::Modifiers::NONE,
+                            },
+                        ],
+                        ..Default::default()
+                    },
+                    |ui| {
+                        actions.extend(rich_text(ui, &palette, &spans, None, Locale::English));
+                    },
+                );
+                output.textures_delta.clear();
+            }
+            assert_eq!(
+                actions,
+                [Action::SeekTo {
+                    seconds: 47.0,
+                    exact: true
+                }],
+                "click at {target:?}"
+            );
+        }
+    }
 
     #[test]
     fn search_clear_button_has_a_localized_accessible_name() {

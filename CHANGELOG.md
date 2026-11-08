@@ -10,6 +10,13 @@ are the distribution record.
 
 ### Fixed
 
+- Timestamps in comments and replies seek within the current video instead
+  of reopening it, including timestamps at `0:00`.
+- Timestamp and rich-text links respond across the visible text instead of
+  requiring clicks below the letters; hover underlines use the same bounds.
+- Enable the native browser integration so formatted web links in descriptions,
+  comments and replies actually open in the default browser when left-clicked.
+  The right-click Copy menu remains available.
 - The watch page player now sizes to the video's actual aspect ratio (16:9,
   4:3, 21:9 and other landscape shapes) instead of leaving black bars inside
   a fixed pane; square and portrait videos keep YouTube's standard 16:9 box.

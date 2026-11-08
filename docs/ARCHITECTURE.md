@@ -220,8 +220,9 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
   device, merged and deduplicated), a channel's RSS, and the account's
   subscriptions, history, Watch later, liked videos and playlists. The watch
   page's description, chapters, recommended videos and comments come from it
-  too (`details`, `comments`; spans map YouTube links on the video itself to
-  seeks), and channel pages are its tabs (`channel_tab`, `channel_about`):
+  too (`details`, `comments`; comment requests carry the watched video id so
+  spans in comments, replies and descriptions map links on that video to
+  seeks, including `0:00`), and channel pages are its tabs (`channel_tab`, `channel_about`):
   videos, shorts, live, playlists and the channel's own search, paged through
   `More` continuations (`more_videos`, `more_playlists`), as is the home feed
   (`more_videos` again).
@@ -347,6 +348,13 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
   it when the inline video scrolls completely above the watch page's clip.
   Returning from it sets `State::watch_scroll_to_video` to reveal the inline
   player.
+- `src/widgets.rs` lays out rich-text spans in descriptions, comments and
+  replies. Clicking a web link sends `Action::OpenUrl`, whose existing scheme
+  restrictions apply; timestamps seek, and the context menu copies the text.
+  Link hit testing and hover underlines use each glyph's logical rectangle,
+  translated by its row; glyph positions alone denote the font baseline.
+  The shared `eframe` dependency enables `links`: without it the native
+  integration ignores `OpenUrl` commands instead of opening the browser.
 - `src/bench.rs` measures what one frame costs on the busiest views:
   `cargo test --release -p youtfast-ui --lib frame_cost -- --ignored
   --nocapture --test-threads=1`.
