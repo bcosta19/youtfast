@@ -322,6 +322,10 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
 
 ### youtfast-ui
 
+- The top-bar bell opens a notifications popup over the current view. It
+  shares the full page's visit snapshot, mark-seen action and video rows;
+  opening either surface marks the current alerts seen. New arrivals while a
+  surface is open join that snapshot and are marked seen.
 - `src/player.rs` is the player as YouTube draws it: the controls over the
   video's bottom edge (shown while the pointer moves, kept while paused), the
   seek bar with chapters and SponsorBlock's segments, the settings menu

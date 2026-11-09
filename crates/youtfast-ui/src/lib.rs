@@ -236,9 +236,29 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                             palette.accent,
                         );
                     }
+                    let mut open = state.notifications_popup_open;
                     if bell.clicked() {
-                        actions.push(Action::Navigate(View::Notifications));
+                        open = !open;
+                        if open {
+                            actions.push(Action::VisitNotifications);
+                        } else {
+                            egui::Popup::close_all(ui.ctx());
+                        }
                     }
+                    let nested_open = egui::Popup::is_any_open(ui.ctx());
+                    let popup = egui::Popup::menu(&bell)
+                        .open_bool(&mut open)
+                        .close_behavior(egui::PopupCloseBehavior::IgnoreClicks)
+                        .show(|ui| notifications::popup(ui, state, actions));
+                    if let Some(popup) = popup
+                        && !nested_open
+                        && !egui::Popup::is_any_open(ui.ctx())
+                        && popup.response.clicked_elsewhere()
+                        && !bell.clicked()
+                    {
+                        open = false;
+                    }
+                    state.notifications_popup_open = open;
                     if widgets::icon_button(
                         ui,
                         Icon::Info,
@@ -984,6 +1004,177 @@ mod tests {
         assert_eq!(items[0].3, None);
         let notifications = items.iter().find(|i| i.1 == View::Notifications).unwrap();
         assert_eq!(notifications.3, Some(0));
+    }
+
+    fn top_bar_frame(
+        ctx: &egui::Context,
+        state: &mut State,
+        events: Vec<egui::Event>,
+        actions: &mut Vec<Action>,
+    ) -> egui::FullOutput {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(1280.0, 800.0),
+                )),
+                events,
+                ..Default::default()
+            },
+            |ui| top_bar(ui, state, actions),
+        );
+        output.textures_delta.clear();
+        output
+    }
+
+    fn pointer_click(
+        ctx: &egui::Context,
+        state: &mut State,
+        pos: egui::Pos2,
+        button: egui::PointerButton,
+        actions: &mut Vec<Action>,
+    ) {
+        for pressed in [true, false] {
+            let _ = top_bar_frame(
+                ctx,
+                state,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                actions,
+            );
+        }
+    }
+
+    #[test]
+    fn bell_opens_notifications_without_navigating_and_closes_on_second_click() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let mut state = State::default();
+        state.alerts.push(Video::from_id("test-video".into()));
+        let bell = egui::pos2(1168.0, 28.0);
+        let mut actions = Vec::new();
+        let _ = top_bar_frame(&ctx, &mut state, Vec::new(), &mut actions);
+        pointer_click(
+            &ctx,
+            &mut state,
+            bell,
+            egui::PointerButton::Primary,
+            &mut actions,
+        );
+        assert!(state.notifications_popup_open, "bell should open the popup");
+        pointer_click(
+            &ctx,
+            &mut state,
+            bell,
+            egui::PointerButton::Primary,
+            &mut actions,
+        );
+        assert!(
+            !state.notifications_popup_open,
+            "second click should close it"
+        );
+        assert_eq!(state.view, View::Home, "opening the bell must not navigate");
+        assert_eq!(
+            actions
+                .iter()
+                .filter(|action| matches!(action, Action::VisitNotifications))
+                .count(),
+            1,
+            "only opening marks alerts visited"
+        );
+        assert!(
+            !actions
+                .iter()
+                .any(|action| matches!(action, Action::Navigate(_)))
+        );
+    }
+
+    #[test]
+    fn notifications_popup_closes_on_outside_click() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let mut state = State {
+            notifications_popup_open: true,
+            ..State::default()
+        };
+        let mut actions = Vec::new();
+        let _ = top_bar_frame(&ctx, &mut state, Vec::new(), &mut actions);
+        let _ = top_bar_frame(&ctx, &mut state, Vec::new(), &mut actions);
+        pointer_click(
+            &ctx,
+            &mut state,
+            egui::pos2(300.0, 500.0),
+            egui::PointerButton::Primary,
+            &mut actions,
+        );
+        assert!(!state.notifications_popup_open);
+    }
+
+    #[test]
+    fn notification_context_menu_remains_usable() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let mut video = Video::from_id("test-video".into());
+        video.title = "A notification video".into();
+        let mut state = State {
+            notifications_popup_open: true,
+            alerts_visit: vec![video],
+            ..State::default()
+        };
+        let mut actions = Vec::new();
+        let _ = top_bar_frame(&ctx, &mut state, Vec::new(), &mut actions);
+        let output = top_bar_frame(&ctx, &mut state, Vec::new(), &mut actions);
+        let row = output
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.text() == "A notification video" => {
+                    Some(text.pos + vec2(3.0, 3.0))
+                }
+                _ => None,
+            })
+            .expect("notification row is visible");
+        pointer_click(
+            &ctx,
+            &mut state,
+            row,
+            egui::PointerButton::Secondary,
+            &mut actions,
+        );
+        let output = top_bar_frame(&ctx, &mut state, Vec::new(), &mut actions);
+        assert!(
+            state.notifications_popup_open,
+            "context menu must not close the notification list"
+        );
+        let play_next = output
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.text() == "Play next" => {
+                    Some(text.pos + vec2(3.0, 3.0))
+                }
+                _ => None,
+            })
+            .expect("context menu remains visible on the next frame");
+        pointer_click(
+            &ctx,
+            &mut state,
+            play_next,
+            egui::PointerButton::Primary,
+            &mut actions,
+        );
+        assert!(
+            actions
+                .iter()
+                .any(|action| matches!(action, Action::Enqueue { next: true, .. }))
+        );
     }
 
     /// Draws one frame and reports the left edge of the sidebar's nav label:

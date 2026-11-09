@@ -114,6 +114,8 @@ pub enum Action {
     MarkRemoving(u32),
     /// Dismiss the remove confirm.
     CancelRemoving,
+    /// Open the notifications popup and mark its current alerts as visited.
+    VisitNotifications,
     /// `[ check now ]` on the Notifications page.
     CheckAlertsNow,
     /// `[ mark all seen ]` on the Notifications page.

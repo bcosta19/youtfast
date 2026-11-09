@@ -13,6 +13,48 @@ impl State {
         self.alerts_checking = false;
         self.notice = Some(format!("Could not check for uploads: {error}"));
     }
+
+    fn visit_alerts(&mut self, now: i64) -> bool {
+        self.alerts_visit = std::mem::take(&mut self.alerts);
+        let previous = self.library.alerts_seen_at.unwrap_or(now);
+        let newest = self
+            .alerts_visit
+            .iter()
+            .filter_map(|video| video.published_at)
+            .max();
+        let seen_at = previous.max(newest.unwrap_or(previous).min(now));
+        let changed = self.library.alerts_seen_at != Some(seen_at);
+        self.library.alerts_seen_at = Some(seen_at);
+        changed
+    }
+
+    pub(super) fn visit_alerts_popup(&mut self, now: i64) -> bool {
+        if self.view == View::Notifications {
+            return false;
+        }
+        self.visit_alerts(now)
+    }
+
+    /// Keep arrivals visible during a visit; otherwise leave them unread.
+    fn receive_alerts(&mut self, mut new: Vec<Video>, now: i64) -> bool {
+        if new.is_empty() || (!self.notifications_popup_open && self.view != View::Notifications) {
+            self.alerts = new;
+            return false;
+        }
+
+        let newest = new.iter().filter_map(|video| video.published_at).max();
+        let ids: HashSet<&str> = new.iter().map(|video| video.id.as_str()).collect();
+        self.alerts_visit
+            .retain(|video| !ids.contains(video.id.as_str()));
+        new.append(&mut self.alerts_visit);
+        self.alerts_visit = new;
+        self.alerts.clear();
+        let previous = self.library.alerts_seen_at.unwrap_or(now);
+        let seen_at = previous.max(newest.unwrap_or(previous).min(now));
+        let changed = self.library.alerts_seen_at != Some(seen_at);
+        self.library.alerts_seen_at = Some(seen_at);
+        changed
+    }
 }
 
 impl App {
@@ -66,16 +108,14 @@ impl App {
         ) else {
             return;
         };
-        let changed = self.state.library.alerts_seen_at != Some(found.seen_at)
+        let mut changed = self.state.library.alerts_seen_at != Some(found.seen_at)
             || self.state.library.alerts_notified_at != found.notified_at;
         self.state.library.alerts_seen_at = Some(found.seen_at);
         self.state.library.alerts_notified_at = found.notified_at;
+        changed |= self.state.receive_alerts(found.new, util::now());
         if changed {
             self.save_library();
         }
-        // `new` is everything unseen since the last visit; replace, so a
-        // second check does not repeat the badge's rows.
-        self.state.alerts = found.new;
         if self.state.settings.desktop_notifications
             && self.state.settings.alerts
             && !found.to_notify.is_empty()
@@ -120,14 +160,74 @@ impl App {
         self.set_alerts_timer();
     }
 
-    /// Opening the Notifications page marks it all seen, but the rows stay
-    /// drawn for this visit.
+    /// Opening the page or popup marks alerts seen, but keeps this visit's rows.
     pub(super) fn mark_notifications_visited(&mut self) {
-        self.state.alerts_visit = self.state.alerts.clone();
-        self.state.alerts.clear();
-        if self.state.library.alerts_seen_at != Some(util::now()) {
-            self.state.library.alerts_seen_at = Some(util::now());
+        if self.state.visit_alerts(util::now()) {
             self.save_library();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn video(id: &str) -> Video {
+        Video::from_id(id.to_owned())
+    }
+
+    #[test]
+    fn popup_on_notifications_page_preserves_the_current_visit() {
+        let mut state = State {
+            view: View::Notifications,
+            alerts_visit: vec![video("already-seen")],
+            ..State::default()
+        };
+
+        assert!(!state.visit_alerts_popup(100));
+        assert_eq!(state.alerts_visit[0].id, "already-seen");
+        assert_eq!(state.library.alerts_seen_at, None);
+    }
+
+    #[test]
+    fn opening_before_a_check_does_not_discard_unfetched_uploads() {
+        let mut state = State {
+            notifications_popup_open: true,
+            ..State::default()
+        };
+        state.library.alerts_seen_at = Some(50);
+        assert!(!state.visit_alerts_popup(100));
+        let mut upload = video("not-yet-fetched");
+        upload.published_at = Some(90);
+        let found = alerts::compute(vec![upload], state.library.alerts_seen_at, None, 110)
+            .expect("the check has an existing watermark");
+
+        assert!(state.receive_alerts(found.new, 110));
+        assert_eq!(state.alerts_visit[0].id, "not-yet-fetched");
+        assert_eq!(state.library.alerts_seen_at, Some(90));
+    }
+
+    #[test]
+    fn arrivals_update_an_open_visit_without_duplicates() {
+        let mut state = State {
+            notifications_popup_open: true,
+            alerts_visit: vec![video("old"), video("duplicate")],
+            ..State::default()
+        };
+
+        assert!(state.receive_alerts(vec![video("new"), video("duplicate")], 100));
+        let ids: Vec<_> = state
+            .alerts_visit
+            .iter()
+            .map(|video| video.id.as_str())
+            .collect();
+        assert_eq!(ids, ["new", "duplicate", "old"]);
+        assert!(state.alerts.is_empty());
+        assert_eq!(state.library.alerts_seen_at, Some(100));
+
+        state.notifications_popup_open = false;
+        assert!(!state.receive_alerts(vec![video("unread")], 200));
+        assert_eq!(state.alerts[0].id, "unread");
+        assert_eq!(state.library.alerts_seen_at, Some(100));
     }
 }

@@ -168,6 +168,10 @@ pub(crate) fn fixture(page: &str) -> State {
         "account" => View::Account,
         _ => View::Home,
     };
+    if page == "notifications-popup" {
+        state.alerts_visit = videos.iter().take(8).cloned().collect();
+        state.notifications_popup_open = true;
+    }
     if page == "account" {
         state
             .library
@@ -324,6 +328,16 @@ impl eframe::App for Demo {
                         tr(locale, "YouTFast — demo").into_owned(),
                     ));
                 }
+                Action::VisitNotifications => {
+                    if self.state.view != View::Notifications {
+                        self.state.alerts_visit = std::mem::take(&mut self.state.alerts);
+                    }
+                }
+                Action::MarkAlertsSeen => {
+                    self.state.alerts.clear();
+                    self.state.alerts_visit.clear();
+                }
+                Action::SetAlerts(on) => self.state.settings.alerts = on,
                 Action::Navigate(v) => self.state.view = v,
                 Action::Open(v) => {
                     self.state.video_tabs.open(v.clone());
@@ -453,7 +467,12 @@ impl eframe::App for Demo {
                 _ => {}
             }
         }
-        if self.frames >= 300 && self.capture.is_some() {
+        let capture_ready = if self.state.notifications_popup_open {
+            self.frames >= 12
+        } else {
+            self.frames >= 300
+        };
+        if capture_ready && self.capture.is_some() {
             ui.ctx()
                 .send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
         }
