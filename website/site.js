@@ -30,21 +30,26 @@ function setLanguage(next) {
   for (const element of document.querySelectorAll('[data-en][data-pt]')) {
     element.textContent = element.dataset[next].replaceAll('\\n', '\n');
   }
+  // The same page in the other language: `pt/install.html` ↔ `install.html`.
+  const file = window.location.pathname.split('/').pop();
   languageButton.textContent = next === 'en' ? 'PT-BR' : 'EN';
-  languageButton.href = next === 'en' ? 'pt/' : (window.location.pathname.includes('/pt/') ? '../' : './');
+  languageButton.href = next === 'en' ? `pt/${file}` : (window.location.pathname.includes('/pt/') ? `../${file}` : `./${file}`);
   languageButton.lang = next === 'en' ? 'pt-BR' : 'en';
   languageButton.setAttribute('aria-label', next === 'en' ? 'Mudar idioma para português' : 'Switch language to English');
   document.querySelector('nav[aria-label]').setAttribute('aria-label', next === 'en' ? 'Main navigation' : 'Navegação principal');
-  document.querySelector('.footer nav').setAttribute('aria-label', next === 'en' ? 'Project links' : 'Links do projeto');
-  document.querySelector('.product-image').setAttribute('aria-label', next === 'en' ? 'Watch the YouTFast demo' : 'Assistir à demonstração do YouTFast');
-  document.querySelector('.product-image img').alt = next === 'en'
-    ? 'YouTFast playing Spring by Blender Studio, with the video library and recommendations in its native window.'
-    : 'YouTFast reproduzindo Spring, do Blender Studio, com biblioteca e recomendações na janela nativa.';
-  document.querySelector('video').setAttribute('aria-label', next === 'en' ? 'YouTFast product demonstration' : 'Demonstração do YouTFast');
+  document.querySelector('.footer nav')?.setAttribute('aria-label', next === 'en' ? 'Project links' : 'Links do projeto');
+  document.querySelector('.product-image')?.setAttribute('aria-label', next === 'en' ? 'Watch the YouTFast demo' : 'Assistir à demonstração do YouTFast');
+  const productImage = document.querySelector('.product-image img');
+  if (productImage) {
+    productImage.alt = next === 'en'
+      ? 'YouTFast playing Spring by Blender Studio, with the video library and recommendations in its native window.'
+      : 'YouTFast reproduzindo Spring, do Blender Studio, com biblioteca e recomendações na janela nativa.';
+  }
+  document.querySelector('video')?.setAttribute('aria-label', next === 'en' ? 'YouTFast product demonstration' : 'Demonstração do YouTFast');
   applyTheme(themePreference, false);
 }
-// Point the main button at the visitor's platform. Without JavaScript it keeps
-// pointing at the whole download section.
+// Point the main button at the visitor's platform, and mark that platform's
+// card or install route. Without JavaScript every route stays reachable.
 const osLabels = {
   windows: ['Download for Windows (free)', 'Baixar para Windows (grátis)'],
   macos: ['Download for macOS (Apple Silicon)', 'Baixar para macOS (Apple Silicon)'],
@@ -64,12 +69,16 @@ function detectPlatform() {
 const detected = detectPlatform();
 if (detected) {
   const button = document.querySelector('#os-download');
-  const label = button.querySelector('span');
-  [label.dataset.en, label.dataset.pt] = osLabels[detected];
-  button.href = `#download-${detected}`;
+  if (button) {
+    const label = button.querySelector('span');
+    [label.dataset.en, label.dataset.pt] = osLabels[detected];
+    button.href = `#download-${detected}`;
+  }
   const card = document.querySelector(`#download-${detected}`);
-  card.classList.add('is-detected');
-  card.querySelector('.recommended').hidden = false;
+  if (card) {
+    card.classList.add('is-detected');
+    card.querySelector('.recommended').hidden = false;
+  }
 }
 
 themeControl.hidden = false;

@@ -1508,3 +1508,112 @@ h1,h2 {
 .header nav a {
   white-space:nowrap;
 }
+
+/* Install guide page: one column of routes, reusing the download cards' parts. */
+.install-intro {
+  padding-top:48px;
+  padding-bottom:16px;
+}
+
+.install-intro h1 {
+  max-width:none;
+  margin:0;
+}
+
+.install-intro .hero-description {
+  margin:16px 0 28px;
+  max-width:62ch;
+}
+
+.install-intro td a {
+  color:var(--accent);
+  font-weight:600;
+  text-decoration:underline;
+  text-underline-offset:3px;
+}
+
+.install-route {
+  margin-top:48px;
+  scroll-margin-top:24px;
+}
+
+.install-route>* {
+  max-width:880px;
+}
+
+.install-route .card-head {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:baseline;
+  gap:8px 12px;
+  padding-top:28px;
+  border-top:1px solid var(--line);
+}
+
+.install-route.is-detected .card-head {
+  border-top-color:var(--accent);
+  box-shadow:0 -2px 0 var(--accent);
+}
+
+.install-route h2 {
+  font-size:28px;
+}
+
+.install-route .requirement {
+  margin:12px 0 18px;
+  color:var(--muted);
+}
+
+.install-route .steps {
+  margin-bottom:12px;
+}
+
+.install-route .steps+.steps {
+  margin-top:0;
+}
+
+.install-route pre {
+  margin:0 0 20px;
+  padding:12px 14px;
+  overflow-x:auto;
+  border:1px solid var(--line);
+  border-radius:6px;
+  background:var(--bg);
+  font-size:13px;
+  line-height:1.6;
+}
+
+.install-route code {
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+
+.install-route .notice {
+  margin:0 0 20px;
+}
+
+.install-facts {
+  display:grid;
+  gap:8px;
+  margin:20px 0 0;
+  font-size:15px;
+}
+
+.install-facts>div {
+  display:grid;
+  grid-template-columns:7em minmax(0,1fr);
+  gap:12px;
+}
+
+.install-facts dt {
+  font-weight:600;
+}
+
+.install-facts dd {
+  margin:0;
+  overflow-wrap:anywhere;
+  color:var(--muted);
+}
+
+.install-route .alt-list {
+  margin:16px 0;
+}

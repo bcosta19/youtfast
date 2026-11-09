@@ -95,6 +95,7 @@
     <nav aria-label="Main navigation">
       <a href="#experience" data-en="Features" data-pt="Recursos">Features</a>
       <a href="#download" data-en="Download" data-pt="Baixar">Download</a>
+      <a href="install.html" data-en="Install" data-pt="Instalar">Install</a>
       <a href="#how-it-works" data-en="How it works" data-pt="Como funciona">How it works</a>
       <a href="https://github.com/bcosta19/youtfast">GitHub <span aria-hidden="true">↗</span></a>
     </nav>
@@ -205,6 +206,7 @@
           <div>
             <h2 id="download-title" data-en="Download for your system." data-pt="Baixe para o seu sistema.">Download for your system.</h2>
             <p data-en="Version {{VERSION}}, free. Windows and macOS builds are newer and have been checked mainly by automated tests so far, so expect rough edges." data-pt="Versão {{VERSION}}, gratuita. Os pacotes para Windows e macOS são mais recentes e foram verificados principalmente por testes automatizados até agora, então podem ter arestas.">Version {{VERSION}}, free. Windows and macOS builds are newer and have been checked mainly by automated tests so far, so expect rough edges.</p>
+            <p><a class="text-link" href="install.html" data-en="Step-by-step install guide for every system →" data-pt="Guia de instalação passo a passo para cada sistema →">Step-by-step install guide for every system →</a></p>
           </div>
           <a class="release-link" href="https://github.com/bcosta19/youtfast/releases" data-en="All release files ↗" data-pt="Todos os arquivos das versões ↗">All release files ↗</a>
         </div>
@@ -232,7 +234,7 @@
             <ol class="steps">
               <li data-en="Install yt-dlp and Deno first." data-pt="Instale primeiro o yt-dlp e o Deno.">Install yt-dlp and Deno first.</li>
               <li data-en="Download the ZIP and double-click it to unzip." data-pt="Baixe o ZIP e dê dois cliques para descompactar.">Download the ZIP and double-click it to unzip.</li>
-              <li data-en="The first time, right-click YouTFast.app and choose Open, then confirm." data-pt="Na primeira vez, clique com o botão direito em YouTFast.app, escolha Abrir e confirme.">The first time, right-click YouTFast.app and choose Open, then confirm.</li>
+              <li data-en="Open YouTFast.app. The first time macOS refuses it: open System Settings → Privacy &amp; Security, click Open Anyway and confirm." data-pt="Abra o YouTFast.app. Na primeira vez o macOS recusa: abra Ajustes do Sistema → Privacidade e Segurança, clique em Abrir Mesmo Assim e confirme.">Open YouTFast.app. The first time macOS refuses it: open System Settings → Privacy &amp; Security, click Open Anyway and confirm.</li>
             </ol>
             <p class="notice" data-en="The app is ad-hoc signed but not notarized by Apple, which is why macOS asks you to confirm the first time." data-pt="O aplicativo tem assinatura ad-hoc, mas não é notarizado pela Apple, por isso o macOS pede confirmação na primeira vez.">The app is ad-hoc signed but not notarized by Apple, which is why macOS asks you to confirm the first time.</p>
             </details>
@@ -249,7 +251,7 @@ flatpak run io.github.bcosta19.YouTFast</code></pre>
             </details>
             <p class="inline-links"><span data-en="Other options:" data-pt="Outras opções:">Other options:</span></p>
             <ul class="alt-list">
-              <li><a href="https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/youtfast-v{{VERSION}}-x86_64-unknown-linux-gnu.tar.gz" data-en="Native archive (.tar.gz) ↗" data-pt="Arquivo nativo (.tar.gz) ↗">Native archive (.tar.gz) ↗</a> <span data-en="needs glibc 2.39+, libmpv, yt-dlp and a JS runtime" data-pt="precisa de glibc 2.39+, libmpv, yt-dlp e um runtime JS">needs glibc 2.39+, libmpv, yt-dlp and a JS runtime</span></li>
+              <li><a href="https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/youtfast-v{{VERSION}}-x86_64-unknown-linux-gnu.tar.gz" data-en="Native archive (.tar.gz) ↗" data-pt="Arquivo nativo (.tar.gz) ↗">Native archive (.tar.gz) ↗</a> <span data-en="needs glibc 2.39+, libmpv, yt-dlp and a JS runtime:" data-pt="precisa de glibc 2.39+, libmpv, yt-dlp e um runtime JS:">needs glibc 2.39+, libmpv, yt-dlp and a JS runtime:</span> <a href="install.html#install-ubuntu" data-en="Ubuntu/Debian steps" data-pt="passos para Ubuntu/Debian">Ubuntu/Debian steps</a>, <a href="install.html#install-fedora" data-en="Fedora steps" data-pt="passos para Fedora">Fedora steps</a></li>
               <li><a href="https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/youtfast-{{VERSION}}-1-x86_64.pkg.tar.zst" data-en="Arch Linux package ↗" data-pt="Pacote para Arch Linux ↗">Arch Linux package ↗</a> <span data-en="install with:" data-pt="instale com:">install with:</span> <code class="inline-code">sudo pacman -U ./youtfast-{{VERSION}}-1-x86_64.pkg.tar.zst</code></li>
             </ul>
             <p class="small-status" data-en="Flathub, AUR, Winget and Homebrew: not published yet." data-pt="Flathub, AUR, Winget e Homebrew: ainda não publicados.">Flathub, AUR, Winget and Homebrew: not published yet.</p>
@@ -366,7 +368,8 @@ flatpak run io.github.bcosta19.YouTFast</code></pre>
           <h3 data-en="Read more" data-pt="Saiba mais">Read more</h3>
           <ul class="doc-links">
             <li><a href="https://github.com/bcosta19/youtfast/blob/main/docs/user-guide.md" data-en="User guide ↗" data-pt="Guia do usuário ↗">User guide ↗</a></li>
-            <li><a href="https://github.com/bcosta19/youtfast/blob/main/docs/distribution.md" data-en="Installation and platforms ↗" data-pt="Instalação e plataformas ↗">Installation and platforms ↗</a></li>
+            <li><a href="install.html" data-en="Install guide" data-pt="Guia de instalação">Install guide</a></li>
+            <li><a href="https://github.com/bcosta19/youtfast/blob/main/docs/distribution.md" data-en="Platform details ↗" data-pt="Detalhes das plataformas ↗">Platform details ↗</a></li>
             <li><a href="https://github.com/bcosta19/youtfast/blob/main/docs/youtube-api-format.md" data-en="YouTube response formats ↗" data-pt="Formatos de resposta do YouTube ↗">YouTube response formats ↗</a></li>
             <li><a href="https://github.com/bcosta19/youtfast" data-en="Source code ↗" data-pt="Código-fonte ↗">Source code ↗</a></li>
           </ul>

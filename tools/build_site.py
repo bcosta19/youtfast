@@ -8,7 +8,7 @@ from posixpath import normpath
 from shutil import copyfile
 import tomllib
 from urllib.parse import unquote, urlsplit
-from site_locale import portuguese_page
+from site_locale import PAGES, page_url, portuguese_page
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "dist" / "site"
@@ -21,6 +21,7 @@ if not _released:
 RELEASE_DATE = _released.group(1)
 FILES = {
     "index.html": ROOT / "website/index.html",
+    "install.html": ROOT / "website/install.html",
     "styles.css": ROOT / "website/styles.css",
     "cinema.css": ROOT / "website/cinema.css",
     "assets/fonts/NotoSans-Regular.woff2": ROOT / "website/assets/fonts/NotoSans-Regular.woff2",
@@ -61,39 +62,75 @@ class Page(HTMLParser):
             if attrs.get(key):
                 self.references.append(attrs[key])
 
-    def validate(self):
+    def validate(self, pages=None):
+        """Check links; `pages` maps each other built page to its ids, for
+        links into a section of another page."""
         if self.headings != 1:
-            raise ValueError("The landing page must have exactly one h1")
+            raise ValueError(f"{self.path} must have exactly one h1")
+        pages = {**(pages or {}), self.path: self.ids}
         for reference in self.references:
             url = urlsplit(reference)
             if url.scheme or url.netloc:
                 if url.scheme != "https":
                     raise ValueError(f"Unexpected external URL scheme: {reference}")
                 continue
+            target = self.path
             if url.path:
                 target = normpath(str(Path(self.path).parent / unquote(url.path)))
                 if url.path.endswith("/"):
                     target = normpath(target + "/index.html")
                 if url.path.startswith("/") or target.startswith("../"):
                     raise ValueError(f"Path is not project-Pages safe: {reference}")
-                if target not in set(FILES) | {"pt/index.html"}:
+                if target not in set(FILES) | {"pt/" + page for page in PAGES}:
                     raise ValueError(f"Asset missing from publication allowlist: {reference}")
-            if url.fragment and url.fragment not in self.ids:
+            if url.fragment and url.fragment not in pages.get(target, ()):
                 raise ValueError(f"Missing section: {reference}")
 
 
+def render_pages():
+    """Every page, stamped, in English and Portuguese, by output path."""
+    rendered = {}
+    for name in PAGES:
+        source = stamp(FILES[name].read_text())
+        if "{{" in source:
+            raise ValueError(f"Unresolved template placeholder in website/{name}")
+        rendered[name] = source
+        rendered["pt/" + name] = portuguese_page(source, ORIGIN, name)
+    return rendered
+
+
+def validate_pages(rendered):
+    parsed = {}
+    for name, html in rendered.items():
+        parsed[name] = Page(name)
+        parsed[name].feed(html)
+    ids = {name: page.ids for name, page in parsed.items()}
+    for page in parsed.values():
+        page.validate(ids)
+
+
+def sitemap():
+    entries = []
+    for name in PAGES:
+        english, portuguese = page_url(ORIGIN, name, False), page_url(ORIGIN, name, True)
+        for location in (english, portuguese):
+            entries.append(
+                f"  <url><loc>{location}</loc>"
+                f'<xhtml:link rel="alternate" hreflang="en" href="{english}"/>'
+                f'<xhtml:link rel="alternate" hreflang="pt-BR" href="{portuguese}"/>'
+                f'<xhtml:link rel="alternate" hreflang="x-default" href="{english}"/>'
+                "</url>\n")
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+            'xmlns:xhtml="http://www.w3.org/1999/xhtml">\n'
+            + "".join(entries) + "</urlset>\n")
+
+
 def build():
-    source = stamp(FILES["index.html"].read_text())
-    if "{{" in source:
-        raise ValueError("Unresolved template placeholder in website/index.html")
-    localized = portuguese_page(source, ORIGIN)
-    for name, html in [("index.html", source), ("pt/index.html", localized)]:
-        page = Page(name)
-        page.feed(html)
-        page.validate()
+    pages = render_pages()
+    validate_pages(pages)
     generated = {
-        "index.html": source,
-        "pt/index.html": localized,
+        **pages,
         "404.html": ('<!doctype html><html lang="en"><meta charset="utf-8">'
                      '<meta name="viewport" content="width=device-width,initial-scale=1">'
                      '<meta name="robots" content="noindex">'
@@ -102,22 +139,11 @@ def build():
                      '<p><a href="/">YouTFast in English</a> · '
                      '<a href="/pt/">YouTFast em português</a></p></main></body></html>'),
         "robots.txt": f"User-agent: *\nAllow: /\n\nSitemap: {ORIGIN}/sitemap.xml\n",
-        "sitemap.xml": (
-            '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
-            'xmlns:xhtml="http://www.w3.org/1999/xhtml">\n'
-            + "".join(
-                f"  <url><loc>{ORIGIN}{path}</loc>"
-                f'<xhtml:link rel="alternate" hreflang="en" href="{ORIGIN}/"/>'
-                f'<xhtml:link rel="alternate" hreflang="pt-BR" href="{ORIGIN}/pt/"/>'
-                f'<xhtml:link rel="alternate" hreflang="x-default" href="{ORIGIN}/"/>'
-                "</url>\n" for path in ["/", "/pt/"]
-            ) + "</urlset>\n"
-        ),
+        "sitemap.xml": sitemap(),
     }
     # Publish only the explicit public assets above, never the repository root.
     for name, source in FILES.items():
-        if name == "index.html":
+        if name in PAGES:
             continue  # written above with the release version filled in
         if not source.is_file() or source.is_symlink():
             raise ValueError(f"Missing or symbolic source asset: {source.relative_to(ROOT)}")

@@ -8,6 +8,19 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Added
+
+- A step-by-step install guide for each system (Flatpak, Arch, Ubuntu and
+  Debian, Fedora, Windows and macOS), with checking the download, updating
+  and removing: `docs/install.md`, and an install page on the website in
+  English and Portuguese.
+
+### Fixed
+
+- The website's macOS steps now describe macOS 15's **Open Anyway** in
+  Privacy & Security; right-clicking **Open** no longer opens an app that is
+  not notarized.
+
 ## [0.5.2] - 2026-11-09
 
 ### Fixed

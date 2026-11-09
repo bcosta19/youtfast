@@ -37,27 +37,25 @@ module; a standalone yt-dlp executable does not provide that module. This
 optional integration is a separate platform QA gate. Cookies.txt selection and
 signed-out use do not need browser-profile access.
 
+Step-by-step installation, update and removal for each platform is in
+[Installing YouTFast](install.md). This page covers what the packages are and
+what still needs checking.
+
 ## Linux and Flatpak
 
 Flatpak is the preferred route across Linux distributions without depending on
 the host's libmpv or glibc baseline. It still needs matching CPU architecture,
-a supported Flatpak installation/runtime, drivers and portals. It does not make
-a Linux package work on Windows/macOS. Our bundle is x86_64 only. See
-[Flatpak's introduction](https://docs.flatpak.org/en/latest/introduction.html).
+a supported Flatpak installation/runtime, drivers and portals. Our bundle is
+x86_64 only. See [Flatpak's introduction](https://docs.flatpak.org/en/latest/introduction.html).
 
-After installing Flatpak using the distribution's supported instructions:
-
-```sh
-flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-flatpak install --user ./youtfast-v0.5.2-x86_64.flatpak
-flatpak run io.github.bcosta19.YouTFast
-```
-
-Download from the matching release and verify its checksum first. The runtime
-is a separate download. The manifest includes libmpv, yt-dlp, EJS and Deno.
-Host browser profiles/theme directories are not granted access; choose a
+The runtime is a separate download. The manifest includes libmpv, yt-dlp, EJS
+and Deno. Host browser profiles/theme directories are not granted access; choose a
 cookies.txt through the portal or remain signed out. Do not broaden permissions
 to make a smoke test pass.
+
+The native archive installs into the user's `~/.local` (see the install guide)
+so the in-app updater can replace the binary in place; it falls back to
+`~/.local/bin/youtfast` when the running binary is not writable.
 
 A bundle is not a Flathub listing or automatic-update channel. A repository is
 the preferred Flatpak distribution channel for updates; see [single-file bundles](https://docs.flatpak.org/en/latest/single-file-bundles.html).

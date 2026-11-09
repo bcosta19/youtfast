@@ -1,8 +1,9 @@
 # Project website
 
-The landing page is static HTML/CSS/JavaScript, in English and Brazilian
-Portuguese. It has no package installation, external fonts, analytics, embeds
-or API calls. Download buttons link directly to the current release assets on GitHub; the build reads the version from `Cargo.toml` and fills the `{{VERSION}}` placeholder in `website/index.html`.
+The site is static HTML/CSS/JavaScript, in English and Brazilian
+Portuguese: the landing page (`index.html`) and the install guide
+(`install.html`, the steps of `docs/install.md`). It has no package installation, external fonts, analytics, embeds
+or API calls. Download buttons and commands link directly to the current release assets on GitHub; the build reads the version from `Cargo.toml` and fills the `{{VERSION}}` placeholder in each page.
 
 ## Preview
 
@@ -13,7 +14,8 @@ python3 tools/build_site.py
 python3 -m http.server 8765 --bind 127.0.0.1 --directory dist/site
 ```
 
-Open `http://127.0.0.1:8765/`, or open `/pt/` for Portuguese. The language
+Open `http://127.0.0.1:8765/`, or open `/pt/` for Portuguese; the install
+guide is `/install.html` and `/pt/install.html`. The language
 switch works without storing anything; all content and links remain usable
 in both languages without JavaScript. The theme selector offers System, Light and
 Dark. System follows `prefers-color-scheme`; a manual choice is stored only in
@@ -28,8 +30,10 @@ animations respect `prefers-reduced-motion`; links also work without animations.
 The build copies an explicit allowlist of public assets into `dist/site/`.
 It checks local references, section anchors, image alternatives, paired
 translations and relative asset URLs. Relative URLs support both local
-preview and static hosting. The build also renders the Portuguese page,
-`robots.txt`, a bilingual sitemap and a 404 page.
+preview and static hosting. The build also renders the Portuguese pages,
+`robots.txt`, a bilingual sitemap and a 404 page. Cloudflare Pages serves
+`install.html` at `/install`, which is the URL the canonical links and the
+sitemap use. Keep `install.html` and `docs/install.md` saying the same steps.
 
 ## Publication
 

@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f9f7ff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1c1727" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="Step-by-step install, update and removal of YouTFast on Linux (Flatpak, Arch, Ubuntu, Debian, Fedora), Windows and macOS.">
+  <meta name="robots" content="index,follow">
+  <meta property="og:site_name" content="YouTFast">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="pt_BR">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Install YouTFast — Linux, Windows and macOS">
+  <meta property="og:description" content="Step-by-step install, update and removal of YouTFast on Linux (Flatpak, Arch, Ubuntu, Debian, Fedora), Windows and macOS.">
+  <meta property="og:url" content="https://youtfast.pages.dev/install">
+  <meta property="og:image" content="https://youtfast.pages.dev/assets/player.webp">
+  <meta name="twitter:title" content="Install YouTFast — Linux, Windows and macOS">
+  <meta name="twitter:description" content="Step-by-step install, update and removal of YouTFast on Linux (Flatpak, Arch, Ubuntu, Debian, Fedora), Windows and macOS.">
+  <meta name="twitter:card" content="summary">
+  <link rel="canonical" href="https://youtfast.pages.dev/install">
+  <link rel="alternate" hreflang="en" href="https://youtfast.pages.dev/install">
+  <link rel="alternate" hreflang="pt-BR" href="https://youtfast.pages.dev/pt/install">
+  <link rel="alternate" hreflang="x-default" href="https://youtfast.pages.dev/install">
+  <link rel="icon" href="assets/youtfast.svg" type="image/svg+xml">
+  <script>try{const theme=localStorage.getItem('youtfast-theme');if(theme==='light'||theme==='dark')document.documentElement.dataset.theme=theme}catch{}</script>
+  <link rel="preload" href="assets/fonts/NotoSans-Regular.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="cinema.css">
+  <script src="site.js" defer></script>
+  <title>Install YouTFast — Linux, Windows and macOS</title>
+</head>
+<body>
+  <a class="skip-link" href="#main" data-en="Skip to content" data-pt="Pular para o conteúdo">Skip to content</a>
+  <header class="header wrap">
+    <a class="brand" href="./" aria-label="YouTFast"><img src="assets/youtfast.svg" width="34" height="34" alt=""><span>YouTFast</span></a>
+    <nav aria-label="Main navigation">
+      <a href="index.html#experience" data-en="Features" data-pt="Recursos">Features</a>
+      <a href="index.html#download" data-en="Download" data-pt="Baixar">Download</a>
+      <a href="install.html" aria-current="page" data-en="Install" data-pt="Instalar">Install</a>
+      <a href="https://github.com/bcosta19/youtfast">GitHub <span aria-hidden="true">↗</span></a>
+    </nav>
+    <label class="theme-control" id="theme-control" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v16a8 8 0 0 0 0-16Z" fill="currentColor"/></svg><span class="theme-label" data-en="Theme" data-pt="Tema">Theme</span><select id="theme" aria-label="Theme"><option value="system" data-en="System" data-pt="Sistema">System</option><option value="light" data-en="Light" data-pt="Claro">Light</option><option value="dark" data-en="Dark" data-pt="Escuro">Dark</option></select></label>
+    <a class="language" id="language" href="pt/install.html" aria-label="Mudar idioma para português" lang="pt-BR">PT-BR</a>
+  </header>
+
+  <main id="main" class="install-page">
+    <section class="install-intro wrap" aria-labelledby="install-title">
+      <h1 id="install-title" data-en="Install YouTFast." data-pt="Instale o YouTFast.">Install YouTFast.</h1>
+      <p class="hero-description" data-en="Pick your system below and follow its steps in order. Version {{VERSION}}, free. Linux needs an x86_64 (Intel/AMD 64-bit) computer." data-pt="Escolha o seu sistema abaixo e siga os passos na ordem. Versão {{VERSION}}, gratuita. No Linux, é preciso um computador x86_64 (Intel/AMD de 64 bits).">Pick your system below and follow its steps in order. Version {{VERSION}}, free. Linux needs an x86_64 (Intel/AMD 64-bit) computer.</p>
+      <div class="table-scroll">
+        <table class="bench-table">
+          <caption class="sr-only" data-en="Which steps to follow" data-pt="Quais passos seguir">Which steps to follow</caption>
+          <thead><tr><th scope="col" data-en="Your computer" data-pt="Seu computador">Your computer</th><th scope="col" data-en="Follow" data-pt="Siga">Follow</th></tr></thead>
+          <tbody>
+            <tr><th scope="row" data-en="Any Linux with Flatpak; not sure which Linux route" data-pt="Qualquer Linux com Flatpak; na dúvida sobre o Linux">Any Linux with Flatpak; not sure which Linux route</th><td><a href="#download-linux" data-en="Linux: Flatpak" data-pt="Linux: Flatpak">Linux: Flatpak</a></td></tr>
+            <tr><th scope="row" data-en="Arch, Manjaro, EndeavourOS, CachyOS, Omarchy" data-pt="Arch, Manjaro, EndeavourOS, CachyOS, Omarchy">Arch, Manjaro, EndeavourOS, CachyOS, Omarchy</th><td><a href="#install-arch" data-en="Linux: Arch package" data-pt="Linux: pacote Arch">Linux: Arch package</a></td></tr>
+            <tr><th scope="row" data-en="Ubuntu 24.04+, Debian 13+, Linux Mint 22+, Pop!_OS 24.04+" data-pt="Ubuntu 24.04+, Debian 13+, Linux Mint 22+, Pop!_OS 24.04+">Ubuntu 24.04+, Debian 13+, Linux Mint 22+, Pop!_OS 24.04+</th><td><a href="#install-ubuntu" data-en="Linux: Ubuntu and Debian" data-pt="Linux: Ubuntu e Debian">Linux: Ubuntu and Debian</a></td></tr>
+            <tr><th scope="row" data-en="Fedora 40+" data-pt="Fedora 40+">Fedora 40+</th><td><a href="#install-fedora" data-en="Linux: Fedora" data-pt="Linux: Fedora">Linux: Fedora</a></td></tr>
+            <tr><th scope="row" data-en="Windows 10 or 11, 64-bit" data-pt="Windows 10 ou 11, 64 bits">Windows 10 or 11, 64-bit</th><td><a href="#download-windows" data-en="Windows" data-pt="Windows">Windows</a></td></tr>
+            <tr><th scope="row" data-en="Mac with Apple Silicon, macOS 15+" data-pt="Mac com Apple Silicon, macOS 15+">Mac with Apple Silicon, macOS 15+</th><td><a href="#download-macos" data-en="macOS" data-pt="macOS">macOS</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="measurement-note" data-en="Commands go in a terminal: copy each block and paste it. Each Linux block downloads into the folder the terminal is in, your home folder when it opens." data-pt="Os comandos vão em um terminal: copie cada bloco e cole. Cada bloco do Linux baixa na pasta em que o terminal está, a sua pasta pessoal quando ele abre.">Commands go in a terminal: copy each block and paste it. Each Linux block downloads into the folder the terminal is in, your home folder when it opens.</p>
+    </section>
+
+    <section class="install-route wrap" id="download-linux" aria-labelledby="download-linux-title">
+      <div class="card-head">
+        <h2 id="download-linux-title" data-en="Linux: Flatpak (any distribution)" data-pt="Linux: Flatpak (qualquer distribuição)">Linux: Flatpak (any distribution)</h2>
+        <span class="recommended" hidden data-en="Recommended for your system" data-pt="Recomendado para o seu sistema">Recommended for your system</span>
+      </div>
+      <p class="requirement" data-en="Recommended for Linux. The bundle already contains libmpv, yt-dlp and Deno. You only need Flatpak; most distributions ship it, otherwise follow Flatpak’s setup page." data-pt="Recomendado para Linux. O pacote já contém libmpv, yt-dlp e Deno. Você só precisa do Flatpak; a maioria das distribuições já o traz, senão siga a página de instalação do Flatpak.">Recommended for Linux. The bundle already contains libmpv, yt-dlp and Deno. You only need Flatpak; most distributions ship it, otherwise follow Flatpak’s setup page.</p>
+      <p class="inline-links"><a href="https://flatpak.org/setup/" data-en="Flatpak setup for your distribution ↗" data-pt="Instalar o Flatpak na sua distribuição ↗">Flatpak setup for your distribution ↗</a></p>
+      <ol class="steps">
+        <li data-en="Open a terminal." data-pt="Abra um terminal.">Open a terminal.</li>
+        <li data-en="Download the bundle and its checksums, and check the download. The last line must end in OK." data-pt="Baixe o pacote e os checksums e confira o download. A última linha precisa terminar em OK.">Download the bundle and its checksums, and check the download. The last line must end in OK.</li>
+      </ol>
+      <pre tabindex="0"><code>curl -LO https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/youtfast-v{{VERSION}}-x86_64.flatpak
+curl -LO https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/checksums.txt
+sha256sum -c --ignore-missing checksums.txt</code></pre>
+      <ol class="steps" start="3">
+        <li data-en="Install it for your user. The first time, Flatpak also downloads the runtime it needs; answer y when asked." data-pt="Instale para o seu usuário. Na primeira vez, o Flatpak também baixa o runtime de que precisa; responda y quando perguntar.">Install it for your user. The first time, Flatpak also downloads the runtime it needs; answer y when asked.</li>
+      </ol>
+      <pre tabindex="0"><code>flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak install --user ./youtfast-v{{VERSION}}-x86_64.flatpak</code></pre>
+      <ol class="steps" start="4">
+        <li data-en="Open YouTFast from the application menu, or run: flatpak run io.github.bcosta19.YouTFast" data-pt="Abra o YouTFast pelo menu de aplicativos, ou execute: flatpak run io.github.bcosta19.YouTFast">Open YouTFast from the application menu, or run: flatpak run io.github.bcosta19.YouTFast</li>
+      </ol>
+      <dl class="install-facts">
+        <div><dt data-en="Update" data-pt="Atualizar">Update</dt><dd data-en="Repeat the steps with the next release; there is no automatic update channel yet." data-pt="Repita os passos com a próxima versão; ainda não há canal de atualização automática.">Repeat the steps with the next release; there is no automatic update channel yet.</dd></div>
+        <div><dt data-en="Remove" data-pt="Remover">Remove</dt><dd data-en="flatpak uninstall --user io.github.bcosta19.YouTFast" data-pt="flatpak uninstall --user io.github.bcosta19.YouTFast">flatpak uninstall --user io.github.bcosta19.YouTFast</dd></div>
+      </dl>
+      <p class="notice" data-en="The Flatpak cannot read your browser’s profile: to sign in, choose a cookies.txt file in the app, or stay signed out." data-pt="O Flatpak não lê o perfil do seu navegador: para entrar na conta, escolha um arquivo cookies.txt no aplicativo, ou use sem conta.">The Flatpak cannot read your browser’s profile: to sign in, choose a cookies.txt file in the app, or stay signed out.</p>
+    </section>
+
+    <section class="install-route wrap" id="install-arch" aria-labelledby="install-arch-title">
+      <div class="card-head">
+        <h2 id="install-arch-title" data-en="Linux: Arch, Manjaro, EndeavourOS, CachyOS, Omarchy" data-pt="Linux: Arch, Manjaro, EndeavourOS, CachyOS, Omarchy">Linux: Arch, Manjaro, EndeavourOS, CachyOS, Omarchy</h2>
+      </div>
+      <p class="requirement" data-en="A pacman package. pacman installs mpv, yt-dlp, Deno and every other library YouTFast needs." data-pt="Um pacote do pacman. O pacman instala mpv, yt-dlp, Deno e todas as outras bibliotecas de que o YouTFast precisa.">A pacman package. pacman installs mpv, yt-dlp, Deno and every other library YouTFast needs.</p>
+      <ol class="steps">
+        <li data-en="Open a terminal, download the package and check it." data-pt="Abra um terminal, baixe o pacote e confira.">Open a terminal, download the package and check it.</li>
+      </ol>
+      <pre tabindex="0"><code>curl -LO https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/youtfast-{{VERSION}}-1-x86_64.pkg.tar.zst
+curl -LO https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/checksums.txt
+sha256sum -c --ignore-missing checksums.txt</code></pre>
+      <ol class="steps" start="2">
+        <li data-en="Install it:" data-pt="Instale:">Install it:</li>
+      </ol>
+      <pre tabindex="0"><code>sudo pacman -U ./youtfast-{{VERSION}}-1-x86_64.pkg.tar.zst</code></pre>
+      <ol class="steps" start="3">
+        <li data-en="Open YouTFast from the application menu, or run youtfast." data-pt="Abra o YouTFast pelo menu de aplicativos, ou execute youtfast.">Open YouTFast from the application menu, or run youtfast.</li>
+      </ol>
+      <dl class="install-facts">
+        <div><dt data-en="Update" data-pt="Atualizar">Update</dt><dd data-en="Repeat the steps with the next release, and keep the system updated (sudo pacman -Syu) so yt-dlp stays current." data-pt="Repita os passos com a próxima versão e mantenha o sistema atualizado (sudo pacman -Syu) para o yt-dlp continuar atual.">Repeat the steps with the next release, and keep the system updated (sudo pacman -Syu) so yt-dlp stays current.</dd></div>
+        <div><dt data-en="Remove" data-pt="Remover">Remove</dt><dd data-en="sudo pacman -R youtfast" data-pt="sudo pacman -R youtfast">sudo pacman -R youtfast</dd></div>
+      </dl>
+    </section>
+
+    <section class="install-route wrap" id="install-ubuntu" aria-labelledby="install-ubuntu-title">
+      <div class="card-head">
+        <h2 id="install-ubuntu-title" data-en="Linux: Ubuntu, Debian, Linux Mint, Pop!_OS" data-pt="Linux: Ubuntu, Debian, Linux Mint, Pop!_OS">Linux: Ubuntu, Debian, Linux Mint, Pop!_OS</h2>
+      </div>
+      <p class="requirement" data-en="For Ubuntu 24.04+, Debian 13+, Linux Mint 22+ or Pop!_OS 24.04+ without Flatpak. Older versions: use the Flatpak." data-pt="Para Ubuntu 24.04+, Debian 13+, Linux Mint 22+ ou Pop!_OS 24.04+ sem Flatpak. Versões mais antigas: use o Flatpak.">For Ubuntu 24.04+, Debian 13+, Linux Mint 22+ or Pop!_OS 24.04+ without Flatpak. Older versions: use the Flatpak.</p>
+      <ol class="steps">
+        <li data-en="Open a terminal and install the libraries YouTFast uses:" data-pt="Abra um terminal e instale as bibliotecas que o YouTFast usa:">Open a terminal and install the libraries YouTFast uses:</li>
+      </ol>
+      <pre tabindex="0"><code>sudo apt-get update
+sudo apt-get install libmpv2 libxkbcommon0 libxkbcommon-x11-0 libwayland-client0 \
+  libgl1 libfontconfig1 pipx unzip curl</code></pre>
+      <ol class="steps" start="2">
+        <li data-en="Install the current yt-dlp and Deno for your user, in ~/.local/bin. The distribution’s yt-dlp package is too old to play YouTube videos." data-pt="Instale o yt-dlp e o Deno atuais para o seu usuário, em ~/.local/bin. O pacote yt-dlp da distribuição é antigo demais para reproduzir vídeos do YouTube.">Install the current yt-dlp and Deno for your user, in ~/.local/bin. The distribution’s yt-dlp package is too old to play YouTube videos.</li>
+      </ol>
+      <pre tabindex="0"><code>pipx ensurepath
+pipx install "yt-dlp[default]"
+curl -fsSL https://deno.land/install.sh | DENO_INSTALL="$HOME/.local" sh -s -- -y --no-modify-path</code></pre>
+      <p class="notice" data-en="If pipx ensurepath says it changed your PATH, log out and back in once, so programs opened from the menu find yt-dlp. Then yt-dlp --version and deno --version must both work in a new terminal." data-pt="Se o pipx ensurepath disser que mudou o seu PATH, saia da sessão e entre de novo uma vez, para os programas abertos pelo menu acharem o yt-dlp. Depois, yt-dlp --version e deno --version precisam funcionar em um terminal novo.">If pipx ensurepath says it changed your PATH, log out and back in once, so programs opened from the menu find yt-dlp. Then yt-dlp --version and deno --version must both work in a new terminal.</p>
+      <ol class="steps" start="3">
+        <li data-en="Download YouTFast, check it, and install the program, its icon and its menu entry for your user. The last command prints the version." data-pt="Baixe o YouTFast, confira e instale o programa, o ícone e a entrada do menu para o seu usuário. O último comando mostra a versão.">Download YouTFast, check it, and install the program, its icon and its menu entry for your user. The last command prints the version.</li>
+      </ol>
+      <pre tabindex="0"><code>curl -LO https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/youtfast-v{{VERSION}}-x86_64-unknown-linux-gnu.tar.gz
+curl -LO https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/checksums.txt
+sha256sum -c --ignore-missing checksums.txt
+tar xzf youtfast-v{{VERSION}}-x86_64-unknown-linux-gnu.tar.gz
+cd youtfast-v{{VERSION}}-x86_64-unknown-linux-gnu
+install -Dm755 youtfast ~/.local/bin/youtfast
+install -Dm644 packaging/icons/youtfast.svg ~/.local/share/icons/hicolor/scalable/apps/youtfast.svg
+sed "s|^Exec=youtfast|Exec=$HOME/.local/bin/youtfast|" packaging/applications/youtfast.desktop \
+  | install -Dm644 /dev/stdin ~/.local/share/applications/youtfast.desktop
+~/.local/bin/youtfast --version</code></pre>
+      <ol class="steps" start="4">
+        <li data-en="Open YouTFast from the application menu, or run youtfast." data-pt="Abra o YouTFast pelo menu de aplicativos, ou execute youtfast.">Open YouTFast from the application menu, or run youtfast.</li>
+      </ol>
+      <dl class="install-facts">
+        <div><dt data-en="Update" data-pt="Atualizar">Update</dt><dd data-en="YouTFast updates itself in Settings → About. Update yt-dlp with pipx upgrade yt-dlp when videos stop loading." data-pt="O YouTFast se atualiza em Configurações → Sobre. Atualize o yt-dlp com pipx upgrade yt-dlp quando os vídeos pararem de carregar.">YouTFast updates itself in Settings → About. Update yt-dlp with pipx upgrade yt-dlp when videos stop loading.</dd></div>
+        <div><dt data-en="Remove" data-pt="Remover">Remove</dt><dd data-en="rm ~/.local/bin/youtfast ~/.local/share/applications/youtfast.desktop ~/.local/share/icons/hicolor/scalable/apps/youtfast.svg" data-pt="rm ~/.local/bin/youtfast ~/.local/share/applications/youtfast.desktop ~/.local/share/icons/hicolor/scalable/apps/youtfast.svg">rm ~/.local/bin/youtfast ~/.local/share/applications/youtfast.desktop ~/.local/share/icons/hicolor/scalable/apps/youtfast.svg</dd></div>
+      </dl>
+    </section>
+
+    <section class="install-route wrap" id="install-fedora" aria-labelledby="install-fedora-title">
+      <div class="card-head">
+        <h2 id="install-fedora-title" data-en="Linux: Fedora" data-pt="Linux: Fedora">Linux: Fedora</h2>
+      </div>
+      <p class="requirement" data-en="For Fedora 40 or newer without Flatpak." data-pt="Para Fedora 40 ou mais novo sem Flatpak.">For Fedora 40 or newer without Flatpak.</p>
+      <ol class="steps">
+        <li data-en="Open a terminal and install the libraries YouTFast uses:" data-pt="Abra um terminal e instale as bibliotecas que o YouTFast usa:">Open a terminal and install the libraries YouTFast uses:</li>
+      </ol>
+      <pre tabindex="0"><code>sudo dnf install mpv-libs libxkbcommon-x11 mesa-libGL fontconfig pipx unzip curl</code></pre>
+      <ol class="steps" start="2">
+        <li data-en="Install the current yt-dlp and Deno for your user, in ~/.local/bin. The distribution’s yt-dlp package is too old to play YouTube videos." data-pt="Instale o yt-dlp e o Deno atuais para o seu usuário, em ~/.local/bin. O pacote yt-dlp da distribuição é antigo demais para reproduzir vídeos do YouTube.">Install the current yt-dlp and Deno for your user, in ~/.local/bin. The distribution’s yt-dlp package is too old to play YouTube videos.</li>
+      </ol>
+      <pre tabindex="0"><code>pipx ensurepath
+pipx install "yt-dlp[default]"
+curl -fsSL https://deno.land/install.sh | DENO_INSTALL="$HOME/.local" sh -s -- -y --no-modify-path</code></pre>
+      <p class="notice" data-en="If pipx ensurepath says it changed your PATH, log out and back in once, so programs opened from the menu find yt-dlp. Then yt-dlp --version and deno --version must both work in a new terminal." data-pt="Se o pipx ensurepath disser que mudou o seu PATH, saia da sessão e entre de novo uma vez, para os programas abertos pelo menu acharem o yt-dlp. Depois, yt-dlp --version e deno --version precisam funcionar em um terminal novo.">If pipx ensurepath says it changed your PATH, log out and back in once, so programs opened from the menu find yt-dlp. Then yt-dlp --version and deno --version must both work in a new terminal.</p>
+      <ol class="steps" start="3">
+        <li data-en="Download YouTFast, check it, and install the program, its icon and its menu entry for your user. The last command prints the version." data-pt="Baixe o YouTFast, confira e instale o programa, o ícone e a entrada do menu para o seu usuário. O último comando mostra a versão.">Download YouTFast, check it, and install the program, its icon and its menu entry for your user. The last command prints the version.</li>
+      </ol>
+      <pre tabindex="0"><code>curl -LO https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/youtfast-v{{VERSION}}-x86_64-unknown-linux-gnu.tar.gz
+curl -LO https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/checksums.txt
+sha256sum -c --ignore-missing checksums.txt
+tar xzf youtfast-v{{VERSION}}-x86_64-unknown-linux-gnu.tar.gz
+cd youtfast-v{{VERSION}}-x86_64-unknown-linux-gnu
+install -Dm755 youtfast ~/.local/bin/youtfast
+install -Dm644 packaging/icons/youtfast.svg ~/.local/share/icons/hicolor/scalable/apps/youtfast.svg
+sed "s|^Exec=youtfast|Exec=$HOME/.local/bin/youtfast|" packaging/applications/youtfast.desktop \
+  | install -Dm644 /dev/stdin ~/.local/share/applications/youtfast.desktop
+~/.local/bin/youtfast --version</code></pre>
+      <ol class="steps" start="4">
+        <li data-en="Open YouTFast from the application menu, or run youtfast." data-pt="Abra o YouTFast pelo menu de aplicativos, ou execute youtfast.">Open YouTFast from the application menu, or run youtfast.</li>
+      </ol>
+      <dl class="install-facts">
+        <div><dt data-en="Update" data-pt="Atualizar">Update</dt><dd data-en="YouTFast updates itself in Settings → About. Update yt-dlp with pipx upgrade yt-dlp when videos stop loading." data-pt="O YouTFast se atualiza em Configurações → Sobre. Atualize o yt-dlp com pipx upgrade yt-dlp quando os vídeos pararem de carregar.">YouTFast updates itself in Settings → About. Update yt-dlp with pipx upgrade yt-dlp when videos stop loading.</dd></div>
+        <div><dt data-en="Remove" data-pt="Remover">Remove</dt><dd data-en="rm ~/.local/bin/youtfast ~/.local/share/applications/youtfast.desktop ~/.local/share/icons/hicolor/scalable/apps/youtfast.svg" data-pt="rm ~/.local/bin/youtfast ~/.local/share/applications/youtfast.desktop ~/.local/share/icons/hicolor/scalable/apps/youtfast.svg">rm ~/.local/bin/youtfast ~/.local/share/applications/youtfast.desktop ~/.local/share/icons/hicolor/scalable/apps/youtfast.svg</dd></div>
+      </dl>
+    </section>
+
+    <section class="install-route wrap" id="download-windows" aria-labelledby="download-windows-title">
+      <div class="card-head">
+        <h2 id="download-windows-title" data-en="Windows 10 and 11" data-pt="Windows 10 e 11">Windows 10 and 11</h2>
+        <span class="recommended" hidden data-en="Recommended for your system" data-pt="Recomendado para o seu sistema">Recommended for your system</span>
+      </div>
+      <p class="requirement" data-en="For 64-bit Windows 10 or 11. You also need Winget (App Installer), which recent Windows versions include." data-pt="Para Windows 10 ou 11 de 64 bits. Você também precisa do Winget (Instalador de Aplicativo), que vem nas versões recentes do Windows.">For 64-bit Windows 10 or 11. You also need Winget (App Installer), which recent Windows versions include.</p>
+      <ol class="steps">
+        <li data-en="Open Terminal or PowerShell and install yt-dlp and Deno:" data-pt="Abra o Terminal ou o PowerShell e instale o yt-dlp e o Deno:">Open Terminal or PowerShell and install yt-dlp and Deno:</li>
+      </ol>
+      <pre tabindex="0"><code>winget install --id yt-dlp.yt-dlp
+winget install --id DenoLand.Deno</code></pre>
+      <ol class="steps" start="2">
+        <li data-en="Sign out of Windows and back in, so new programs find them." data-pt="Saia da sua conta do Windows e entre de novo, para os programas novos os encontrarem.">Sign out of Windows and back in, so new programs find them.</li>
+        <li data-en="Download YouTFast:" data-pt="Baixe o YouTFast:">Download YouTFast:</li>
+      </ol>
+      <p><a class="button primary" href="https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/youtfast-v{{VERSION}}-x86_64-pc-windows-gnu.zip" data-en="Download for Windows (.zip)" data-pt="Baixar para Windows (.zip)">Download for Windows (.zip)</a></p>
+      <ol class="steps" start="4">
+        <li data-en="Right-click the ZIP, choose Extract All…, and pick a lasting place such as Documents\YouTFast. Keep all its files together: the program needs the DLLs beside it." data-pt="Clique com o botão direito no ZIP, escolha Extrair Tudo… e escolha um lugar definitivo, como Documentos\YouTFast. Mantenha todos os arquivos juntos: o programa precisa das DLLs ao lado dele.">Right-click the ZIP, choose Extract All…, and pick a lasting place such as Documents\YouTFast. Keep all its files together: the program needs the DLLs beside it.</li>
+        <li data-en="Open youtfast.exe. SmartScreen warns about apps without a publisher signature, which YouTFast does not have: choose More info, then Run anyway." data-pt="Abra o youtfast.exe. O SmartScreen alerta sobre aplicativos sem assinatura de editor, e o YouTFast não tem uma: escolha Mais informações e depois Executar assim mesmo.">Open youtfast.exe. SmartScreen warns about apps without a publisher signature, which YouTFast does not have: choose More info, then Run anyway.</li>
+        <li data-en="Optional: right-click youtfast.exe and pin it to Start, or create a desktop shortcut." data-pt="Opcional: clique com o botão direito no youtfast.exe e fixe no Iniciar, ou crie um atalho na área de trabalho.">Optional: right-click youtfast.exe and pin it to Start, or create a desktop shortcut.</li>
+      </ol>
+      <p class="notice" data-en="To check the download first, run Get-FileHash on the ZIP in PowerShell and compare the Hash with its line in checksums.txt." data-pt="Para conferir o download antes, execute Get-FileHash no ZIP pelo PowerShell e compare o Hash com a linha dele no checksums.txt.">To check the download first, run Get-FileHash on the ZIP in PowerShell and compare the Hash with its line in checksums.txt.</p>
+      <dl class="install-facts">
+        <div><dt data-en="Update" data-pt="Atualizar">Update</dt><dd data-en="YouTFast updates itself in Settings → About. Update yt-dlp with winget upgrade --id yt-dlp.yt-dlp when videos stop loading." data-pt="O YouTFast se atualiza em Configurações → Sobre. Atualize o yt-dlp com winget upgrade --id yt-dlp.yt-dlp quando os vídeos pararem de carregar.">YouTFast updates itself in Settings → About. Update yt-dlp with winget upgrade --id yt-dlp.yt-dlp when videos stop loading.</dd></div>
+        <div><dt data-en="Remove" data-pt="Remover">Remove</dt><dd data-en="Delete the extracted folder." data-pt="Apague a pasta extraída.">Delete the extracted folder.</dd></div>
+      </dl>
+    </section>
+
+    <section class="install-route wrap" id="download-macos" aria-labelledby="download-macos-title">
+      <div class="card-head">
+        <h2 id="download-macos-title" data-en="macOS" data-pt="macOS">macOS</h2>
+        <span class="recommended" hidden data-en="Recommended for your system" data-pt="Recomendado para o seu sistema">Recommended for your system</span>
+      </div>
+      <p class="requirement" data-en="For Macs with Apple Silicon (M1 or newer) on macOS 15 or newer; Intel Macs are not supported. You also need Homebrew." data-pt="Para Macs com Apple Silicon (M1 ou mais novo) e macOS 15 ou mais novo; Macs Intel não são suportados. Você também precisa do Homebrew.">For Macs with Apple Silicon (M1 or newer) on macOS 15 or newer; Intel Macs are not supported. You also need Homebrew.</p>
+      <p class="inline-links"><a href="https://brew.sh/">Homebrew ↗</a></p>
+      <ol class="steps">
+        <li data-en="Open Terminal and install yt-dlp and Deno:" data-pt="Abra o Terminal e instale o yt-dlp e o Deno:">Open Terminal and install yt-dlp and Deno:</li>
+      </ol>
+      <pre tabindex="0"><code>brew install yt-dlp deno</code></pre>
+      <ol class="steps" start="2">
+        <li data-en="Download YouTFast:" data-pt="Baixe o YouTFast:">Download YouTFast:</li>
+      </ol>
+      <p><a class="button primary" href="https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/youtfast-v{{VERSION}}-aarch64-apple-darwin.zip" data-en="Download for macOS (.zip)" data-pt="Baixar para macOS (.zip)">Download for macOS (.zip)</a></p>
+      <ol class="steps" start="3">
+        <li data-en="Double-click the ZIP to unpack it, then drag YouTFast.app into Applications." data-pt="Dê dois cliques no ZIP para descompactar e arraste o YouTFast.app para Aplicativos.">Double-click the ZIP to unpack it, then drag YouTFast.app into Applications.</li>
+        <li data-en="Open YouTFast. The first time macOS refuses it, because Apple has not notarized it: click Done, open System Settings → Privacy &amp; Security, click Open Anyway next to the YouTFast message and confirm with your password." data-pt="Abra o YouTFast. Na primeira vez o macOS recusa, porque a Apple não o notarizou: clique em OK, abra Ajustes do Sistema → Privacidade e Segurança, clique em Abrir Mesmo Assim ao lado da mensagem do YouTFast e confirme com a sua senha.">Open YouTFast. The first time macOS refuses it, because Apple has not notarized it: click Done, open System Settings → Privacy &amp; Security, click Open Anyway next to the YouTFast message and confirm with your password.</li>
+      </ol>
+      <p class="notice" data-en="To check the download first, run shasum -a 256 on the ZIP in Terminal and compare the result with its line in checksums.txt." data-pt="Para conferir o download antes, execute shasum -a 256 no ZIP pelo Terminal e compare o resultado com a linha dele no checksums.txt.">To check the download first, run shasum -a 256 on the ZIP in Terminal and compare the result with its line in checksums.txt.</p>
+      <dl class="install-facts">
+        <div><dt data-en="Update" data-pt="Atualizar">Update</dt><dd data-en="YouTFast updates itself in Settings → About. Update yt-dlp with brew upgrade yt-dlp when videos stop loading." data-pt="O YouTFast se atualiza em Configurações → Sobre. Atualize o yt-dlp com brew upgrade yt-dlp quando os vídeos pararem de carregar.">YouTFast updates itself in Settings → About. Update yt-dlp with brew upgrade yt-dlp when videos stop loading.</dd></div>
+        <div><dt data-en="Remove" data-pt="Remover">Remove</dt><dd data-en="Drag YouTFast.app from Applications to the Trash." data-pt="Arraste o YouTFast.app de Aplicativos para o Lixo.">Drag YouTFast.app from Applications to the Trash.</dd></div>
+      </dl>
+    </section>
+
+    <section class="install-route wrap" id="your-data" aria-labelledby="your-data-title">
+      <h2 id="your-data-title" data-en="Your data and troubleshooting" data-pt="Seus dados e solução de problemas">Your data and troubleshooting</h2>
+      <p data-en="Removing YouTFast keeps your library and settings. For a clean removal also delete: ~/.local/share/youtfast and ~/.config/youtfast (Arch package or native archive), ~/.var/app/io.github.bcosta19.YouTFast (Flatpak), %APPDATA%\youtfast (Windows), ~/Library/Application Support/youtfast (macOS). Sign out in the app first: the session lives in the system’s credential store." data-pt="Remover o YouTFast mantém a sua biblioteca e as configurações. Para remover tudo, apague também: ~/.local/share/youtfast e ~/.config/youtfast (pacote Arch ou arquivo nativo), ~/.var/app/io.github.bcosta19.YouTFast (Flatpak), %APPDATA%\youtfast (Windows), ~/Library/Application Support/youtfast (macOS). Saia da conta no aplicativo antes: a sessão fica no cofre de credenciais do sistema.">Removing YouTFast keeps your library and settings. For a clean removal also delete: ~/.local/share/youtfast and ~/.config/youtfast (Arch package or native archive), ~/.var/app/io.github.bcosta19.YouTFast (Flatpak), %APPDATA%\youtfast (Windows), ~/Library/Application Support/youtfast (macOS). Sign out in the app first: the session lives in the system’s credential store.</p>
+      <ul class="alt-list">
+        <li data-en="Videos never start: update yt-dlp, then check that yt-dlp --version and deno --version work in a new terminal." data-pt="Os vídeos não começam: atualize o yt-dlp e confira se yt-dlp --version e deno --version funcionam em um terminal novo.">Videos never start: update yt-dlp, then check that yt-dlp --version and deno --version work in a new terminal.</li>
+        <li data-en="libmpv.so.2 or GLIBC_2.39 not found on Linux: your system is missing libmpv or is too old for the native archive; use the Flatpak." data-pt="libmpv.so.2 ou GLIBC_2.39 não encontrado no Linux: falta o libmpv ou o sistema é antigo demais para o arquivo nativo; use o Flatpak.">libmpv.so.2 or GLIBC_2.39 not found on Linux: your system is missing libmpv or is too old for the native archive; use the Flatpak.</li>
+        <li data-en="youtfast: command not found: use the menu entry, or log out and back in so ~/.local/bin is on your PATH." data-pt="youtfast: command not found: use a entrada do menu, ou saia e entre de novo na sessão para o ~/.local/bin entrar no PATH.">youtfast: command not found: use the menu entry, or log out and back in so ~/.local/bin is on your PATH.</li>
+      </ul>
+      <p class="inline-links"><a href="https://github.com/bcosta19/youtfast/issues" data-en="Still stuck? Open an issue (Portuguese is welcome) ↗" data-pt="Ainda com problema? Abra uma issue (português é bem-vindo) ↗">Still stuck? Open an issue (Portuguese is welcome) ↗</a> <a href="https://github.com/bcosta19/youtfast/blob/main/docs/install.md" data-en="This guide on GitHub ↗" data-pt="Este guia no GitHub ↗">This guide on GitHub ↗</a></p>
+    </section>
+  </main>
+
+  <footer class="footer wrap">
+    <div class="footer-bottom"><p class="legal" data-en="Independent project; not affiliated with YouTube or Google. This website uses no analytics, external fonts or third-party embeds." data-pt="Projeto independente, sem vínculo com YouTube ou Google. Este site não usa analytics, fontes externas nem embeds de terceiros.">Independent project; not affiliated with YouTube or Google. This website uses no analytics, external fonts or third-party embeds.</p></div>
+  </footer>
+</body>
+</html>

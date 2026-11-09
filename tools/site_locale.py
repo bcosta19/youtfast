@@ -1,12 +1,19 @@
-"""Render the Portuguese landing page as crawlable HTML, without browser JavaScript."""
+"""Render the Portuguese site pages as crawlable HTML, without browser JavaScript."""
 from html import escape
 from html.parser import HTMLParser
 import json
 from urllib.parse import urlsplit
 
-TITLE = 'YouTFast — Cliente YouTube nativo para desktop'
-DESCRIPTION = ('YouTFast é um cliente YouTube gratuito e de código aberto para Linux, '
-               'Windows e macOS. Reprodução nativa, biblioteca local e sem telemetria.')
+# Each page: its public path (Cloudflare Pages serves `install.html` as
+# `/install`), and its Portuguese title and description.
+PAGES = {
+    'index.html': ('', 'YouTFast — Cliente YouTube nativo para desktop',
+                   'YouTFast é um cliente YouTube gratuito e de código aberto para Linux, '
+                   'Windows e macOS. Reprodução nativa, biblioteca local e sem telemetria.'),
+    'install.html': ('install', 'Instalar o YouTFast — Linux, Windows e macOS',
+                     'Passo a passo para instalar, atualizar e remover o YouTFast no Linux '
+                     '(Flatpak, Arch, Ubuntu, Debian, Fedora), no Windows e no macOS.'),
+}
 LABELS = {
     'Skip to content': 'Pular para o conteúdo',
     'YouTFast desktop application playing a video with its local library and recommendations.':
@@ -23,9 +30,11 @@ VOID = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'met
 
 
 class PortuguesePage(HTMLParser):
-    def __init__(self, origin):
+    def __init__(self, origin, page):
         super().__init__(convert_charrefs=True)
         self.origin = origin
+        self.page = page
+        self.slug, self.title, self.description = PAGES[page]
         self.output = []
         self.stack = []
 
@@ -41,31 +50,33 @@ class PortuguesePage(HTMLParser):
         if tag == 'html':
             attrs['lang'] = 'pt-BR'
         if tag == 'title':
-            text = TITLE
+            text = self.title
         for key in ('aria-label', 'alt', 'content'):
             if key in attrs:
                 attrs[key] = LABELS.get(attrs[key], attrs[key])
         if tag == 'meta':
             field = attrs.get('property', attrs.get('name'))
             if field in ('description', 'og:description', 'twitter:description'):
-                attrs['content'] = DESCRIPTION
+                attrs['content'] = self.description
             elif field in ('og:title', 'twitter:title'):
-                attrs['content'] = TITLE
+                attrs['content'] = self.title
             elif field == 'og:url':
-                attrs['content'] = self.origin + '/pt/'
+                attrs['content'] = page_url(self.origin, self.page, True)
             elif field == 'og:locale':
                 attrs['content'] = 'pt_BR'
             elif field == 'og:locale:alternate':
                 attrs['content'] = 'en_US'
         if tag == 'link' and attrs.get('rel') == 'canonical':
-            attrs['href'] = self.origin + '/pt/'
+            attrs['href'] = page_url(self.origin, self.page, True)
         for key in ('href', 'src', 'poster'):
             value = attrs.get(key, '')
             url = urlsplit(value)
-            if url.path and not url.scheme and not url.netloc:
+            # Links between pages stay in the same language's folder.
+            if url.path and not url.scheme and not url.netloc and not is_page(url.path):
                 attrs[key] = '../' + value
         if attrs.get('id') == 'language':
-            attrs.update(href='../', lang='en', **{'aria-label': 'Switch language to English'})
+            attrs.update(href='../' + ('' if self.page == 'index.html' else self.page), lang='en',
+                         **{'aria-label': 'Switch language to English'})
             text = 'EN'
         if attrs.get('id') == 'theme':
             attrs['aria-label'] = 'Tema de cores'
@@ -91,10 +102,11 @@ class PortuguesePage(HTMLParser):
             schema = json.loads(data)
             for item in schema['@graph']:
                 if item['@type'] == 'SoftwareApplication':
-                    item['description'] = DESCRIPTION
+                    item['description'] = self.description
                 if item['@type'] == 'WebPage':
-                    item.update(url=self.origin + '/pt/', name=TITLE, inLanguage='pt-BR')
-                    item['@id'] = self.origin + '/pt/#webpage'
+                    url = page_url(self.origin, self.page, True)
+                    item.update(url=url, name=self.title, inLanguage='pt-BR')
+                    item['@id'] = url + '#webpage'
             self.output.append(json.dumps(schema, ensure_ascii=False, indent=2))
         elif self.stack and self.stack[-1][0] in ('script', 'style'):
             self.output.append(data)
@@ -102,8 +114,16 @@ class PortuguesePage(HTMLParser):
             self.output.append(escape(data, quote=False))
 
 
-def portuguese_page(source, origin):
-    parser = PortuguesePage(origin)
+def is_page(path):
+    return path in ('./', 'index.html') or path in PAGES
+
+
+def page_url(origin, page, portuguese):
+    return f"{origin}/{'pt/' if portuguese else ''}{PAGES[page][0]}"
+
+
+def portuguese_page(source, origin, page='index.html'):
+    parser = PortuguesePage(origin, page)
     parser.feed(source)
     parser.close()
     if parser.stack:
