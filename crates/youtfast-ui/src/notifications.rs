@@ -1,5 +1,4 @@
-//! The Notifications page: uploads newer than the last visit, in the
-//! usual rows grouped by day, with Check now and Mark all as seen.
+//! New-upload alerts in the full page and the top-bar popup.
 
 use egui::{RichText, Ui};
 use youtfast_i18n::{Locale, format as trf, gettext as tr};
@@ -9,6 +8,73 @@ use youtfast_app::Action;
 use youtfast_app::State;
 use youtfast_appearance::theme;
 use youtfast_core::util::{self, AgeBucket};
+
+/// A compact view of the same visit, anchored to the top-bar bell.
+pub(super) fn popup(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+    ui.set_width(400.0_f32.min((ui.ctx().content_rect().width() - 32.0).max(180.0)));
+    ui.label(
+        RichText::new(tr(locale, "Notifications").as_ref())
+            .font(theme::semibold(16.0))
+            .color(state.palette.text),
+    );
+    ui.add_space(8.0);
+    if !state.settings.alerts {
+        ui.label(tr(locale, "Alerts are off").as_ref());
+        if widgets::button(
+            ui,
+            &state.palette,
+            tr(locale, "Turn on").as_ref(),
+            widgets::ButtonStyle::Normal,
+        )
+        .clicked()
+        {
+            actions.push(Action::SetAlerts(true));
+        }
+        return;
+    }
+    ui.horizontal_wrapped(|ui| {
+        if state.alerts_checking {
+            widgets::loading(ui, &state.palette, "new uploads", locale);
+        } else if widgets::button(
+            ui,
+            &state.palette,
+            tr(locale, "Check now").as_ref(),
+            widgets::ButtonStyle::Normal,
+        )
+        .clicked()
+        {
+            actions.push(Action::CheckAlertsNow);
+        }
+        if !state.alerts_visit.is_empty()
+            && widgets::button(
+                ui,
+                &state.palette,
+                tr(locale, "Mark all as seen").as_ref(),
+                widgets::ButtonStyle::Normal,
+            )
+            .clicked()
+        {
+            actions.push(Action::MarkAlertsSeen);
+        }
+    });
+    ui.label(
+        RichText::new(checked_line(state))
+            .font(theme::regular(13.0))
+            .color(state.palette.secondary),
+    );
+    ui.add_space(8.0);
+    if state.alerts_visit.is_empty() {
+        ui.label(tr(locale, "Nothing new").as_ref());
+        ui.label(tr(locale, "New videos from subscribed channels appear here").as_ref());
+    } else {
+        let height = (ui.ctx().content_rect().height() * 0.55).min(400.0);
+        egui::ScrollArea::vertical()
+            .max_height(height)
+            .min_scrolled_height(height)
+            .show(ui, |ui| rows(ui, state, actions, false));
+    }
+}
 
 pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
@@ -84,7 +150,7 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         }
         egui::ScrollArea::vertical()
             .auto_shrink(false)
-            .show(ui, |ui| rows(ui, state, actions));
+            .show(ui, |ui| rows(ui, state, actions, true));
     });
 }
 
@@ -120,7 +186,7 @@ fn checked_line(state: &State) -> String {
 }
 
 /// Rows grouped by day under section headings; the cursor opens them.
-fn rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+fn rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>, page: bool) {
     let locale = state.settings.language;
 
     let today = util::Today::at(util::now());
@@ -138,7 +204,7 @@ fn rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             .map_or(videos.len(), |offset| start + offset);
         widgets::section(ui, &state.palette, &capitalized(day, locale), None, |ui| {
             for (index, video) in videos.iter().enumerate().take(end).skip(start) {
-                let selected = index == state.cursor;
+                let selected = page && index == state.cursor;
                 let watched = widgets::watched(&state.library, video);
                 let response =
                     widgets::video_row(ui, &state.palette, video, None, watched, selected, locale);
@@ -151,6 +217,9 @@ fn rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     } else {
                         Action::Open(video.clone())
                     });
+                    if !page {
+                        ui.close();
+                    }
                 }
                 results::video_menu(&response, state, video, actions);
             }

@@ -85,6 +85,7 @@ impl State {
         self.autoplay = None;
         self.alerts.clear();
         self.alerts_visit.clear();
+        self.notifications_popup_open = false;
         self.alerts_checking = false;
         self.last_checked = None;
     }
@@ -320,6 +321,8 @@ mod tests {
             queue: vec![private.clone()],
             up_next: vec![private.clone()],
             alerts: vec![private.clone()],
+            alerts_visit: vec![private.clone()],
+            notifications_popup_open: true,
             save_targets: Fetch::Ready(vec![SaveTarget {
                 id: "private-playlist".into(),
                 name: "Private".into(),
@@ -352,6 +355,7 @@ mod tests {
         assert!(state.page.is_none());
         assert!(matches!(state.page_videos, Listing::Idle));
         assert!(matches!(state.save_targets, Fetch::Idle));
+        assert!(!state.notifications_popup_open && state.alerts_visit.is_empty());
         assert!(state.queue.is_empty() && state.up_next.is_empty() && state.alerts.is_empty());
         assert_eq!(state.view, View::Home);
         assert_eq!(state.library.history[0].video.id, "device00001");

@@ -352,10 +352,15 @@ unusable source may still prevent a preview or playback.
 
 YouTube's own notifications have no API, so YouTFast checks your
 subscriptions on a timer instead (every 15 minutes by default; 5, 15, 30
-or 60 in Settings) and lists what's new under `[7] Notifications`. New
-uploads also come to the desktop as notifications. Both can be turned
-off there; the first run only starts the clock, so a fresh install
-doesn't flood you.
+or 60 in Settings). The top-bar bell opens a scrollable list without leaving
+the current page; you can check again or clear it there. Opening the bell
+marks the current alerts as seen, but keeps them visible during that visit.
+Videos found by a check while the list is open appear there and are also
+marked as seen.
+The Notifications sidebar entry still opens the full page. New uploads can
+also appear as desktop notifications. Both checks and desktop notifications
+can be turned off in Settings; the first run only starts the clock, so a
+fresh install doesn't flood you.
 
 ## Interface font
 

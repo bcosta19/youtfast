@@ -15,6 +15,9 @@ are the distribution record.
   and removing: `docs/install.md`, and an install page on the website in
   English and Portuguese.
 
+- The top-bar bell opens a scrollable notifications popup without leaving the
+  current page; the sidebar still opens the full notifications page.
+
 ### Fixed
 
 - The website's macOS steps now describe macOS 15's **Open Anyway** in

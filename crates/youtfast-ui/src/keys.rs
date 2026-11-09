@@ -19,7 +19,7 @@ pub(super) fn handle(
     if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Extra2)) {
         actions.push(Action::Forward);
     }
-    if ctx.text_edit_focused() || egui::Popup::is_any_open(ctx) {
+    if ctx.text_edit_focused() || state.notifications_popup_open || egui::Popup::is_any_open(ctx) {
         return;
     }
     if !state.keys_open && state.player_menu == youtfast_app::PlayerMenu::Closed {

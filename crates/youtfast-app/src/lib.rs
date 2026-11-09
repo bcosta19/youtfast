@@ -296,6 +296,8 @@ pub struct State {
     pub alerts: Vec<Video>,
     /// The rows the Notifications view shows during this visit.
     pub alerts_visit: Vec<Video>,
+    /// Whether the top-bar notifications popup is open.
+    pub notifications_popup_open: bool,
     /// Unix seconds of the last check (the page's hint line).
     pub last_checked: Option<i64>,
     /// A check is in flight.
@@ -1321,6 +1323,11 @@ impl App {
             Action::SetChannelTab(tab) => self.set_channel_tab(tab),
             Action::CheckAlertsNow => self.check_alerts_now(),
             Action::MarkAlertsSeen => self.mark_alerts_seen(),
+            Action::VisitNotifications => {
+                if self.state.visit_alerts_popup(util::now()) {
+                    self.save_library();
+                }
+            }
             Action::SetAlerts(on) => self.set_alerts(on),
             Action::SetDesktopNotifications(on) => {
                 self.state.settings.desktop_notifications = on;
