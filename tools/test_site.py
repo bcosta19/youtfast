@@ -5,10 +5,12 @@ import json
 import re
 import unittest
 
-from build_site import ORIGIN, VERSION, Page, stamp
+from build_site import ORIGIN, VERSION, Page, render_pages, stamp, validate_pages
 from site_locale import portuguese_page
 
-SOURCE = stamp((Path(__file__).resolve().parents[1] / 'website/index.html').read_text())
+WEBSITE = Path(__file__).resolve().parents[1] / 'website'
+SOURCE = stamp((WEBSITE / 'index.html').read_text())
+INSTALL = stamp((WEBSITE / 'install.html').read_text())
 
 
 class Metadata(HTMLParser):
@@ -48,15 +50,27 @@ class WebsiteTests(unittest.TestCase):
         self.assertIn('aria-label="Links do projeto"', html)
         self.assertIn('src="../site.js"', html)
         self.assertIn('poster="../assets/player.webp"', html)
+        install = portuguese_page(INSTALL, ORIGIN, 'install.html')
+        self.assertIn('>Instale o YouTFast.</h1>', install)
+        self.assertIn('<title>Instalar o YouTFast — Linux, Windows e macOS</title>', install)
+        self.assertIn('href="../styles.css"', install)
+        # Links between pages stay in Portuguese; the language switch leads
+        # to the same page in English.
+        self.assertIn('href="index.html#download"', install)
+        self.assertIn('id="language" href="../install.html"', install)
+        self.assertIn('href="install.html"', html)
 
     def test_downloads_link_to_the_current_release_assets(self):
-        self.assertNotIn('{{', SOURCE)
-        for asset in [f'youtfast-v{VERSION}-x86_64.flatpak',
-                      f'youtfast-v{VERSION}-x86_64-unknown-linux-gnu.tar.gz',
-                      f'youtfast-{VERSION}-1-x86_64.pkg.tar.zst',
-                      f'youtfast-v{VERSION}-x86_64-pc-windows-gnu.zip',
-                      f'youtfast-v{VERSION}-aarch64-apple-darwin.zip', 'checksums.txt']:
-            self.assertIn(f'/releases/download/v{VERSION}/{asset}"', SOURCE)
+        self.assertNotIn('{{', SOURCE + INSTALL)
+        assets = [f'youtfast-v{VERSION}-x86_64.flatpak',
+                  f'youtfast-v{VERSION}-x86_64-unknown-linux-gnu.tar.gz',
+                  f'youtfast-{VERSION}-1-x86_64.pkg.tar.zst',
+                  f'youtfast-v{VERSION}-x86_64-pc-windows-gnu.zip',
+                  f'youtfast-v{VERSION}-aarch64-apple-darwin.zip', 'checksums.txt']
+        for source in (SOURCE, INSTALL):
+            for asset in assets:
+                with self.subTest(asset=asset):
+                    self.assertIn(f'/releases/download/v{VERSION}/{asset}', source)
 
     def test_download_urls_follow_the_release_workflow_naming(self):
         workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/release.yml').read_text()
@@ -64,7 +78,8 @@ class WebsiteTests(unittest.TestCase):
                  .replace('$RELEASE_TAG', 'v' + VERSION)
                  for m in re.findall(r'youtfast-(?:\$\{RELEASE_TAG#v\}|\$env:RELEASE_TAG|\$RELEASE_TAG)[^"\s]*', workflow)}
         names = {'youtfast-' + n.split('youtfast-', 1)[1] if n.startswith('youtfast-') else n for n in names}
-        urls = re.findall(r'releases/download/v([^/"]+)/([^"]+)"', SOURCE)
+        # Links and the commands shown on the install page.
+        urls = re.findall(r'releases/download/v([^/"\s]+)/([^"\s<]+)', SOURCE + INSTALL)
         self.assertTrue(urls)
         for version, asset in urls:
             self.assertEqual(version, VERSION)
@@ -73,16 +88,18 @@ class WebsiteTests(unittest.TestCase):
         self.assertIn('checksums.txt', workflow)
 
     def test_canonical_urls_and_language_alternates_match_each_page(self):
-        for path, html in [('/', SOURCE), ('/pt/', portuguese_page(SOURCE, ORIGIN))]:
-            meta = Metadata(html)
-            canonical = [a['href'] for t, a in meta.tags
-                         if t == 'link' and a.get('rel') == 'canonical']
-            self.assertEqual(canonical, [ORIGIN + path])
-            self.assertEqual(meta.meta('og:url'), ORIGIN + path)
-            alternates = {a['hreflang']: a['href'] for t, a in meta.tags
-                          if t == 'link' and a.get('rel') == 'alternate'}
-            self.assertEqual(alternates, {'en': ORIGIN + '/', 'pt-BR': ORIGIN + '/pt/',
-                                          'x-default': ORIGIN + '/'})
+        for page, slug, source in [('index.html', '', SOURCE), ('install.html', 'install', INSTALL)]:
+            for path, html in [('/' + slug, source),
+                               ('/pt/' + slug, portuguese_page(source, ORIGIN, page))]:
+                meta = Metadata(html)
+                canonical = [a['href'] for t, a in meta.tags
+                             if t == 'link' and a.get('rel') == 'canonical']
+                self.assertEqual(canonical, [ORIGIN + path])
+                self.assertEqual(meta.meta('og:url'), ORIGIN + path)
+                alternates = {a['hreflang']: a['href'] for t, a in meta.tags
+                              if t == 'link' and a.get('rel') == 'alternate'}
+                self.assertEqual(alternates, {'en': f'{ORIGIN}/{slug}', 'pt-BR': f'{ORIGIN}/pt/{slug}',
+                                              'x-default': f'{ORIGIN}/{slug}'})
 
     def test_structured_data_describes_the_real_desktop_app(self):
         for html in [SOURCE, portuguese_page(SOURCE, ORIGIN)]:
@@ -99,11 +116,14 @@ class WebsiteTests(unittest.TestCase):
             self.assertEqual(meta.meta('twitter:description'), app['description'])
 
     def test_all_localized_links_and_assets_resolve_inside_the_public_allowlist(self):
-        for name, html in [('index.html', SOURCE),
-                           ('pt/index.html', portuguese_page(SOURCE, ORIGIN))]:
-            page = Page(name)
-            page.feed(html)
-            page.validate()
+        validate_pages(render_pages())
+
+    def test_a_link_into_a_missing_section_of_another_page_is_rejected(self):
+        pages = render_pages()
+        pages['install.html'] = pages['install.html'].replace(
+            'href="index.html#download"', 'href="index.html#no-such-section"')
+        with self.assertRaisesRegex(ValueError, 'Missing section: index.html#no-such-section'):
+            validate_pages(pages)
 
     def test_translation_escapes_markup_but_preserves_inline_scripts(self):
         source = '<html><body><p data-pt="A &amp; B &lt;texto&gt;">Old</p><script>const x = 1 < 2;</script></body></html>'

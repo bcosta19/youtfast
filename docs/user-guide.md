@@ -1,6 +1,6 @@
 # YouTFast user guide
 
-[Back to the overview](../README.md) · [Installation and platforms](distribution.md)
+[Back to the overview](../README.md) · [Install YouTFast](install.md) · [Platform details](distribution.md)
 
 ## Requirements
 

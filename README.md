@@ -67,6 +67,10 @@ been compared yet; numbers from other machines are welcome.
 
 ## Installation
 
+**[Step-by-step install guide](docs/install.md)**, for each system:
+Flatpak, Arch, Ubuntu/Debian, Fedora, Windows and macOS, with updating and
+removing. Also on the website: <https://youtfast.pages.dev/install>.
+
 Published versions are listed on GitHub Releases. A version bump in the
 repository does not mean its packages have been published.
 Packages are built and tested headlessly on GitHub-hosted runners; interactive
@@ -89,7 +93,7 @@ The Flatpak bundles its playback/extraction tools and targets compatible Linux
 distributions at x86_64. It is not yet a Flathub listing or an app update remote.
 The Arch recipe is not yet an AUR entry or an official pacman package.
 
-[Installation, checksums and platform limits](docs/distribution.md) ·
+[Platform details, checksums and limits](docs/distribution.md) ·
 [Arch package maintenance](packaging/arch/README.md)
 
 ## Build from source
@@ -135,6 +139,7 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md); questions in issues are welcome.
 | You want to… | Read |
 |---|---|
 | Learn controls, library, accounts and themes | [User guide](docs/user-guide.md) |
+| Install, update or remove YouTFast | [Install guide](docs/install.md) |
 | Choose a package or check platform coverage | [Distribution](docs/distribution.md) |
 | See release contents and exclusions | [Changelog](CHANGELOG.md) |
 | See work that is not implemented yet | [Roadmap](ROADMAP.md) |

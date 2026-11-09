@@ -13,7 +13,8 @@ APP_ID = "io.github.bcosta19.YouTFast"
 PUBLIC_FILES = [
     "README.md", "CHANGELOG.md", "ROADMAP.md", "CONTRIBUTING.md", "RELEASING.md",
     "SECURITY.md", "CODE_OF_CONDUCT.md", "AGENTS.md", "LICENSE", "THIRD_PARTY_NOTICES.md",
-    "docs/actions.md", "docs/distribution.md", "docs/user-guide.md", "docs/ARCHITECTURE.md",
+    "docs/actions.md", "docs/distribution.md", "docs/install.md", "docs/user-guide.md",
+    "docs/ARCHITECTURE.md",
     "packaging/arch/README.md", "assets/icons/LICENSE.txt", "assets/licenses/rustypipe/LICENSE",
     "packaging/icons/youtfast.svg", "assets/screenshots/search.png",
 ]
