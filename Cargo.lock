@@ -6457,7 +6457,7 @@ dependencies = [
 
 [[package]]
 name = "youtfast"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "clap",
  "eframe",
@@ -6485,7 +6485,7 @@ dependencies = [
 
 [[package]]
 name = "youtfast-app"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "anyhow",
  "eframe",
@@ -6514,7 +6514,7 @@ dependencies = [
 
 [[package]]
 name = "youtfast-appearance"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "egui",
  "fastframe-fonts",
@@ -6528,7 +6528,7 @@ dependencies = [
 
 [[package]]
 name = "youtfast-backend"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "anyhow",
  "egui",
@@ -6548,7 +6548,7 @@ dependencies = [
 
 [[package]]
 name = "youtfast-cast"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "egui",
  "if-addrs",
@@ -6567,7 +6567,7 @@ dependencies = [
 
 [[package]]
 name = "youtfast-core"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "jiff",
  "serde",
@@ -6576,7 +6576,7 @@ dependencies = [
 
 [[package]]
 name = "youtfast-desktop"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "directories",
  "egui",
@@ -6594,7 +6594,7 @@ dependencies = [
 
 [[package]]
 name = "youtfast-i18n"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "fastframe-i18n",
  "serde",
@@ -6603,7 +6603,7 @@ dependencies = [
 
 [[package]]
 name = "youtfast-logic"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "jiff",
  "youtfast-core",
@@ -6613,7 +6613,7 @@ dependencies = [
 
 [[package]]
 name = "youtfast-mpv"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "eframe",
  "egui",
@@ -6623,7 +6623,7 @@ dependencies = [
 
 [[package]]
 name = "youtfast-storage"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "anyhow",
  "apple-native-keyring-store",
@@ -6646,7 +6646,7 @@ dependencies = [
 
 [[package]]
 name = "youtfast-ui"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "egui",
  "fastframe-scroll",
@@ -6667,7 +6667,7 @@ dependencies = [
 
 [[package]]
 name = "youtfast-youtube"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "egui",
  "ehttp",

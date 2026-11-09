@@ -15,6 +15,9 @@
   <url type="bugtracker">https://github.com/bcosta19/youtfast/issues</url>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.5.2" date="2026-11-09">
+      <description><p>Sizes the watch page player to each video's aspect ratio and widens Up next and theater mode to use the window. Comment timestamps seek within the current video, and web links in descriptions and comments open in the default browser.</p></description>
+    </release>
     <release version="0.5.1" date="2026-11-05">
       <description><p>Maintenance release: the source is split into focused crates and takes rustypipe from a pinned fork instead of a vendored copy. No change to the application's behaviour, files or settings.</p></description>
     </release>

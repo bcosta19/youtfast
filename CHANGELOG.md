@@ -8,6 +8,8 @@ are the distribution record.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-09
+
 ### Fixed
 
 - Timestamps in comments and replies seek within the current video instead
@@ -310,7 +312,8 @@ macOS Apple Silicon. Interactive Windows/macOS qualification is still pending.
 These exclusions are scope decisions, not completed features promised for a
 specific next version. See [ROADMAP.md](ROADMAP.md) for follow-up gates.
 
-[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/bcosta19/youtfast/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/bcosta19/youtfast/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/bcosta19/youtfast/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/bcosta19/youtfast/compare/v0.3.0...v0.4.0
