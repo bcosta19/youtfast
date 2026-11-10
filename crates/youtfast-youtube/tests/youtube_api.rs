@@ -445,3 +445,65 @@ fn yt6_a_video_lockup_with_another_image_is_still_read() {
     let channel = items[0].channel.as_ref().unwrap();
     assert!(channel.avatar.is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// YT-7: video lockups on a channel's own tabs
+// ---------------------------------------------------------------------------
+
+/// A video of a channel's Videos tab as YouTube sent it on 2026-11-10: one
+/// metadata row, no channel row; the length in a bottom overlay, beside other
+/// overlays.
+const CHANNEL_TAB_LOCKUP: &str = r#"[{ "richItemRenderer": { "content": { "lockupViewModel": {
+    "contentId": "bbbbbbbbbbb",
+    "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+    "contentImage": { "thumbnailViewModel": {
+        "image": { "sources": [ { "url": "https://i.ytimg.com/vi/bbbbbbbbbbb/hq720.jpg", "width": 720, "height": 404 } ] },
+        "overlays": [
+            { "thumbnailBottomOverlayViewModel": { "badges": [
+                { "thumbnailBadgeViewModel": { "text": "19:25", "badgeStyle": "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT" } }
+            ] } },
+            { "animatedThumbnailOverlayViewModel": { "thumbnail": {} } }
+        ]
+    } },
+    "metadata": { "lockupMetadataViewModel": {
+        "title": { "content": "A video" },
+        "metadata": { "contentMetadataViewModel": { "delimiter": " • ", "metadataRows": [
+            { "metadataParts": [
+                { "text": { "content": "105K views" } },
+                { "accessibilityLabel": "4 hours ago", "text": { "content": "4 hours ago" } }
+            ] }
+        ] } }
+    } }
+} } } }]"#;
+
+#[test]
+fn yt7_a_lone_metadata_row_is_read_as_views_and_age() {
+    // Read as the channel's row, it lost views and age, and nothing was left
+    // for the second row the code expected.
+    let (items, warnings) = regression::video_items(CHANNEL_TAB_LOCKUP, Language::En).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let video = &items[0];
+    assert_eq!(video.view_count, Some(105_000));
+    assert_eq!(video.publish_date_txt.as_deref(), Some("4 hours ago"));
+    assert!(video.publish_date.is_some());
+}
+
+#[test]
+fn yt7_the_length_in_a_bottom_overlay_is_read() {
+    let (items, _) = regression::video_items(CHANNEL_TAB_LOCKUP, Language::En).unwrap();
+    assert_eq!(items[0].duration, Some(19 * 60 + 25));
+}
+
+#[test]
+fn yt7_a_lockup_with_a_channel_row_keeps_every_field() {
+    // Home, search and related lists still send the channel's row first.
+    let (items, _) = regression::video_items(&video_lockup(""), Language::En).unwrap();
+    let video = &items[0];
+    assert_eq!(
+        video.channel.as_ref().map(|channel| channel.id.as_str()),
+        Some("UCaaaaaaaaaaaaaaaaaaaaaa")
+    );
+    assert_eq!(video.view_count, Some(1_200));
+    assert_eq!(video.publish_date_txt.as_deref(), Some("2 days ago"));
+    assert_eq!(video.duration, Some(12 * 60 + 34));
+}

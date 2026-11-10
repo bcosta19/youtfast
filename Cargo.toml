@@ -171,10 +171,10 @@ epaint = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8f
 # change it comes from): ThetaDev/rustypipe PR #80 (comment authors' avatars,
 # the comment count, image/GIF attachments), a failed visitor-data fetch
 # returned as an error instead of a panic (`panic = "abort"` would end the
-# release build), channel pages in YouTube's October 2026 layout, history
-# playback reports, reqwest 0.13 with rustls and ring, and the `regression`
-# hooks. Move `rev` to fix a YouTube format there; drop the fork once an
-# upstream release carries these changes.
-rustypipe = { git = "https://github.com/bcosta19/rustypipe", rev = "d6073def4a320929c08fc18b345812f540853c50" }
+# release build), channel pages in YouTube's October and November 2026
+# layouts, history playback reports, reqwest 0.13 with rustls and ring, and the
+# `regression` hooks. Move `rev` to fix a YouTube format there; drop the fork
+# once an upstream release carries these changes.
+rustypipe = { git = "https://github.com/bcosta19/rustypipe", rev = "1f387f3fea054ab8eb223aa72da75dd3f8b05ede" }
 epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
 winit = { git = "https://github.com/crmne/winit", rev = "59ebfb727b8c83fcd28f8ca59c3733e32b4b4e9b" }

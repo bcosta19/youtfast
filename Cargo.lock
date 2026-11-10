@@ -4405,7 +4405,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 [[package]]
 name = "rustypipe"
 version = "0.11.4"
-source = "git+https://github.com/bcosta19/rustypipe?rev=d6073def4a320929c08fc18b345812f540853c50#d6073def4a320929c08fc18b345812f540853c50"
+source = "git+https://github.com/bcosta19/rustypipe?rev=1f387f3fea054ab8eb223aa72da75dd3f8b05ede#1f387f3fea054ab8eb223aa72da75dd3f8b05ede"
 dependencies = [
  "data-encoding",
  "fancy-regex",

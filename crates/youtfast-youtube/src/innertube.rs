@@ -296,6 +296,40 @@ pub struct More {
     /// The page is read here, not by rustypipe: a playlist in the layout
     /// rustypipe does not know yet (`playlist.rs`).
     pub ours: bool,
+    /// The channel whose own tab the list is: YouTube leaves the channel out
+    /// of those videos, and a continuation page has no header to take it from.
+    pub owner: Option<Owner>,
+}
+
+/// The channel a channel tab's videos belong to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Owner {
+    pub id: String,
+    pub name: String,
+    pub avatar: Option<String>,
+}
+
+impl Owner {
+    fn of(header: &ChannelHeader) -> Self {
+        Self {
+            id: header.id.clone(),
+            name: header.name.clone(),
+            avatar: header.avatar.clone(),
+        }
+    }
+
+    /// Fills what the video lacks from its channel. A video of another
+    /// channel (a collaboration) keeps its own name and gets no avatar.
+    pub fn fill(&self, video: &mut Video) {
+        let channel_id = video.channel_id.get_or_insert_with(|| self.id.clone());
+        if *channel_id != self.id {
+            return;
+        }
+        video.channel.get_or_insert_with(|| self.name.clone());
+        if video.channel_avatar.is_none() {
+            video.channel_avatar.clone_from(&self.avatar);
+        }
+    }
 }
 
 impl More {
@@ -307,6 +341,7 @@ impl More {
             visitor_data: paginator.visitor_data.clone(),
             authenticated: paginator.authenticated,
             ours: false,
+            owner: None,
         })
     }
 }
@@ -334,8 +369,15 @@ pub async fn more_videos(
         .continuation::<VideoItem, _>(&more.ctoken, more.endpoint, more.visitor_data.as_deref())
         .await
         .map_err(text)?;
-    let more = More::of(&page);
-    Ok((page.items.into_iter().map(video).collect(), more))
+    let mut next = More::of(&page);
+    let mut videos: Vec<Video> = page.items.into_iter().map(video).collect();
+    if let Some(owner) = &more.owner {
+        videos.iter_mut().for_each(|video| owner.fill(video));
+        if let Some(next) = &mut next {
+            next.owner = Some(owner.clone());
+        }
+    }
+    Ok((videos, next))
 }
 
 /// The next page of playlists.
@@ -428,7 +470,8 @@ pub async fn channel_tab(
     } else {
         result.content
     };
-    let more = More::of(&ordered);
+    let mut more = More::of(&ordered);
+    let owner = Owner::of(&header);
     let shorts = *tab == ChannelTab::Shorts;
     let videos = ordered
         .items
@@ -437,9 +480,13 @@ pub async fn channel_tab(
             let mut video = video(item);
             // The Shorts tab does not mark its items.
             video.short |= shorts;
+            owner.fill(&mut video);
             video
         })
         .collect();
+    if let Some(more) = &mut more {
+        more.owner = Some(owner);
+    }
     Ok((header, videos, more))
 }
 
@@ -811,6 +858,29 @@ fn absolute(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_channel_tab_fills_its_own_videos_but_not_a_collaborators() {
+        let owner = Owner {
+            id: "UCowner".into(),
+            name: "Owner".into(),
+            avatar: Some("https://yt3.ggpht.com/owner".into()),
+        };
+        let mut own = Video::from_id("aaaaaaaaaaa".into());
+        owner.fill(&mut own);
+        assert_eq!(own.channel_id.as_deref(), Some("UCowner"));
+        assert_eq!(own.channel.as_deref(), Some("Owner"));
+        assert_eq!(
+            own.channel_avatar.as_deref(),
+            Some("https://yt3.ggpht.com/owner")
+        );
+        let mut other = Video::from_id("bbbbbbbbbbb".into());
+        other.channel_id = Some("UCother".into());
+        other.channel = Some("Other".into());
+        owner.fill(&mut other);
+        assert_eq!(other.channel.as_deref(), Some("Other"));
+        assert_eq!(other.channel_avatar, None);
+    }
 
     #[tokio::test]
     async fn a_failed_visitor_data_fetch_is_an_error_not_a_crash() {

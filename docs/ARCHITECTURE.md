@@ -235,7 +235,9 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
   seeks, including `0:00`), and channel pages are its tabs (`channel_tab`, `channel_about`):
   videos, shorts, live, playlists and the channel's own search, paged through
   `More` continuations (`more_videos`, `more_playlists`), as is the home feed
-  (`more_videos` again).
+  (`more_videos` again). A channel tab's videos come without their channel;
+  `More::owner` carries the header's channel to every page, which fills the
+  name, id and avatar of the channel's own videos (`Owner::fill`).
 - Home's For you is the account's own recommendations
   (`src/innertube/home.rs`: `browse` `FEwhat_to_watch` through rustypipe's
   `raw`, read here, continued by rustypipe).

@@ -8,6 +8,14 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Fixed
+
+- Videos on a channel's page show their views, age and length again, and
+  so do the same videos in Up next. YouTube changed how it lists a
+  channel's own videos (YT-7 in `docs/youtube-api-format.md`).
+- A channel's videos show the channel's avatar instead of its initial, and
+  keep the channel's name on pages loaded with "Load more".
+
 ## [0.6.0] - 2026-11-09
 
 ### Added
