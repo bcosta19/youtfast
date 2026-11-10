@@ -151,6 +151,16 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
   `theme::SystemFonts` looks on a thread started in `main`, and `App` swaps
   them in once found. `theme::install_fonts` is the synchronous path for tests
   and the demo.
+- `InterfaceFont::Family` is an installed family chosen in the settings. On
+  Linux `desktop_font::family` resolves it like the desktop's own font
+  (`fc-match`, one weight at a time) and `desktop_font::installed_families`
+  lists what `fc-list :lang=en` knows, both on the font thread; the list
+  reaches the views as `State::font_families`. A font file read for a face
+  stays in memory for the life of the process, once per file, because egui
+  shares a face's bytes between weights only when they are `'static`. A
+  family that cannot be loaded draws with Inter and sets
+  `theme::face_missing`. A saved value this version does not know reads as
+  the system's face instead of failing the settings file.
 
 ### youtfast-storage
 

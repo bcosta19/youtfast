@@ -16,6 +16,9 @@
 //! configured, or the family is not installed, the caller falls back to the
 //! library's `system-ui`, then to Inter.
 //!
+//! A family chosen in the settings ([`family`]) is looked up the same way,
+//! and [`installed_families`] lists the ones `fc-list` knows for that menu.
+//!
 //! Everything here runs on the font thread (`theme::SystemFonts`), never on
 //! the interface thread, and the answer is kept for the life of the process.
 
@@ -54,6 +57,95 @@ pub fn interface() -> Option<&'static Interface> {
 pub fn cached() -> Option<&'static Interface> {
     FACE.get().and_then(Option::as_ref)
 }
+
+/// The last family asked of [`family`], found or not. One is kept: a
+/// person trying faces in the settings must not pile them all up.
+static CHOSEN: std::sync::Mutex<Option<(String, Option<Arc<Interface>>)>> =
+    std::sync::Mutex::new(None);
+
+/// The installed family `name`, at its four weights. Blocks like
+/// [`interface`] the first time a name is asked: call it only off the
+/// interface thread. `None` when the family is not installed or its files
+/// cannot be read, and always outside Linux.
+pub fn family(name: &str) -> Option<Arc<Interface>> {
+    if let Some(known) = cached_family(name) {
+        return known;
+    }
+    let found = lookup_family(name).map(Arc::new);
+    if found.is_none() {
+        log::info!("the chosen interface font is not installed");
+    }
+    let mut chosen = CHOSEN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    *chosen = Some((name.to_owned(), found.clone()));
+    found
+}
+
+/// What [`family`] answered for `name`, if it was the last one asked.
+pub fn cached_family(name: &str) -> Option<Option<Arc<Interface>>> {
+    let chosen = CHOSEN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    chosen
+        .as_ref()
+        .filter(|(known, _)| known == name)
+        .map(|(_, face)| face.clone())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn lookup_family(_name: &str) -> Option<Interface> {
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn lookup_family(name: &str) -> Option<Interface> {
+    resolve(name)
+}
+
+/// The families installed that can draw the interface's Latin text, sorted
+/// by name: what `fc-list` knows on Linux, nothing elsewhere. Blocks while
+/// `fc-list` runs; call it off the interface thread.
+pub fn installed_families() -> Vec<String> {
+    #[cfg(target_os = "linux")]
+    {
+        // `lang=en` leaves out symbol, emoji and single-script faces.
+        run("fc-list", &[":lang=en", "family"])
+            .map(|output| parse_fc_list(&output))
+            .unwrap_or_default()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Vec::new()
+    }
+}
+
+/// The families in `fc-list`'s output, one line per file: the family, then
+/// after commas its other names (a style's own name, a translation). Each
+/// family once, sorted without regard to case, at most [`MOST_FAMILIES`].
+fn parse_fc_list(output: &str) -> Vec<String> {
+    let mut families: Vec<String> = output
+        .lines()
+        .filter_map(|line| line.split(',').next())
+        .map(str::trim)
+        .filter(|family| {
+            !family.is_empty()
+                && family.len() <= LONGEST_FAMILY
+                && !family.starts_with('.')
+                && !family.chars().any(char::is_control)
+        })
+        .map(str::to_owned)
+        .collect();
+    families.sort_by_cached_key(|family| (family.to_lowercase(), family.clone()));
+    families.dedup();
+    families.truncate(MOST_FAMILIES);
+    families
+}
+
+/// More families than a menu can usefully list are left out.
+const MOST_FAMILIES: usize = 2000;
+/// A longer name is not a family's.
+const LONGEST_FAMILY: usize = 100;
 
 impl Interface {
     /// Puts the desktop's face where the interface face is: the library's
@@ -163,6 +255,22 @@ fn spawn(program: &str, args: &[&str]) -> Option<std::process::Child> {
 #[cfg(target_os = "linux")]
 fn printed(mut child: std::process::Child, deadline: std::time::Instant) -> Option<String> {
     use std::io::Read as _;
+    // Read while it runs: a program that prints more than a pipe holds
+    // (`fc-list` on a machine with many fonts) would otherwise wait for a
+    // reader until the deadline.
+    let mut stdout = child.stdout.take()?;
+    let reader = std::thread::Builder::new()
+        .name("youtfast-fonts-read".into())
+        .spawn(move || {
+            let mut output = String::new();
+            stdout
+                .by_ref()
+                .take(MOST_OUTPUT)
+                .read_to_string(&mut output)
+                .ok()
+                .map(|_| output)
+        })
+        .ok();
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break status,
@@ -170,19 +278,20 @@ fn printed(mut child: std::process::Child, deadline: std::time::Instant) -> Opti
                 std::thread::sleep(std::time::Duration::from_millis(1));
             }
             _ => {
+                // Ending the program closes the pipe, which ends the reader.
                 let _ = child.kill();
                 let _ = child.wait();
                 return None;
             }
         }
     };
-    if !status.success() {
-        return None;
-    }
-    let mut output = String::new();
-    child.stdout.take()?.read_to_string(&mut output).ok()?;
-    Some(output)
+    let output = reader?.join().ok()??;
+    status.success().then_some(output)
 }
+
+/// No tool's answer is read past this.
+#[cfg(target_os = "linux")]
+const MOST_OUTPUT: u64 = 4 * 1024 * 1024;
 
 /// The family's four weights, asked of `fc-match` side by side.
 #[cfg(target_os = "linux")]
@@ -209,21 +318,8 @@ fn resolve(family: &str) -> Option<Interface> {
         .collect();
     let regular = answers.first()?.clone()?;
     // A weight fontconfig could not give from this family takes regular.
-    // Kept for the life of the process, as the library keeps its faces: the
-    // four weights share one copy of a variable file.
-    let mut loaded: Vec<(std::path::PathBuf, &'static [u8])> = Vec::new();
-    let mut bytes_of = |path: &std::path::Path| -> Option<&'static [u8]> {
-        if let Some((_, bytes)) = loaded.iter().find(|(known, _)| known == path) {
-            return Some(bytes);
-        }
-        let bytes = std::fs::read(path).ok()?;
-        if !is_font(&bytes) {
-            return None;
-        }
-        let bytes: &'static [u8] = Box::leak(bytes.into_boxed_slice());
-        loaded.push((path.to_path_buf(), bytes));
-        Some(bytes)
-    };
+    // The four weights share one copy of a variable file.
+    let bytes_of = |path: &std::path::Path| font_file(path);
     let mut faces = Vec::new();
     for (weight, answer) in Weight::ALL.iter().zip(&answers) {
         let (index, path) = answer.clone().unwrap_or_else(|| regular.clone());
@@ -239,6 +335,40 @@ fn resolve(family: &str) -> Option<Interface> {
         faces,
     })
 }
+
+/// The font files read so far. egui shares a face's bytes between weights
+/// only when they are `'static`, so a file is kept for the life of the
+/// process, as the library keeps its faces: once, however many times its
+/// family is chosen again.
+#[cfg(target_os = "linux")]
+static FILES: std::sync::Mutex<Vec<(std::path::PathBuf, &'static [u8])>> =
+    std::sync::Mutex::new(Vec::new());
+
+/// The bytes of the font file at `path`; `None` for a file that cannot be
+/// read, is not a font, or is larger than [`LARGEST_FILE`].
+#[cfg(target_os = "linux")]
+fn font_file(path: &std::path::Path) -> Option<&'static [u8]> {
+    let mut files = FILES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some((_, bytes)) = files.iter().find(|(known, _)| known == path) {
+        return Some(bytes);
+    }
+    if std::fs::metadata(path).ok()?.len() > LARGEST_FILE {
+        return None;
+    }
+    let bytes = std::fs::read(path).ok()?;
+    if !is_font(&bytes) {
+        return None;
+    }
+    let bytes: &'static [u8] = Box::leak(bytes.into_boxed_slice());
+    files.push((path.to_path_buf(), bytes));
+    Some(bytes)
+}
+
+/// A larger file is not kept in memory for the interface's text.
+#[cfg(target_os = "linux")]
+const LARGEST_FILE: u64 = 32 * 1024 * 1024;
 
 /// A face of `bytes` at `weight`: a face that varies in weight is set to
 /// it, a static one is drawn as it is.
@@ -460,6 +590,38 @@ mod tests {
         let other = "0|Liberation Sans|/usr/share/fonts/liberation/LiberationSans-Regular.ttf\n";
         assert_eq!(parse_fc_match(other, "Adwaita Sans"), None);
         assert_eq!(parse_fc_match("", "x"), None);
+    }
+
+    #[test]
+    fn fc_list_gives_each_family_once_in_order() {
+        let output = "FiraCode Nerd Font,FiraCode Nerd Font Light\n\
+                      Adwaita Sans\n\
+                      FiraCode Nerd Font,FiraCode Nerd Font Med\n\
+                      \n\
+                      .Hidden Face\n\
+                      inter\n\
+                      Noto Sans CJK JP,Noto Sans CJK JP Bold\n\
+                      Adwaita Sans\n";
+        assert_eq!(
+            parse_fc_list(output),
+            [
+                "Adwaita Sans",
+                "FiraCode Nerd Font",
+                "inter",
+                "Noto Sans CJK JP"
+            ]
+        );
+        assert!(parse_fc_list("").is_empty());
+        // A name no family has is left out instead of filling the menu.
+        assert!(parse_fc_list(&"x".repeat(LONGEST_FAMILY + 1)).is_empty());
+    }
+
+    #[test]
+    fn a_family_that_is_not_installed_is_remembered_as_missing() {
+        let name = "YouTFast test family that no machine installs";
+        assert!(cached_family(name).is_none());
+        assert!(family(name).is_none());
+        assert!(matches!(cached_family(name), Some(None)));
     }
 
     #[test]

@@ -1731,3 +1731,9 @@ msgstr "Nova aba"
 
 msgid "Next / previous video tab"
 msgstr "Aba de vídeo seguinte / anterior"
+
+msgid "{font} couldn't be loaded, so YouTFast uses Inter."
+msgstr "Não foi possível carregar {font}, então o YouTFast usa Inter."
+
+msgid "Search fonts"
+msgstr "Buscar fontes"

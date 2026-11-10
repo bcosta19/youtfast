@@ -247,7 +247,7 @@ fn text_rendering() -> fastframe_text::TextRendering {
 }
 
 /// Which face draws the interface. The settings keep the choice.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InterfaceFont {
     /// The face the desktop draws its own interface with, falling back to
@@ -256,6 +256,36 @@ pub enum InterfaceFont {
     System,
     /// The bundled Inter, the same on every machine.
     Inter,
+    /// An installed family, by name ([`installed_families`]), falling back
+    /// to Inter when it is not installed any more.
+    Family(String),
+}
+
+impl<'de> serde::Deserialize<'de> for InterfaceFont {
+    /// A value this version does not know (a later one's) is the system's
+    /// face instead of an error that would set the whole file aside.
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "lowercase")]
+        enum Known {
+            System,
+            Inter,
+            Family(String),
+        }
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum Saved {
+            Known(Known),
+            Other(serde::de::IgnoredAny),
+        }
+        Ok(match Saved::deserialize(deserializer)? {
+            Saved::Known(Known::Inter) => Self::Inter,
+            Saved::Known(Known::Family(family)) if !family.trim().is_empty() => {
+                Self::Family(family)
+            }
+            Saved::Known(Known::System | Known::Family(_)) | Saved::Other(_) => Self::System,
+        })
+    }
 }
 
 /// Counts font swaps: text laid out before one is drawn from an atlas that
@@ -273,15 +303,18 @@ fn set_fonts(ctx: &egui::Context, fonts: egui::FontDefinitions) {
 }
 
 impl InterfaceFont {
+    /// The choices every machine has; the installed families follow them.
     pub const ALL: [Self; 2] = [Self::System, Self::Inter];
-
-    fn primary(self) -> fastframe_fonts::Primary {
-        match self {
-            Self::System => fastframe_fonts::Primary::System,
-            Self::Inter => fastframe_fonts::Primary::Inter,
-        }
-    }
 }
+
+/// The installed families the settings offer, once the font thread has
+/// listed them; empty until then, and where there is no list (outside
+/// Linux).
+pub fn installed_families() -> &'static [String] {
+    INSTALLED_FAMILIES.get().map_or(&[], Vec::as_slice)
+}
+
+static INSTALLED_FAMILIES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
 
 /// The family of figures that keep their width while they count: Inter's
 /// tabular digits, whichever face draws the rest of the interface.
@@ -307,13 +340,14 @@ fn same_font(font: &[u8], inter: &[u8]) -> bool {
     font.len() == inter.len() && (std::ptr::eq(font.as_ptr(), inter.as_ptr()) || font == inter)
 }
 
-/// Set when the system face was asked for: whether Inter drew instead.
-static SYSTEM_FACE_MISSING: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+/// Whether the last complete lookup of the system's face, or of a chosen
+/// family, ended with Inter drawing instead.
+static FACE_MISSING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Whether the system's interface face was asked for and could not be
-/// used, so Inter draws instead. False until the first such lookup ends.
-pub fn system_face_missing() -> bool {
-    SYSTEM_FACE_MISSING.get().copied().unwrap_or(false)
+/// Whether the face asked for (the system's, or a chosen family) could not
+/// be used, so Inter draws instead. False until such a lookup ends.
+pub fn face_missing() -> bool {
+    FACE_MISSING.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// The interface face at its four weights, the installed faces behind it
@@ -321,7 +355,7 @@ pub fn system_face_missing() -> bool {
 /// Inter and not the system's face: the same on every machine, for tests
 /// and the demo.
 pub fn install_fonts(ctx: &egui::Context) {
-    set_fonts(ctx, font_definitions(InterfaceFont::Inter, true));
+    set_fonts(ctx, font_definitions(&InterfaceFont::Inter, true));
 }
 
 /// The fonts for `choice`. With `system_fallbacks` this also looks for the
@@ -332,30 +366,76 @@ pub fn install_fonts(ctx: &egui::Context) {
 /// The system face is, in order: the desktop's configured font (Linux),
 /// the platform's interface face (`Primary::System`: San Francisco, Segoe
 /// UI, fontconfig's `system-ui`), then Inter.
-fn font_definitions(choice: InterfaceFont, system_fallbacks: bool) -> egui::FontDefinitions {
-    let desktop = match (choice, system_fallbacks) {
-        (InterfaceFont::System, true) => desktop_font::interface(),
-        (InterfaceFont::System, false) => desktop_font::cached(),
-        (InterfaceFont::Inter, _) => None,
-    };
-    let primary = if choice == InterfaceFont::System && desktop.is_none() && system_fallbacks {
-        InterfaceFont::System.primary()
-    } else {
-        InterfaceFont::Inter.primary()
+fn font_definitions(choice: &InterfaceFont, system_fallbacks: bool) -> egui::FontDefinitions {
+    let (fonts, missing) = looked_up(choice, system_fallbacks);
+    // Inter asks for no face, so it leaves the last answer as it is: the
+    // tests and the demo install it without touching what the app found.
+    if let Some(missing) = missing.filter(|_| *choice != InterfaceFont::Inter) {
+        FACE_MISSING.store(missing, std::sync::atomic::Ordering::Relaxed);
+    }
+    fonts
+}
+
+/// [`font_definitions`], and whether the face asked for was missing so
+/// Inter draws instead; `None` when nothing was looked for.
+fn looked_up(
+    choice: &InterfaceFont,
+    system_fallbacks: bool,
+) -> (egui::FontDefinitions, Option<bool>) {
+    use fastframe_fonts::Primary;
+    // The face that replaces the library's, and the library's own choice
+    // under it. Without `system_fallbacks` only what is already known is
+    // used, and Inter draws until the search ends.
+    let (replacement, primary) = match choice {
+        InterfaceFont::Inter => (Replacement::None, Primary::Inter),
+        InterfaceFont::System => {
+            let desktop = if system_fallbacks {
+                desktop_font::interface()
+            } else {
+                desktop_font::cached()
+            };
+            match desktop {
+                Some(desktop) => (Replacement::Desktop(desktop), Primary::Inter),
+                None if system_fallbacks => (Replacement::None, Primary::System),
+                None => (Replacement::None, Primary::Inter),
+            }
+        }
+        InterfaceFont::Family(name) => {
+            let family = if system_fallbacks {
+                desktop_font::family(name)
+            } else {
+                desktop_font::cached_family(name).flatten()
+            };
+            (
+                family.map_or(Replacement::None, Replacement::Family),
+                Primary::Inter,
+            )
+        }
     };
     let mut fonts = fastframe_fonts::FontSetup::default()
         .primary(primary)
         .system_fallbacks(system_fallbacks)
         .definitions();
-    if let Some(desktop) = desktop {
-        desktop.apply(&mut fonts);
+    match &replacement {
+        Replacement::None => {}
+        Replacement::Desktop(face) => face.apply(&mut fonts),
+        Replacement::Family(face) => face.apply(&mut fonts),
     }
-    if choice == InterfaceFont::System && system_fallbacks {
-        let _ = SYSTEM_FACE_MISSING.set(desktop.is_none() && draws_with_inter(&fonts));
-    }
+    let missing = system_fallbacks.then(|| {
+        *choice != InterfaceFont::Inter
+            && matches!(replacement, Replacement::None)
+            && draws_with_inter(&fonts)
+    });
     add_tabular(&mut fonts);
     text_rendering().apply_to(&mut fonts);
-    fonts
+    (fonts, missing)
+}
+
+/// The face put where the library's interface face is.
+enum Replacement {
+    None,
+    Desktop(&'static desktop_font::Interface),
+    Family(std::sync::Arc<desktop_font::Interface>),
 }
 
 /// Registers the [`tabular`] family: Inter's digits ahead of whatever the
@@ -391,6 +471,7 @@ impl SystemFonts {
     /// Starts looking; called before the window is made, so the search
     /// overlaps its setup.
     pub fn find(choice: InterfaceFont) -> Self {
+        let searched = choice.clone();
         let (sender, fonts) = Self::channel(choice);
         let wake = std::sync::Arc::clone(&fonts.waker);
         // A thread that cannot start leaves the channel disconnected, and
@@ -398,9 +479,10 @@ impl SystemFonts {
         let _ = std::thread::Builder::new()
             .name("youtfast-fonts".into())
             .spawn(move || {
-                if sender.send(font_definitions(choice, true)).is_ok()
-                    && let Some(ctx) = wake.get()
-                {
+                let sent = sender.send(font_definitions(&searched, true)).is_ok();
+                // After the faces: the menu can wait, the text cannot.
+                INSTALLED_FAMILIES.get_or_init(desktop_font::installed_families);
+                if sent && let Some(ctx) = wake.get() {
                     ctx.request_repaint();
                 }
             });
@@ -428,7 +510,7 @@ impl SystemFonts {
         if self.poll(ctx) {
             return true;
         }
-        set_fonts(ctx, font_definitions(self.choice, false));
+        set_fonts(ctx, font_definitions(&self.choice, false));
         false
     }
 
@@ -438,7 +520,7 @@ impl SystemFonts {
             Ok(fonts) => set_fonts(ctx, fonts),
             Err(std::sync::mpsc::TryRecvError::Empty) => return false,
             Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                set_fonts(ctx, font_definitions(self.choice, true));
+                set_fonts(ctx, font_definitions(&self.choice, true));
             }
         }
         // New fonts take effect from the next pass.
@@ -683,7 +765,7 @@ mod tests {
 
     #[test]
     fn the_interface_face_is_inter_unless_another_took_its_place() {
-        let mut fonts = font_definitions(InterfaceFont::Inter, false);
+        let mut fonts = font_definitions(&InterfaceFont::Inter, false);
         assert!(draws_with_inter(&fonts));
         // What the library registers when the system face was found: the
         // same key, another face.
@@ -699,14 +781,14 @@ mod tests {
     #[test]
     fn counting_figures_keep_inters_digits_with_either_face() {
         let tabular_family = || egui::FontFamily::Name(TABULAR.into());
-        let inter = font_definitions(InterfaceFont::Inter, false);
+        let inter = font_definitions(&InterfaceFont::Inter, false);
         assert_eq!(
             inter.families[&tabular_family()],
             inter.families[&egui::FontFamily::Proportional]
         );
         assert!(!inter.font_data.contains_key(TABULAR));
 
-        let mut other = font_definitions(InterfaceFont::Inter, false);
+        let mut other = font_definitions(&InterfaceFont::Inter, false);
         other.font_data.insert(
             fastframe_fonts::INTER_REGULAR.to_owned(),
             std::sync::Arc::new(egui::FontData::from_owned(vec![0, 1, 0, 0])),
@@ -726,8 +808,8 @@ mod tests {
 
     #[test]
     fn the_system_choice_builds_fonts_with_the_same_families() {
-        let system = font_definitions(InterfaceFont::System, false); // nothing looked for
-        let inter = font_definitions(InterfaceFont::Inter, false);
+        let system = font_definitions(&InterfaceFont::System, false); // nothing looked for
+        let inter = font_definitions(&InterfaceFont::Inter, false);
         assert_eq!(
             system
                 .families
@@ -740,11 +822,26 @@ mod tests {
         );
         // The notice follows what happened to the lookup: Inter drew
         // because neither the desktop's font nor the platform's was found.
-        let searched = font_definitions(InterfaceFont::System, true);
+        let (searched, missing) = looked_up(&InterfaceFont::System, true);
         assert_eq!(
-            system_face_missing(),
-            desktop_font::cached().is_none() && draws_with_inter(&searched)
+            missing,
+            Some(desktop_font::cached().is_none() && draws_with_inter(&searched))
         );
+        assert_eq!(looked_up(&InterfaceFont::System, false).1, None);
+    }
+
+    #[test]
+    fn a_family_that_is_not_installed_draws_with_inter_and_says_so() {
+        let choice = InterfaceFont::Family("YouTFast test family nobody installs".into());
+        // Before the search: Inter, and nothing to say yet.
+        let (fonts, missing) = looked_up(&choice, false);
+        assert!(draws_with_inter(&fonts));
+        assert_eq!(missing, None);
+        let (fonts, missing) = looked_up(&choice, true);
+        assert!(draws_with_inter(&fonts));
+        assert_eq!(missing, Some(true));
+        // Inter itself is never missing.
+        assert_eq!(looked_up(&InterfaceFont::Inter, true).1, Some(false));
     }
 
     #[test]
@@ -753,9 +850,9 @@ mod tests {
         let (sender, fonts) = SystemFonts::channel(InterfaceFont::Inter);
         assert!(!fonts.install(&ctx));
         assert!(!fonts.poll(&ctx));
-        assert!(fonts_in(&ctx) == font_definitions(InterfaceFont::Inter, false));
+        assert!(fonts_in(&ctx) == font_definitions(&InterfaceFont::Inter, false));
         // What the search found, told apart by a family of its own.
-        let mut found = font_definitions(InterfaceFont::Inter, false);
+        let mut found = font_definitions(&InterfaceFont::Inter, false);
         found.families.insert(
             egui::FontFamily::Name("found".into()),
             vec![fastframe_fonts::INTER_REGULAR.to_owned()],
@@ -771,6 +868,6 @@ mod tests {
         let (sender, fonts) = SystemFonts::channel(InterfaceFont::Inter);
         drop(sender);
         assert!(fonts.install(&ctx));
-        assert!(fonts_in(&ctx) == font_definitions(InterfaceFont::Inter, true));
+        assert!(fonts_in(&ctx) == font_definitions(&InterfaceFont::Inter, true));
     }
 }

@@ -1693,3 +1693,9 @@ msgstr "{name} nach unten"
 
 msgid "Restore default"
 msgstr "Standard wiederherstellen"
+
+msgid "{font} couldn't be loaded, so YouTFast uses Inter."
+msgstr "{font} konnte nicht geladen werden, daher verwendet YouTFast Inter."
+
+msgid "Search fonts"
+msgstr "Schriften suchen"

@@ -15,6 +15,10 @@ are the distribution record.
   and removing: `docs/install.md`, and an install page on the website in
   English and Portuguese.
 
+- On Linux, Settings → Appearance → Interface font also lists the fonts
+  installed on the computer, with a field to search them; the font chosen
+  draws the whole interface. Windows and macOS keep System and Inter.
+
 - The top-bar bell opens a scrollable notifications popup without leaving the
   current page; the sidebar still opens the full notifications page.
 
