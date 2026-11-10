@@ -40,8 +40,38 @@ pub fn focus_outline(ui: &Ui, response: &Response, radius: CornerRadius) {
     }
 }
 
-/// A frameless button that is just the icon, a round tint under it on
-/// hover.
+/// How far the pointer's hover over `response` has faded in (0 to 1). A
+/// control's hover tint follows this instead of switching in one frame; the
+/// window is only redrawn while the fade runs.
+pub fn hover_fade(ui: &Ui, response: &Response) -> f32 {
+    ui.ctx().animate_bool(
+        response.id.with("hover"),
+        response.hovered() && ui.is_enabled(),
+    )
+}
+
+/// How far a press on `response` has sunk in (0 to 1), the way
+/// [`hover_fade`] follows the pointer.
+pub fn press_fade(ui: &Ui, response: &Response) -> f32 {
+    ui.ctx().animate_bool(
+        response.id.with("press"),
+        response.is_pointer_button_down_on() && ui.is_enabled(),
+    )
+}
+
+/// The colour `t` of the way from `from` to `to`.
+pub fn mix(from: Color32, to: Color32, t: f32) -> Color32 {
+    if t <= 0.0 {
+        from
+    } else if t >= 1.0 {
+        to
+    } else {
+        Color32::from(egui::lerp(egui::Rgba::from(from)..=egui::Rgba::from(to), t))
+    }
+}
+
+/// A frameless button that is just the icon, a round tint under it that fades
+/// in on hover.
 pub fn icon_button(ui: &mut Ui, icon: Icon, size: f32, hint: &str) -> Response {
     let edge = (size + 12.0).max(32.0);
     let (rect, response) = ui.allocate_exact_size(vec2(edge, edge), Sense::click());
@@ -56,11 +86,17 @@ pub fn icon_button(ui: &mut Ui, icon: Icon, size: f32, hint: &str) -> Response {
     }
     if response.hovered() {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
-        ui.painter().circle_filled(
-            rect.center(),
-            edge / 2.0,
-            ui.visuals().widgets.hovered.weak_bg_fill,
+    }
+    let hover = hover_fade(ui, &response);
+    if hover > 0.0 {
+        let widgets = &ui.visuals().widgets;
+        let fill = mix(
+            widgets.hovered.weak_bg_fill,
+            widgets.active.weak_bg_fill,
+            press_fade(ui, &response),
         );
+        ui.painter()
+            .circle_filled(rect.center(), edge / 2.0, fill.gamma_multiply(hover));
     }
     let tint = ui.visuals().text_color();
     icon.image(tint, size)
@@ -214,11 +250,17 @@ pub fn icon_text_button(
     if hovered {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
     }
+    let hover = hover_fade(ui, &response);
+    let press = press_fade(ui, &response);
     let fill = match style {
-        ButtonStyle::Primary if hovered => palette.text.gamma_multiply(0.85),
-        ButtonStyle::Primary => palette.text,
-        _ if hovered => palette.surface_hover,
-        _ => palette.surface,
+        ButtonStyle::Primary => palette
+            .text
+            .gamma_multiply(1.0 - 0.15 * hover - 0.1 * press),
+        _ => mix(
+            mix(palette.surface, palette.surface_hover, hover),
+            palette.surface_active,
+            press,
+        ),
     };
     let painter = ui.painter();
     painter.rect_filled(rect, CornerRadius::same((height / 2.0) as u8), fill);
@@ -346,21 +388,20 @@ pub fn nav_item(
     if hovered {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
     }
-    if selected || hovered {
-        let fill = if selected {
-            palette.surface
-        } else {
-            palette.surface_hover
-        };
+    // The fill and the label fade with the pointer and with the selection,
+    // so moving between pages reads as one item handing over to the next.
+    let hover = hover_fade(ui, &response);
+    let on = ui
+        .ctx()
+        .animate_bool(response.id.with("selected"), selected);
+    let lit = hover.max(on);
+    if lit > 0.0 {
+        let fill = mix(palette.surface_hover, palette.surface, on);
         ui.painter()
-            .rect_filled(rect, CornerRadius::same(RADIUS), fill);
+            .rect_filled(rect, CornerRadius::same(RADIUS), fill.gamma_multiply(lit));
     }
     focus_outline(ui, &response, CornerRadius::same(RADIUS));
-    let color = if selected || hovered {
-        palette.text
-    } else {
-        palette.secondary
-    };
+    let color = mix(palette.secondary, palette.text, lit);
     let icon_size = 20.0;
     let count = count.filter(|count| *count > 0);
     if collapsed {

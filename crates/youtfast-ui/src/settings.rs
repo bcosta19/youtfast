@@ -1,6 +1,7 @@
 //! The settings page, the siblings' way: the page's title, then each group
 //! as a heading over a card of rows — the option's name and what it does
-//! at the left, its control at the right.
+//! at the left, its control at the right. The column sits in the middle of
+//! the page, with an index of the groups beside it when there is room.
 
 use egui::{Align, Color32, CornerRadius, Layout, Response, RichText, Sense, Ui, pos2, vec2};
 
@@ -18,33 +19,184 @@ use youtfast_storage::settings::{
 const WIDTH: f32 = 760.0;
 /// The room a row keeps at its right for a usual control.
 const CONTROL_WIDTH: f32 = 260.0;
+/// The index of the groups a wide window shows beside the column, and the
+/// space between the two.
+const INDEX_WIDTH: f32 = 200.0;
+const INDEX_GAP: f32 = 32.0;
+/// The height of one entry of the index.
+const INDEX_ROW: f32 = 34.0;
+/// How far below the top of the page a group's heading already counts as
+/// the current one.
+const INDEX_REACH: f32 = 96.0;
 /// How often the checks may run, in minutes.
 const INTERVALS: [u32; 4] = [5, 15, 30, 60];
+
+/// The page's groups, in order: the name the index lists and the group.
+const GROUPS: [(&str, Group); 6] = [
+    ("Appearance", appearance),
+    ("Playback", playback),
+    ("Sidebar", sidebar),
+    ("History", history),
+    ("Notifications", notifications),
+    ("About", about),
+];
+
+type Group = fn(&mut Ui, &State, &mut Vec<Action>);
+
+/// What the index remembers between frames.
+#[derive(Clone, Copy, Default)]
+struct IndexState {
+    /// The group under the top of the page, as the last frame drew it.
+    current: usize,
+    /// The group to scroll to in this frame.
+    jump: Option<usize>,
+    /// The group last chosen in the index: it stays marked until the page
+    /// is scrolled by hand, since the last groups never reach the top.
+    chosen: Option<usize>,
+}
 
 pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
     results::panel(ui, |ui| {
+        let page = ui.available_rect_before_wrap();
+        // A window with room for it lists the groups beside the column;
+        // either way what is drawn sits in the middle of the page.
+        let indexed = page.width() >= WIDTH + INDEX_WIDTH + INDEX_GAP;
+        let width = WIDTH.min(page.width());
+        let block = if indexed {
+            width + INDEX_WIDTH + INDEX_GAP
+        } else {
+            width
+        };
+        // Whole pixels: a half-pixel offset would blur every glyph.
+        let left = ((page.width() - block) / 2.0).max(0.0).floor();
+        let column = left + block - width;
+
+        let id = egui::Id::new("settings-index");
+        let mut index: IndexState = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_default();
+        if ui.input(|i| i.smooth_scroll_delta.y != 0.0 || i.pointer.is_decidedly_dragging()) {
+            index.chosen = None;
+        }
+        let jump = index.jump.take();
+
+        let mut current = 0;
+        // The whole panel scrolls, so the wheel works beside the column
+        // too and the bar stays at the window's edge.
         egui::ScrollArea::vertical()
             .auto_shrink(false)
             .show(ui, |ui| {
-                // set_max_width also widens: a narrow window would cut
-                // the text off at its edge instead of wrapping it.
-                ui.set_max_width(WIDTH.min(ui.available_width()));
-                results::title(ui, state, &tr(locale, "Settings"), None);
-                appearance(ui, state, actions);
-                ui.add_space(24.0);
-                playback(ui, state, actions);
-                ui.add_space(24.0);
-                sidebar(ui, state, actions);
-                ui.add_space(24.0);
-                history(ui, state, actions);
-                ui.add_space(24.0);
-                notifications(ui, state, actions);
-                ui.add_space(24.0);
-                about(ui, state, actions);
-                ui.add_space(24.0);
+                let top = ui.clip_rect().top();
+                let mut rect = ui.available_rect_before_wrap();
+                rect.min.x += column;
+                rect.max.x = rect.min.x + width;
+                ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+                    // set_max_width also widens: a narrow window would cut
+                    // the text off at its edge instead of wrapping it.
+                    ui.set_max_width(width);
+                    if !indexed {
+                        results::title(ui, state, &tr(locale, "Settings"), None);
+                    }
+                    for (group, (_, draw)) in GROUPS.iter().enumerate() {
+                        if indexed {
+                            if jump == Some(group) {
+                                ui.scroll_to_cursor(Some(Align::TOP));
+                            }
+                            if ui.cursor().top() <= top + INDEX_REACH {
+                                current = group;
+                            }
+                        }
+                        draw(ui, state, actions);
+                        ui.add_space(24.0);
+                    }
+                });
             });
+
+        if indexed {
+            index.current = index.chosen.unwrap_or(current);
+            let rect = egui::Rect::from_min_size(
+                page.min + vec2(left, 0.0),
+                vec2(INDEX_WIDTH, page.height()),
+            );
+            ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+                results::title(ui, state, &tr(locale, "Settings"), None);
+                if let Some(chosen) = group_index(ui, state, index.current) {
+                    index.jump = Some(chosen);
+                    index.chosen = Some(chosen);
+                    index.current = chosen;
+                }
+            });
+        }
+        ui.ctx().data_mut(|d| d.insert_temp(id, index));
     });
+}
+
+/// The index beside the column: one entry per group, the current one in
+/// the primary colour beside an accent bar that slides to it. Returns the
+/// entry clicked.
+fn group_index(ui: &mut Ui, state: &State, current: usize) -> Option<usize> {
+    let locale = state.settings.language;
+    let palette = &state.palette;
+    let mut chosen = None;
+    let first = ui.cursor().top();
+    ui.spacing_mut().item_spacing.y = 2.0;
+    for (group, (name, _)) in GROUPS.iter().enumerate() {
+        let name = tr(locale, name);
+        let (rect, response) =
+            ui.allocate_exact_size(vec2(ui.available_width(), INDEX_ROW), Sense::click());
+        response.widget_info(|| {
+            egui::WidgetInfo::selected(
+                egui::WidgetType::Button,
+                ui.is_enabled(),
+                group == current,
+                name.as_ref(),
+            )
+        });
+        if response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+        let hover = widgets::hover_fade(ui, &response);
+        let on = ui
+            .ctx()
+            .animate_bool(response.id.with("current"), group == current);
+        if hover > 0.0 {
+            ui.painter().rect_filled(
+                rect,
+                CornerRadius::same(theme::RADIUS_SMALL),
+                palette.surface.gamma_multiply(hover),
+            );
+        }
+        widgets::focus_outline(ui, &response, CornerRadius::same(theme::RADIUS_SMALL));
+        let font = if group == current {
+            theme::semibold(14.0)
+        } else {
+            theme::medium(14.0)
+        };
+        let color = widgets::mix(palette.secondary, palette.text, hover.max(on));
+        let galley = ui.painter().layout_no_wrap(name.into_owned(), font, color);
+        ui.painter().galley(
+            pos2(rect.left() + 14.0, rect.center().y - galley.size().y / 2.0),
+            galley,
+            color,
+        );
+        if response.clicked() {
+            chosen = Some(group);
+        }
+    }
+    // One bar for the whole index, so it travels between entries instead
+    // of going out on one and coming on at the other.
+    let step = INDEX_ROW + ui.spacing().item_spacing.y;
+    let at = ui.ctx().animate_value_with_time(
+        ui.id().with("bar"),
+        current as f32,
+        ui.style().animation_time * 1.5,
+    );
+    let bar = egui::Rect::from_min_size(
+        pos2(ui.max_rect().left(), first + at * step + 8.0),
+        vec2(3.0, INDEX_ROW - 16.0),
+    );
+    ui.painter()
+        .rect_filled(bar, CornerRadius::same(2), palette.accent);
+    chosen
 }
 
 /// The Appearance group: the theme, its status, where palettes live.
@@ -229,7 +381,7 @@ fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     widgets::section(ui, palette, &tr(locale, "Playback"), None, |ui| {
         widgets::card(ui, palette, |ui| {
             let autoplay = state.settings.autoplay;
-            setting_row(
+            if switch_row(
                 ui,
                 palette,
                 &tr(locale, "Autoplay"),
@@ -237,16 +389,14 @@ fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     locale,
                     "At the end of a video, the next one starts after a countdown: first the queue, then the source list, then related videos.",
                 ),
-                CONTROL_WIDTH,
-                |ui| {
-                    if switch(ui, palette, autoplay, &tr(locale, "Autoplay")).clicked() {
-                        actions.push(Action::SetAutoplay(!autoplay));
-                    }
-                },
-            );
+                autoplay,
+                &tr(locale, "Autoplay"),
+            ) {
+                actions.push(Action::SetAutoplay(!autoplay));
+            }
             ui.add_space(12.0);
             let scroll_miniplayer = state.settings.scroll_miniplayer;
-            setting_row(
+            if switch_row(
                 ui,
                 palette,
                 &tr(locale, "Miniplayer while scrolling"),
@@ -254,20 +404,11 @@ fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     locale,
                     "Keep the video visible when scrolling down to the comments.",
                 ),
-                CONTROL_WIDTH,
-                |ui| {
-                    if switch(
-                        ui,
-                        palette,
-                        scroll_miniplayer,
-                        &tr(locale, "Miniplayer while scrolling"),
-                    )
-                    .clicked()
-                    {
-                        actions.push(Action::SetScrollMiniplayer(!scroll_miniplayer));
-                    }
-                },
-            );
+                scroll_miniplayer,
+                &tr(locale, "Miniplayer while scrolling"),
+            ) {
+                actions.push(Action::SetScrollMiniplayer(!scroll_miniplayer));
+            }
             ui.add_space(12.0);
             let buffer_choices = [
                 (
@@ -324,7 +465,7 @@ fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             );
             ui.add_space(12.0);
             let sponsorblock = state.settings.sponsorblock;
-            setting_row(
+            if switch_row(
                 ui,
                 palette,
                 &tr(locale, "Skip sponsors (SponsorBlock)"),
@@ -332,13 +473,11 @@ fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     locale,
                     "Skips sponsors and offers to skip intros, credits and other segments marked by the SponsorBlock community. Requests to sponsor.ajay.app use a hash prefix matching thousands of videos.",
                 ),
-                CONTROL_WIDTH,
-                |ui| {
-                    if switch(ui, palette, sponsorblock, "SponsorBlock").clicked() {
-                        actions.push(Action::SetSponsorBlock(!sponsorblock));
-                    }
-                },
-            );
+                sponsorblock,
+                "SponsorBlock",
+            ) {
+                actions.push(Action::SetSponsorBlock(!sponsorblock));
+            }
         });
     });
 }
@@ -365,52 +504,64 @@ fn sidebar(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             ui.add_space(8.0);
             let entries = &state.settings.sidebar;
             let last = entries.len() - 1;
+            // A row is as tall as its arrows.
+            let step = 32.0 + ui.spacing().item_spacing.y;
             for (index, entry) in entries.iter().enumerate() {
                 let name = sidebar_button_name(locale, entry.button);
                 // A global id keyed by button (`push_id`'s widget ids still
                 // follow the row's position), so focus and the switch's
                 // animation travel with the row when it moves.
                 let row = egui::UiBuilder::new().id(egui::Id::new(("sidebar-row", entry.button)));
-                ui.scope_builder(row, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 8.0;
-                        ui.add_enabled_ui(entry.button.can_hide(), |ui| {
-                            if switch(ui, palette, entry.visible, &name).clicked() {
-                                let mut next = entries.clone();
-                                next[index].visible = !entry.visible;
-                                actions.push(Action::SetSidebar(next));
-                            }
-                        });
-                        ui.label(
-                            RichText::new(&name)
-                                .font(theme::medium(14.0))
-                                .color(palette.text),
-                        );
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            for (icon, up, key, enabled) in [
-                                (Icon::ChevronDown, false, "Move {name} down", index < last),
-                                (Icon::ChevronUp, true, "Move {name} up", index > 0),
-                            ] {
-                                let hint = trf(locale, key, &[("name", name.clone())]);
-                                let moved = ui
-                                    .add_enabled_ui(enabled, |ui| {
-                                        widgets::icon_button(ui, icon, 18.0, &hint)
-                                    })
-                                    .inner;
-                                if moved.clicked() {
-                                    let to = if up {
-                                        index.checked_sub(1)
-                                    } else {
-                                        Some(index + 1).filter(|to| *to <= last)
-                                    };
-                                    if let Some(to) = to {
-                                        let mut next = entries.clone();
-                                        next.swap(index, to);
-                                        actions.push(Action::SetSidebar(next));
+                // A moved row slides from the place it had: the picture
+                // only, the row itself is already where it goes.
+                let place = ui.ctx().animate_value_with_time(
+                    egui::Id::new(("sidebar-place", entry.button)),
+                    index as f32,
+                    ui.style().animation_time * 1.5,
+                );
+                let slide = vec2(0.0, (place - index as f32) * step);
+                ui.with_visual_transform(egui::emath::TSTransform::from_translation(slide), |ui| {
+                    ui.scope_builder(row, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 8.0;
+                            ui.add_enabled_ui(entry.button.can_hide(), |ui| {
+                                if switch(ui, palette, entry.visible, &name).clicked() {
+                                    let mut next = entries.clone();
+                                    next[index].visible = !entry.visible;
+                                    actions.push(Action::SetSidebar(next));
+                                }
+                            });
+                            ui.label(
+                                RichText::new(&name)
+                                    .font(theme::medium(14.0))
+                                    .color(palette.text),
+                            );
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                for (icon, up, key, enabled) in [
+                                    (Icon::ChevronDown, false, "Move {name} down", index < last),
+                                    (Icon::ChevronUp, true, "Move {name} up", index > 0),
+                                ] {
+                                    let hint = trf(locale, key, &[("name", name.clone())]);
+                                    let moved = ui
+                                        .add_enabled_ui(enabled, |ui| {
+                                            widgets::icon_button(ui, icon, 18.0, &hint)
+                                        })
+                                        .inner;
+                                    if moved.clicked() {
+                                        let to = if up {
+                                            index.checked_sub(1)
+                                        } else {
+                                            Some(index + 1).filter(|to| *to <= last)
+                                        };
+                                        if let Some(to) = to {
+                                            let mut next = entries.clone();
+                                            next.swap(index, to);
+                                            actions.push(Action::SetSidebar(next));
+                                        }
                                     }
                                 }
-                            }
-                        });
+                            });
+                        })
                     })
                 });
             }
@@ -519,7 +670,7 @@ fn notifications(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     widgets::section(ui, palette, &tr(locale, "Notifications"), None, |ui| {
         widgets::card(ui, palette, |ui| {
             let on = state.settings.alerts;
-            setting_row(
+            if switch_row(
                 ui,
                 palette,
                 &tr(locale, "Check for new uploads"),
@@ -527,13 +678,11 @@ fn notifications(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     locale,
                     "Checks the same sources as Home. YouTube's notifications have no API, so the app watches subscribed channels instead.",
                 ),
-                CONTROL_WIDTH,
-                |ui| {
-                    if switch(ui, palette, on, &tr(locale, "Check for new uploads")).clicked() {
-                        actions.push(Action::SetAlerts(!on));
-                    }
-                },
-            );
+                on,
+                &tr(locale, "Check for new uploads"),
+            ) {
+                actions.push(Action::SetAlerts(!on));
+            }
             ui.add_space(12.0);
             let desktop = state.settings.desktop_notifications;
             setting_row(
@@ -687,7 +836,7 @@ fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             );
             ui.add_space(12.0);
             let notify_on = state.settings.update_notifications;
-            setting_row(
+            if switch_row(
                 ui,
                 palette,
                 &tr(locale, "Notify about new versions"),
@@ -695,23 +844,14 @@ fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     locale,
                     "Show a system notification when a new version is available and ask if you want to update.",
                 ),
-                CONTROL_WIDTH,
-                |ui| {
-                    if switch(
-                        ui,
-                        palette,
-                        notify_on,
-                        &tr(locale, "Notify about new versions"),
-                    )
-                    .clicked()
-                    {
-                        actions.push(Action::SetUpdateNotifications(!notify_on));
-                    }
-                },
-            );
+                notify_on,
+                &tr(locale, "Notify about new versions"),
+            ) {
+                actions.push(Action::SetUpdateNotifications(!notify_on));
+            }
             ui.add_space(12.0);
             let auto_update = state.settings.auto_update;
-            setting_row(
+            if switch_row(
                 ui,
                 palette,
                 &tr(locale, "Automatic updates (minor and patch)"),
@@ -719,20 +859,11 @@ fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     locale,
                     "Automatically download and install minor (0.x.0) and patch (0.0.x) updates and display the changelog of what changed. Major versions (x.0.0) always require clicking Update manually.",
                 ),
-                CONTROL_WIDTH,
-                |ui| {
-                    if switch(
-                        ui,
-                        palette,
-                        auto_update,
-                        &tr(locale, "Automatic updates (minor and patch)"),
-                    )
-                    .clicked()
-                    {
-                        actions.push(Action::SetAutoUpdate(!auto_update));
-                    }
-                },
-            );
+                auto_update,
+                &tr(locale, "Automatic updates (minor and patch)"),
+            ) {
+                actions.push(Action::SetAutoUpdate(!auto_update));
+            }
 
             let active_changelog: Option<(String, String)> = match &state.update {
                 UpdateState::Available(release) | UpdateState::Installing(release)
@@ -895,6 +1026,58 @@ fn setting_row(
     }
 }
 
+/// A [`setting_row`] whose control is a [`switch`]: the whole row takes
+/// the click and lights up under the pointer. Returns whether it was
+/// clicked. `name` is the switch's accessible name.
+fn switch_row(
+    ui: &mut Ui,
+    palette: &Palette,
+    label: &str,
+    description: &str,
+    on: bool,
+    name: &str,
+) -> bool {
+    let id = ui.id().with(("switch-row", label));
+    // The row's click is read where the last frame drew it, before the
+    // switch is added: the switch then stays above it and keeps its own
+    // clicks and the keyboard's focus.
+    let row = ui
+        .ctx()
+        .data(|d| d.get_temp::<egui::Rect>(id))
+        .filter(|_| ui.is_enabled())
+        .map(|rect| ui.interact(rect, id, Sense::CLICK));
+    let fill = ui.painter().add(egui::Shape::Noop);
+    let mut clicked = row.as_ref().is_some_and(Response::clicked);
+    let drawn = ui
+        .scope(|ui| {
+            // A selectable label would take the click meant for the row.
+            ui.style_mut().interaction.selectable_labels = false;
+            setting_row(ui, palette, label, description, CONTROL_WIDTH, |ui| {
+                clicked |= switch(ui, palette, on, name).clicked();
+            });
+        })
+        .response
+        .rect
+        .expand2(vec2(6.0, 5.0));
+    ui.ctx().data_mut(|d| d.insert_temp(id, drawn));
+    let under = row.as_ref().is_some_and(Response::contains_pointer);
+    if under {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    let hover = ui.ctx().animate_bool(id.with("hover"), under);
+    if hover > 0.0 {
+        ui.painter().set(
+            fill,
+            egui::Shape::rect_filled(
+                drawn,
+                CornerRadius::same(theme::RADIUS_SMALL),
+                palette.surface_hover.gamma_multiply(0.5 * hover),
+            ),
+        );
+    }
+    clicked
+}
+
 /// How wide a row's combo box is: at least 240, and enough for its widest
 /// choice, so the button never outgrows the room `setting_row` keeps for it
 /// and runs over the description. Mirrors egui's combo button: the text,
@@ -921,7 +1104,8 @@ fn combo_width(ui: &Ui, labels: impl IntoIterator<Item = impl Into<String>>) -> 
 }
 
 /// An on/off switch: a pill, `accent` when on, its round knob sliding to
-/// the side that is on. Dimmed while disabled. The caller reads the click.
+/// the side that is on and stretching while pressed. Dimmed while disabled.
+/// The caller reads the click.
 fn switch(ui: &mut Ui, palette: &Palette, on: bool, label: &str) -> Response {
     let (rect, response) = ui.allocate_exact_size(vec2(40.0, 22.0), Sense::click());
     let enabled = ui.is_enabled();
@@ -931,16 +1115,13 @@ fn switch(ui: &mut Ui, palette: &Palette, on: bool, label: &str) -> Response {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
     if ui.is_rect_visible(rect) {
-        let t = ui.ctx().animate_bool(response.id, on);
-        let off = if response.hovered() && enabled {
-            palette.outline
-        } else {
-            palette.surface_active
-        };
-        let fill = Color32::from(egui::lerp(
-            egui::Rgba::from(off)..=egui::Rgba::from(palette.accent),
-            t,
-        ));
+        let t = ui
+            .ctx()
+            .animate_bool_with_easing(response.id, on, egui::emath::easing::cubic_out);
+        let hover = widgets::hover_fade(ui, &response);
+        let press = widgets::press_fade(ui, &response);
+        let off = widgets::mix(palette.surface_active, palette.outline, hover);
+        let fill = widgets::mix(off, palette.accent, t);
         let (fill, knob) = if enabled {
             (fill, Color32::WHITE)
         } else {
@@ -948,9 +1129,17 @@ fn switch(ui: &mut Ui, palette: &Palette, on: bool, label: &str) -> Response {
         };
         ui.painter().rect_filled(rect, CornerRadius::same(11), fill);
         widgets::focus_outline(ui, &response, CornerRadius::same(11));
-        let x = egui::lerp(rect.left() + 11.0..=rect.right() - 11.0, t);
+        // The knob stretches towards the other side while held, so the
+        // press is felt before the switch moves.
+        let stretch = 5.0 * press;
+        let x = egui::lerp(
+            rect.left() + 11.0 + stretch / 2.0..=rect.right() - 11.0 - stretch / 2.0,
+            t,
+        );
+        let knob_rect =
+            egui::Rect::from_center_size(pos2(x, rect.center().y), vec2(16.0 + stretch, 16.0));
         ui.painter()
-            .circle_filled(pos2(x, rect.center().y), 8.0, knob);
+            .rect_filled(knob_rect, CornerRadius::same(8), knob);
     }
     response
 }
@@ -958,6 +1147,184 @@ fn switch(ui: &mut Ui, palette: &Palette, on: bool, label: &str) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Where each text of a frame was drawn.
+    fn texts(output: &egui::FullOutput) -> Vec<(String, egui::Pos2)> {
+        output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some((text.galley.text().to_owned(), text.pos)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn page(
+        ctx: &egui::Context,
+        state: &State,
+        width: f32,
+        events: Vec<egui::Event>,
+        time: f64,
+    ) -> Vec<(String, egui::Pos2)> {
+        let mut actions = Vec::new();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(width, 700.0),
+                )),
+                events,
+                time: Some(time),
+                ..Default::default()
+            },
+            |ui| show(ui, state, &mut actions),
+        );
+        let texts = texts(&output);
+        output.textures_delta.clear();
+        texts
+    }
+
+    fn left_of(texts: &[(String, egui::Pos2)], text: &str) -> Vec<f32> {
+        texts
+            .iter()
+            .filter(|(drawn, _)| drawn == text)
+            .map(|(_, pos)| pos.x)
+            .collect()
+    }
+
+    #[test]
+    fn the_column_fills_a_narrow_window_and_is_centred_in_a_wider_one() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let state = State::default();
+        // Narrower than the column: it starts at the panel's margin.
+        let narrow = page(&ctx, &state, 600.0, vec![], 0.0);
+        assert_eq!(left_of(&narrow, "Settings"), [24.0]);
+        assert_eq!(left_of(&narrow, "Playback"), [24.0]);
+        // 1000 wide: 952 inside the margins, too little for the index, so
+        // the 760 column starts at 24 + (952 - 760) / 2.
+        let alone = page(&ctx, &state, 1000.0, vec![], 0.0);
+        assert_eq!(left_of(&alone, "Settings"), [120.0]);
+        assert_eq!(left_of(&alone, "Playback"), [120.0]);
+        // 1600 wide: the index (200) and its gap (32) join the column, and
+        // the three start at 24 + (1552 - 992) / 2. A group in view is
+        // named over its card, then in the index.
+        let indexed = page(&ctx, &state, 1600.0, vec![], 0.0);
+        assert_eq!(left_of(&indexed, "Settings"), [304.0]);
+        assert_eq!(left_of(&indexed, "Playback"), [536.0, 318.0]);
+    }
+
+    #[test]
+    fn the_index_lists_the_groups_and_scrolls_to_the_one_clicked() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let state = State::default();
+        let width = 1600.0;
+        let first = page(&ctx, &state, width, vec![], 0.0);
+        // Every group is named in the index, whether or not the page has
+        // reached it; the ones in view are named again over their card.
+        let index_left = left_of(&first, "Settings")[0] + 14.0;
+        for (name, _) in GROUPS {
+            assert!(left_of(&first, name).contains(&index_left), "{name}");
+        }
+        assert_eq!(left_of(&first, "Appearance").len(), 2);
+        let heading = |texts: &[(String, egui::Pos2)]| {
+            texts
+                .iter()
+                .filter(|(drawn, _)| drawn == "Notifications")
+                .map(|(_, pos)| *pos)
+                .max_by(|a, b| a.x.total_cmp(&b.x))
+                .unwrap()
+        };
+        let entry = first
+            .iter()
+            .filter(|(drawn, _)| drawn == "Notifications")
+            .map(|(_, pos)| *pos)
+            .min_by(|a, b| a.x.total_cmp(&b.x))
+            .unwrap();
+        // Only the index names it: its card is below the window.
+        assert_eq!(left_of(&first, "Notifications"), [index_left]);
+        let at = entry + vec2(10.0, 8.0);
+        page(
+            &ctx,
+            &state,
+            width,
+            vec![
+                egui::Event::PointerMoved(at),
+                egui::Event::PointerButton {
+                    pos: at,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: Default::default(),
+                },
+            ],
+            0.1,
+        );
+        page(
+            &ctx,
+            &state,
+            width,
+            vec![egui::Event::PointerButton {
+                pos: at,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: Default::default(),
+            }],
+            0.2,
+        );
+        let mut last = Vec::new();
+        for frame in 0..60 {
+            last = page(&ctx, &state, width, vec![], 0.3 + f64::from(frame) * 0.05);
+        }
+        let after = heading(&last);
+        assert!(after.x > index_left && after.y < 700.0, "{after:?}");
+        // The entry in the index stayed where it was.
+        assert!(last.contains(&("Notifications".to_owned(), entry)));
+    }
+
+    #[test]
+    fn a_switch_row_takes_the_click_anywhere_on_it() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let state = State::default();
+        let draw = |events: Vec<egui::Event>, actions: &mut Vec<Action>| {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        vec2(900.0, 700.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| playback(ui, &state, actions),
+            );
+            let texts = texts(&output);
+            output.textures_delta.clear();
+            texts
+        };
+        let mut actions = Vec::new();
+        let first = draw(vec![], &mut actions);
+        let label = first
+            .iter()
+            .find(|(drawn, _)| drawn == "Autoplay")
+            .map(|(_, pos)| *pos)
+            .unwrap();
+        // On the option's name, far from the switch at the right.
+        let at = label + vec2(20.0, 6.0);
+        let button = |pressed| egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        };
+        // The row takes its click where the frame before drew it.
+        draw(vec![egui::Event::PointerMoved(at)], &mut actions);
+        draw(vec![button(true)], &mut actions);
+        draw(vec![button(false)], &mut actions);
+        assert_eq!(actions, vec![Action::SetAutoplay(!state.settings.autoplay)]);
+    }
 
     #[test]
     fn history_reporting_disclosure_is_visible_in_both_themes_and_widths() {

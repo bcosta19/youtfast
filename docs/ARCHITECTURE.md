@@ -359,6 +359,18 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
   translated by its row; glyph positions alone denote the font baseline.
   The shared `eframe` dependency enables `links`: without it the native
   integration ignores `OpenUrl` commands instead of opening the browser.
+- Controls fade into their hover and pressed looks instead of switching in
+  one frame: `widgets::hover_fade` and `widgets::press_fade` wrap egui's
+  `animate_bool`, which only asks for new frames while a fade runs, so an
+  idle window still draws nothing. Their length is the style's
+  `animation_time` (`theme::apply`).
+- `src/settings.rs` centres its column in the page; a page with room for it
+  also lists the groups in an index beside the column. The index stays put
+  while the page scrolls, marks the group at the top of the page and scrolls
+  to the one clicked; what it remembers between frames is view state kept in
+  egui's memory. A row whose control is a switch takes the click anywhere on
+  it (`switch_row`): the row's click is registered where the previous frame
+  drew it, before the switch, so the switch stays above it.
 - `src/bench.rs` measures what one frame costs on the busiest views:
   `cargo test --release -p youtfast-ui --lib frame_cost -- --ignored
   --nocapture --test-threads=1`.

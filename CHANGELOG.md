@@ -18,6 +18,17 @@ are the distribution record.
 - The top-bar bell opens a scrollable notifications popup without leaving the
   current page; the sidebar still opens the full notifications page.
 
+### Changed
+
+- Settings no longer hug the left of a wide window: the page is centred, and
+  a window with room for it lists the groups (Appearance, Playback, Sidebar…)
+  in an index beside them. Clicking a group scrolls to it, and the index
+  marks the group being read.
+- Buttons, sidebar items and switches fade into their hover and pressed looks
+  instead of changing in one frame. In Settings, a row with a switch takes
+  the click anywhere on it, and a sidebar button moved up or down slides to
+  its new place.
+
 ### Fixed
 
 - The website's macOS steps now describe macOS 15's **Open Anyway** in
