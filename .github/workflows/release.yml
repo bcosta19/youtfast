@@ -8,7 +8,7 @@ on:
       tag:
         description: Version to validate and package without publishing
         required: true
-        default: v0.5.2
+        default: v0.6.0
         type: string
 
 permissions:

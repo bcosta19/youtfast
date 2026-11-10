@@ -8,6 +8,8 @@ are the distribution record.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-09
+
 ### Added
 
 - A step-by-step install guide for each system (Flatpak, Arch, Ubuntu and
@@ -343,7 +345,8 @@ macOS Apple Silicon. Interactive Windows/macOS qualification is still pending.
 These exclusions are scope decisions, not completed features promised for a
 specific next version. See [ROADMAP.md](ROADMAP.md) for follow-up gates.
 
-[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/bcosta19/youtfast/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/bcosta19/youtfast/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/bcosta19/youtfast/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/bcosta19/youtfast/compare/v0.4.0...v0.5.0
