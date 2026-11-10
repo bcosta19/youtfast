@@ -121,6 +121,9 @@ impl App {
                 mpv::Event::Loaded => {
                     self.state.player_error = None;
                     self.captions_pending = self.state.settings.captions.is_some();
+                    if let Some(surface) = &self.surface {
+                        surface.allow_frames();
+                    }
                 }
                 mpv::Event::Failed(failure) => {
                     // What the session can fix is tried again with it.
@@ -243,6 +246,9 @@ impl App {
 
     fn stop_playback(&mut self, ctx: &egui::Context) {
         self.close_mini_player();
+        if let Some(surface) = &self.surface {
+            surface.forget();
+        }
         if let Some(player) = &mut self.player
             && let Err(error) = player.stop()
         {
@@ -335,6 +341,9 @@ impl App {
         }
         // A live stream starts at its live edge, not where it was left.
         let start = start.filter(|_| !video.live);
+        if let Some(surface) = &self.surface {
+            surface.forget();
+        }
         if let Some(player) = &mut self.player {
             if let Err(error) = player.set_looping(video.short) {
                 log::warn!("mpv: {error}");

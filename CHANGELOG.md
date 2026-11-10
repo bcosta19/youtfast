@@ -10,6 +10,9 @@ are the distribution record.
 
 ### Fixed
 
+- A video that fails to open no longer leaves the previous video's picture on
+  screen or draws the title and description inside the player: the player stays
+  black with the error, and a spinner covers the wait for the first frame.
 - Videos on a channel's page show their views, age and length again, and
   so do the same videos in Up next. YouTube changed how it lists a
   channel's own videos (YT-7 in `docs/youtube-api-format.md`).

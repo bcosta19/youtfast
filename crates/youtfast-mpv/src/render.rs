@@ -7,9 +7,11 @@
 //! on the first draw and freed in [`VideoSurface::destroy`], from
 //! `App::on_exit`, where the context is current too.
 //!
-//! The framebuffer keeps the last frame, so a frame egui draws for another
-//! reason (a hover, a tooltip) only blits it again; mpv renders when it says
-//! a new frame is due, or when the size changes.
+//! The framebuffer keeps its last picture between egui frames: a frame egui
+//! draws for another reason (a hover, a tooltip) only blits it again; mpv
+//! renders when it says a new frame is due, or when the size changes. Opening
+//! another video deletes the target and holds the blit until mpv loads that
+//! file and draws a frame that is not a redraw.
 
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::num::NonZeroU32;
@@ -39,6 +41,53 @@ pub struct VideoSurface {
     inner: Arc<Mutex<Inner>>,
 }
 
+/// Whether the target holds a frame that may be shown for the selected video.
+#[derive(Default)]
+struct Frame {
+    /// mpv reported the selected file loaded; its frames may be shown.
+    allowed: bool,
+    /// The target holds a picture from the allowed file.
+    current: bool,
+    /// The target still holds the previous video's picture; delete it before
+    /// the next draw so no later render can bring those pixels back.
+    discard: bool,
+}
+
+impl Frame {
+    /// A new load started: the target still holds the previous video.
+    fn forget(&mut self) {
+        self.allowed = false;
+        self.current = false;
+        self.discard = true;
+    }
+
+    /// mpv loaded the selected file: its frames may be shown now.
+    fn allow(&mut self) {
+        self.allowed = true;
+    }
+
+    fn allowed(&self) -> bool {
+        self.allowed
+    }
+
+    fn discard_target(&mut self) -> bool {
+        std::mem::take(&mut self.discard)
+    }
+
+    /// mpv rendered into the target. A frame from the previous file (or a
+    /// resize-only render before the new file loaded) must not make the
+    /// target visible.
+    fn rendered(&mut self, new_frame: bool) {
+        if self.allowed && new_frame {
+            self.current = true;
+        }
+    }
+
+    fn visible(&self) -> bool {
+        self.current
+    }
+}
+
 struct Inner {
     mpv: Arc<Handle>,
     get_proc_address: GetProcAddress,
@@ -46,6 +95,10 @@ struct Inner {
     repaint: egui::Context,
     render: Option<RenderContext>,
     target: Option<Target>,
+    frame: Frame,
+    /// The libmpv build did not answer `NEXT_FRAME_INFO`; fall back to its
+    /// update flag instead (logged once).
+    frame_info_missing: bool,
     /// Creating the renderer failed once; the error is logged and the
     /// surface stays black rather than retrying every frame.
     failed: bool,
@@ -71,6 +124,8 @@ impl VideoSurface {
                 repaint,
                 render: None,
                 target: None,
+                frame: Frame::default(),
+                frame_info_missing: false,
                 failed: false,
             })),
         }
@@ -87,6 +142,31 @@ impl VideoSurface {
             rect,
             callback: Arc::new(callback),
         });
+    }
+
+    /// A new video is opening: the framebuffer still holds the old picture.
+    pub fn forget(&self) {
+        self.inner
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .frame
+            .forget();
+    }
+
+    /// mpv loaded the selected file: its frames may be shown now.
+    pub fn allow_frames(&self) {
+        self.inner
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .frame
+            .allow();
+    }
+
+    /// Whether the current video's first frame is still to come, and the
+    /// renderer can still draw it.
+    pub fn waiting_for_frame(&self) -> bool {
+        let inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+        !inner.frame.visible() && !inner.failed
     }
 
     /// Frees the renderer and the framebuffer. Call with the GL context
@@ -144,6 +224,11 @@ impl Inner {
             let previous_draw = gl.get_parameter_i32(glow::DRAW_FRAMEBUFFER_BINDING);
             let previous_read = gl.get_parameter_i32(glow::READ_FRAMEBUFFER_BINDING);
 
+            if self.frame.discard_target()
+                && let Some(old) = self.target.take()
+            {
+                old.delete(gl);
+            }
             let resized = self
                 .target
                 .as_ref()
@@ -167,10 +252,34 @@ impl Inner {
 
             let frame_due =
                 ffi::mpv_render_context_update(render.ptr) & ffi::MPV_RENDER_UPDATE_FRAME != 0;
-            if (frame_due || resized)
-                && let Err(error) = render.render(target)
-            {
-                log::warn!("mpv could not draw a frame: {error}");
+            if self.frame.allowed() && (frame_due || resized) {
+                // SAFETY: called from the render callback.
+                let next = render.next_frame_info();
+                if frame_due && next.is_none() && !self.frame_info_missing {
+                    self.frame_info_missing = true;
+                    log::warn!("mpv did not report the next frame; using its update flag instead");
+                }
+                match render.render(target) {
+                    Ok(()) => self
+                        .frame
+                        .rendered(next.map_or(frame_due, |frame| new_picture(frame.flags))),
+                    Err(error) => {
+                        log::warn!("mpv could not draw a frame: {error}");
+                        if resized {
+                            // The target was just recreated and nothing drew
+                            // into it: blitting would show undefined pixels.
+                            restore(gl, previous_draw, previous_read);
+                            return;
+                        }
+                    }
+                }
+            }
+            if !self.frame.visible() {
+                // The target holds the previous video, or the new one has not
+                // drawn a frame yet: leave the black backing egui drew instead
+                // of blitting it.
+                restore(gl, previous_draw, previous_read);
+                return;
             }
 
             gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(target.framebuffer));
@@ -201,6 +310,12 @@ impl Inner {
     }
 }
 
+/// Whether mpv is about to render a new picture, not redraw the previous one.
+/// The previous one can still be the video that was just replaced.
+fn new_picture(flags: u64) -> bool {
+    flags & ffi::MPV_RENDER_FRAME_INFO_PRESENT != 0
+        && flags & ffi::MPV_RENDER_FRAME_INFO_REDRAW == 0
+}
 fn video_viewport(info: &egui::PaintCallbackInfo) -> egui::epaint::ViewportInPixels {
     let rect = info.viewport;
     let scale = info.pixels_per_point;
@@ -436,6 +551,23 @@ impl RenderContext {
         }
     }
 
+    /// The frame mpv is about to render, if this libmpv answers.
+    ///
+    /// # Safety
+    ///
+    /// The render context must be valid. Call it from the paint callback.
+    unsafe fn next_frame_info(&self) -> Option<ffi::mpv_render_frame_info> {
+        let mut info = ffi::mpv_render_frame_info::default();
+        let param = ffi::mpv_render_param {
+            type_: ffi::MPV_RENDER_PARAM_NEXT_FRAME_INFO,
+            data: (&raw mut info).cast(),
+        };
+        // SAFETY: a valid render context; the call copies the queued frame's
+        // description into `info`.
+        let code = unsafe { ffi::mpv_render_context_get_info(self.ptr, param) };
+        (code >= 0).then_some(info)
+    }
+
     /// # Safety
     ///
     /// The GL context must be current.
@@ -495,5 +627,53 @@ mod tests {
                 assert_eq!(info.clip_rect_in_pixels().top_px, (80.0 * scale) as i32);
             }
         }
+    }
+
+    #[test]
+    fn only_a_frame_rendered_after_the_new_file_loads_is_shown() {
+        let mut frame = Frame::default();
+        frame.allow();
+        frame.rendered(true);
+        assert!(frame.visible());
+
+        frame.forget();
+        assert!(frame.discard_target());
+        assert!(!frame.discard_target());
+        // mpv can still deliver a frame of the previous file after loadfile.
+        frame.rendered(true);
+        assert!(
+            !frame.visible(),
+            "a frame from the old file must stay hidden"
+        );
+
+        // The new file loaded, but only its own frame may be shown: a resize
+        // render before that frame does not count.
+        frame.allow();
+        frame.rendered(false);
+        assert!(!frame.visible());
+        frame.rendered(true);
+        assert!(frame.visible());
+
+        // A resize while the old picture is still in the target must not
+        // revive it.
+        frame.forget();
+        frame.rendered(false);
+        assert!(!frame.visible());
+    }
+
+    #[test]
+    fn a_redraw_request_does_not_count_as_the_new_videos_first_frame() {
+        use ffi::{
+            MPV_RENDER_FRAME_INFO_PRESENT, MPV_RENDER_FRAME_INFO_REDRAW,
+            MPV_RENDER_FRAME_INFO_REPEAT,
+        };
+        assert!(new_picture(MPV_RENDER_FRAME_INFO_PRESENT));
+        assert!(new_picture(
+            MPV_RENDER_FRAME_INFO_PRESENT | MPV_RENDER_FRAME_INFO_REPEAT
+        ));
+        assert!(!new_picture(
+            MPV_RENDER_FRAME_INFO_PRESENT | MPV_RENDER_FRAME_INFO_REDRAW
+        ));
+        assert!(!new_picture(0));
     }
 }

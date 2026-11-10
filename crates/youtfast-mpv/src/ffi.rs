@@ -91,9 +91,20 @@ pub const MPV_RENDER_PARAM_OPENGL_FBO: mpv_render_param_type = 3;
 pub const MPV_RENDER_PARAM_FLIP_Y: mpv_render_param_type = 4;
 pub const MPV_RENDER_PARAM_X11_DISPLAY: mpv_render_param_type = 8;
 pub const MPV_RENDER_PARAM_WL_DISPLAY: mpv_render_param_type = 9;
+pub const MPV_RENDER_PARAM_NEXT_FRAME_INFO: mpv_render_param_type = 11;
 
 pub const MPV_RENDER_API_TYPE_OPENGL: &std::ffi::CStr = c"opengl";
 pub const MPV_RENDER_UPDATE_FRAME: u64 = 1 << 0;
+pub const MPV_RENDER_FRAME_INFO_PRESENT: u64 = 1 << 0;
+pub const MPV_RENDER_FRAME_INFO_REDRAW: u64 = 1 << 1;
+pub const MPV_RENDER_FRAME_INFO_REPEAT: u64 = 1 << 2;
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct mpv_render_frame_info {
+    pub flags: u64,
+    pub target_time: i64,
+}
 
 #[repr(C)]
 pub struct mpv_render_param {
@@ -174,6 +185,10 @@ unsafe extern "C" {
         callback_ctx: *mut c_void,
     );
     pub fn mpv_render_context_update(ctx: *mut mpv_render_context) -> u64;
+    pub fn mpv_render_context_get_info(
+        ctx: *mut mpv_render_context,
+        param: mpv_render_param,
+    ) -> c_int;
     pub fn mpv_render_context_render(
         ctx: *mut mpv_render_context,
         params: *mut mpv_render_param,

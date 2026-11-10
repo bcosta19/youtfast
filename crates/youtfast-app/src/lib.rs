@@ -979,6 +979,7 @@ impl App {
                 if let Some(id) = youtfast_core::links::video_id_from_link(text) {
                     self.state.suggestions.clear();
                     self.open(Video::from_id(id));
+                    ctx.request_repaint();
                     return;
                 }
                 if let Some(channel) = youtfast_core::links::channel_from_link(text) {
@@ -995,7 +996,12 @@ impl App {
                 self.state.view = View::Results;
                 self.load(View::Results, true);
             }
-            Action::Open(video) => self.open(video),
+            Action::Open(video) => {
+                self.open(video);
+                // The opening picture (black, then the spinner) is drawn after
+                // the click; ask for that frame instead of waiting for mpv.
+                ctx.request_repaint();
+            }
             Action::OpenVideoTab(video) => self.state.video_tabs.add(video),
             Action::SelectVideoTab(id) => {
                 if let Some(video) = self.state.video_tabs.video(&id).cloned() {
@@ -1005,13 +1011,17 @@ impl App {
                         self.select_video_tab(video);
                     }
                 }
+                ctx.request_repaint();
             }
             Action::NewVideoTab => {
                 // Leaving the watch page keeps the video playing in the mini player.
                 self.apply(ctx, Action::Navigate(View::Home));
                 self.state.video_tabs.request_new_tab();
             }
-            Action::CloseVideoTab(id) => self.close_video_tab(ctx, &id),
+            Action::CloseVideoTab(id) => {
+                self.close_video_tab(ctx, &id);
+                ctx.request_repaint();
+            }
             Action::LoadExtras => self.load_extras(),
             Action::ToggleTranscript => {
                 self.state.transcript_open = !self.state.transcript_open;
@@ -1036,7 +1046,10 @@ impl App {
                     );
                 }
             }
-            Action::RetryPlayback => self.retry_playback(),
+            Action::RetryPlayback => {
+                self.retry_playback();
+                ctx.request_repaint();
+            }
             Action::ToggleLoop => self.toggle_loop(),
             Action::MoveQueue { from, to } => self.move_queue(from, to),
             Action::SetCaptionScale(scale) => self.set_caption_scale(scale),
@@ -1068,8 +1081,14 @@ impl App {
                 }
                 self.save_settings();
             }
-            Action::Back => self.travel(ctx, false),
-            Action::Forward => self.travel(ctx, true),
+            Action::Back => {
+                self.travel(ctx, false);
+                ctx.request_repaint();
+            }
+            Action::Forward => {
+                self.travel(ctx, true);
+                ctx.request_repaint();
+            }
             Action::Navigate(view) => {
                 if self.state.view != view {
                     self.push_location();
@@ -1119,6 +1138,7 @@ impl App {
             Action::PlayPlaylist => {
                 if let Some(video) = self.state.page_videos.items().first().cloned() {
                     self.open(video);
+                    ctx.request_repaint();
                 }
             }
             Action::SetHistorySync(sync) => {
@@ -1350,8 +1370,12 @@ impl App {
                 if !self.await_playlist_page(PlaylistAdvance::Manual) {
                     self.play_next();
                 }
+                ctx.request_repaint();
             }
-            Action::PlayPrevious => self.play_previous(),
+            Action::PlayPrevious => {
+                self.play_previous();
+                ctx.request_repaint();
+            }
             Action::CancelAutoplay => {
                 self.state.autoplay = None;
                 self.state.playing_waiting = None;

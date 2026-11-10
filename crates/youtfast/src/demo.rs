@@ -19,6 +19,9 @@ pub fn run(cli: &crate::Cli) -> eframe::Result {
         })
         .unwrap_or([1280.0, 800.0]);
     let page = cli.demo_view.clone();
+    // The offline harness draws a synthetic picture where the video surface
+    // would be; the opening and error views need it absent.
+    let player_picture = !matches!(page.as_str(), "player-error" | "player-opening");
     let locale = if cli.demo_language == "pt-BR" {
         Locale::PortugueseBrazil
     } else {
@@ -54,9 +57,17 @@ pub fn run(cli: &crate::Cli) -> eframe::Result {
             theme::install_fonts(&cc.egui_ctx);
             fastframe_icons::install::<youtfast_appearance::icons::Icon>(&cc.egui_ctx);
             egui_extras::install_image_loaders(&cc.egui_ctx);
-            cc.egui_ctx
-                .data_mut(|d| d.insert_temp(egui::Id::new("synthetic-images"), true));
+            cc.egui_ctx.data_mut(|d| {
+                d.insert_temp(egui::Id::new("synthetic-images"), true);
+                d.insert_temp(egui::Id::new("synthetic-picture"), player_picture);
+            });
             let mut state = fixture(&page);
+            if page == "player-error" {
+                state.player_error = Some(
+                    "Could not play this video. The player did not identify the cause. Try reopening the video."
+                        .into(),
+                );
+            }
             state.settings.language = locale;
             state.palette = if light {
                 theme::Palette::light()
@@ -64,17 +75,29 @@ pub fn run(cli: &crate::Cli) -> eframe::Result {
                 theme::Palette::dark()
             };
             theme::apply(&cc.egui_ctx, &state.palette);
+            let mut status = Status {
+                position: 84.0,
+                duration: 600.0,
+                speed: 1.0,
+                paused: true,
+                volume: 65.0,
+                video_aspect: aspect,
+                ..Default::default()
+            };
+            if page == "player-opening" {
+                status.idle = true;
+                status.buffering = true;
+                status.position = 0.0;
+                status.paused = false;
+            }
+            if page == "player-error" {
+                status.idle = true;
+                status.buffering = false;
+                status.position = 0.0;
+            }
             Ok(Box::new(Demo {
                 state,
-                status: Status {
-                    position: 84.0,
-                    duration: 600.0,
-                    speed: 1.0,
-                    paused: true,
-                    volume: 65.0,
-                    video_aspect: aspect,
-                    ..Default::default()
-                },
+                status,
                 capture,
                 frames: 0,
                 hover_first: page == "home-hover",
@@ -159,7 +182,7 @@ pub(crate) fn fixture(page: &str) -> State {
     state.mini_closed = true;
     state.view = match page {
         "watch" | "transcript" | "shorts" | "fullscreen" | "theater" | "cast"
-        | "cast-connected" | "cast-missing" => View::Watch,
+        | "cast-connected" | "cast-missing" | "player-error" | "player-opening" => View::Watch,
         "results" => View::Results,
         "channel" => View::Channel,
         "playlist" => View::Playlist,

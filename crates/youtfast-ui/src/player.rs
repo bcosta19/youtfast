@@ -305,16 +305,17 @@ pub fn player(
         }
     }
 
-    if state.player_error.is_some() {
-        let button = Rect::from_center_size(rect.center() + vec2(0.0, 52.0), vec2(180.0, 36.0));
-        ui.scope_builder(UiBuilder::new().max_rect(button), |ui| {
-            if ui
-                .add(egui::Button::new(tr(locale, "Retry")).min_size(button.size()))
-                .clicked()
-            {
-                actions.push(Action::RetryPlayback);
-            }
-        });
+    let retry_button = Rect::from_center_size(rect.center() + vec2(0.0, 52.0), vec2(180.0, 36.0));
+    // A child, not a scope: the overlay must not advance the page's layout
+    // cursor, or the metadata is drawn inside the player. It exists whether or
+    // not there is an error so the page's later auto ids stay the same.
+    let mut retry = ui.new_child(UiBuilder::new().max_rect(retry_button));
+    if state.player_error.is_some()
+        && retry
+            .add(egui::Button::new(tr(locale, "Retry")).min_size(retry_button.size()))
+            .clicked()
+    {
+        actions.push(Action::RetryPlayback);
     }
 
     osd(ui, rect, state);
@@ -414,6 +415,18 @@ fn picture(
     picture_rounded(ui, rect, CornerRadius::ZERO, state, status, surface);
 }
 
+/// Whether the player is still opening the selected video.
+fn opening(status: &Status, waiting_for_frame: bool, audio_only: bool) -> bool {
+    if audio_only {
+        return false;
+    }
+    // The spinner lasts until the video's first frame, not merely until its
+    // audio starts. A file with no video track never gets a frame, and a
+    // failed renderer never will, so neither keeps it spinning.
+    let waiting = waiting_for_frame && !status.paused && (status.idle || status.has_video);
+    waiting || (!status.idle && (status.buffering || (status.position <= 0.0 && !status.paused)))
+}
+
 fn picture_rounded(
     ui: &mut Ui,
     rect: Rect,
@@ -459,6 +472,10 @@ fn picture_rounded(
         }
         #[cfg(feature = "demo")]
         if surface.is_none()
+            && ui.ctx().data(|d| {
+                d.get_temp::<bool>(egui::Id::new("synthetic-picture"))
+                    .unwrap_or(true)
+            })
             && ui
                 .ctx()
                 .data(|d| d.get_temp::<bool>(egui::Id::new("synthetic-images")))
@@ -480,7 +497,11 @@ fn picture_rounded(
         ui.painter()
             .galley(rect.center() - galley.size() / 2.0, galley, Color32::WHITE);
     } else if status.is_some_and(|status| {
-        !status.idle && (status.buffering || (status.position <= 0.0 && !status.paused))
+        opening(
+            status,
+            surface.is_none_or(VideoSurface::waiting_for_frame),
+            state.audio_only,
+        )
     }) {
         let size = (rect.height() / 6.0).clamp(20.0, 40.0);
         egui::Spinner::new()
@@ -2383,5 +2404,128 @@ mod tests {
         assert!(!mini_shapes.is_empty());
         assert!(mini_shapes.iter().all(|shape| !has_text(shape)));
         assert!(mini_shapes.iter().any(has_rounded_rect));
+    }
+
+    #[test]
+    fn an_error_retry_stays_out_of_the_page_flow_and_still_retries() {
+        fn draw(
+            ctx: &egui::Context,
+            state: &mut State,
+            status: &Status,
+            events: Vec<egui::Event>,
+            actions: &mut Vec<Action>,
+        ) -> f32 {
+            let screen = Rect::from_min_size(pos2(0.0, 0.0), vec2(900.0, 800.0));
+            let video = Rect::from_min_size(pos2(0.0, 0.0), vec2(800.0, 450.0));
+            let mut below = 0.0;
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    ui.allocate_exact_size(video.size(), Sense::hover());
+                    player(ui, video, state, Some(status), None, Mode::Page, actions);
+                    below = ui.label("below the video").rect.top();
+                },
+            );
+            output.textures_delta.clear();
+            below
+        }
+
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let mut state = State {
+            watching: Some(Video::from_id("aaaaaaaaaaa".into())),
+            player_error: Some("The video could not be loaded".into()),
+            ..State::default()
+        };
+        let status = Status::default();
+        let mut actions = Vec::new();
+        let below = draw(&ctx, &mut state, &status, Vec::new(), &mut actions);
+        assert!(
+            below >= 450.0,
+            "the retry button must not move the page content into the player: {below:?} < 450"
+        );
+
+        let retry = pos2(400.0, 225.0 + 52.0);
+        for pressed in [true, false] {
+            draw(
+                &ctx,
+                &mut state,
+                &status,
+                vec![
+                    egui::Event::PointerMoved(retry),
+                    egui::Event::PointerButton {
+                        pos: retry,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                &mut actions,
+            );
+        }
+        assert!(
+            actions
+                .iter()
+                .any(|action| matches!(action, Action::RetryPlayback)),
+            "clicking the retry overlay must still retry: {actions:?}"
+        );
+    }
+
+    #[test]
+    fn the_spinner_covers_the_gap_before_the_first_frame() {
+        let idle = Status {
+            idle: true,
+            ..Default::default()
+        };
+        assert!(
+            opening(&idle, true, false),
+            "a selected video with no frame yet is still opening"
+        );
+        assert!(
+            !opening(&idle, false, false),
+            "a frame belonging to this load needs no spinner"
+        );
+        assert!(
+            !opening(&idle, true, true),
+            "audio-only mode never shows the opening spinner"
+        );
+
+        let buffering = Status {
+            buffering: true,
+            ..Default::default()
+        };
+        assert!(opening(&buffering, false, false));
+
+        let paused_at_start = Status {
+            position: 0.0,
+            paused: true,
+            ..Default::default()
+        };
+        assert!(!opening(&paused_at_start, false, false));
+
+        let playing = Status {
+            position: 3.0,
+            has_video: true,
+            ..Default::default()
+        };
+        assert!(!opening(&playing, false, false));
+        assert!(
+            opening(&playing, true, false),
+            "the spinner lasts until the first frame, not just until audio starts"
+        );
+
+        let without_picture = Status {
+            position: 3.0,
+            has_video: false,
+            ..Default::default()
+        };
+        assert!(
+            !opening(&without_picture, true, false),
+            "a file with no video track must not spin forever"
+        );
     }
 }
