@@ -138,6 +138,7 @@ fn page_of(page: &Value, authenticated: bool) -> (Vec<Video>, Option<More>) {
         visitor_data: None,
         authenticated,
         ours: true,
+        owner: None,
     });
     (videos, more)
 }

@@ -26,6 +26,7 @@ pub async fn recommended(rp: &RustyPipe) -> Result<(Vec<Video>, Option<More>), S
             .map(str::to_owned),
         authenticated: true,
         ours: false,
+        owner: None,
     });
     Ok((videos, more))
 }

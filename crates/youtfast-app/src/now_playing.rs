@@ -396,6 +396,7 @@ mod tests {
             visitor_data: None,
             authenticated: false,
             ours: true,
+            owner: None,
         });
         assert!(media_state(&state, Some(&playing())).controls.next);
     }

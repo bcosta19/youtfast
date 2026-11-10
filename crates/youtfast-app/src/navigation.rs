@@ -419,6 +419,7 @@ mod tests {
             visitor_data: None,
             authenticated: false,
             ours: true,
+            owner: None,
         };
         assert_eq!(
             s.finish_playlist_page(2, 2, "PLsame", Ok((Vec::new(), Some(more)))),

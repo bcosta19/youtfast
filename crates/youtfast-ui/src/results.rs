@@ -713,6 +713,7 @@ mod tests {
             visitor_data: None,
             authenticated: false,
             ours: false,
+            owner: None,
         };
         let mut channels = State {
             view: youtfast_core::model::View::Results,

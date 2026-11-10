@@ -912,6 +912,7 @@ mod tests {
             visitor_data: None,
             authenticated: false,
             ours: false,
+            owner: None,
         }
     }
 

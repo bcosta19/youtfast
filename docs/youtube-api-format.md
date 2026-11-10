@@ -144,6 +144,28 @@ only as a dependency. Only a live request shows a new format.
 - **Tests:** `yt6_a_video_lockup_keeps_its_channels_avatar`,
   `yt6_a_video_lockup_with_another_image_is_still_read`.
 
+### YT-7: video lockups on a channel's own tabs (2026-11-10)
+
+- **Symptom:** video cards of a channel's Videos tab show only the title: no
+  channel, views, age or length. Up next has the same gaps for videos queued
+  from such a tab, but not for related videos, so the problem appears and
+  disappears there.
+- **Old format:** a video lockup's `metadataRows` were `[channel, views ·
+  age]`; the length badge was in `thumbnailOverlayBadgeViewModel.thumbnailBadges`.
+- **New format:** on the channel's own tabs there is a single row, `[views ·
+  age]`, since the channel is the page's. The length badge sits in
+  `thumbnailBottomOverlayViewModel.badges`. The lone row was read as the
+  channel (and failed, since it has no link), the second row read for views
+  was missing, and no overlay matched the old badge shape. Home, search and
+  related lists still send the old shape.
+- **Fix:** `map_lockup` in the fork's `src/client/response/video_item.rs`
+  reads the channel row only when there are two or more rows, and otherwise
+  uses the page's channel. `ImageViewOverlay` and `ImageViewOl::badge_text` in
+  its `src/client/response/mod.rs` read both badge shapes.
+- **Tests:** `yt7_a_lone_metadata_row_is_read_as_views_and_age`,
+  `yt7_the_length_in_a_bottom_overlay_is_read`,
+  `yt7_a_lockup_with_a_channel_row_keeps_every_field`.
+
 ## Adding an entry
 
 Copy this outline. Number entries in order, and never reuse a number.
