@@ -377,6 +377,13 @@ Segoe UI on Windows and, on Linux, the font your desktop is set to use
 change applies at once. Other scripts (Arabic, Chinese, Devanagari, ...) are
 drawn with the fonts installed on the computer either way.
 
+On Linux the menu then lists the fonts installed on the computer (the ones
+fontconfig says can draw English text): type in the menu's field to narrow
+the list, and pick one to draw the interface with it. Bold and medium text
+use the family's own weights where it has them. If a chosen font is later
+removed, YouTFast draws with Inter and says which font is missing; pick
+another in the same menu. Windows and macOS offer System and Inter only.
+
 If the system's font cannot be found or read, YouTFast draws with Inter and
 the Appearance group says so. **Report this** opens your browser at a new
 GitHub issue with the YouTFast version, your operating system, the desktop

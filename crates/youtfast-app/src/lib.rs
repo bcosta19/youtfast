@@ -224,9 +224,12 @@ pub struct State {
     pub themes: Vec<(String, String)>,
     /// Whether the desktop's palette is followed (Omarchy on Linux).
     pub follows_omarchy: bool,
-    /// The system's interface font was asked for and could not be used, so
-    /// Inter draws instead (`theme::system_face_missing`).
-    pub system_font_missing: bool,
+    /// The interface font asked for (the system's, or a chosen family) could
+    /// not be used, so Inter draws instead (`theme::face_missing`).
+    pub interface_font_missing: bool,
+    /// The installed families the settings offer as interface fonts
+    /// (`theme::installed_families`); empty until listed, and outside Linux.
+    pub font_families: Vec<String>,
     /// What the theme setting says under it; empty when all is well.
     pub theme_status: String,
     /// Where the palette files live, for the settings page to say.
@@ -1214,13 +1217,13 @@ impl App {
                 ctx.request_repaint();
             }
             Action::SetInterfaceFont(choice) => {
-                self.state.settings.interface_font = choice;
+                self.state.settings.interface_font = choice.clone();
                 self.save_settings();
                 // The search for other scripts' faces runs again; once the
                 // first has finished it answers at once.
                 let fonts = theme::SystemFonts::find(choice);
                 self.fonts = (!fonts.install(ctx)).then_some(fonts);
-                self.state.system_font_missing = theme::system_face_missing();
+                self.state.interface_font_missing = theme::face_missing();
                 ctx.request_repaint();
             }
             Action::ReportInterfaceFont => {
@@ -1547,7 +1550,14 @@ impl eframe::App for App {
         if self.fonts.as_ref().is_some_and(|fonts| fonts.poll(ctx)) {
             self.fonts = None;
         }
-        self.state.system_font_missing = theme::system_face_missing();
+        self.state.interface_font_missing = theme::face_missing();
+        // Listed once by the font thread, after the faces themselves.
+        if self.state.font_families.is_empty() {
+            let families = theme::installed_families();
+            if !families.is_empty() {
+                self.state.font_families = families.to_vec();
+            }
+        }
         self.poll();
         self.poll_cast(ctx);
         images::forget_unseen(ctx);

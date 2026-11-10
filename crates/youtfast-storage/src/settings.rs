@@ -478,6 +478,42 @@ mod tests {
     }
 
     #[test]
+    fn the_saved_interface_font_reads_older_and_unknown_values() {
+        use youtfast_appearance::theme::InterfaceFont;
+        let read = |json: &str| serde_json::from_str::<InterfaceFont>(json).unwrap();
+        assert_eq!(read(r#""system""#), InterfaceFont::System);
+        assert_eq!(read(r#""inter""#), InterfaceFont::Inter);
+        assert_eq!(
+            read(r#"{"family":"Adwaita Sans"}"#),
+            InterfaceFont::Family("Adwaita Sans".into())
+        );
+        // What this version does not know is the system's face, not an
+        // error that would set the whole settings file aside.
+        for unknown in [
+            r#""serif""#,
+            r#"{"family":" "}"#,
+            r#"{"file":"/x"}"#,
+            "7",
+            "null",
+        ] {
+            assert_eq!(read(unknown), InterfaceFont::System, "{unknown}");
+        }
+        let family = InterfaceFont::Family("Fira Sans".into());
+        let json = serde_json::to_string(&family).unwrap();
+        assert_eq!(json, r#"{"family":"Fira Sans"}"#);
+        assert_eq!(read(&json), family);
+        assert_eq!(
+            serde_json::to_string(&InterfaceFont::Inter).unwrap(),
+            r#""inter""#
+        );
+        // Inside a settings file, an unknown font leaves the rest readable.
+        let settings: Settings =
+            serde_json::from_str(r#"{"interface_font":{"file":"/x"},"volume":40}"#).unwrap();
+        assert_eq!(settings.interface_font, InterfaceFont::System);
+        assert!((settings.volume - 40.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
     fn an_older_file_loads_as_auto() {
         let settings: Settings =
             serde_json::from_str(r#"{"quality":{"Max":720},"volume":40}"#).unwrap();

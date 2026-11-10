@@ -1693,3 +1693,9 @@ msgstr "Descendre {name}"
 
 msgid "Restore default"
 msgstr "Rétablir les valeurs par défaut"
+
+msgid "{font} couldn't be loaded, so YouTFast uses Inter."
+msgstr "Impossible de charger {font} : YouTFast utilise donc Inter."
+
+msgid "Search fonts"
+msgstr "Rechercher des polices"

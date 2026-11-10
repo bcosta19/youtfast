@@ -234,26 +234,52 @@ fn appearance(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     interface_font_picker(ui, state, actions);
                 },
             );
-            if state.settings.interface_font == InterfaceFont::System && state.system_font_missing {
-                ui.add_space(8.0);
-                ui.label(
-                    RichText::new(tr(
-                        locale,
-                        "Your system's interface font couldn't be loaded, so YouTFast uses Inter.",
-                    ))
-                    .font(theme::regular(13.0))
-                    .color(palette.secondary),
-                );
-                ui.add_space(4.0);
-                if widgets::button(
-                    ui,
-                    palette,
-                    &tr(locale, "Report this"),
-                    widgets::ButtonStyle::Normal,
-                )
-                .clicked()
-                {
-                    actions.push(Action::ReportInterfaceFont);
+            if state.interface_font_missing {
+                // Inter draws instead of the face asked for. Only the
+                // system's own face is worth a report: a family that was
+                // removed is chosen again in the menu above.
+                let notice = match &state.settings.interface_font {
+                    InterfaceFont::System => Some((
+                        tr(
+                            locale,
+                            "Your system's interface font couldn't be loaded, so YouTFast uses Inter.",
+                        )
+                        .into_owned(),
+                        true,
+                    )),
+                    InterfaceFont::Family(family) => Some((
+                        trf(
+                            locale,
+                            "{font} couldn't be loaded, so YouTFast uses Inter.",
+                            &[("font", family.clone())],
+                        ),
+                        false,
+                    )),
+                    InterfaceFont::Inter => None,
+                };
+                if let Some((notice, report)) = notice {
+                    ui.add_space(8.0);
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(notice)
+                                .font(theme::regular(13.0))
+                                .color(palette.secondary),
+                        )
+                        .wrap(),
+                    );
+                    if report {
+                        ui.add_space(4.0);
+                        if widgets::button(
+                            ui,
+                            palette,
+                            &tr(locale, "Report this"),
+                            widgets::ButtonStyle::Normal,
+                        )
+                        .clicked()
+                        {
+                            actions.push(Action::ReportInterfaceFont);
+                        }
+                    }
                 }
             }
             ui.add_space(12.0);
@@ -306,33 +332,83 @@ fn language_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         });
 }
 
-/// The interface font's menu: the system's, or Inter.
+/// The interface font's menu: the system's, Inter, then the families
+/// installed on this computer, narrowed by what is typed in its field.
 fn interface_font_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
-    let name = |font: InterfaceFont| match font {
+    let current = &state.settings.interface_font;
+    let name = |font: &InterfaceFont| match font {
         InterfaceFont::System => tr(locale, "System (default)").into_owned(),
         InterfaceFont::Inter => "Inter".to_owned(),
+        InterfaceFont::Family(family) => family.clone(),
     };
-    egui::ComboBox::from_id_salt("interface-font")
+    let item = |ui: &mut Ui, font: InterfaceFont, actions: &mut Vec<Action>| {
+        let label = RichText::new(name(&font)).font(theme::regular(14.0));
+        if ui.selectable_label(*current == font, label).clicked() {
+            actions.push(Action::SetInterfaceFont(font));
+            ui.close();
+        }
+    };
+    let search = egui::Id::new("interface-font-search");
+    let combo = egui::ComboBox::from_id_salt("interface-font")
         .width(200.0)
-        .selected_text(
-            RichText::new(name(state.settings.interface_font)).font(theme::regular(14.0)),
-        )
-        .show_ui(ui, |ui| {
+        .selected_text(RichText::new(name(current)).font(theme::regular(14.0)));
+    if state.font_families.is_empty() {
+        // Nothing installed is listed (not yet, or not on this system).
+        combo.show_ui(ui, |ui| {
             for font in InterfaceFont::ALL {
-                if ui
-                    .selectable_label(
-                        state.settings.interface_font == font,
-                        RichText::new(name(font)).font(theme::regular(14.0)),
-                    )
-                    .clicked()
-                {
-                    actions.push(Action::SetInterfaceFont(font));
-                    ui.close();
-                }
+                item(ui, font, actions);
             }
         });
+        return;
+    }
+    let shown = combo
+        // A click in the search field must not close the menu.
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .height(FONT_MENU_HEIGHT)
+        .show_ui(ui, |ui| {
+            let mut typed: String = ui.data(|d| d.get_temp(search)).unwrap_or_default();
+            let field = ui.add(
+                egui::TextEdit::singleline(&mut typed)
+                    .hint_text(tr(locale, "Search fonts"))
+                    .desired_width(f32::INFINITY),
+            );
+            if field.changed() {
+                ui.data_mut(|d| d.insert_temp(search, typed.clone()));
+            }
+            let wanted = typed.trim().to_lowercase();
+            let fixed: Vec<InterfaceFont> = InterfaceFont::ALL
+                .into_iter()
+                .filter(|font| name(font).to_lowercase().contains(&wanted))
+                .collect();
+            let families: Vec<&String> = state
+                .font_families
+                .iter()
+                .filter(|family| wanted.is_empty() || family.to_lowercase().contains(&wanted))
+                .collect();
+            let row = ui.spacing().interact_size.y;
+            // Only the rows in view are laid out, however many families
+            // are installed.
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, true])
+                .show_rows(ui, row, fixed.len() + families.len(), |ui, rows| {
+                    for index in rows {
+                        let font = match fixed.get(index) {
+                            Some(font) => font.clone(),
+                            None => InterfaceFont::Family(families[index - fixed.len()].clone()),
+                        };
+                        item(ui, font, actions);
+                    }
+                });
+        });
+    if shown.inner.is_none() {
+        // The next time it opens, the menu starts unfiltered.
+        ui.data_mut(|d| d.remove::<String>(search));
+    }
 }
+
+/// How tall the list of installed families may grow.
+const FONT_MENU_HEIGHT: f32 = 320.0;
 
 /// The theme's menu: Automatic, Dark, Light, then the palette files.
 fn theme_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
@@ -1684,8 +1760,8 @@ mod tests {
             (InterfaceFont::Inter, false, false),
         ] {
             let mut state = State::default();
-            state.settings.interface_font = font;
-            state.system_font_missing = missing;
+            state.settings.interface_font = font.clone();
+            state.interface_font_missing = missing;
             let labels = draw_appearance(&ctx, &state, Vec::new(), &mut Vec::new());
             let has = |text: &str| labels.iter().any(|(label, _)| label == text);
             assert_eq!(has(NOTICE), shown, "{font:?} {missing}");
@@ -1695,11 +1771,97 @@ mod tests {
     }
 
     #[test]
+    fn a_chosen_family_that_is_gone_is_named_without_a_report() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let mut state = State::default();
+        state.settings.interface_font = InterfaceFont::Family("Fira Sans".into());
+        let gone = "Fira Sans couldn't be loaded, so YouTFast uses Inter.";
+        for missing in [false, true] {
+            state.interface_font_missing = missing;
+            let labels = draw_appearance(&ctx, &state, Vec::new(), &mut Vec::new());
+            let has = |text: &str| labels.iter().any(|(label, _)| label == text);
+            // The menu names the family whether or not it is listed.
+            assert!(has("Fira Sans"));
+            assert_eq!(has(gone), missing);
+            assert!(!has(NOTICE));
+            assert!(!has("Report this"));
+        }
+    }
+
+    #[test]
+    fn the_interface_font_menu_lists_installed_families_and_narrows_them() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let state = State {
+            font_families: vec![
+                "Adwaita Sans".to_owned(),
+                "Fira Sans".to_owned(),
+                "Noto Serif".to_owned(),
+            ],
+            ..State::default()
+        };
+        let mut actions = Vec::new();
+        let labels = draw_appearance(&ctx, &state, Vec::new(), &mut actions);
+        assert!(!labels.iter().any(|(label, _)| label == "Fira Sans"));
+        click_at(
+            &ctx,
+            &state,
+            centre_of(&labels, "System (default)"),
+            &mut actions,
+        );
+        let open = draw_appearance(&ctx, &state, Vec::new(), &mut actions);
+        for listed in [
+            "Inter",
+            "Adwaita Sans",
+            "Fira Sans",
+            "Noto Serif",
+            "Search fonts",
+        ] {
+            assert!(open.iter().any(|(label, _)| label == listed), "{listed}");
+        }
+        // A click in the search field leaves the menu open; typing narrows
+        // the list to the names holding the text, whatever its case.
+        click_at(&ctx, &state, centre_of(&open, "Search fonts"), &mut actions);
+        let narrowed = draw_appearance(
+            &ctx,
+            &state,
+            vec![egui::Event::Text("SANS".to_owned())],
+            &mut actions,
+        );
+        let narrowed = if narrowed.iter().any(|(label, _)| label == "Noto Serif") {
+            // The frame that takes the text still drew the old list.
+            draw_appearance(&ctx, &state, Vec::new(), &mut actions)
+        } else {
+            narrowed
+        };
+        let has = |text: &str| narrowed.iter().any(|(label, _)| label == text);
+        assert!(has("Adwaita Sans") && has("Fira Sans"));
+        assert!(!has("Noto Serif") && !has("Inter"));
+        assert!(actions.is_empty());
+        click_at(
+            &ctx,
+            &state,
+            centre_of(&narrowed, "Fira Sans"),
+            &mut actions,
+        );
+        assert_eq!(
+            actions,
+            [Action::SetInterfaceFont(InterfaceFont::Family(
+                "Fira Sans".into()
+            ))]
+        );
+        // Chosen: the menu is closed again.
+        let closed = draw_appearance(&ctx, &state, Vec::new(), &mut Vec::new());
+        assert!(!closed.iter().any(|(label, _)| label == "Adwaita Sans"));
+    }
+
+    #[test]
     fn report_this_asks_to_open_the_issue_and_nothing_else() {
         let ctx = egui::Context::default();
         youtfast_appearance::theme::install_fonts(&ctx);
         let state = State {
-            system_font_missing: true,
+            interface_font_missing: true,
             ..State::default()
         };
         let mut actions = Vec::new();
