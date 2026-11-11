@@ -316,6 +316,7 @@ fn new_picture(flags: u64) -> bool {
     flags & ffi::MPV_RENDER_FRAME_INFO_PRESENT != 0
         && flags & ffi::MPV_RENDER_FRAME_INFO_REDRAW == 0
 }
+
 fn video_viewport(info: &egui::PaintCallbackInfo) -> egui::epaint::ViewportInPixels {
     let rect = info.viewport;
     let scale = info.pixels_per_point;

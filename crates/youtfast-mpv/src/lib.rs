@@ -174,7 +174,11 @@ impl Tracks {
             return Self::default();
         };
         Self {
-            has_video: tracks.iter().any(|track| track["type"] == "video"),
+            has_video: tracks.iter().any(|track| {
+                track["type"] == "video"
+                    && track["selected"].as_bool().unwrap_or(false)
+                    && !track["albumart"].as_bool().unwrap_or(false)
+            }),
             subtitles: tracks
                 .iter()
                 .filter(|track| track["type"] == "sub")
@@ -1230,13 +1234,27 @@ mod tests {
 
     #[test]
     fn the_track_list_says_whether_the_file_has_a_picture() {
-        let video =
-            Tracks::from_track_list(r#"[{"id": 1, "type": "video"}, {"id": 2, "type": "audio"}]"#);
+        let video = Tracks::from_track_list(
+            r#"[{"id": 1, "type": "video", "selected": true}, {"id": 2, "type": "audio", "selected": true}]"#,
+        );
         assert!(video.has_video);
         assert!(video.subtitles.is_empty());
 
         let audio = Tracks::from_track_list(r#"[{"id": 2, "type": "audio"}]"#);
         assert!(!audio.has_video);
+
+        let deselected = Tracks::from_track_list(
+            r#"[{"id": 1, "type": "video", "selected": false}, {"id": 2, "type": "audio", "selected": true}]"#,
+        );
+        assert!(
+            !deselected.has_video,
+            "a deselected video track cannot produce a picture"
+        );
+
+        let cover_art = Tracks::from_track_list(
+            r#"[{"id": 1, "type": "video", "selected": true, "albumart": true}]"#,
+        );
+        assert!(!cover_art.has_video, "cover art is not a video picture");
 
         assert!(!Tracks::from_track_list("not json").has_video);
     }
