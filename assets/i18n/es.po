@@ -1699,3 +1699,9 @@ msgstr "No se pudo cargar {font}, así que YouTFast usa Inter."
 
 msgid "Search fonts"
 msgstr "Buscar fuentes"
+
+msgid "General"
+msgstr "General"
+
+msgid "Player"
+msgstr "Reproductor"

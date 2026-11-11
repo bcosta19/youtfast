@@ -821,83 +821,168 @@ fn keys_overlay(ctx: &egui::Context, state: &mut State) {
 
     let palette = state.palette;
     let mut close = false;
-    let response = egui::Modal::new(egui::Id::new("keys")).show(ctx, |ui| {
-        let width = (ctx.content_rect().width() - 64.0).clamp(280.0, 840.0);
-        ui.set_width(width);
-        ui.horizontal(|ui| {
-            ui.heading(tr(locale, "Keyboard shortcuts").as_ref());
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                close = widgets::icon_button(ui, Icon::Close, 18.0, tr(locale, "Close").as_ref())
-                    .clicked();
+    let id = egui::Id::new("keys");
+    // The area's first sizing pass otherwise caps the modal at egui's
+    // default height, so the list below would scroll despite the room.
+    let height = (ctx.content_rect().height() - 96.0).clamp(240.0, 680.0);
+    let margin_y = 16;
+    let response = egui::Modal::new(id)
+        .area(egui::Modal::default_area(id).default_height(height))
+        .frame(
+            egui::Frame::popup(&ctx.style_of(ctx.theme()))
+                .inner_margin(egui::Margin::symmetric(20, margin_y)),
+        )
+        .show(ctx, |ui| {
+            let shell: &[(&'static str, &'static str)] = &[
+                ("/", "Focus search"),
+                ("Enter", "Search or open link"),
+                ("1–9", "Views (outside the video)"),
+                ("?", "Show this list"),
+                ("Esc", "Close or go back"),
+                ("Alt+← / →", "Back / forward"),
+                ("Ctrl+Tab / Ctrl+Shift+Tab", "Next / previous video tab"),
+                ("Ctrl/Cmd+W", "Close tab"),
+                ("Space", "Play/pause in miniplayer"),
+                ("r", "Refresh page"),
+                ("↑ / ↓", "Scroll page"),
+                ("j", "Next item"),
+                ("k", "Previous item"),
+                ("g / G", "First / last item"),
+                ("Enter", "Open item"),
+                ("h / l", "Channel tabs"),
+                ("a", "Next account"),
+                ("b", "Sidebar"),
+            ];
+            let player: &[(&'static str, &'static str)] = &[
+                ("Space / k", "Play or pause"),
+                ("← / →", "Back / forward 5 s"),
+                ("j / l", "Back / forward 10 s"),
+                ("0–9", "Seek to 0–90%"),
+                (", / .", "Previous / next frame"),
+                ("< / >", "Playback speed"),
+                ("m", "Mute"),
+                ("c", "Captions"),
+                ("Shift+N / P", "Next / previous"),
+                ("i", "Miniplayer"),
+                ("Home / End", "Start / end"),
+                ("Ctrl+← / →", "Chapters (Option on Mac)"),
+                ("↑ / ↓", "Volume: 5%; switch Shorts"),
+                ("f", "Full screen"),
+                ("t", "Theater mode"),
+                ("Shift+A", "Audio-only mode"),
+            ];
+            let measured = |bindings: &[(&'static str, &'static str)]| {
+                let key = bindings
+                    .iter()
+                    .map(|(key, _)| {
+                        ui.painter()
+                            .layout_no_wrap(
+                                tr(locale, key).into_owned(),
+                                theme::medium(13.0),
+                                palette.text,
+                            )
+                            .size()
+                            .x
+                            + 16.0
+                    })
+                    .fold(24.0, f32::max);
+                let body = egui::TextStyle::Body.resolve(ui.style());
+                let label = bindings
+                    .iter()
+                    .map(|(_, label)| {
+                        ui.painter()
+                            .layout_no_wrap(
+                                tr(locale, label).into_owned(),
+                                body.clone(),
+                                palette.text,
+                            )
+                            .size()
+                            .x
+                    })
+                    .fold(0.0, f32::max);
+                key + 12.0 + label
+            };
+            let shell_width = measured(shell);
+            let player_width = measured(player);
+            let gap = 48.0;
+            let natural = shell_width + gap + player_width;
+            let available = ctx.content_rect().width() - 64.0;
+            let two_columns = natural <= available;
+            let width = if two_columns {
+                // Room for the floating vertical scrollbar on shorter windows.
+                natural + 24.0
+            } else {
+                available.clamp(280.0, 1040.0)
+            };
+            ui.set_width(width);
+            // `default_height` seeds only the first sizing pass, so pin the
+            // height every frame or a smaller window keeps the old size.
+            ui.set_height(height - 2.0 * f32::from(margin_y));
+            ui.horizontal(|ui| {
+                ui.heading(tr(locale, "Keyboard shortcuts").as_ref());
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    close =
+                        widgets::icon_button(ui, Icon::Close, 18.0, tr(locale, "Close").as_ref())
+                            .clicked();
+                });
             });
-        });
-        ui.add_space(12.0);
-        let shell: &[(&'static str, &'static str)] = &[
-            ("/", "Focus search"),
-            ("Enter", "Search or open link"),
-            ("1–9", "Views (outside the video)"),
-            ("?", "Show this list"),
-            ("Esc", "Close or go back"),
-            ("Alt+← / →", "Back / forward"),
-            ("Ctrl+Tab / Ctrl+Shift+Tab", "Next / previous video tab"),
-            ("Ctrl/Cmd+W", "Close tab"),
-            ("Space", "Play/pause in miniplayer"),
-            ("r", "Refresh page"),
-            ("↑ / ↓", "Scroll page"),
-            ("j", "Next item"),
-            ("k", "Previous item"),
-            ("g / G", "First / last item"),
-            ("Enter", "Open item"),
-            ("h / l", "Channel tabs"),
-            ("a", "Next account"),
-            ("b", "Sidebar"),
-        ];
-        let player: &[(&'static str, &'static str)] = &[
-            ("Space / k", "Play or pause"),
-            ("← / →", "Back / forward 5 s"),
-            ("j / l", "Back / forward 10 s"),
-            ("0–9", "Seek to 0–90%"),
-            (", / .", "Previous / next frame"),
-            ("< / >", "Playback speed"),
-            ("m", "Mute"),
-            ("c", "Captions"),
-            ("Shift+N / P", "Next / previous"),
-            ("i", "Miniplayer"),
-            ("Home / End", "Start / end"),
-            ("Ctrl+← / →", "Chapters (Option on Mac)"),
-            ("↑ / ↓", "Volume: 5%; switch Shorts"),
-            ("f", "Full screen"),
-            ("t", "Theater mode"),
-            ("Shift+A", "Audio-only mode"),
-        ];
-        let column = |ui: &mut egui::Ui, id: &str, bindings: &[(&'static str, &'static str)]| {
-            egui::Grid::new(id)
-                .num_columns(2)
-                .spacing([12.0, 8.0])
+            ui.add_space(12.0);
+            let column = |ui: &mut egui::Ui,
+                          id: &str,
+                          title: &'static str,
+                          bindings: &[(&'static str, &'static str)]| {
+                ui.label(
+                    RichText::new(tr(locale, title))
+                        .font(theme::medium(13.0))
+                        .color(palette.secondary),
+                );
+                ui.add_space(6.0);
+                egui::Grid::new(id)
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .show(ui, |ui| {
+                        for (key, label) in bindings {
+                            key_pill(ui, &palette, tr(locale, key).as_ref());
+                            ui.add(egui::Label::new(tr(locale, label).as_ref()).wrap());
+                            ui.end_row();
+                        }
+                    });
+            };
+            egui::ScrollArea::vertical()
+                // The floating scrollbar sits on this margin instead of
+                // against the longest description.
+                .content_margin(egui::Margin {
+                    right: 24,
+                    ..egui::Margin::ZERO
+                })
+                .auto_shrink([false, true])
                 .show(ui, |ui| {
-                    for (key, label) in bindings {
-                        key_pill(ui, &palette, tr(locale, key).as_ref());
-                        ui.add(egui::Label::new(tr(locale, label).as_ref()).wrap());
-                        ui.end_row();
+                    if two_columns {
+                        ui.horizontal_top(|ui| {
+                            ui.allocate_ui_with_layout(
+                                vec2(shell_width, 0.0),
+                                Layout::top_down(Align::Min),
+                                |ui| column(ui, "keys-shell", "General", shell),
+                            );
+                            ui.add_space((gap - ui.spacing().item_spacing.x).max(0.0));
+                            ui.allocate_ui_with_layout(
+                                vec2(player_width, 0.0),
+                                Layout::top_down(Align::Min),
+                                |ui| column(ui, "keys-player", "Player", player),
+                            );
+                        });
+                    } else if width > 740.0 {
+                        ui.columns(2, |columns| {
+                            column(&mut columns[0], "keys-shell", "General", shell);
+                            column(&mut columns[1], "keys-player", "Player", player);
+                        });
+                    } else {
+                        column(ui, "keys-shell", "General", shell);
+                        ui.add_space(20.0);
+                        column(ui, "keys-player", "Player", player);
                     }
                 });
-        };
-        egui::ScrollArea::vertical()
-            .max_height((ctx.content_rect().height() - 110.0).max(120.0))
-            .show(ui, |ui| {
-                if width > 740.0 {
-                    ui.horizontal_top(|ui| {
-                        column(ui, "keys-shell", shell);
-                        ui.add_space(24.0);
-                        column(ui, "keys-player", player);
-                    });
-                } else {
-                    column(ui, "keys-shell", shell);
-                    ui.add_space(20.0);
-                    column(ui, "keys-player", player);
-                }
-            });
-    });
+        });
     if close || response.should_close() {
         state.keys_open = false;
     }
@@ -925,6 +1010,10 @@ mod tests {
     use super::*;
     use youtfast_core::model::{Listing, Video};
     use youtfast_storage::settings::{SidebarEntry, default_sidebar, sanitize_sidebar};
+
+    fn screen(width: f32, height: f32) -> egui::Rect {
+        egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(width, height))
+    }
 
     fn views(state: &State) -> Vec<View> {
         sidebar_items(state)
@@ -1004,6 +1093,153 @@ mod tests {
         assert_eq!(items[0].3, None);
         let notifications = items.iter().find(|i| i.1 == View::Notifications).unwrap();
         assert_eq!(notifications.3, Some(0));
+    }
+
+    #[test]
+    fn the_shortcuts_modal_fits_its_columns_and_keeps_the_padding() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1280.0, 800.0));
+        let mut state = State {
+            keys_open: true,
+            ..State::default()
+        };
+        let mut output = egui::FullOutput::default();
+        for _ in 0..3 {
+            output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    time: Some(0.0),
+                    ..Default::default()
+                },
+                |_| keys_overlay(&ctx, &mut state),
+            );
+            output.textures_delta.clear();
+        }
+        let text_x = |wanted: &str| {
+            output.shapes.iter().find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.text() == wanted => Some(text.pos.x),
+                _ => None,
+            })
+        };
+        let general = text_x("General").expect("the general column is named");
+        let player = text_x("Player").expect("the player column is named");
+        let rect = ctx
+            .memory(|memory| memory.area_rect(egui::Id::new("keys")))
+            .expect("the modal has an area");
+        let right = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.pos.y > rect.top() + 60.0 => {
+                    Some(text.pos.x + text.galley.size().x)
+                }
+                _ => None,
+            })
+            .fold(0.0, f32::max);
+        assert!(
+            (general - rect.left() - 20.0).abs() < 6.0,
+            "the list keeps the modal's left padding"
+        );
+        assert!(
+            player > general + 300.0,
+            "the player column is beside the first list instead of below it"
+        );
+        assert!(
+            rect.width() < 900.0,
+            "the modal shrinks to its content instead of leaving a gap"
+        );
+        assert!(
+            (40.0..55.0).contains(&(rect.right() - right)),
+            "the labels stop at the scrollbar gutter instead of the modal edge"
+        );
+        assert!(
+            rect.height() > 500.0,
+            "the modal is tall enough to show the list without scrolling"
+        );
+        assert!(
+            screen.contains_rect(rect),
+            "the modal stays inside the window"
+        );
+        assert!(
+            text_x("Sidebar").is_some(),
+            "the last General row is visible instead of scrolled away"
+        );
+        assert!(
+            text_x("Audio-only mode").is_some(),
+            "the last Player row is visible instead of scrolled away"
+        );
+    }
+
+    #[test]
+    fn the_shortcuts_modal_follows_a_resized_window() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let mut state = State {
+            keys_open: true,
+            ..State::default()
+        };
+        let mut run = |screen: egui::Rect, open: bool| {
+            for _ in 0..3 {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(screen),
+                        time: Some(0.0),
+                        ..Default::default()
+                    },
+                    |_| {
+                        if open {
+                            keys_overlay(&ctx, &mut state);
+                        }
+                    },
+                );
+                output.textures_delta.clear();
+            }
+            ctx.memory(|memory| memory.area_rect(egui::Id::new("keys")))
+                .expect("the modal has an area")
+        };
+
+        let tall = run(screen(1280.0, 800.0), true);
+        let short = run(screen(1280.0, 500.0), true);
+        assert!(
+            short.height() < tall.height(),
+            "the modal shrinks with the window instead of keeping its first size"
+        );
+        assert!(
+            screen(1280.0, 500.0).contains_rect(short),
+            "the shrunk modal stays inside the window"
+        );
+
+        let grown = run(screen(800.0, 800.0), true);
+        assert!(
+            grown.height() > short.height(),
+            "the modal grows again after the window does"
+        );
+        assert!(
+            screen(800.0, 800.0).contains_rect(grown),
+            "the grown modal stays inside the window"
+        );
+
+        let stacked = run(screen(600.0, 600.0), true);
+        assert!(
+            stacked.width() < 600.0,
+            "a narrow window gets the stacked layout instead of overflowing"
+        );
+        assert!(
+            screen(600.0, 600.0).contains_rect(stacked),
+            "the stacked modal stays inside the window"
+        );
+
+        let _ = run(screen(1280.0, 800.0), false);
+        let reopened = run(screen(1280.0, 500.0), true);
+        assert!(
+            reopened.height() < tall.height(),
+            "reopening on a short window does not restore the old tall size"
+        );
+        assert!(
+            screen(1280.0, 500.0).contains_rect(reopened),
+            "the reopened modal stays inside the short window"
+        );
     }
 
     fn top_bar_frame(
