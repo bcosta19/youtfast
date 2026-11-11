@@ -22,6 +22,31 @@ class BundleTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
 
+    def test_bundled_mpv_rejects_old_or_unverifiable_package_versions(self):
+        for version in ("0.41.0", "1:0.41.0-7", "0.9.0", "0.42.0-rc1",
+                        "HEAD", "", "2.5.0\n0.41.0"):
+            with self.subTest(version=version), self.assertRaisesRegex(ValueError, "0.42.0"):
+                bundle.require_mpv_version(version)
+
+    def test_macos_rejects_old_linked_mpv_even_when_homebrew_has_new_mpv(self):
+        binary = self.root / "youtfast"
+        keg = self.root / "Cellar/mpv/0.42.0"
+        new_library = keg / "lib/libmpv.2.dylib"
+        old_library = self.root / "Cellar/mpv/0.41.0/lib/libmpv.2.dylib"
+        for library in (old_library, new_library):
+            library.parent.mkdir(parents=True)
+            library.touch()
+        for dependency, roots in (
+            (str(old_library), []),
+            ("@rpath/libmpv.2.dylib", [old_library.parent, new_library.parent]),
+            ("@rpath/libmpv.2.dylib", [self.root / "missing"]),
+        ):
+            listing = f"app:\n{dependency} (compatibility version 1.0.0, current version 2.0.0)\n"
+            rpaths = "".join(f"cmd LC_RPATH\ncmdsize 48\npath {root} (offset 12)\n" for root in roots)
+            with self.subTest(dependency=dependency, roots=roots):
+                with self.assertRaisesRegex(ValueError, "validated Homebrew"):
+                    bundle.verify_macos_mpv_source(binary, keg, lambda _: listing, lambda _: rpaths)
+
     def test_windows_dependency_graph_includes_transitive_dlls_and_stops_at_system(self):
         prefix = self.root / "ucrt64"
         (prefix / "bin").mkdir(parents=True)

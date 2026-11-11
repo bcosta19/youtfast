@@ -6,14 +6,19 @@
 
 | What | Why | Arch | Debian/Ubuntu |
 |---|---|---|---|
-| libmpv | Playback, linked at build time | `mpv` | `libmpv-dev` |
+| libmpv 0.42+ | Playback, linked at build time | `mpv>=0.42.0` | `libmpv-dev` (check version) |
 | yt-dlp | The streams mpv plays and playback retries | `yt-dlp` | `yt-dlp` (keep it current) |
 | Deno / matching yt-dlp EJS | YouTube extraction challenges | `deno` and distribution EJS package | See [yt-dlp setup](https://github.com/yt-dlp/yt-dlp/wiki/EJS) |
 | Rust 1.98 | Pinned in `rust-toolchain.toml` | `rustup` | `rustup` |
 | python-secretstorage | Optional: signing in with a Chromium-based browser's login | `python-secretstorage` | `python3-secretstorage` |
 
-mpv must be built with Lua (the usual packages are): it resolves YouTube
-links through its `ytdl_hook` script. Keep yt-dlp and its JS runtime on `PATH`.
+mpv 0.42 or newer must be built with Lua (the usual packages are): it resolves
+YouTube links through its `ytdl_hook` script and waits until yt-dlp's streams
+become available. Older hooks can open them too early and receive HTTP 403.
+Keep yt-dlp and its JS runtime on `PATH`. Check the installed **libmpv package**
+version, not its client API version or a separately installed mpv executable.
+If your distribution only provides older libmpv, upgrade from a trusted source
+or use the next Flatpak release containing mpv 0.42+.
 Browser import also needs `python3` with the `yt_dlp` module; an executable-only
 yt-dlp install does not supply that Python module.
 
@@ -423,6 +428,15 @@ changelog, and checks GitHub Releases for newer stable versions:
   clicking the **Update** button in the app to confirm and install the release.
 
 ## Help
+
+If playback intermittently shows **"Could not play this video. The player did
+not identify the cause. Try reopening the video."**, check libmpv first.
+On versions older than 0.42, stream URLs may be opened before their
+`available_at` time. Upgrade libmpv to 0.42+ (with Lua), or use the next
+Flatpak release with that version; reopening after a few seconds is only a
+temporary workaround. This generic message can also have other causes:
+if it persists on supported libmpv, follow the
+[installation troubleshooting steps](install.md#if-something-goes-wrong).
 
 Read [CONTRIBUTING.md](../CONTRIBUTING.md) for bug reports and
 [SECURITY.md](../SECURITY.md) for private account/security issues.

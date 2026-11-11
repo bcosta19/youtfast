@@ -114,6 +114,8 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
   (`PlaybackBuffer::Compact`) to keep the process near 200 MB on long videos.
 - Playback hands the watch link to mpv, whose ytdl hook asks yt-dlp for the
   streams (`mpv::FORMAT`, bounded by the quality chosen, 1080p on Auto).
+  Supported playback requires libmpv 0.42+ with Lua: its hook waits for
+  yt-dlp formats' `available_at` time before opening media URLs.
   Updating yt-dlp fixes YouTube breakage without a release. Videos play signed
   out: with a session, yt-dlp only has YouTube's web clients, which without a
   PO token offer little more than one 360p stream. A video refused signed out

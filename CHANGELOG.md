@@ -8,6 +8,18 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Fixed
+
+- Flatpak upgrades to mpv 0.42.0 and libplacebo 7.387.0 so playback waits for
+  yt-dlp streams to become available instead of intermittently failing with
+  HTTP 403 (#84). Native playback requires libmpv 0.42+ with Lua; Arch package
+  dependencies and Windows/macOS bundle checks enforce the new baseline.
+
+### Security
+
+- The Flatpak mpv upgrade also includes the upstream playlist-entry validation
+  fix for CVE-2026-123095.
+
 ## [0.6.1] - 2026-11-11
 
 ### Changed
