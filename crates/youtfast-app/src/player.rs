@@ -149,6 +149,9 @@ impl App {
         let Some(video) = &self.state.watching else {
             return;
         };
+        if let Some(surface) = &self.surface {
+            surface.forget();
+        }
         if let Some(player) = &mut self.player {
             let position = player.status().position.max(0.0);
             self.state.player_error = player

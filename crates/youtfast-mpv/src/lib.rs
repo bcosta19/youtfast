@@ -118,6 +118,9 @@ pub struct Status {
     pub buffering: bool,
     /// Nothing is loaded.
     pub idle: bool,
+    /// The loaded file has a video track; false before one loads and for
+    /// audio-only files.
+    pub has_video: bool,
     /// A seek can land: false while nothing is loaded and while a video
     /// is still opening.
     pub seekable: bool,
@@ -157,31 +160,44 @@ pub struct Subtitle {
     pub selected: bool,
 }
 
-impl Subtitle {
-    /// The captions tracks in mpv's `track-list`, which it hands over as
-    /// JSON.
-    fn from_track_list(json: &str) -> Vec<Self> {
+/// What mpv's `track-list` says about the loaded file.
+#[derive(Default)]
+struct Tracks {
+    subtitles: Vec<Subtitle>,
+    has_video: bool,
+}
+
+impl Tracks {
+    /// The tracks in mpv's `track-list`, which it hands over as JSON.
+    fn from_track_list(json: &str) -> Self {
         let Ok(serde_json::Value::Array(tracks)) = serde_json::from_str(json) else {
-            return Vec::new();
+            return Self::default();
         };
-        tracks
-            .iter()
-            .filter(|track| track["type"] == "sub")
-            .filter_map(|track| {
-                let id = track["id"].as_i64()?;
-                let lang = track["lang"].as_str().unwrap_or_default().to_owned();
-                let title = track["title"]
-                    .as_str()
-                    .filter(|title| !title.is_empty())
-                    .map_or_else(|| lang.clone(), str::to_owned);
-                Some(Self {
-                    id,
-                    lang,
-                    title,
-                    selected: track["selected"].as_bool().unwrap_or(false),
+        Self {
+            has_video: tracks.iter().any(|track| {
+                track["type"] == "video"
+                    && track["selected"].as_bool().unwrap_or(false)
+                    && !track["albumart"].as_bool().unwrap_or(false)
+            }),
+            subtitles: tracks
+                .iter()
+                .filter(|track| track["type"] == "sub")
+                .filter_map(|track| {
+                    let id = track["id"].as_i64()?;
+                    let lang = track["lang"].as_str().unwrap_or_default().to_owned();
+                    let title = track["title"]
+                        .as_str()
+                        .filter(|title| !title.is_empty())
+                        .map_or_else(|| lang.clone(), str::to_owned);
+                    Some(Subtitle {
+                        id,
+                        lang,
+                        title,
+                        selected: track["selected"].as_bool().unwrap_or(false),
+                    })
                 })
-            })
-            .collect()
+                .collect(),
+        }
     }
 }
 
@@ -573,6 +589,7 @@ impl Mpv {
         self.ytdl_failure = None;
         self.at_end = false;
         self.status.idle = true;
+        self.status.has_video = false;
         self.status.buffering = true;
         self.status.position = 0.0;
         self.status.duration = 0.0;
@@ -950,10 +967,12 @@ impl Mpv {
             SPEED => status.speed = double.unwrap_or(1.0),
             MUTE => status.muted = flag.unwrap_or(false),
             TRACKS => {
-                status.subtitles = string
+                let tracks = string
                     .as_deref()
-                    .map(Subtitle::from_track_list)
+                    .map(Tracks::from_track_list)
                     .unwrap_or_default();
+                status.has_video = tracks.has_video;
+                status.subtitles = tracks.subtitles;
             }
             _ => {}
         }
@@ -1194,7 +1213,7 @@ mod tests {
             {"id": 2, "type": "sub", "lang": "pt-orig", "selected": true}
         ]"#;
         assert_eq!(
-            Subtitle::from_track_list(json),
+            Tracks::from_track_list(json).subtitles,
             vec![
                 Subtitle {
                     id: 1,
@@ -1210,7 +1229,34 @@ mod tests {
                 },
             ]
         );
-        assert!(Subtitle::from_track_list("not json").is_empty());
+        assert!(Tracks::from_track_list("not json").subtitles.is_empty());
+    }
+
+    #[test]
+    fn the_track_list_says_whether_the_file_has_a_picture() {
+        let video = Tracks::from_track_list(
+            r#"[{"id": 1, "type": "video", "selected": true}, {"id": 2, "type": "audio", "selected": true}]"#,
+        );
+        assert!(video.has_video);
+        assert!(video.subtitles.is_empty());
+
+        let audio = Tracks::from_track_list(r#"[{"id": 2, "type": "audio"}]"#);
+        assert!(!audio.has_video);
+
+        let deselected = Tracks::from_track_list(
+            r#"[{"id": 1, "type": "video", "selected": false}, {"id": 2, "type": "audio", "selected": true}]"#,
+        );
+        assert!(
+            !deselected.has_video,
+            "a deselected video track cannot produce a picture"
+        );
+
+        let cover_art = Tracks::from_track_list(
+            r#"[{"id": 1, "type": "video", "selected": true, "albumart": true}]"#,
+        );
+        assert!(!cover_art.has_video, "cover art is not a video picture");
+
+        assert!(!Tracks::from_track_list("not json").has_video);
     }
 
     #[test]

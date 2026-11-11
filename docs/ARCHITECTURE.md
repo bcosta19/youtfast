@@ -130,7 +130,13 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
   undefined. The wl_display or X11 Display goes to mpv so hardware decoding
   can share frames with OpenGL (VAAPI on Linux). Scrolling keeps the
   framebuffer at the full video's size, even outside the window; reinstate
-  egui's scissor after mpv renders and before blitting.
+  egui's scissor after mpv renders and before blitting. The framebuffer keeps
+  its last picture between egui frames. `VideoSurface::forget` marks it as
+  belonging to the previous load when another video opens, is retried or is
+  stopped; the next draw deletes the target, and the callback stops blitting
+  until mpv reports the new file loaded (`allow_frames`) and draws a frame that
+  is not a redraw of the old one. A failed load then shows the black backing
+  instead of the old video.
 - The eframe fork exposes `CreationContext::get_proc_address`, which the
   render API needs. That is one more reason to stay on the shared egui and
   winit forks; move their revisions together with the sibling apps.
@@ -355,7 +361,9 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
   width with mpv letterboxing and keeps YouTube's 113 px metadata strip below
   the player, leaving room for the title and channel row above the fold when
   the window is tall enough; metadata and Up next keep their columns beneath
-  it in a wide window.
+  it in a wide window. The error's Retry is built in a child UI, not a scope:
+  a scope would advance the page's layout cursor and draw the title and
+  description inside the player.
 - Leaving the watch page hands the video to the mini player
   (`player::mini`), which keeps drawing it: an undrawn render-API video
   output stalls. Closing the mini player pauses the video; playing again from
