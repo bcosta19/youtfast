@@ -8,9 +8,11 @@ InnerTube has no public contract: YouTube changes request parameters and
 response layouts without notice. This file records every such change that broke
 YouTFast, so the next one is recognised quickly and none of them comes back.
 
-Every entry has a regression test in [`crates/youtfast-youtube/tests/youtube_api.rs`](../crates/youtfast-youtube/tests/youtube_api.rs)
-named after it (`yt<n>_…`). The test passes on the format YouTube uses now and
-fails if the code goes back to the old one.
+Regression tests are named after their entry (`yt<n>_…`).
+[`crates/youtfast-youtube/tests/youtube_api.rs`](../crates/youtfast-youtube/tests/youtube_api.rs)
+tests the fork's formats; app-owned readers are tested in their module.
+Parser fixtures cover the current format and any supported older format;
+request routing and live latency are not inferred from parser tests.
 
 ## How a format change shows up
 
@@ -165,6 +167,35 @@ only as a dependency. Only a live request shows a new format.
 - **Tests:** `yt7_a_lone_metadata_row_is_read_as_views_and_age`,
   `yt7_the_length_in_a_bottom_overlay_is_read`,
   `yt7_a_lockup_with_a_channel_row_keeps_every_field`.
+
+### YT-8: account playlist lockups trigger retries (2026-11-11)
+
+- **Symptom:** Liked videos and Watch later load slowly. Before the fallback
+  succeeded, rustypipe retried `InvalidData("itemSectionRenderer empty")`:
+  three identical browse requests and 3.4–6 seconds of retry sleeps, then
+  the app's reader made a fourth request for the same first page.
+- **Old format:** `playlistVideoListRenderer.contents` held
+  `playlistVideoRenderer` rows and a `continuationItemRenderer`.
+- **New format:** `lockupViewModel` videos sit directly in the page's
+  `itemSectionRenderer.contents`; a `continuationItemViewModel` carries the
+  next token. rustypipe's playlist mapper fails, and its `InvalidData`
+  extraction error is retryable even though the response layout will not change.
+- **Fix:** `liked` and `watch_later` in
+  `crates/youtfast-youtube/src/innertube.rs` call `playlist::videos` directly,
+  bypassing rustypipe's playlist mapper and its extraction retries. The
+  first successful authenticated `browse` (`VLLL` / `VLWL`) supplies the
+  videos and continuation in one request. `playlist::more` continues with
+  the same authentication; the reader also accepts older first-page rows.
+  Public playlist details retain their rustypipe-first fallback.
+- **Tests:** `yt8_account_playlist_lockups_keep_their_videos_and_authenticated_continuation`
+  and `yt8_account_playlists_still_read_older_first_pages` in
+  `crates/youtfast-youtube/src/innertube/playlist.rs` use trimmed synthetic
+  pages to cover both layouts and authenticated continuation directions.
+  These offline parser tests do not measure request count or latency.
+- **Live comparison:** run `youtfast --verbose`, open Liked videos, count
+  `WARN dependency` retry lines and time to first rows. The format-triggered
+  retry lines should disappear. Repeat for Watch later; do not extract or
+  log the account's credential-store session to investigate.
 
 ## Adding an entry
 

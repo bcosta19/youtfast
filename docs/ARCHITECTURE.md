@@ -247,11 +247,12 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
 - Home's For you is the account's own recommendations
   (`src/innertube/home.rs`: `browse` `FEwhat_to_watch` through rustypipe's
   `raw`, read here, continued by rustypipe).
-- Playlists (Watch later and liked videos included) come in a newer layout
-  rustypipe fails to read; when it does, `src/innertube/playlist.rs` reads
-  them through `raw` (`browse` `VL<id>`) and pages them itself
-  (`More::ours`) — its shorts land on the shelf, filled further by
-  `channel_shorts` (each device channel's Shorts tab).
+- Playlists can come in a newer layout rustypipe fails to read.
+  Watch later and liked videos go straight to `src/innertube/playlist.rs`;
+  public playlist details use it when rustypipe's reader fails. It reads
+  through authenticated `raw` (`browse` `VL<id>`) when a session is available
+  and pages the list itself (`More::ours`). Its shorts land on the shelf,
+  filled further by `channel_shorts` (each device channel's Shorts tab).
 - rustypipe has no posts or podcasts tabs, no write actions and no home
   recommendations call: subscribing acts on the local library. The watch
   page's rating and the account playlists of `[ save ]` are explicit writes to

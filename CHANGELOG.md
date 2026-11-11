@@ -10,6 +10,8 @@ are the distribution record.
 
 ### Fixed
 
+- Liked videos and Watch later load without retrying an incompatible
+  playlist reader first (YT-8 in `docs/youtube-api-format.md`).
 - A video that fails to open no longer leaves the previous video's picture on
   screen or draws the title and description inside the player: the player stays
   black with the error, and a spinner covers the wait for the first frame.

@@ -196,7 +196,7 @@ fn read(page: &Value) -> (Vec<Video>, Option<String>) {
     (videos, ctoken)
 }
 
-/// The older playlist row, when a continuation still sends it.
+/// The older playlist row, on a first page or a continuation.
 fn from_playlist_renderer(renderer: &Value) -> Option<Video> {
     let mut video = from_renderer(renderer)?;
     if video.duration.is_none() {
@@ -293,9 +293,10 @@ mod tests {
     }
 
     #[test]
-    fn the_newer_layout_reads_the_lists_videos_and_next_page() {
+    fn yt8_account_playlist_lockups_keep_their_videos_and_authenticated_continuation() {
         let first = format!(
-            r#"{{ "contents": {{ "twoColumnBrowseResultsRenderer": {{ "tabs": [{{
+            r#"{{ "metadata": {{ "playlistMetadataRenderer": {{ "title": "Liked videos" }} }},
+                "contents": {{ "twoColumnBrowseResultsRenderer": {{ "tabs": [{{
                 "tabRenderer": {{ "content": {{ "sectionListRenderer": {{ "contents": [
                     {{ "itemSectionRenderer": {{ "contents": [{}, {}, {}] }} }},
                     {{ "continuationItemViewModel": {{ "continuationCommand": {{
@@ -307,10 +308,47 @@ mod tests {
             lockup("bbbbbbbbbbb", "Two"),
             lockup("aaaaaaaaaaa", "One again"),
         );
-        let (videos, ctoken) = read(&serde_json::from_str(&first).unwrap());
+        let (videos, more) = page_of(&serde_json::from_str(&first).unwrap(), true);
         let titles: Vec<&str> = videos.iter().map(|video| video.title.as_str()).collect();
         assert_eq!(titles, ["One", "Two"]);
-        assert_eq!(ctoken.as_deref(), Some("page-2"));
+        let more = more.expect("the account list has a second page");
+        assert_eq!(more.ctoken, "page-2");
+        assert_eq!(more.endpoint, ContinuationEndpoint::Browse);
+        assert!(more.authenticated);
+        assert!(more.ours);
+    }
+
+    #[test]
+    fn yt8_account_playlists_still_read_older_first_pages() {
+        let page = json!({
+            "contents": { "twoColumnBrowseResultsRenderer": { "tabs": [{
+                "tabRenderer": { "content": { "sectionListRenderer": { "contents": [{
+                    "itemSectionRenderer": { "contents": [{
+                        "playlistVideoListRenderer": { "contents": [
+                            { "playlistVideoRenderer": {
+                                "videoId": "aaaaaaaaaaa",
+                                "title": { "simpleText": "Older row" },
+                                "shortBylineText": { "runs": [{ "text": "Channel" }] },
+                                "lengthSeconds": "123"
+                            } },
+                            { "continuationItemRenderer": { "continuationEndpoint": {
+                                "continuationCommand": { "token": "older-page-2" }
+                            } } }
+                        ] }
+                    }] }
+                }] } } }
+            }] } }
+        });
+        let (videos, more) = page_of(&page, true);
+        assert_eq!(videos.len(), 1, "nested playlist rows are not duplicated");
+        assert_eq!(videos[0].id, "aaaaaaaaaaa");
+        assert_eq!(videos[0].title, "Older row");
+        assert_eq!(videos[0].channel.as_deref(), Some("Channel"));
+        assert_eq!(videos[0].duration, Some(123.0));
+        let more = more.expect("the older list has a second page");
+        assert_eq!(more.ctoken, "older-page-2");
+        assert!(more.authenticated);
+        assert!(more.ours);
     }
 
     /// Against YouTube itself, signed out: `cargo test -- --ignored`.
