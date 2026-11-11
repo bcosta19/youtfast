@@ -586,33 +586,20 @@ fn history_row(entry: HistoryItem<VideoItem>) -> HistoryRow {
 }
 
 pub async fn watch_later(rp: &RustyPipe) -> Result<(Vec<Video>, Option<More>), Error> {
-    or_ours(rp, "WL", rp.query().watch_later().await).await
+    playlist::videos(rp, "WL")
+        .await
+        .map_err(|text| Error::Other(text.into()))
 }
 
 pub async fn liked(rp: &RustyPipe) -> Result<(Vec<Video>, Option<More>), Error> {
-    or_ours(rp, "LL", rp.query().liked_videos().await).await
-}
-
-/// rustypipe's reading of a playlist, or this app's when YouTube sent the
-/// newer layout rustypipe does not know: the videos as `lockupViewModel`s
-/// straight in the section, which rustypipe fails to read.
-async fn or_ours(
-    rp: &RustyPipe,
-    id: &str,
-    result: Result<Playlist, Error>,
-) -> Result<(Vec<Video>, Option<More>), Error> {
-    match result {
-        Ok(page) => Ok(playlist_page(page)),
-        Err(error) if newer_layout(&error) => playlist::videos(rp, id)
-            .await
-            .map_err(|text| Error::Other(text.into())),
-        Err(error) => Err(error),
-    }
+    playlist::videos(rp, "LL")
+        .await
+        .map_err(|text| Error::Other(text.into()))
 }
 
 fn newer_layout(error: &Error) -> bool {
-    // "itemSectionRenderer empty" for the account's lists, a missing
-    // field for public ones: any reading error is the layout.
+    // Public playlists can have missing fields in rustypipe's older
+    // layout: any reading error lets the app's reader try the response.
     matches!(error, Error::Extraction(_))
 }
 

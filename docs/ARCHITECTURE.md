@@ -247,11 +247,12 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
 - Home's For you is the account's own recommendations
   (`src/innertube/home.rs`: `browse` `FEwhat_to_watch` through rustypipe's
   `raw`, read here, continued by rustypipe).
-- Playlists (Watch later and liked videos included) come in a newer layout
-  rustypipe fails to read; when it does, `src/innertube/playlist.rs` reads
-  them through `raw` (`browse` `VL<id>`) and pages them itself
-  (`More::ours`) — its shorts land on the shelf, filled further by
-  `channel_shorts` (each device channel's Shorts tab).
+- Playlists can come in a newer layout rustypipe fails to read.
+  Watch later and liked videos go straight to `src/innertube/playlist.rs`;
+  public playlist details use it when rustypipe's reader fails. It reads
+  through authenticated `raw` (`browse` `VL<id>`) when a session is available
+  and pages the list itself (`More::ours`). Its shorts land on the shelf,
+  filled further by `channel_shorts` (each device channel's Shorts tab).
 - rustypipe has no posts or podcasts tabs, no write actions and no home
   recommendations call: subscribing acts on the local library. The watch
   page's rating and the account playlists of `[ save ]` are explicit writes to
@@ -391,6 +392,11 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
   egui's memory. A row whose control is a switch takes the click anywhere on
   it (`switch_row`): the row's click is registered where the previous frame
   drew it, before the switch, so the switch stays above it.
+- `src/account.rs` is laid out like the settings page: it draws in
+  `settings::column`, centred by `settings::centered_left`, and each part is a
+  `widgets::section` over a card of `settings::row`s (`setting_row` for a
+  name and description at the left): the identity or text at the left, the
+  actions right-aligned on the same line, under the text in a narrow card.
 - `src/bench.rs` measures what one frame costs on the busiest views:
   `cargo test --release -p youtfast-ui --lib frame_cost -- --ignored
   --nocapture --test-threads=1`.

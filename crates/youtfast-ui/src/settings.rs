@@ -16,9 +16,9 @@ use youtfast_storage::settings::{
 };
 
 /// The widest the settings read well.
-const WIDTH: f32 = 760.0;
+pub(crate) const WIDTH: f32 = 760.0;
 /// The room a row keeps at its right for a usual control.
-const CONTROL_WIDTH: f32 = 260.0;
+pub(crate) const CONTROL_WIDTH: f32 = 260.0;
 /// The index of the groups a wide window shows beside the column, and the
 /// space between the two.
 const INDEX_WIDTH: f32 = 200.0;
@@ -55,6 +55,33 @@ struct IndexState {
     chosen: Option<usize>,
 }
 
+/// How far from the left of a page `page_width` wide a block `block` wide
+/// sits to be in the middle. Whole pixels: a half-pixel offset would blur
+/// every glyph.
+pub(crate) fn centered_left(page_width: f32, block: f32) -> f32 {
+    ((page_width - block) / 2.0).max(0.0).floor()
+}
+
+/// What `add_contents` draws in a column `width` wide, `offset` from the
+/// left of the room the ui has left.
+pub(crate) fn column<R>(
+    ui: &mut Ui,
+    offset: f32,
+    width: f32,
+    add_contents: impl FnOnce(&mut Ui) -> R,
+) -> R {
+    let mut rect = ui.available_rect_before_wrap();
+    rect.min.x += offset;
+    rect.max.x = rect.min.x + width;
+    ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+        // set_max_width also widens: a narrow window would cut
+        // the text off at its edge instead of wrapping it.
+        ui.set_max_width(width);
+        add_contents(ui)
+    })
+    .inner
+}
+
 pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
     results::panel(ui, |ui| {
@@ -68,9 +95,8 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         } else {
             width
         };
-        // Whole pixels: a half-pixel offset would blur every glyph.
-        let left = ((page.width() - block) / 2.0).max(0.0).floor();
-        let column = left + block - width;
+        let left = centered_left(page.width(), block);
+        let offset = left + block - width;
 
         let id = egui::Id::new("settings-index");
         let mut index: IndexState = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_default();
@@ -86,13 +112,7 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             .auto_shrink(false)
             .show(ui, |ui| {
                 let top = ui.clip_rect().top();
-                let mut rect = ui.available_rect_before_wrap();
-                rect.min.x += column;
-                rect.max.x = rect.min.x + width;
-                ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
-                    // set_max_width also widens: a narrow window would cut
-                    // the text off at its edge instead of wrapping it.
-                    ui.set_max_width(width);
+                column(ui, offset, width, |ui| {
                     if !indexed {
                         results::title(ui, state, &tr(locale, "Settings"), None);
                     }
@@ -1054,10 +1074,32 @@ fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     });
 }
 
+/// A row's name in medium and, under it, what it does in secondary. An
+/// empty name leaves only the description.
+pub(crate) fn row_text(ui: &mut Ui, palette: &Palette, label: &str, description: &str) {
+    if !label.is_empty() {
+        ui.label(
+            RichText::new(label)
+                .font(theme::medium(14.0))
+                .color(palette.text),
+        );
+    }
+    if !description.is_empty() {
+        ui.add(
+            egui::Label::new(
+                RichText::new(description)
+                    .font(theme::regular(13.0))
+                    .color(palette.secondary),
+            )
+            .wrap(),
+        );
+    }
+}
+
 /// One option: its name in medium and what it does in secondary at the
 /// left, the control at the right in `control_width`. In a card too
 /// narrow for both, the control goes under the text.
-fn setting_row(
+pub(crate) fn setting_row(
     ui: &mut Ui,
     palette: &Palette,
     label: &str,
@@ -1065,23 +1107,23 @@ fn setting_row(
     control_width: f32,
     control: impl FnOnce(&mut Ui),
 ) {
-    let text = |ui: &mut Ui| {
-        ui.label(
-            RichText::new(label)
-                .font(theme::medium(14.0))
-                .color(palette.text),
-        );
-        if !description.is_empty() {
-            ui.add(
-                egui::Label::new(
-                    RichText::new(description)
-                        .font(theme::regular(13.0))
-                        .color(palette.secondary),
-                )
-                .wrap(),
-            );
-        }
-    };
+    row(
+        ui,
+        control_width,
+        |ui| row_text(ui, palette, label, description),
+        control,
+    );
+}
+
+/// A row of a card: `text` at the left, `control` at the right in
+/// `control_width`, on the same line while the card leaves the text at
+/// least 160 for itself and under the text otherwise.
+pub(crate) fn row(
+    ui: &mut Ui,
+    control_width: f32,
+    text: impl FnOnce(&mut Ui),
+    control: impl FnOnce(&mut Ui),
+) {
     let reserved = control_width + 16.0;
     if ui.available_width() - reserved < 160.0 {
         ui.vertical(|ui| {
