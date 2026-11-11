@@ -8,6 +8,11 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Changed
+
+- The Account page uses the Settings page's layout: a centered column of
+  cards, with each account's and browser profile's buttons on its own row.
+
 ### Fixed
 
 - Liked videos and Watch later load without retrying an incompatible

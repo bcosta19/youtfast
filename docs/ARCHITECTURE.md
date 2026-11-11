@@ -392,6 +392,11 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
   egui's memory. A row whose control is a switch takes the click anywhere on
   it (`switch_row`): the row's click is registered where the previous frame
   drew it, before the switch, so the switch stays above it.
+- `src/account.rs` is laid out like the settings page: it draws in
+  `settings::column`, centred by `settings::centered_left`, and each part is a
+  `widgets::section` over a card of `settings::row`s (`setting_row` for a
+  name and description at the left): the identity or text at the left, the
+  actions right-aligned on the same line, under the text in a narrow card.
 - `src/bench.rs` measures what one frame costs on the busiest views:
   `cargo test --release -p youtfast-ui --lib frame_cost -- --ignored
   --nocapture --test-threads=1`.
