@@ -28,6 +28,7 @@ use youtfast_youtube::innertube;
 use youtfast_youtube::ytdlp;
 
 pub use action::Action;
+pub use watch::failure_message;
 
 /// Draws one frame of the views and collects the actions they push: the
 /// interface's `ui::frame`. The application calls it without depending on
