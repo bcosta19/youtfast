@@ -825,11 +825,12 @@ fn keys_overlay(ctx: &egui::Context, state: &mut State) {
     // The area's first sizing pass otherwise caps the modal at egui's
     // default height, so the list below would scroll despite the room.
     let height = (ctx.content_rect().height() - 96.0).clamp(240.0, 680.0);
+    let margin_y = 16;
     let response = egui::Modal::new(id)
         .area(egui::Modal::default_area(id).default_height(height))
         .frame(
             egui::Frame::popup(&ctx.style_of(ctx.theme()))
-                .inner_margin(egui::Margin::symmetric(20, 16)),
+                .inner_margin(egui::Margin::symmetric(20, margin_y)),
         )
         .show(ctx, |ui| {
             let shell: &[(&'static str, &'static str)] = &[
@@ -914,6 +915,9 @@ fn keys_overlay(ctx: &egui::Context, state: &mut State) {
                 available.clamp(280.0, 1040.0)
             };
             ui.set_width(width);
+            // `default_height` seeds only the first sizing pass, so pin the
+            // height every frame or a smaller window keeps the old size.
+            ui.set_height(height - 2.0 * f32::from(margin_y));
             ui.horizontal(|ui| {
                 ui.heading(tr(locale, "Keyboard shortcuts").as_ref());
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -945,8 +949,12 @@ fn keys_overlay(ctx: &egui::Context, state: &mut State) {
                     });
             };
             egui::ScrollArea::vertical()
-                // The scrollbar takes the empty gutter on the right instead
-                // of sitting against the longest description.
+                // The floating scrollbar sits on this margin instead of
+                // against the longest description.
+                .content_margin(egui::Margin {
+                    right: 24,
+                    ..egui::Margin::ZERO
+                })
                 .auto_shrink([false, true])
                 .show(ui, |ui| {
                     if two_columns {
@@ -956,7 +964,7 @@ fn keys_overlay(ctx: &egui::Context, state: &mut State) {
                                 Layout::top_down(Align::Min),
                                 |ui| column(ui, "keys-shell", "General", shell),
                             );
-                            ui.add_space(gap);
+                            ui.add_space((gap - ui.spacing().item_spacing.x).max(0.0));
                             ui.allocate_ui_with_layout(
                                 vec2(player_width, 0.0),
                                 Layout::top_down(Align::Min),
@@ -1002,6 +1010,10 @@ mod tests {
     use super::*;
     use youtfast_core::model::{Listing, Video};
     use youtfast_storage::settings::{SidebarEntry, default_sidebar, sanitize_sidebar};
+
+    fn screen(width: f32, height: f32) -> egui::Rect {
+        egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(width, height))
+    }
 
     fn views(state: &State) -> Vec<View> {
         sidebar_items(state)
@@ -1147,6 +1159,61 @@ mod tests {
             screen.contains_rect(rect),
             "the modal stays inside the window"
         );
+        assert!(
+            text_x("Sidebar").is_some(),
+            "the last General row is visible instead of scrolled away"
+        );
+        assert!(
+            text_x("Audio-only mode").is_some(),
+            "the last Player row is visible instead of scrolled away"
+        );
+    }
+
+    #[test]
+    fn the_shortcuts_modal_follows_a_resized_window() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let mut state = State {
+            keys_open: true,
+            ..State::default()
+        };
+        let mut run = |screen: egui::Rect| {
+            for _ in 0..3 {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(screen),
+                        time: Some(0.0),
+                        ..Default::default()
+                    },
+                    |_| keys_overlay(&ctx, &mut state),
+                );
+                output.textures_delta.clear();
+            }
+            ctx.memory(|memory| memory.area_rect(egui::Id::new("keys")))
+                .expect("the modal has an area")
+        };
+
+        let tall = run(screen(1280.0, 800.0));
+        let short = run(screen(1280.0, 500.0));
+        assert!(
+            short.height() < tall.height(),
+            "the modal shrinks with the window instead of keeping its first size"
+        );
+        assert!(
+            screen(1280.0, 500.0).contains_rect(short),
+            "the shrunk modal stays inside the window"
+        );
+        for size in [
+            egui::vec2(800.0, 500.0),
+            egui::vec2(800.0, 800.0),
+            egui::vec2(1280.0, 800.0),
+        ] {
+            let rect = run(screen(size.x, size.y));
+            assert!(
+                screen(size.x, size.y).contains_rect(rect),
+                "the modal stays inside a {size:?} window"
+            );
+        }
     }
 
     fn top_bar_frame(
