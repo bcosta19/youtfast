@@ -16,6 +16,10 @@ are the distribution record.
   yt-dlp streams to become available instead of intermittently failing with
   HTTP 403 (#84). Native playback requires libmpv 0.42+ with Lua; Arch package
   dependencies and Windows/macOS bundle checks enforce the new baseline.
+- macOS release packaging refreshes Homebrew metadata before installing mpv,
+  so a hosted runner's stale formula cache cannot select an older playback stack.
+- Remove a CI test that raced other font lookups while asserting the contents of
+  a shared, single-entry cache; missing-font fallback remains covered by UI tests.
 
 ### Security
 
