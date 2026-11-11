@@ -1,11 +1,14 @@
 YouTFast: Linux x86_64 package
 
-Built on Ubuntu 24.04. Requires glibc 2.39 or newer and system libmpv.so.2,
-libxkbcommon, libwayland, OpenGL and fontconfig. This is not a static AppImage.
-On Ubuntu 24.04: sudo apt-get install libmpv2 libxkbcommon0 libxkbcommon-x11-0 libwayland-client0 libgl1 libfontconfig1 yt-dlp
-Keep yt-dlp current and use libmpv built with Lua support.
-YouTube extraction also needs a supported JS runtime such as Deno and the
-matching yt-dlp EJS component; see docs/distribution.md for upstream setup.
+Built on Ubuntu 24.04. Requires glibc 2.39 or newer and system libmpv.so.2
+from mpv 0.42 or newer with Lua support, libxkbcommon, libwayland, OpenGL and
+fontconfig. This is not a static AppImage.
+On Ubuntu 24.04: sudo apt-get install libmpv2 libxkbcommon0 libxkbcommon-x11-0 libwayland-client0 libgl1 libfontconfig1
+Check the libmpv package version: Ubuntu's default package may be older than
+0.42. Upgrade from a trusted source or use the next Flatpak release with mpv
+0.42+; installing the libraries above alone is not enough for playback.
+Keep yt-dlp current. YouTube extraction also needs a supported JS runtime such
+as Deno and the matching yt-dlp EJS component; see docs/install.md for setup.
 Run ./youtfast from the extracted directory. --version does not open the app.
 Desktop entry and SVG icon are included for optional manual installation.
 

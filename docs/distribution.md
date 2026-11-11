@@ -9,7 +9,7 @@ outstanding gates.
 
 | Target | Candidate artifact | Runtime requirements | Updates |
 |---|---|---|---|
-| Linux x86_64 native | `*-x86_64-unknown-linux-gnu.tar.gz` | glibc 2.39+, system libmpv/Lua, graphics libraries, current yt-dlp and JS runtime | In-app updater (`Settings → About`, SHA-256 verified) or replace archive; update system dependencies separately |
+| Linux x86_64 native | `*-x86_64-unknown-linux-gnu.tar.gz` | glibc 2.39+, system libmpv 0.42+ with Lua, graphics libraries, current yt-dlp and JS runtime | In-app updater (`Settings → About`, SHA-256 verified) or replace archive; update system dependencies separately |
 | Linux x86_64 Flatpak | `*-x86_64.flatpak` and Flathub source manifest (`channels.tar.gz`) | Flatpak, Freedesktop 25.08 runtime, graphics drivers and portals | Install next bundle; no Flathub update remote until listing submission is accepted |
 | Arch Linux x86_64 | `.pkg.tar.zst` and `*-aur.tar.gz` recipe | System dependencies installed by pacman; AUR source builds also need Rust/Cargo | Local pacman package; AUR helper after entry acceptance |
 | Windows x86_64 | `*-x86_64-pc-windows-gnu.zip` and Winget manifest (`channels.tar.gz`) | Bundled libmpv/imported DLLs; current yt-dlp and Deno on PATH | In-app updater (`Settings → About`), replace extracted directory, or update via Winget |
@@ -27,6 +27,15 @@ signing for internal bundle consistency; it is not a Developer ID signature,
 notarization or proof that Gatekeeper accepts the download. Never recommend
 disabling system security globally. Intel Macs/universal binaries, ARM Windows
 and Linux ARM64 are not built.
+
+The supported YouTube playback baseline is **libmpv 0.42+ with Lua**, distinct
+from the older client ABI needed to link the executable. Its yt-dlp hook waits
+for formats' `available_at` time instead of opening streams early and getting
+HTTP 403. Flatpak pins mpv 0.42.0 and compatible libplacebo; Windows/macOS
+bundlers reject older mpv packages, and the Arch recipe requires `mpv>=0.42.0`.
+Older published artifacts are unchanged: use a release containing this fix.
+Native Linux users must check their libmpv package version and upgrade it
+separately; glibc 2.39+ and the `libmpv.so.2` soname alone are not enough.
 
 Native packages keep extraction tools external so users can update them as
 YouTube changes. Install current yt-dlp with its matching EJS component and a
@@ -85,7 +94,7 @@ keyring or library to debug packaging.
 | Check | Required evidence |
 |---|---|
 | Startup | Desktop/Finder/Explorer launch and correct version without build-toolchain libraries on PATH |
-| Playback | Signed-out search, public video audio/picture, seek, captions, full screen and mini player |
+| Playback | Confirm bundled/system libmpv 0.42+ with Lua; repeated signed-out public-video opens, audio/picture, seek, captions, full screen and mini player |
 | Graphics | OpenGL rendering; record GPU/driver and actual hardware-decoding result |
 | Integration | File chooser/portal, media controls, notifications, keyboard, all six interface languages, light/dark and HiDPI |
 | Persistence | New-profile settings/library survive restart; writes stay in documented paths |

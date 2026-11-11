@@ -80,7 +80,7 @@ checks on clean Windows and macOS machines are still in progress. Download from
 | Platform | Package | Requirements |
 |---|---|---|
 | Linux x86_64 | Flatpak bundle | Flatpak, Freedesktop 25.08 runtime and desktop drivers/portals |
-| Linux x86_64 | Native archive | glibc 2.39+, system libmpv and current yt-dlp/Deno; supports in-app updates |
+| Linux x86_64 | Native archive | glibc 2.39+, system libmpv 0.42+ with Lua and current yt-dlp/Deno; supports in-app updates |
 | Windows x86_64 | ZIP with libmpv and DLLs | Current yt-dlp/Deno on PATH; supports in-app updates; no MSI/MSIX or publisher signature |
 | macOS 15+ Apple Silicon | ZIP with app and dylibs | Current yt-dlp/Deno; supports in-app updates; ad-hoc signed, not notarized |
 | Arch Linux x86_64 | Pacman package and source PKGBUILD | Built and installed in a clean Arch container by CI; AUR submission pending |
@@ -107,9 +107,11 @@ cargo run --locked --release -- "https://youtu.be/dQw4w9WgXcQ"
 cargo run --locked --release -- "rust egui"
 ```
 
-Playback needs libmpv with Lua support, current yt-dlp and its matching EJS/JS
-runtime. Optional browser-session import also needs `python3` with the `yt_dlp`
-module. See the [requirements](docs/user-guide.md#requirements).
+Playback needs **libmpv 0.42 or newer with Lua support**, current yt-dlp and its
+matching EJS/JS runtime. Older mpv versions can open stream URLs before they
+become available, causing intermittent HTTP 403 failures. Optional browser-session
+import also needs `python3` with the `yt_dlp` module. See the
+[requirements](docs/user-guide.md#requirements).
 
 **Cast to TV** supports YouTube TVs through native DIAL/Lounge, including
 compatible Samsung TVs without Chromecast. Google Cast support additionally

@@ -22,6 +22,13 @@ def run(*args):
     return subprocess.check_output([str(arg) for arg in args], text=True)
 
 
+def require_mpv_version(version):
+    """Reject native candidates whose bundled mpv predates the playback fixes."""
+    match = re.fullmatch(r"(?:\d+:)?(\d+)\.(\d+)\.(\d+)(?:[-_]\d+)?", version)
+    if match is None or tuple(map(int, match.groups())) < (0, 42, 0):
+        raise ValueError("Bundled libmpv must be version 0.42.0 or newer")
+
+
 def dll_imports(text):
     return re.findall(r"DLL Name:\s+([^\s]+)", text)
 
@@ -58,8 +65,11 @@ def windows(binary, prefix, dist):
         raise ValueError("The Windows candidate must bundle libmpv")
     owners = set()
     for library in libraries:
+        owner = run("pacman", "-Qqo", f"/{prefix.name}/bin/{library.name}").strip()
+        if "mpv" in library.name.lower():
+            require_mpv_version(run("pacman", "-Q", owner).split()[1])
         shutil.copy2(library, directory / library.name)
-        owners.add(run("pacman", "-Qqo", f"/{prefix.name}/bin/{library.name}").strip())
+        owners.add(owner)
     inventory = run("pacman", "-Qi", *sorted(owners))
     (directory / "native-dependencies.txt").write_text(inventory)
     (directory / "native-dependencies.json").write_text(json.dumps({
@@ -73,7 +83,7 @@ def windows(binary, prefix, dist):
     copy_public_files(directory)
     (directory / "INSTALL.txt").write_text(
         "YouTFast Windows x86_64 release candidate. Extract the entire ZIP, then run youtfast.exe.\n"
-        "libmpv and its imported DLLs are included; keep them beside the executable.\n"
+        "libmpv 0.42+ and its imported DLLs are included; keep them beside the executable.\n"
         "Install current yt-dlp and Deno separately and make them available on PATH.\n"
         "Browser-session import additionally needs Python with the yt_dlp module.\n"
         "This package has no publisher signature or installer. Interactive QA and\n"
@@ -130,6 +140,30 @@ def verify_macho(paths, executable_dir, inspect, inspect_rpaths=None):
                 raise ValueError("macOS dyld rejects duplicate LC_RPATH entries")
 
 
+def verify_macos_mpv_source(binary, prefix, inspect, inspect_rpaths):
+    """Require the linked libmpv to come from the supported Homebrew keg."""
+    keg = prefix.resolve()
+    require_mpv_version(keg.name)
+    imports = [item for item in macho_imports(inspect(binary))
+               if Path(item).name.startswith("libmpv") and item.endswith(".dylib")]
+    if len(imports) != 1:
+        raise ValueError("The macOS executable must link exactly one libmpv")
+
+    def local_path(value):
+        return Path(value.replace("@executable_path", str(binary.parent))
+                    .replace("@loader_path", str(binary.parent)))
+
+    dependency = imports[0]
+    if dependency.startswith("@rpath/"):
+        suffix = dependency.removeprefix("@rpath/")
+        candidates = [local_path(root) / suffix for root in macho_rpaths(inspect_rpaths(binary))]
+    else:
+        candidates = [local_path(dependency)]
+    source = next((path for path in candidates if path.is_file()), None)
+    if source is None or not source.resolve().is_relative_to(keg / "lib"):
+        raise ValueError("Linked libmpv must come from the validated Homebrew mpv keg")
+
+
 def macos(binary, dist):
     current = check()
     if run("uname", "-m").strip() != "arm64":
@@ -155,6 +189,9 @@ def macos(binary, dist):
         }, output)
     (app / "Resources").mkdir()
     shutil.copy2(ROOT / "packaging/icons/youtfast.icns", app / "Resources/youtfast.icns")
+    verify_macos_mpv_source(executable, Path(run("brew", "--prefix", "mpv").strip()),
+                            lambda path: run("otool", "-L", path),
+                            lambda path: run("otool", "-l", path))
     subprocess.run(["dylibbundler", "-b", "-cd", "-x", str(executable),
                     "-d", str(app / "Frameworks"),
                     "-p", "@executable_path/../Frameworks/"], check=True)
@@ -188,7 +225,7 @@ def macos(binary, dist):
     copy_public_files(directory)
     (directory / "INSTALL.txt").write_text(
         "YouTFast macOS 15+ Apple Silicon release candidate.\n"
-        "Copy YouTFast.app to Applications. libmpv and linked dylibs are bundled.\n"
+        "Copy YouTFast.app to Applications. libmpv 0.42+ and linked dylibs are bundled.\n"
         "Install current yt-dlp and Deno separately, for example through Homebrew.\n"
         "Finder launches include /opt/homebrew/bin and /usr/local/bin on PATH.\n"
         "Browser-session import also needs Python with the yt_dlp module.\n"

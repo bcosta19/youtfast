@@ -19,7 +19,11 @@ sudo apt-get install -y build-essential pkg-config libmpv-dev libxkbcommon-dev \
 cargo build --locked
 ```
 
-Runtime playback needs a current yt-dlp and libmpv built with Lua support.
+Runtime playback needs current yt-dlp and **libmpv 0.42+ built with Lua support**.
+Ubuntu's build dependencies above do not guarantee that playback baseline:
+if your distribution provides older libmpv, upgrade it from a trusted source
+or use the next Flatpak release containing mpv 0.42+. Linking against an older
+client API can still compile; it does not qualify YouTube playback.
 Keep `Cargo.lock` committed and use `--locked`. mise/mbx is optional; a normal
 rustup/Cargo checkout must work independently of sibling repositories.
 Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the code is laid

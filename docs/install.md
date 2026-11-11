@@ -26,6 +26,14 @@ Not sure which Linux route? Use **Flatpak**: it needs nothing else from your
 system. To see whether your Linux is new enough for the native archive, run
 `ldd --version`; the first line must end in 2.39 or higher.
 
+Native Linux playback additionally requires **libmpv 0.42+ built with Lua**.
+Check your installed libmpv package version (`apt-cache policy libmpv2`,
+`dnf info --installed mpv-libs`, or `pacman -Q mpv`). The distribution versions
+below describe the glibc baseline, not a guarantee that their default mpv is
+new enough. If yours is older, upgrade libmpv from a trusted source or use the
+next Flatpak release containing mpv 0.42+. Updating YouTFast alone does not
+update a native system's libmpv.
+
 ## Linux: Flatpak
 
 You need: Flatpak installed. Many distributions ship it; otherwise follow
@@ -75,8 +83,10 @@ You need: an Arch-based system with `sudo`.
    sha256sum -c --ignore-missing checksums.txt
    ```
 
-3. Install it. pacman also installs mpv, yt-dlp, Deno and the other
-   libraries YouTFast needs:
+3. Install it. pacman also installs mpv, yt-dlp, Deno and the other libraries
+   YouTFast needs. Releases containing the #84 fix require mpv 0.42+;
+   older published packages do not enforce this. Check `pacman -Q mpv` and
+   update the system with `sudo pacman -Syu` if needed:
 
    ```sh
    sudo pacman -U "./youtfast-$V-1-x86_64.pkg.tar.zst"
@@ -122,8 +132,8 @@ You need: Fedora 40 or newer and `sudo`.
 3. [Install the YouTFast archive](#install-the-native-archive).
 
 Other distributions with glibc 2.39 or newer can follow the same three
-steps: install libmpv (built with Lua, as usual), libxkbcommon, Wayland's
-client library, OpenGL and fontconfig under your distribution's names.
+steps: install libmpv 0.42+ (built with Lua), libxkbcommon, Wayland's client
+library, OpenGL and fontconfig under your distribution's names.
 
 ### yt-dlp and Deno on Linux
 
@@ -270,6 +280,7 @@ folders: sign out in the app before removing it.
 | What you see | What to do |
 |---|---|
 | The window opens but videos never start | Update yt-dlp (see your route above). Check that `yt-dlp --version` and `deno --version` work in a new terminal. |
+| Intermittently: `Could not play this video. The player did not identify the cause. Try reopening the video.` | Check the installed libmpv package version. Before 0.42 its yt-dlp hook can open streams too early and receive HTTP 403. Upgrade libmpv to 0.42+ with Lua, or use the next Flatpak release containing it. Reopening after a few seconds is a temporary workaround, not a fix. If it persists on 0.42+, report it; this message can have other causes. |
 | `youtfast: command not found` after the native archive | Use the menu entry, or log out and back in so `~/.local/bin` is on `PATH`. |
 | `error while loading shared libraries: libmpv.so.2` | Install your distribution's libmpv (step 1 of your route), or use the [Flatpak](#linux-flatpak). |
 | `GLIBC_2.39 not found` | Your Linux is older than the native archive supports: use the [Flatpak](#linux-flatpak). |
