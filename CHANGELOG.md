@@ -18,6 +18,8 @@ are the distribution record.
   dependencies and Windows/macOS bundle checks enforce the new baseline.
 - macOS release packaging refreshes Homebrew metadata before installing mpv,
   so a hosted runner's stale formula cache cannot select an older playback stack.
+- Remove a CI test that raced other font lookups while asserting the contents of
+  a shared, single-entry cache; missing-font fallback remains covered by UI tests.
 
 ### Security
 

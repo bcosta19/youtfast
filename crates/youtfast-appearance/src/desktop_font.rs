@@ -617,14 +617,6 @@ mod tests {
     }
 
     #[test]
-    fn a_family_that_is_not_installed_is_remembered_as_missing() {
-        let name = "YouTFast test family that no machine installs";
-        assert!(cached_family(name).is_none());
-        assert!(family(name).is_none());
-        assert!(matches!(cached_family(name), Some(None)));
-    }
-
-    #[test]
     fn family_names_are_escaped_for_fontconfig() {
         assert_eq!(escape_pattern("Adwaita Sans"), "Adwaita Sans");
         assert_eq!(escape_pattern("Noto Sans-X:y"), r"Noto Sans\-X\:y");
