@@ -270,6 +270,8 @@ jobs:
         run: |
           toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
           rustup toolchain install "$toolchain" --profile minimal
+          # Hosted images can retain formula metadata from before the mpv release.
+          brew update
           brew install mpv dylibbundler
           echo "LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
       - name: Build and bundle application with libmpv
