@@ -41,33 +41,44 @@ pub struct VideoSurface {
     inner: Arc<Mutex<Inner>>,
 }
 
+/// How far the selected video has got towards a picture in the target.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Phase {
+    /// mpv has not loaded the selected file; nothing it renders may be shown.
+    #[default]
+    Waiting,
+    /// The file loaded; its first new frame has not been rendered yet.
+    Loaded,
+    /// The target holds a picture from the selected file.
+    Shown,
+}
+
 /// Whether the target holds a frame that may be shown for the selected video.
 #[derive(Default)]
 struct Frame {
-    /// mpv reported the selected file loaded; its frames may be shown.
-    allowed: bool,
-    /// The target holds a picture from the allowed file.
-    current: bool,
+    phase: Phase,
     /// The target still holds the previous video's picture; delete it before
-    /// the next draw so no later render can bring those pixels back.
+    /// the next draw so no later render can bring those pixels back. Set
+    /// apart from `phase`: the new file can load before that draw.
     discard: bool,
 }
 
 impl Frame {
     /// A new load started: the target still holds the previous video.
     fn forget(&mut self) {
-        self.allowed = false;
-        self.current = false;
+        self.phase = Phase::Waiting;
         self.discard = true;
     }
 
     /// mpv loaded the selected file: its frames may be shown now.
     fn allow(&mut self) {
-        self.allowed = true;
+        if self.phase == Phase::Waiting {
+            self.phase = Phase::Loaded;
+        }
     }
 
     fn allowed(&self) -> bool {
-        self.allowed
+        self.phase != Phase::Waiting
     }
 
     fn discard_target(&mut self) -> bool {
@@ -78,13 +89,13 @@ impl Frame {
     /// resize-only render before the new file loaded) must not make the
     /// target visible.
     fn rendered(&mut self, new_frame: bool) {
-        if self.allowed && new_frame {
-            self.current = true;
+        if self.phase == Phase::Loaded && new_frame {
+            self.phase = Phase::Shown;
         }
     }
 
     fn visible(&self) -> bool {
-        self.current
+        self.phase == Phase::Shown
     }
 }
 

@@ -2477,20 +2477,25 @@ mod tests {
 
     #[test]
     fn the_spinner_covers_the_gap_before_the_first_frame() {
+        const NO_FRAME_YET: bool = true;
+        const FRAME_SHOWN: bool = false;
+        const VIDEO: bool = false;
+        const AUDIO_ONLY: bool = true;
+
         let idle = Status {
             idle: true,
             ..Default::default()
         };
         assert!(
-            opening(&idle, true, false),
+            opening(&idle, NO_FRAME_YET, VIDEO),
             "a selected video with no frame yet is still opening"
         );
         assert!(
-            !opening(&idle, false, false),
+            !opening(&idle, FRAME_SHOWN, VIDEO),
             "a frame belonging to this load needs no spinner"
         );
         assert!(
-            !opening(&idle, true, true),
+            !opening(&idle, NO_FRAME_YET, AUDIO_ONLY),
             "audio-only mode never shows the opening spinner"
         );
 
@@ -2498,23 +2503,23 @@ mod tests {
             buffering: true,
             ..Default::default()
         };
-        assert!(opening(&buffering, false, false));
+        assert!(opening(&buffering, FRAME_SHOWN, VIDEO));
 
         let paused_at_start = Status {
             position: 0.0,
             paused: true,
             ..Default::default()
         };
-        assert!(!opening(&paused_at_start, false, false));
+        assert!(!opening(&paused_at_start, FRAME_SHOWN, VIDEO));
 
         let playing = Status {
             position: 3.0,
             has_video: true,
             ..Default::default()
         };
-        assert!(!opening(&playing, false, false));
+        assert!(!opening(&playing, FRAME_SHOWN, VIDEO));
         assert!(
-            opening(&playing, true, false),
+            opening(&playing, NO_FRAME_YET, VIDEO),
             "the spinner lasts until the first frame, not just until audio starts"
         );
 
@@ -2524,7 +2529,7 @@ mod tests {
             ..Default::default()
         };
         assert!(
-            !opening(&without_picture, true, false),
+            !opening(&without_picture, NO_FRAME_YET, VIDEO),
             "a file with no video track must not spin forever"
         );
     }

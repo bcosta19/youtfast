@@ -63,10 +63,8 @@ pub fn run(cli: &crate::Cli) -> eframe::Result {
             });
             let mut state = fixture(&page);
             if page == "player-error" {
-                state.player_error = Some(
-                    "Could not play this video. The player did not identify the cause. Try reopening the video."
-                        .into(),
-                );
+                state.player_error =
+                    Some(youtfast_app::failure_message(youtfast_mpv::Failure::Other).into());
             }
             state.settings.language = locale;
             state.palette = if light {

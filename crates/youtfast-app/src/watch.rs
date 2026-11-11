@@ -746,7 +746,7 @@ impl App {
 }
 
 /// What the watch page says when a video could not play.
-fn failure_message(failure: mpv::Failure) -> &'static str {
+pub fn failure_message(failure: mpv::Failure) -> &'static str {
     match failure {
         mpv::Failure::BotCheck => {
             "YouTube is limiting requests from this connection. Try again later."
