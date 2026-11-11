@@ -1124,17 +1124,19 @@ mod tests {
         };
         let general = text_x("General").expect("the general column is named");
         let player = text_x("Player").expect("the player column is named");
+        let rect = ctx
+            .memory(|memory| memory.area_rect(egui::Id::new("keys")))
+            .expect("the modal has an area");
         let right = output
             .shapes
             .iter()
             .filter_map(|shape| match &shape.shape {
-                egui::Shape::Text(text) => Some(text.pos.x + text.galley.size().x),
+                egui::Shape::Text(text) if text.pos.y > rect.top() + 60.0 => {
+                    Some(text.pos.x + text.galley.size().x)
+                }
                 _ => None,
             })
             .fold(0.0, f32::max);
-        let rect = ctx
-            .memory(|memory| memory.area_rect(egui::Id::new("keys")))
-            .expect("the modal has an area");
         assert!(
             (general - rect.left() - 20.0).abs() < 6.0,
             "the list keeps the modal's left padding"
@@ -1148,8 +1150,8 @@ mod tests {
             "the modal shrinks to its content instead of leaving a gap"
         );
         assert!(
-            rect.right() - right < 60.0,
-            "the player column reaches the modal's right padding"
+            (40.0..55.0).contains(&(rect.right() - right)),
+            "the labels stop at the scrollbar gutter instead of the modal edge"
         );
         assert!(
             rect.height() > 500.0,
@@ -1177,7 +1179,7 @@ mod tests {
             keys_open: true,
             ..State::default()
         };
-        let mut run = |screen: egui::Rect| {
+        let mut run = |screen: egui::Rect, open: bool| {
             for _ in 0..3 {
                 let mut output = ctx.run_ui(
                     egui::RawInput {
@@ -1185,7 +1187,11 @@ mod tests {
                         time: Some(0.0),
                         ..Default::default()
                     },
-                    |_| keys_overlay(&ctx, &mut state),
+                    |_| {
+                        if open {
+                            keys_overlay(&ctx, &mut state);
+                        }
+                    },
                 );
                 output.textures_delta.clear();
             }
@@ -1193,8 +1199,8 @@ mod tests {
                 .expect("the modal has an area")
         };
 
-        let tall = run(screen(1280.0, 800.0));
-        let short = run(screen(1280.0, 500.0));
+        let tall = run(screen(1280.0, 800.0), true);
+        let short = run(screen(1280.0, 500.0), true);
         assert!(
             short.height() < tall.height(),
             "the modal shrinks with the window instead of keeping its first size"
@@ -1203,17 +1209,37 @@ mod tests {
             screen(1280.0, 500.0).contains_rect(short),
             "the shrunk modal stays inside the window"
         );
-        for size in [
-            egui::vec2(800.0, 500.0),
-            egui::vec2(800.0, 800.0),
-            egui::vec2(1280.0, 800.0),
-        ] {
-            let rect = run(screen(size.x, size.y));
-            assert!(
-                screen(size.x, size.y).contains_rect(rect),
-                "the modal stays inside a {size:?} window"
-            );
-        }
+
+        let grown = run(screen(800.0, 800.0), true);
+        assert!(
+            grown.height() > short.height(),
+            "the modal grows again after the window does"
+        );
+        assert!(
+            screen(800.0, 800.0).contains_rect(grown),
+            "the grown modal stays inside the window"
+        );
+
+        let stacked = run(screen(600.0, 600.0), true);
+        assert!(
+            stacked.width() < 600.0,
+            "a narrow window gets the stacked layout instead of overflowing"
+        );
+        assert!(
+            screen(600.0, 600.0).contains_rect(stacked),
+            "the stacked modal stays inside the window"
+        );
+
+        let _ = run(screen(1280.0, 800.0), false);
+        let reopened = run(screen(1280.0, 500.0), true);
+        assert!(
+            reopened.height() < tall.height(),
+            "reopening on a short window does not restore the old tall size"
+        );
+        assert!(
+            screen(1280.0, 500.0).contains_rect(reopened),
+            "the reopened modal stays inside the short window"
+        );
     }
 
     fn top_bar_frame(
