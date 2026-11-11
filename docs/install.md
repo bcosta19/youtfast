@@ -30,8 +30,8 @@ Native Linux playback additionally requires **libmpv 0.42+ built with Lua**.
 Check your installed libmpv package version (`apt-cache policy libmpv2`,
 `dnf info --installed mpv-libs`, or `pacman -Q mpv`). The distribution versions
 below describe the glibc baseline, not a guarantee that their default mpv is
-new enough. If yours is older, upgrade libmpv from a trusted source or use the
-next Flatpak release containing mpv 0.42+. Updating YouTFast alone does not
+new enough. If yours is older, upgrade libmpv from a trusted source or use a
+Flatpak release containing mpv 0.42+. Updating YouTFast alone does not
 update a native system's libmpv.
 
 ## Linux: Flatpak
@@ -280,7 +280,7 @@ folders: sign out in the app before removing it.
 | What you see | What to do |
 |---|---|
 | The window opens but videos never start | Update yt-dlp (see your route above). Check that `yt-dlp --version` and `deno --version` work in a new terminal. |
-| Intermittently: `Could not play this video. The player did not identify the cause. Try reopening the video.` | Check the installed libmpv package version. Before 0.42 its yt-dlp hook can open streams too early and receive HTTP 403. Upgrade libmpv to 0.42+ with Lua, or use the next Flatpak release containing it. Reopening after a few seconds is a temporary workaround, not a fix. If it persists on 0.42+, report it; this message can have other causes. |
+| Intermittently: `Could not play this video. The player did not identify the cause. Try reopening the video.` | Check the installed libmpv package version. Before 0.42 its yt-dlp hook can open streams too early and receive HTTP 403. Upgrade libmpv to 0.42+ with Lua, or use a Flatpak release containing it. Reopening after a few seconds is a temporary workaround, not a fix. If it persists on 0.42+, report it; this message can have other causes. |
 | `youtfast: command not found` after the native archive | Use the menu entry, or log out and back in so `~/.local/bin` is on `PATH`. |
 | `error while loading shared libraries: libmpv.so.2` | Install your distribution's libmpv (step 1 of your route), or use the [Flatpak](#linux-flatpak). |
 | `GLIBC_2.39 not found` | Your Linux is older than the native archive supports: use the [Flatpak](#linux-flatpak). |

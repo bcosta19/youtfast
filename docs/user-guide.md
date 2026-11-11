@@ -18,7 +18,7 @@ become available. Older hooks can open them too early and receive HTTP 403.
 Keep yt-dlp and its JS runtime on `PATH`. Check the installed **libmpv package**
 version, not its client API version or a separately installed mpv executable.
 If your distribution only provides older libmpv, upgrade from a trusted source
-or use the next Flatpak release containing mpv 0.42+.
+or use a Flatpak release containing mpv 0.42+.
 Browser import also needs `python3` with the `yt_dlp` module; an executable-only
 yt-dlp install does not supply that Python module.
 
