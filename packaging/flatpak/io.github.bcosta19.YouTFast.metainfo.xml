@@ -15,6 +15,9 @@
   <url type="bugtracker">https://github.com/bcosta19/youtfast/issues</url>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.6.2" date="2026-11-11">
+      <description><p>Updates the Flatpak playback stack to mpv 0.42 and libplacebo 7.387 so streams wait until they are available instead of intermittently failing with HTTP 403. Native playback requires libmpv 0.42 or newer with Lua support. Includes the upstream mpv playlist-entry validation security fix.</p></description>
+    </release>
     <release version="0.6.1" date="2026-11-11">
       <description><p>Liked videos and Watch later load with one request instead of retrying, a video that fails to open no longer shows the previous video's picture, channel pages show views, age and length again, and the Account page and keyboard shortcuts window are laid out more clearly.</p></description>
     </release>

@@ -7,7 +7,9 @@ describe exactly what each version includes and excludes.
 ## Open release gates
 
 0.1.0 (pre-release), 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.5.1, 0.5.2 and 0.6.0 are
-published; 0.6.1 is being prepared as a candidate. Before publishing 0.6.1 or promoting a release to latest:
+published; the 0.6.1 tag/draft is preserved and 0.6.2 is being prepared as a
+candidate with the #84 playback fix. Before publishing 0.6.2 or promoting a
+release to latest:
 
 - Validate the exact candidate with the hosted Release dry run, inspect every
   package and its checksums, and review the matching Windows and macOS native
