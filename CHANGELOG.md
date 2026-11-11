@@ -10,6 +10,9 @@ are the distribution record.
 
 ### Fixed
 
+- The keyboard shortcuts window has roomier margins, sizes itself to its
+  General and Player columns so no empty space remains on the right, and
+  shows the whole list without scrolling on ordinary screens.
 - Videos on a channel's page show their views, age and length again, and
   so do the same videos in Up next. YouTube changed how it lists a
   channel's own videos (YT-7 in `docs/youtube-api-format.md`).
