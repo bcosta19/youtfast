@@ -544,7 +544,7 @@ fn about_video(
 
 /// YouTube's line under the title: the channel's round avatar, name and
 /// subscribers with the Subscribe pill, then the rating, Share and Save at
-/// the right. Filled from rustypipe's details when they arrive; the
+/// the right. Filled from the watch page's details when they arrive; the
 /// spinner or the error until then.
 fn channel_line(
     ui: &mut Ui,
@@ -1696,7 +1696,7 @@ fn up_next(ui: &mut Ui, state: &State, large: bool, actions: &mut Vec<Action>) {
     );
 }
 
-/// The recommended videos rustypipe sent with the details.
+/// The recommended videos the watch page sent with the details.
 fn related(ui: &mut Ui, state: &State, large: bool, actions: &mut Vec<Action>) {
     let locale: Locale = state.settings.language;
     let Fetch::Ready(details) = &state.details else {

@@ -1,4 +1,4 @@
-//! YouTube on TV's Lounge transport. This is independent of RustyPipe's
+//! YouTube on TV's Lounge transport. This is independent of the InnerTube
 //! account session: pairing identifiers and tokens live only in this worker.
 //! Protocol references: ytcast/youtube/remote.go and casttube/YouTubeSession.py.
 //! No browser data, cookies, response bodies or transport errors are exported.

@@ -1,42 +1,45 @@
-//! The account and the feeds, through rustypipe: YouTube's own API
-//! (InnerTube) with the signed-in session, and channel RSS without one.
-//! Everything here runs on the backend runtime and returns the app's types.
+//! The account and the feeds: YouTube's own API (InnerTube) with the
+//! signed-in session, and channel RSS without one. Everything here runs on
+//! the backend runtime and returns the app's types.
 
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use rustypipe::client::{RustyPipe, RustyPipeQuery};
-use rustypipe::error::Error;
-use rustypipe::model::{
-    Channel as RpChannel, ChannelItem, ChannelRss, Comment, HistoryItem, Playlist, PlaylistItem,
-    Thumbnail, UrlTarget, VideoDetails, VideoItem, paginator::ContinuationEndpoint,
-    paginator::Paginator, richtext::TextComponent,
-};
-use rustypipe::param::ChannelVideoTab;
+use serde_json::{Value, json};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use youtfast_core::model::{
-    Channel, ChannelAbout, ChannelHeader, ChannelTab, Chapter, CommentRow, Details, HistoryRow,
-    PlaylistSummary, Span, Video,
+    Channel, ChannelHeader, ChannelTab, HistoryRow, PlaylistSummary, Video,
 };
 use youtfast_core::util;
-use youtfast_storage::account::CacheFile;
-use youtfast_storage::paths::Dirs;
 
+pub mod channel;
+pub mod client;
 mod discovery;
 mod edit;
 mod history_sync;
 mod home;
+pub mod items;
 mod playlist;
+pub mod rss;
+pub mod watch;
+
+pub use channel::{
+    ChannelVideoTab, channel_about, channel_header_counts, channel_order_token,
+    channel_playlists_page, channel_tab, channel_tab_params,
+};
+pub use client::{AuthError, Client, ContinuationEndpoint, Error};
 pub use discovery::{
     ChannelOrder, PlaylistDetails, SearchDate, SearchKind, SearchLength, SearchOptions,
-    SearchOrder, playlist_details, search_filtered,
+    SearchOrder, playlist_details, search_filtered, suggestions,
 };
 pub use edit::{rate, rating, save_targets, set_saved};
 pub use history_sync::mark_watched;
 pub use home::recommended;
+pub use items::absolute;
+pub use watch::{comments, details};
 
 /// Channel feeds fetched at once: RSS is cheap, but hundreds of
 /// subscriptions should not open hundreds of connections.
@@ -48,23 +51,13 @@ const RSS_TTL: i64 = 10 * 60;
 /// and the alerts check so neither re-fetches what the other just got.
 pub type RssCache = std::sync::Mutex<HashMap<String, (i64, Vec<Video>)>>;
 
-/// The rustypipe client. Its cache keeps client versions and the player's
-/// deobfuscation data between runs, never the session (see [`CacheFile`]),
-/// and it writes no error reports: those hold whole responses. Botguard
-/// stays off: playback is mpv's, so the binary rustypipe would find on
-/// PATH has nothing to do here.
-pub fn client(dirs: &Dirs) -> Result<RustyPipe, Error> {
-    RustyPipe::builder()
-        .storage(Box::new(CacheFile {
-            path: dirs.youtube_cache(),
-        }))
-        .storage_dir(dirs.cache.clone())
-        .no_reporter()
-        .no_botguard()
-        .build_with_client(http())
+/// Builds the InnerTube client. Session cookies live only in memory and are
+/// never persisted to disk by this client.
+pub fn client() -> Result<Client, Error> {
+    Client::new(http())
 }
 
-/// The HTTP client under rustypipe. Certificates are checked by the
+/// The HTTP client under InnerTube. Certificates are checked by the
 /// operating system's verifier rather than against its roots read once: a
 /// fresh Windows keeps a few roots and downloads the others only when its
 /// own verifier needs them, so until something else (a browser) had
@@ -114,20 +107,20 @@ pub fn text(error: Error) -> String {
 }
 
 /// Starts using a session, checking it with YouTube first.
-pub async fn sign_in(rp: &RustyPipe, cookie: String) -> Result<(), Error> {
+pub async fn sign_in(rp: &Client, cookie: String) -> Result<(), Error> {
     rp.user_auth_set_cookie(cookie).await
 }
 
-pub async fn sign_out(rp: &RustyPipe) {
+pub async fn sign_out(rp: &Client) {
     // Fails only when there was no session, which is the goal anyway.
-    let _ = rp.user_auth_remove_cookie().await;
+    rp.user_auth_remove_cookie().await;
 }
 
 /// The home feed: the account's subscription feed when signed in, and the
 /// latest videos of every channel subscribed on this device. Newest first.
 /// Channels whose RSS `cache` still holds fresh answer from it.
 pub async fn feed(
-    rp: &RustyPipe,
+    rp: &Client,
     channels: Vec<Channel>,
     account: bool,
     cache: &RssCache,
@@ -136,10 +129,30 @@ pub async fn feed(
     let mut problems = Vec::new();
     let mut more = None;
     if account {
-        match rp.query().subscription_feed().await {
+        match rp
+            .post_raw(
+                "browse",
+                &json!({ "browseId": "FEsubscriptions" }),
+                true,
+                None,
+            )
+            .await
+        {
             Ok(page) => {
-                more = More::of(&page);
-                videos.extend(page.items.into_iter().map(video));
+                let visitor_data = page
+                    .pointer("/responseContext/visitorData")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned);
+                let (sub_videos, ctoken) = items::collect_videos_and_ctoken(&page);
+                more = ctoken.map(|ctoken| More {
+                    ctoken,
+                    endpoint: ContinuationEndpoint::Browse,
+                    visitor_data,
+                    authenticated: true,
+                    ours: false,
+                    owner: None,
+                });
+                videos.extend(sub_videos);
             }
             Err(error) => problems.push(format!("your account's feed: {}", text(error))),
         }
@@ -161,15 +174,14 @@ pub async fn feed(
     let mut tasks = spawn_limited(fresh, |channel| {
         let rp = rp.clone();
         async move {
-            let result = rp.query().channel_rss(&channel.id).await;
+            let result = rss::fetch(&rp, &channel.id).await;
             (channel, result)
         }
     });
     let mut failed_channels = 0;
     while let Some(joined) = tasks.join_next().await {
         match joined {
-            Ok((channel, Ok(feed))) => {
-                let videos_of_channel: Vec<Video> = rss_videos(feed);
+            Ok((channel, Ok(videos_of_channel))) => {
                 cache
                     .lock()
                     .unwrap()
@@ -207,28 +219,22 @@ pub async fn feed(
 
 /// The newest Shorts of the given channels, up to `per` each, interleaved
 /// so no channel floods the shelf. Channels that fail are skipped.
-pub async fn channel_shorts(rp: &RustyPipe, channels: Vec<String>, per: usize) -> Vec<Video> {
+pub async fn channel_shorts(rp: &Client, channels: Vec<String>, per: usize) -> Vec<Video> {
     let mut tasks = spawn_limited(channels, |id| {
         let rp = rp.clone();
         async move {
-            let result = rp
-                .query()
-                .channel_videos_tab(&id, ChannelVideoTab::Shorts)
-                .await;
+            let result = channel_tab(&rp, &id, &ChannelTab::Shorts, ChannelOrder::Latest).await;
             (id, result)
         }
     });
     let mut each = Vec::new();
     while let Some(joined) = tasks.join_next().await {
         match joined {
-            Ok((_, Ok(channel))) => {
-                let shorts: Vec<Video> = channel
-                    .content
-                    .items
+            Ok((_, Ok((_, videos, _)))) => {
+                let shorts: Vec<Video> = videos
                     .into_iter()
                     .take(per)
-                    .map(|item| {
-                        let mut video = video(item);
+                    .map(|mut video| {
                         video.short = true;
                         video
                     })
@@ -236,7 +242,7 @@ pub async fn channel_shorts(rp: &RustyPipe, channels: Vec<String>, per: usize) -
                 each.push(shorts);
             }
             Ok((id, Err(error))) => {
-                log::warn!("could not read the shorts of {id}: {}", text(error));
+                log::warn!("could not read the shorts of {id}: {error}");
             }
             Err(error) => {
                 log::warn!("a shorts task failed: {error}");
@@ -293,8 +299,7 @@ pub struct More {
     pub endpoint: ContinuationEndpoint,
     pub visitor_data: Option<String>,
     pub authenticated: bool,
-    /// The page is read here, not by rustypipe: a playlist in the layout
-    /// rustypipe does not know yet (`playlist.rs`).
+    /// A playlist continuation handled by `playlist::more`.
     pub ours: bool,
     /// The channel whose own tab the list is: YouTube leaves the channel out
     /// of those videos, and a continuation page has no header to take it from.
@@ -310,7 +315,7 @@ pub struct Owner {
 }
 
 impl Owner {
-    fn of(header: &ChannelHeader) -> Self {
+    pub(crate) fn of(header: &ChannelHeader) -> Self {
         Self {
             id: header.id.clone(),
             name: header.name.clone(),
@@ -332,519 +337,181 @@ impl Owner {
     }
 }
 
-impl More {
-    /// The next page's directions, when the paginator has one.
-    pub fn of<T>(paginator: &Paginator<T>) -> Option<More> {
-        paginator.ctoken.as_ref().map(|ctoken| More {
-            ctoken: ctoken.clone(),
-            endpoint: paginator.endpoint,
-            visitor_data: paginator.visitor_data.clone(),
-            authenticated: paginator.authenticated,
-            ours: false,
-            owner: None,
-        })
-    }
+async fn post_continuation(rp: &Client, more: &More) -> Result<Value, String> {
+    rp.post_raw(
+        more.endpoint.as_str(),
+        &json!({ "continuation": more.ctoken }),
+        more.authenticated,
+        more.visitor_data.as_deref(),
+    )
+    .await
+    .map_err(text)
 }
 
-/// The query a continuation runs through: with the session when the
-/// list it continues needed one.
-fn continuation_query(rp: &RustyPipe, more: &More) -> RustyPipeQuery {
-    let query = rp.query();
-    if more.authenticated {
-        query.authenticated()
-    } else {
-        query
-    }
+fn next_more(more: &More, ctoken: Option<String>, page: &Value) -> Option<More> {
+    ctoken.map(|ctoken| More {
+        ctoken,
+        endpoint: more.endpoint,
+        visitor_data: page
+            .pointer("/responseContext/visitorData")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .or_else(|| more.visitor_data.clone()),
+        authenticated: more.authenticated,
+        ours: more.ours,
+        owner: more.owner.clone(),
+    })
 }
 
 /// The next page of videos.
-pub async fn more_videos(
-    rp: &RustyPipe,
-    more: &More,
-) -> Result<(Vec<Video>, Option<More>), String> {
+pub async fn more_videos(rp: &Client, more: &More) -> Result<(Vec<Video>, Option<More>), String> {
     if more.ours {
         return playlist::more(rp, more).await;
     }
-    let page = continuation_query(rp, more)
-        .continuation::<VideoItem, _>(&more.ctoken, more.endpoint, more.visitor_data.as_deref())
-        .await
-        .map_err(text)?;
-    let mut next = More::of(&page);
-    let mut videos: Vec<Video> = page.items.into_iter().map(video).collect();
+    let page = post_continuation(rp, more).await?;
+    let (mut videos, ctoken) = items::collect_videos_and_ctoken(&page);
     if let Some(owner) = &more.owner {
         videos.iter_mut().for_each(|video| owner.fill(video));
-        if let Some(next) = &mut next {
-            next.owner = Some(owner.clone());
-        }
     }
+    let next = next_more(more, ctoken, &page);
     Ok((videos, next))
 }
 
 /// The next page of playlists.
 pub async fn more_playlists(
-    rp: &RustyPipe,
+    rp: &Client,
     more: &More,
 ) -> Result<(Vec<PlaylistSummary>, Option<More>), String> {
-    let page = continuation_query(rp, more)
-        .continuation::<PlaylistItem, _>(&more.ctoken, more.endpoint, more.visitor_data.as_deref())
-        .await
-        .map_err(text)?;
-    let more = More::of(&page);
-    Ok((page.items.into_iter().map(playlist).collect(), more))
+    let page = post_continuation(rp, more).await?;
+    let (playlists, ctoken) = items::collect_playlists_and_ctoken(&page);
+    let next = next_more(more, ctoken, &page);
+    Ok((playlists, next))
 }
 
 /// The next page of channels (the account's subscriptions).
 pub async fn more_channels(
-    rp: &RustyPipe,
+    rp: &Client,
     more: &More,
 ) -> Result<(Vec<Channel>, Option<More>), String> {
-    let page = continuation_query(rp, more)
-        .continuation::<ChannelItem, _>(&more.ctoken, more.endpoint, more.visitor_data.as_deref())
-        .await
-        .map_err(text)?;
-    let more = More::of(&page);
-    Ok((page.items.into_iter().map(channel).collect(), more))
+    let page = post_continuation(rp, more).await?;
+    let (channels, ctoken) = items::collect_channels_and_ctoken(&page);
+    let next = next_more(more, ctoken, &page);
+    Ok((channels, next))
 }
 
 /// The next page of the account's history.
 pub async fn more_history(
-    rp: &RustyPipe,
+    rp: &Client,
     more: &More,
 ) -> Result<(Vec<HistoryRow>, Option<More>), String> {
     let page = rp
-        .query()
-        .history_continuation(&more.ctoken, more.visitor_data.as_deref())
+        .post_raw(
+            "browse",
+            &json!({ "continuation": more.ctoken }),
+            true,
+            more.visitor_data.as_deref(),
+        )
         .await
         .map_err(text)?;
-    let more = More::of(&page);
-    Ok((page.items.into_iter().map(history_row).collect(), more))
-}
-
-/// A channel's `UC…` id: `id` itself when it already is one, or resolved
-/// from a handle or vanity path (`@handle`, `c/name`, `user/name`).
-async fn resolve_channel_id<'a>(
-    rp: &RustyPipe,
-    id: &'a str,
-) -> Result<std::borrow::Cow<'a, str>, String> {
-    if id.starts_with("UC") {
-        return Ok(std::borrow::Cow::Borrowed(id));
-    }
-    let url = format!("https://youtube.com/{}", id.trim_start_matches('/'));
-    match rp.query().resolve_url(&url, false).await.map_err(text)? {
-        UrlTarget::Channel { id } => Ok(std::borrow::Cow::Owned(id)),
-        _ => Err("Could not complete the YouTube request. Retry.".to_owned()),
-    }
-}
-
-/// A channel's Videos, Shorts or Live tab, or its videos matching `query`.
-/// Returns the header every call sends along.
-pub async fn channel_tab(
-    rp: &RustyPipe,
-    id: &str,
-    tab: &ChannelTab,
-    order: ChannelOrder,
-) -> Result<(ChannelHeader, Vec<Video>, Option<More>), String> {
-    let id = resolve_channel_id(rp, id).await?;
-    let id = id.as_ref();
-    let query = rp.query();
-    let result = match tab {
-        ChannelTab::Search(text) => query.channel_search(id, text).await,
-        ChannelTab::Videos => query.channel_videos_tab(id, ChannelVideoTab::Videos).await,
-        ChannelTab::Shorts => query.channel_videos_tab(id, ChannelVideoTab::Shorts).await,
-        ChannelTab::Live => query.channel_videos_tab(id, ChannelVideoTab::Live).await,
-        _ => unreachable!("channel_tab is for the video tabs"),
-    }
-    .map_err(text)?;
-    let header = channel_header(&result);
-    let ordered = if order != ChannelOrder::Latest && !matches!(tab, ChannelTab::Search(_)) {
-        let video_tab = match tab {
-            ChannelTab::Videos => ChannelVideoTab::Videos,
-            ChannelTab::Shorts => ChannelVideoTab::Shorts,
-            ChannelTab::Live => ChannelVideoTab::Live,
-            _ => unreachable!(),
-        };
-        query
-            .channel_videos_tab_order(id, video_tab, order.into())
-            .await
-            .map_err(text)?
-    } else {
-        result.content
-    };
-    let mut more = More::of(&ordered);
-    let owner = Owner::of(&header);
-    let shorts = *tab == ChannelTab::Shorts;
-    let videos = ordered
-        .items
-        .into_iter()
-        .map(|item| {
-            let mut video = video(item);
-            // The Shorts tab does not mark its items.
-            video.short |= shorts;
-            owner.fill(&mut video);
-            video
-        })
-        .collect();
-    if let Some(more) = &mut more {
-        more.owner = Some(owner);
-    }
-    Ok((header, videos, more))
-}
-
-/// A channel's playlists tab.
-pub async fn channel_playlists_page(
-    rp: &RustyPipe,
-    id: &str,
-) -> Result<(ChannelHeader, Vec<PlaylistSummary>, Option<More>), String> {
-    let id = resolve_channel_id(rp, id).await?;
-    let result = rp
-        .query()
-        .channel_playlists(id.as_ref())
-        .await
-        .map_err(text)?;
-    let header = channel_header(&result);
-    let more = More::of(&result.content);
-    Ok((
-        header,
-        result.content.items.into_iter().map(playlist).collect(),
-        more,
-    ))
-}
-
-/// A channel's About tab.
-pub async fn channel_about(
-    rp: &RustyPipe,
-    id: &str,
-    needs_header: bool,
-) -> Result<(Option<ChannelHeader>, ChannelAbout), String> {
-    let id = resolve_channel_id(rp, id).await?;
-    // About can supersede the first Videos request before its header arrives.
-    // ChannelInfo has no name or avatar, so fetch the header in that case.
-    let header = if needs_header {
-        let channel = rp.query().channel_videos(id.as_ref()).await.map_err(text)?;
-        Some(channel_header(&channel))
-    } else {
-        None
-    };
-    let info = rp.query().channel_info(id.as_ref()).await.map_err(text)?;
-    let about = ChannelAbout {
-        url: info.url,
-        description: info.description,
-        links: info.links,
-        views: info.view_count,
-        created: info
-            .create_date
-            .map(|date| iso_date(date.year(), date.month(), date.day())),
-        country: info.country.map(|country| country.name().to_owned()),
-        subscribers: info.subscriber_count,
-        videos: info.video_count,
-    };
-    Ok((header, about))
-}
-
-/// The header every channel response carries.
-fn channel_header<T>(channel: &RpChannel<T>) -> ChannelHeader {
-    ChannelHeader {
-        id: channel.id.clone(),
-        name: channel.name.clone(),
-        handle: channel.handle.clone(),
-        avatar: largest(&channel.avatar),
-        banner: largest(&channel.banner),
-        subscribers: channel.subscriber_count,
-        videos: channel.video_count,
-        has_shorts: channel.has_shorts,
-        has_live: channel.has_live,
-    }
-}
-
-/// A date as `YYYY-MM-DD`.
-fn iso_date(year: i32, month: impl Into<u8>, day: u8) -> String {
-    format!("{year:04}-{:02}-{day:02}", month.into())
+    let (rows, ctoken) = items::collect_history_and_ctoken(&page);
+    let next = next_more(more, ctoken, &page);
+    Ok((rows, next))
 }
 
 /// The first page of the account's subscriptions and its continuation;
 /// the "Load more" rows ask for the next page.
-pub async fn subscriptions(rp: &RustyPipe) -> Result<(Vec<Channel>, Option<More>), Error> {
-    let page = rp.query().subscriptions().await?;
-    let more = More::of(&page);
-    let mut channels: Vec<Channel> = page.items.into_iter().map(channel).collect();
+pub async fn subscriptions(rp: &Client) -> Result<(Vec<Channel>, Option<More>), Error> {
+    let page = rp
+        .post_raw("browse", &json!({ "browseId": "FEchannels" }), true, None)
+        .await?;
+    let visitor_data = page
+        .pointer("/responseContext/visitorData")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let (mut channels, ctoken) = items::collect_channels_and_ctoken(&page);
     channels.sort_by_cached_key(|channel| channel.name.to_lowercase());
+    let more = ctoken.map(|ctoken| More {
+        ctoken,
+        endpoint: ContinuationEndpoint::Browse,
+        visitor_data,
+        authenticated: true,
+        ours: false,
+        owner: None,
+    });
     Ok((channels, more))
 }
 
 /// The first page of the account's history and its continuation.
-pub async fn history(rp: &RustyPipe) -> Result<(Vec<HistoryRow>, Option<More>), Error> {
-    let page = rp.query().history().await?;
-    let more = More::of(&page);
-    Ok((page.items.into_iter().map(history_row).collect(), more))
+pub async fn history(rp: &Client) -> Result<(Vec<HistoryRow>, Option<More>), Error> {
+    let page = rp
+        .post_raw("browse", &json!({ "browseId": "FEhistory" }), true, None)
+        .await?;
+    let visitor_data = page
+        .pointer("/responseContext/visitorData")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let (rows, ctoken) = items::collect_history_and_ctoken(&page);
+    let more = ctoken.map(|ctoken| More {
+        ctoken,
+        endpoint: ContinuationEndpoint::Browse,
+        visitor_data,
+        authenticated: true,
+        ours: false,
+        owner: None,
+    });
+    Ok((rows, more))
 }
 
-fn history_row(entry: HistoryItem<VideoItem>) -> HistoryRow {
-    HistoryRow {
-        video: video(entry.item),
-        when: entry.playback_date_txt,
-    }
-}
-
-pub async fn watch_later(rp: &RustyPipe) -> Result<(Vec<Video>, Option<More>), Error> {
+pub async fn watch_later(rp: &Client) -> Result<(Vec<Video>, Option<More>), Error> {
     playlist::videos(rp, "WL")
         .await
         .map_err(|text| Error::Other(text.into()))
 }
 
-pub async fn liked(rp: &RustyPipe) -> Result<(Vec<Video>, Option<More>), Error> {
+pub async fn liked(rp: &Client) -> Result<(Vec<Video>, Option<More>), Error> {
     playlist::videos(rp, "LL")
         .await
         .map_err(|text| Error::Other(text.into()))
 }
 
-fn newer_layout(error: &Error) -> bool {
-    // Public playlists can have missing fields in rustypipe's older
-    // layout: any reading error lets the app's reader try the response.
-    matches!(error, Error::Extraction(_))
-}
-
-pub async fn playlists(rp: &RustyPipe) -> Result<(Vec<PlaylistSummary>, Option<More>), Error> {
-    let page = rp.query().saved_playlists().await?;
-    let more = More::of(&page);
-    Ok((page.items.into_iter().map(playlist).collect(), more))
-}
-
-/// A playlist's first page of videos. Private playlists need the session,
-/// which rustypipe adds by itself when one is set.
-/// A playlist's first page of videos and its continuation.
-fn playlist_page(playlist: Playlist) -> (Vec<Video>, Option<More>) {
-    let more = More::of(&playlist.videos);
-    (playlist.videos.items.into_iter().map(video).collect(), more)
-}
-
-/// The watch page's data: metadata, description, chapters, recommended
-/// videos and the comments' continuation token. Works signed in or out.
-/// What YouTube suggests for a search being typed. Signed out: the request
-/// carries no session.
-pub async fn suggestions(rp: &RustyPipe, query: &str) -> Result<Vec<String>, String> {
-    rp.query().search_suggestion(query).await.map_err(text)
-}
-
-pub async fn details(rp: &RustyPipe, id: &str) -> Result<Details, String> {
-    let details = rp.query().video_details(id).await.map_err(text)?;
-    Ok(video_details(details, id))
-}
-
-fn video_details(item: VideoDetails, watching_id: &str) -> Details {
-    Details {
-        id: item.id,
-        title: item.name,
-        channel: Channel {
-            id: item.channel.id,
-            name: item.channel.name,
-            avatar: largest(&item.channel.avatar),
-        },
-        subscribers: item.channel.subscriber_count,
-        views: item.view_count,
-        likes: item.like_count,
-        published: item.publish_date_txt,
-        published_date: item
-            .publish_date
-            .map(|date| iso_date(date.year(), date.month(), date.day())),
-        live: item.is_live,
-        description: item
-            .description
-            .0
-            .iter()
-            .map(|component| span(component, watching_id))
-            .collect(),
-        chapters: item
-            .chapters
-            .into_iter()
-            .map(|chapter| Chapter {
-                name: chapter.name,
-                seconds: chapter.position,
-            })
-            .collect(),
-        related: item.recommended.items.into_iter().map(video).collect(),
-        comments_token: item.top_comments.ctoken,
-        comment_count: item.top_comments.count,
-        visitor_data: item.visitor_data,
-    }
-}
-
-/// A page of comments (or of a comment's replies), and the next page's
-/// token when there is one.
-pub async fn comments(
-    rp: &RustyPipe,
-    ctoken: &str,
-    visitor_data: Option<&str>,
-    watching_id: &str,
-) -> Result<(Vec<CommentRow>, Option<String>), String> {
+pub async fn playlists(rp: &Client) -> Result<(Vec<PlaylistSummary>, Option<More>), Error> {
     let page = rp
-        .query()
-        .video_comments(ctoken, visitor_data)
-        .await
-        .map_err(text)?;
-    Ok((
-        page.items
-            .iter()
-            .map(|item| comment(item, watching_id))
-            .collect(),
-        page.ctoken,
-    ))
-}
-
-fn comment(item: &Comment, watching_id: &str) -> CommentRow {
-    CommentRow {
-        id: item.id.clone(),
-        author: item.author.as_ref().map(|author| author.name.clone()),
-        author_id: item.author.as_ref().map(|author| author.id.clone()),
-        author_avatar: item
-            .author
-            .as_ref()
-            .and_then(|author| at_least(&author.avatar, COMMENT_AVATAR)),
-        text: item
-            .text
-            .0
-            .iter()
-            .map(|component| span(component, watching_id))
-            .collect(),
-        image: at_least(&item.image, 320),
-        published: item.publish_date_txt.clone(),
-        likes: item.like_count,
-        replies: item.reply_count,
-        replies_token: item.replies.ctoken.clone(),
-        pinned: item.pinned,
-        by_owner: item.by_owner,
-        hearted: item.hearted,
+        .post_raw(
+            "browse",
+            &json!({ "browseId": "FEplaylist_aggregation" }),
+            true,
+            None,
+        )
+        .await?;
+    let visitor_data = page
+        .pointer("/responseContext/visitorData")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let (mut list, mut ctoken) = items::collect_playlists_and_ctoken(&page);
+    if list.is_empty()
+        && let Ok(fallback) = rp
+            .post_raw("browse", &json!({ "browseId": "FElibrary" }), true, None)
+            .await
+    {
+        let (fb_list, fb_ctoken) = items::collect_playlists_and_ctoken(&fallback);
+        list = fb_list;
+        ctoken = fb_ctoken;
     }
-}
-
-/// One text component as a span. A link to the video being watched with a
-/// start time is a timestamp that seeks; to another video or a channel it
-/// opens there; anything else is a browser link.
-fn span(component: &TextComponent, watching_id: &str) -> Span {
-    let text = component.get_text().to_owned();
-    match component {
-        TextComponent::Text { .. } => Span::Text(text),
-        TextComponent::Web { url, .. } => Span::Link {
-            text,
-            url: url.clone(),
-        },
-        TextComponent::YouTube { target, .. } => match target {
-            UrlTarget::Video { id, start_time } if id == watching_id => Span::Seek {
-                text,
-                seconds: *start_time,
-            },
-            UrlTarget::Video { id, .. } => Span::Video {
-                text,
-                id: id.clone(),
-            },
-            UrlTarget::Channel { id } => Span::Channel {
-                text,
-                id: id.clone(),
-            },
-            _ => Span::Link {
-                text,
-                url: target.to_url(),
-            },
-        },
-        // A variant this rustypipe version does not know yet.
-        _ => Span::Text(text),
-    }
-}
-
-fn video(item: VideoItem) -> Video {
-    let channel = item.channel.as_ref().map(|channel| channel.name.clone());
-    let channel_avatar = item
-        .channel
-        .as_ref()
-        .and_then(|channel| largest(&channel.avatar));
-    Video {
-        id: item.id,
-        title: item.name,
-        channel,
-        channel_avatar,
-        channel_id: item.channel.map(|channel| channel.id),
-        duration: item.duration.map(f64::from),
-        views: item.view_count,
-        live: item.is_live,
-        published_at: item.publish_date.map(|date| date.unix_timestamp()),
-        published: item.publish_date_txt,
-        short: item.is_short,
-    }
-}
-
-fn rss_videos(feed: ChannelRss) -> Vec<Video> {
-    feed.videos
-        .into_iter()
-        .map(|entry| {
-            let at = entry.publish_date.unix_timestamp();
-            Video {
-                id: entry.id,
-                title: entry.name,
-                channel: Some(feed.name.clone()),
-                channel_avatar: None,
-                channel_id: Some(feed.id.clone()),
-                duration: None,
-                // Zero while a premiere has not started.
-                views: (entry.view_count > 0).then_some(entry.view_count),
-                live: false,
-                published_at: Some(at),
-                published: None,
-                short: false,
-            }
-        })
-        .collect()
-}
-
-fn channel(item: ChannelItem) -> Channel {
-    Channel {
-        avatar: largest(&item.avatar),
-        id: item.id,
-        name: item.name,
-    }
-}
-
-fn playlist(item: PlaylistItem) -> PlaylistSummary {
-    PlaylistSummary {
-        thumbnail: largest(&item.thumbnail),
-        channel: item.channel.map(|channel| channel.name),
-        videos: item.video_count,
-        id: item.id,
-        name: item.name,
-    }
-}
-
-/// The largest of a set of thumbnails, as an absolute URL.
-fn largest(thumbnails: &[Thumbnail]) -> Option<String> {
-    let thumbnail = thumbnails.iter().max_by_key(|thumbnail| thumbnail.width)?;
-    Some(absolute(&thumbnail.url))
-}
-
-/// The width a comment's avatar is fetched at: it is drawn about 36 px
-/// square, and a page shows dozens.
-const COMMENT_AVATAR: u32 = 64;
-
-/// The smallest of a set of thumbnails at least `width` pixels wide (the
-/// largest when none is), as an absolute URL.
-fn at_least(thumbnails: &[Thumbnail], width: u32) -> Option<String> {
-    let thumbnail = thumbnails
-        .iter()
-        .filter(|thumbnail| thumbnail.width >= width)
-        .min_by_key(|thumbnail| thumbnail.width)
-        .or_else(|| thumbnails.iter().max_by_key(|thumbnail| thumbnail.width))?;
-    Some(absolute(&thumbnail.url))
-}
-
-/// YouTube gives some image URLs as `//yt3.ggpht.com/…`.
-fn absolute(url: &str) -> String {
-    if url.starts_with("//") {
-        format!("https:{url}")
-    } else {
-        url.to_owned()
-    }
+    let more = ctoken.map(|ctoken| More {
+        ctoken,
+        endpoint: ContinuationEndpoint::Browse,
+        visitor_data,
+        authenticated: true,
+        ours: false,
+        owner: None,
+    });
+    Ok((list, more))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use youtfast_core::model::Span;
 
     #[test]
     fn a_channel_tab_fills_its_own_videos_but_not_a_collaborators() {
@@ -878,13 +545,8 @@ mod tests {
         let proxy = format!("http://{}", closed.local_addr().unwrap());
         drop(closed);
         let client = reqwest::ClientBuilder::new().proxy(reqwest::Proxy::all(proxy).unwrap());
-        let rp = RustyPipe::builder()
-            .no_storage()
-            .no_reporter()
-            .no_botguard()
-            .build_with_client(client)
-            .unwrap();
-        assert!(rp.query().get_visitor_data(true).await.is_err());
+        let rp = Client::new(client).unwrap();
+        assert!(rp.get_visitor_data().await.is_err());
     }
 
     #[test]
@@ -911,24 +573,16 @@ mod tests {
     #[tokio::test]
     #[ignore = "manual public network check through the platform verifier"]
     async fn youtube_answers_through_the_platform_verifier() {
-        let rp = RustyPipe::builder()
-            .no_storage()
-            .no_reporter()
-            .no_botguard()
-            .build_with_client(http())
-            .unwrap();
-        assert!(
-            !rp.query()
-                .search_suggestion("rust")
-                .await
-                .unwrap()
-                .is_empty()
-        );
+        let rp = Client::new(http()).unwrap();
+        assert!(!suggestions(&rp, "rust").await.unwrap().is_empty());
     }
 
-    /// TextComponent is non_exhaustive, so tests build it from JSON.
-    fn from_json(json: &str) -> TextComponent {
+    fn from_json(json: &str) -> Value {
         serde_json::from_str(json).unwrap()
+    }
+
+    fn span(component: &Value, watching_id: &str) -> Span {
+        watch::span_from_synthetic_component(component, watching_id).unwrap()
     }
 
     #[test]
@@ -996,11 +650,8 @@ mod tests {
 
     #[test]
     fn a_bot_check_is_not_a_dead_session() {
-        use rustypipe::error::Error;
         let status = |code, msg: &str| Error::HttpStatus(code, msg.to_owned().into());
-        assert!(is_signed_out(&Error::Auth(
-            rustypipe::error::AuthError::NoLogin
-        )));
+        assert!(is_signed_out(&Error::Auth(AuthError::NoLogin)));
         assert!(is_signed_out(&status(401, "")));
         // An empty or plainly credential 403 still means the session.
         assert!(is_signed_out(&status(403, "")));
@@ -1028,30 +679,30 @@ mod tests {
 
     #[test]
     fn a_small_avatar_is_the_smallest_wide_enough() {
-        // Thumbnail is non_exhaustive too.
-        let thumbnail = |width: u32| -> Thumbnail {
+        let thumbnail = |width: u32| -> Value {
             serde_json::from_str(&format!(
                 r#"{{"url":"//yt3.ggpht.com/{width}","width":{width},"height":{width}}}"#
             ))
             .unwrap()
         };
-        let set = [thumbnail(176), thumbnail(48), thumbnail(88)];
+        let set = Value::Array(vec![thumbnail(176), thumbnail(48), thumbnail(88)]);
         assert_eq!(
-            at_least(&set, 64).as_deref(),
+            items::at_least_value(Some(&set), 64).as_deref(),
             Some("https://yt3.ggpht.com/88")
         );
         // None wide enough: the largest there is.
-        let small = [thumbnail(32), thumbnail(48)];
+        let small = Value::Array(vec![thumbnail(32), thumbnail(48)]);
         assert_eq!(
-            at_least(&small, 64).as_deref(),
+            items::at_least_value(Some(&small), 64).as_deref(),
             Some("https://yt3.ggpht.com/48")
         );
-        assert_eq!(at_least(&[], 64), None);
+        let empty = Value::Array(vec![]);
+        assert_eq!(items::at_least_value(Some(&empty), 64), None);
     }
 
     #[test]
     fn comment_timestamps_seek_only_within_the_watched_video() {
-        let item: Comment = serde_json::from_value(serde_json::json!({
+        let item = serde_json::json!({
             "id": "synthetic-comment",
             "text": [
                 {"YouTube": {"text": "0:47", "target": {"Video": {
@@ -1069,10 +720,11 @@ mod tests {
             "like_count": 0, "reply_count": 0,
             "replies": {"items": [], "ctoken": null, "count": 0, "endpoint": "browse"},
             "by_owner": false, "pinned": false, "hearted": false
-        }))
-        .unwrap();
+        });
         assert_eq!(
-            comment(&item, "aaaaaaaaaaa").text,
+            watch::parse_legacy_comment(&item, None, "aaaaaaaaaaa")
+                .unwrap()
+                .text,
             [
                 Span::Seek {
                     text: "0:47".into(),
@@ -1100,24 +752,27 @@ mod tests {
             "replies": {"items": [], "ctoken": null, "count": 0, "endpoint": "browse"},
             "by_owner": false, "pinned": false, "hearted": false
         });
-        let old: Comment = serde_json::from_value(json.clone()).unwrap();
-        assert_eq!(comment(&old, "aaaaaaaaaaa").image, None);
+        assert_eq!(
+            watch::parse_legacy_comment(&json, None, "aaaaaaaaaaa")
+                .unwrap()
+                .image,
+            None
+        );
         json["image"] = serde_json::json!([
             {"url": "//example.invalid/large.gif", "width": 1280, "height": 720},
             {"url": "//example.invalid/display.gif", "width": 320, "height": 180},
             {"url": "//example.invalid/tiny.gif", "width": 100, "height": 56}
         ]);
-        let with_image: Comment = serde_json::from_value(json.clone()).unwrap();
-        let mapped = comment(&with_image, "aaaaaaaaaaa");
+        let mapped = watch::parse_legacy_comment(&json, None, "aaaaaaaaaaa").unwrap();
         assert_eq!(mapped.text, [Span::Text("hello".into())]);
         assert_eq!(
             mapped.image.as_deref(),
             Some("https://example.invalid/display.gif")
         );
         json["text"] = serde_json::json!([]);
-        let image_only: Comment = serde_json::from_value(json).unwrap();
-        assert!(comment(&image_only, "aaaaaaaaaaa").text.is_empty());
-        assert!(comment(&image_only, "aaaaaaaaaaa").image.is_some());
+        let image_only = watch::parse_legacy_comment(&json, None, "aaaaaaaaaaa").unwrap();
+        assert!(image_only.text.is_empty());
+        assert!(image_only.image.is_some());
     }
 
     #[test]

@@ -80,8 +80,6 @@ pub fn redact_log(
             "quality set",
             "mpv",
             "reading browser cookies failed",
-            "not writing rustypipe's cache",
-            "could not write rustypipe's cache",
             "could not restrict",
             "the library file was unreadable",
             "the settings file was unreadable",

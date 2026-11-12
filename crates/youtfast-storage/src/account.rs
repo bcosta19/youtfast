@@ -6,8 +6,8 @@
 //! is the one a browser holds: the `.youtube.com` cookies, from a
 //! cookies.txt file or read from the browser through yt-dlp. Those cookies
 //! are the account's session, so they only ever live in the platform
-//! credential store, never in a file and never in the log. rustypipe's
-//! cache is written through [`CacheFile`], which strips them.
+//! credential store, never in a file and never in the log. The InnerTube
+//! client (`youtfast_youtube::innertube`) keeps them in memory only.
 
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -24,8 +24,8 @@ const COOKIE_KEY: &str = "youtube-session";
 const STORE_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// The `Cookie` header value for YouTube from a Netscape cookies.txt:
-/// `.youtube.com` cookies for every path under `/`, as rustypipe and yt-dlp
-/// read them. Lines for other sites are skipped.
+/// `.youtube.com` cookies for every path under `/`, as yt-dlp reads them.
+/// Lines for other sites are skipped.
 pub fn cookie_header(cookies_txt: &str) -> Result<String, String> {
     let mut pairs = Vec::new();
     for line in cookies_txt.lines() {
@@ -685,86 +685,6 @@ pub async fn migrate_legacy_session() -> Result<Option<String>, String> {
     Ok(back)
 }
 
-/// rustypipe's cache file (client versions, the player's deobfuscation
-/// data), with the session taken out: rustypipe keeps the cookies and any
-/// OAuth token in the same JSON, which must not reach the disk.
-pub struct CacheFile {
-    pub path: PathBuf,
-}
-
-impl rustypipe::cache::CacheStorage for CacheFile {
-    fn write(&self, data: &str) {
-        let Some(clean) = without_credentials(data) else {
-            log::warn!("not writing rustypipe's cache: it was not the JSON expected");
-            return;
-        };
-        if let Err(error) = crate::paths::write_atomic(&self.path, clean.as_bytes()) {
-            log::warn!("could not write rustypipe's cache: {error}");
-        }
-    }
-
-    fn read(&self) -> Option<String> {
-        std::fs::read_to_string(&self.path)
-            .ok()
-            .and_then(|data| without_credentials(&data))
-    }
-}
-
-/// Names under which rustypipe keeps a session, dropped wherever they
-/// appear in the cache. rustypipe today puts them at the top; a later
-/// version could nest them, so the strip walks the whole JSON.
-const CREDENTIAL_KEYS: &[&str] = &[
-    "auth_cookie",
-    "oauth_token",
-    "cookie",
-    "cookies",
-    "access_token",
-    "refresh_token",
-    "id_token",
-    "authorization",
-];
-
-/// What a session looks like inside a value: the signed-in cookie names
-/// and a Google access token's `ya29.` prefix. The cache is not written
-/// at all while any remains, under any key.
-const SESSION_MARKERS: &[&str] = &["SAPISID=", "__Secure-3PAPISID=", "ya29."];
-
-/// The cache keeps only the fields it is written for (`clients`,
-/// `deobf`); the session is taken out of what remains, or `None` when
-/// the JSON is not the object expected or still names a session
-/// somewhere (then nothing is written at all).
-fn without_credentials(data: &str) -> Option<String> {
-    let mut cache: serde_json::Map<String, serde_json::Value> = serde_json::from_str(data).ok()?;
-    cache.retain(|key, _| matches!(key.as_str(), "clients" | "deobf"));
-    for value in cache.values_mut() {
-        strip_credentials(value);
-    }
-    let clean = serde_json::to_string(&cache).ok()?;
-    // A session under a name not known here refuses the whole write.
-    if SESSION_MARKERS.iter().any(|marker| clean.contains(marker)) {
-        return None;
-    }
-    Some(clean)
-}
-
-/// Drops every credential-named field of `value`, at any depth.
-fn strip_credentials(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Object(map) => {
-            map.retain(|key, _| !CREDENTIAL_KEYS.contains(&key.as_str()));
-            for nested in map.values_mut() {
-                strip_credentials(nested);
-            }
-        }
-        serde_json::Value::Array(items) => {
-            for nested in items {
-                strip_credentials(nested);
-            }
-        }
-        _ => {}
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1069,41 +989,5 @@ mod tests {
                 .contains("no signed-in")
         );
         assert!(cookie_header("<html>not cookies</html>").is_err());
-    }
-
-    #[test]
-    fn legacy_cache_credentials_cannot_restore_an_unselected_account() {
-        use rustypipe::cache::CacheStorage;
-        let path = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
-            .join("target")
-            .join(format!("legacy-cache-{}.json", std::process::id()));
-        std::fs::write(&path, br#"{"clients":{"desktop":{"version":"2.2026"}},"auth_cookie":"SAPISID=synthetic-secret","oauth_token":{"access_token":"ya29.synthetic-secret"}}"#).unwrap();
-        let clean = CacheFile { path: path.clone() }.read().unwrap();
-        std::fs::remove_file(path).unwrap();
-        let value: serde_json::Value = serde_json::from_str(&clean).unwrap();
-        assert_eq!(value["clients"]["desktop"]["version"], "2.2026");
-        assert!(value["auth_cookie"].is_null() && value["oauth_token"].is_null());
-        assert!(!clean.contains("synthetic-secret"));
-    }
-
-    #[test]
-    fn cache_never_keeps_the_session() {
-        let cache = r#"{"clients": {"desktop": {"version": "2.2026"}},
-                        "auth_cookie": {"cookie": "SAPISID=secret"},
-                        "oauth_token": {"access_token": "ya29.secret"},
-                        "a_field_added_later": {"cookie": "SAPISID=secret2"}}"#;
-        let clean = without_credentials(cache).unwrap();
-        assert!(!clean.contains("secret"));
-        assert!(!clean.contains("SAPISID"));
-        assert!(clean.contains("2.2026"));
-        // A credential nested inside a kept field is stripped too.
-        let nested = r#"{"deobf": {"data": {"code": "x"}, "auth_cookie": "SAPISID=s"}}"#;
-        let clean = without_credentials(nested).unwrap();
-        assert!(!clean.contains("SAPISID"));
-        assert!(clean.contains("code"));
-        // A session under a name not known refuses the whole write.
-        let hidden = r#"{"clients": {"desktop": {"sid": "SAPISID=hidden"}}}"#;
-        assert_eq!(without_credentials(hidden), None);
-        assert_eq!(without_credentials("not json"), None);
     }
 }

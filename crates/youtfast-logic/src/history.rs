@@ -135,14 +135,14 @@ fn date(at: i64) -> Option<jiff::civil::Date> {
         .map(|at| at.to_zoned(jiff::tz::TimeZone::system()).date())
 }
 
-// The request uses RustyPipe's UTC default, independently of the UI's clock.
+// The request uses InnerTube's UTC default, independently of the UI's clock.
 fn account_date(at: i64) -> Option<jiff::civil::Date> {
     jiff::Timestamp::from_second(at)
         .ok()
         .map(|at| at.to_zoned(jiff::tz::TimeZone::UTC).date())
 }
 
-/// RustyPipe's default request language is English. Only these two exact
+/// InnerTube's request language is English. Only these two exact
 /// headings have an unambiguous relative meaning; never parse weekdays or
 /// localized month/date strings as timestamps.
 fn section_date(heading: Option<&str>, now: i64) -> Option<jiff::civil::Date> {

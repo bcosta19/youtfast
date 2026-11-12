@@ -1,20 +1,18 @@
-//! The account's home page: YouTube's own recommendations. rustypipe has
-//! no call for it any more, so the first page goes through its `raw`
-//! request (signed in, as the web client) to `browse` `FEwhat_to_watch`
-//! and is read here; the pages after it are an ordinary `browse`
-//! continuation, which rustypipe reads itself ([`super::more_videos`]).
+//! The account's home page: YouTube's own recommendations. The first page
+//! is a signed-in web-client `browse` of `FEwhat_to_watch`, read here; the
+//! pages after it are an ordinary `browse` continuation
+//! ([`super::more_videos`]).
 
-use rustypipe::client::RustyPipe;
-use rustypipe::model::paginator::ContinuationEndpoint;
 use serde_json::{Value, json};
 
 use super::More;
+use super::client::{Client, ContinuationEndpoint};
 use super::edit::{collect, find, post, text};
 use youtfast_core::model::Video;
 
 /// What YouTube recommends to the account, and the next page. An account
 /// with its history paused gets an empty page, not an error.
-pub async fn recommended(rp: &RustyPipe) -> Result<(Vec<Video>, Option<More>), String> {
+pub async fn recommended(rp: &Client) -> Result<(Vec<Video>, Option<More>), String> {
     let page = post(rp, "browse", &json!({ "browseId": "FEwhat_to_watch" })).await?;
     let (videos, ctoken) = read(&page);
     let more = ctoken.map(|ctoken| More {

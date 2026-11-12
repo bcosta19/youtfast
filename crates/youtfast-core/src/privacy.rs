@@ -33,7 +33,7 @@ pub fn safe_error(error: &str) -> String {
         return error.to_owned();
     }
     let error = error.to_ascii_lowercase();
-    // rustls refused the certificate (see `rustypipe::error`'s reqwest causes).
+    // rustls refused the certificate (see `innertube::Error`'s reqwest causes).
     if error.contains("invalid peer certificate") {
         UNTRUSTED_CERTIFICATE
     } else if error.contains("python-secretstorage") {

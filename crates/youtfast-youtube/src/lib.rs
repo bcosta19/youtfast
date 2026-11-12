@@ -1,5 +1,5 @@
-//! Everything that goes out to the network for a video: InnerTube through
-//! rustypipe, playback extraction through yt-dlp, SponsorBlock, captions
+//! Everything that goes out to the network for a video: InnerTube
+//! (`innertube`), playback extraction through yt-dlp, SponsorBlock, captions
 //! and storyboards, and the thumbnails' disk cache.
 
 pub mod extras;

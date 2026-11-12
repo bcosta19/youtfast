@@ -1,28 +1,25 @@
-//! A playlist in the layout YouTube moved to and rustypipe does not read
-//! yet: its videos as `lockupViewModel`s straight in the page's section,
-//! and the next page behind a `continuationItemViewModel`. Read through
-//! rustypipe's `raw` request (`browse` `VL<id>`), with the session when
-//! there is one (Watch later and liked videos always need it), without
-//! it otherwise.
+//! A playlist's videos as `lockupViewModel`s straight in the page's
+//! section, and the next page behind a `continuationItemViewModel`. Read
+//! through `browse` `VL<id>`, with the session when there is one (Watch
+//! later and liked videos always need it), without it otherwise.
 
-use rustypipe::client::RustyPipe;
-use rustypipe::model::paginator::ContinuationEndpoint;
 use serde_json::{Value, json};
 
+use super::client::{Client, ContinuationEndpoint};
 use super::edit::{collect, post_as, text};
 use super::home::{from_lockup, from_renderer};
 use super::{More, PlaylistDetails};
 use youtfast_core::model::Video;
 
 /// The first page of a playlist's videos and the next page's directions.
-pub async fn videos(rp: &RustyPipe, id: &str) -> Result<(Vec<Video>, Option<More>), String> {
+pub async fn videos(rp: &Client, id: &str) -> Result<(Vec<Video>, Option<More>), String> {
     let (_, videos, more) = page_details(rp, id).await?;
     Ok((videos, more))
 }
 
 /// Metadata and videos from the same response, including YouTube's newer header.
 pub async fn page_details(
-    rp: &RustyPipe,
+    rp: &Client,
     id: &str,
 ) -> Result<(PlaylistDetails, Vec<Video>, Option<More>), String> {
     let body = json!({ "browseId": format!("VL{id}") });
@@ -124,7 +121,7 @@ fn video_count(text: &str) -> Option<u64> {
 }
 
 /// The page after one [`videos`] or this read.
-pub async fn more(rp: &RustyPipe, more: &More) -> Result<(Vec<Video>, Option<More>), String> {
+pub async fn more(rp: &Client, more: &More) -> Result<(Vec<Video>, Option<More>), String> {
     let body = json!({ "continuation": more.ctoken });
     let page = post_as(rp, "browse", &body, more.authenticated).await?;
     Ok(page_of(&page, more.authenticated))
@@ -355,7 +352,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "needs the network"]
     async fn a_public_playlist_reads_from_youtube() {
-        let rp = RustyPipe::builder().no_storage().build().unwrap();
+        let rp = Client::default_client().unwrap();
         let (videos, _) = videos(&rp, "PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI")
             .await
             .unwrap();

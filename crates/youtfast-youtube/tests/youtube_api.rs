@@ -1,14 +1,24 @@
 //! Regression tests for YouTube response formats.
 //!
-//! Each test pins one entry of `docs/youtube-api-format.md` (`YT-n`): the
-//! format YouTube sends now is read or built, and the format it stopped
-//! accepting or sending is not what the code goes back to. They run the
-//! rustypipe fork's own parsing and token code through its
-//! `client::regression` hooks; the JSON below is trimmed from real responses,
-//! with synthetic ids and URLs.
+//! Tests pin entries of `docs/youtube-api-format.md` (`YT-n`) and behaviour
+//! preserved when migrating to the in-tree client. The JSON below is trimmed
+//! from response formats, with synthetic ids and URLs.
 
-use rustypipe::client::regression;
-use rustypipe::param::{ChannelOrder, ChannelVideoTab, Language};
+use serde_json::Value;
+use youtfast_youtube::innertube::{
+    self, ChannelOrder, ChannelVideoTab, channel_header_counts, channel_order_token,
+    channel_tab_params,
+};
+
+fn parse_videos(json: &str) -> Vec<youtfast_core::model::Video> {
+    let val: Value = serde_json::from_str(json).unwrap();
+    innertube::items::collect_videos_and_ctoken(&val).0
+}
+
+fn parse_playlists(json: &str) -> Vec<youtfast_core::model::PlaylistSummary> {
+    let val: Value = serde_json::from_str(json).unwrap();
+    innertube::items::collect_playlists_and_ctoken(&val).0
+}
 
 // ---------------------------------------------------------------------------
 // YT-1: the sort token of a channel tab
@@ -58,7 +68,7 @@ const SORT_CHIP_TOKENS: &[(&str, &str, ChannelVideoTab, ChannelOrder, &str)] = &
 fn yt1_sort_tokens_match_the_chips_youtube_sends() {
     for &(channel, target, tab, order, token) in SORT_CHIP_TOKENS {
         assert_eq!(
-            regression::channel_order_token(channel, tab, order, target),
+            channel_order_token(channel, tab, order, target),
             token,
             "{tab:?} {order:?}"
         );
@@ -168,8 +178,7 @@ fn yt1_sort_tokens_use_the_envelope_not_the_refused_fields() {
         .into_iter()
         .zip(orders)
         {
-            let token =
-                regression::channel_order_token("UCXuqSBlHAE6Xw-yeJA0Tunw", tab, order, target);
+            let token = channel_order_token("UCXuqSBlHAE6Xw-yeJA0Tunw", tab, order, target);
             let message = sort_tab_message(&token, tab_field);
             let numbers: Vec<u32> = message
                 .iter()
@@ -205,7 +214,7 @@ fn yt1_each_order_of_each_tab_has_its_own_token() {
             ChannelOrder::Oldest,
         ]
         .into_iter()
-        .map(|order| regression::channel_order_token("UCx", tab, order, target))
+        .map(|order| channel_order_token("UCx", tab, order, target))
         .collect();
         assert_eq!(tokens.len(), 3, "{tab:?}");
     }
@@ -231,15 +240,13 @@ fn yt2_a_short_with_only_a_thumbnail_view_model_is_kept() {
           }
       } } } }
     ]"#;
-    let (items, warnings) = regression::video_items(json, Language::En).unwrap();
-    assert!(warnings.is_empty(), "{warnings:?}");
+    let items = parse_videos(json);
     assert_eq!(items.len(), 1, "the short was dropped");
     let short = &items[0];
     assert_eq!(short.id, "aaaaaaaaaaa");
-    assert_eq!(short.name, "A short");
-    assert_eq!(short.view_count, Some(63_000_000));
-    assert_eq!(short.thumbnail.len(), 1);
-    assert_eq!(short.thumbnail[0].height, 720);
+    assert_eq!(short.title, "A short");
+    assert_eq!(short.views, Some(63_000_000));
+    assert!(short.short);
 }
 
 #[test]
@@ -253,10 +260,11 @@ fn yt2_a_short_with_the_older_thumbnail_is_still_kept() {
           "overlayMetadata": { "primaryText": { "content": "Another short" } }
       } }
     ]"#;
-    let (items, warnings) = regression::video_items(json, Language::En).unwrap();
-    assert!(warnings.is_empty(), "{warnings:?}");
+    let items = parse_videos(json);
     assert_eq!(items.len(), 1);
-    assert_eq!(items[0].thumbnail[0].width, 1080);
+    assert_eq!(items[0].id, "bbbbbbbbbbb");
+    assert_eq!(items[0].title, "Another short");
+    assert!(items[0].short);
 }
 
 // ---------------------------------------------------------------------------
@@ -264,7 +272,7 @@ fn yt2_a_short_with_the_older_thumbnail_is_still_kept() {
 // ---------------------------------------------------------------------------
 
 fn tab_params(name: &str) -> String {
-    regression::channel_tab_params()
+    channel_tab_params()
         .into_iter()
         .find(|(tab, _)| *tab == name)
         .map(|(_, params)| params)
@@ -334,7 +342,7 @@ fn yt4_a_podcast_is_listed_as_a_playlist() {
             "12 episodes"
         ),
     );
-    let (items, _) = regression::playlist_items(&json, Language::En).unwrap();
+    let items = parse_playlists(&json);
     let names: Vec<&str> = items.iter().map(|item| item.name.as_str()).collect();
     assert_eq!(
         names,
@@ -342,7 +350,7 @@ fn yt4_a_podcast_is_listed_as_a_playlist() {
         "the podcast was dropped"
     );
     assert_eq!(items[1].id, "PLbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-    assert_eq!(items[1].video_count, Some(12));
+    assert_eq!(items[1].videos, Some(12));
 }
 
 // ---------------------------------------------------------------------------
@@ -352,16 +360,17 @@ fn yt4_a_podcast_is_listed_as_a_playlist() {
 #[test]
 fn yt5_a_subscriber_part_with_an_accessibility_label_is_read() {
     // The header since 2026-10: only the subscriber part has two keys.
-    let json = r#"{ "metadataRows": [
+    let json: Value = serde_json::from_str(
+        r#"{ "metadataRows": [
         { "metadataParts": [ { "text": { "content": "@handle" } } ] },
         { "metadataParts": [
             { "text": { "content": "572K subscribers" }, "accessibilityLabel": "572 thousand subscribers" },
             { "text": { "content": "151 videos", "styleRuns": [ { "startIndex": 0, "length": 10 } ] } }
         ] }
-    ] }"#;
-    let (subscribers, videos, warnings) =
-        regression::channel_header_counts(json, Language::En).unwrap();
-    assert!(warnings.is_empty(), "{warnings:?}");
+    ] }"#,
+    )
+    .unwrap();
+    let (subscribers, videos) = channel_header_counts(&json);
     // The regression showed the video count as the subscribers (151).
     assert_eq!(subscribers, Some(572_000));
     assert_eq!(videos, Some(151));
@@ -369,14 +378,17 @@ fn yt5_a_subscriber_part_with_an_accessibility_label_is_read() {
 
 #[test]
 fn yt5_an_abbreviated_video_count_is_not_read_digit_by_digit() {
-    let json = r#"{ "metadataRows": [
+    let json: Value = serde_json::from_str(
+        r#"{ "metadataRows": [
         { "metadataParts": [ { "text": { "content": "@handle" } } ] },
         { "metadataParts": [
             { "text": { "content": "161K subscribers" }, "accessibilityLabel": "161 thousand subscribers" },
             { "text": { "content": "2.2K videos" } }
         ] }
-    ] }"#;
-    let (subscribers, videos, _) = regression::channel_header_counts(json, Language::En).unwrap();
+    ] }"#,
+    )
+    .unwrap();
+    let (subscribers, videos) = channel_header_counts(&json);
     assert_eq!(subscribers, Some(161_000));
     // Read digit by digit, "2.2K" was 22.
     assert_eq!(videos, Some(2_200));
@@ -425,12 +437,15 @@ fn yt6_a_video_lockup_keeps_its_channels_avatar() {
                 { "url": "https://yt3.ggpht.com/avatar=s68", "width": 68, "height": 68 }
             ] } } } } },"#,
     );
-    let (items, warnings) = regression::video_items(&json, Language::En).unwrap();
-    assert!(warnings.is_empty(), "{warnings:?}");
-    let channel = items[0].channel.as_ref().expect("the channel was dropped");
-    assert_eq!(channel.id, "UCaaaaaaaaaaaaaaaaaaaaaa");
+    let items = parse_videos(&json);
+    assert_eq!(items.len(), 1);
     assert_eq!(
-        channel.avatar.first().map(|avatar| avatar.url.as_str()),
+        items[0].channel_id.as_deref(),
+        Some("UCaaaaaaaaaaaaaaaaaaaaaa"),
+        "the channel was dropped"
+    );
+    assert_eq!(
+        items[0].channel_avatar.as_deref(),
         Some("https://yt3.ggpht.com/avatar=s68"),
         "the avatar was dropped"
     );
@@ -440,10 +455,13 @@ fn yt6_a_video_lockup_keeps_its_channels_avatar() {
 fn yt6_a_video_lockup_with_another_image_is_still_read() {
     // An image of another shape leaves the avatar out, not the video.
     let json = video_lockup(r#""image": { "somethingElse": {} },"#);
-    let (items, _) = regression::video_items(&json, Language::En).unwrap();
+    let items = parse_videos(&json);
     assert_eq!(items.len(), 1, "the video was dropped");
-    let channel = items[0].channel.as_ref().unwrap();
-    assert!(channel.avatar.is_empty());
+    assert_eq!(
+        items[0].channel_id.as_deref(),
+        Some("UCaaaaaaaaaaaaaaaaaaaaaa")
+    );
+    assert!(items[0].channel_avatar.is_none());
 }
 
 // ---------------------------------------------------------------------------
@@ -480,30 +498,239 @@ const CHANNEL_TAB_LOCKUP: &str = r#"[{ "richItemRenderer": { "content": { "locku
 fn yt7_a_lone_metadata_row_is_read_as_views_and_age() {
     // Read as the channel's row, it lost views and age, and nothing was left
     // for the second row the code expected.
-    let (items, warnings) = regression::video_items(CHANNEL_TAB_LOCKUP, Language::En).unwrap();
-    assert!(warnings.is_empty(), "{warnings:?}");
+    let items = parse_videos(CHANNEL_TAB_LOCKUP);
+    assert_eq!(items.len(), 1);
     let video = &items[0];
-    assert_eq!(video.view_count, Some(105_000));
-    assert_eq!(video.publish_date_txt.as_deref(), Some("4 hours ago"));
-    assert!(video.publish_date.is_some());
+    assert_eq!(video.views, Some(105_000));
+    assert_eq!(video.published.as_deref(), Some("4 hours ago"));
+    assert!(video.published_at.is_some());
 }
 
 #[test]
 fn yt7_the_length_in_a_bottom_overlay_is_read() {
-    let (items, _) = regression::video_items(CHANNEL_TAB_LOCKUP, Language::En).unwrap();
-    assert_eq!(items[0].duration, Some(19 * 60 + 25));
+    let items = parse_videos(CHANNEL_TAB_LOCKUP);
+    assert_eq!(items[0].duration, Some(f64::from(19 * 60 + 25)));
 }
 
 #[test]
 fn yt7_a_lockup_with_a_channel_row_keeps_every_field() {
     // Home, search and related lists still send the channel's row first.
-    let (items, _) = regression::video_items(&video_lockup(""), Language::En).unwrap();
+    let items = parse_videos(&video_lockup(""));
     let video = &items[0];
     assert_eq!(
-        video.channel.as_ref().map(|channel| channel.id.as_str()),
+        video.channel_id.as_deref(),
         Some("UCaaaaaaaaaaaaaaaaaaaaaa")
     );
-    assert_eq!(video.view_count, Some(1_200));
-    assert_eq!(video.publish_date_txt.as_deref(), Some("2 days ago"));
-    assert_eq!(video.duration, Some(12 * 60 + 34));
+    assert_eq!(video.views, Some(1_200));
+    assert_eq!(video.published.as_deref(), Some("2 days ago"));
+    assert_eq!(video.duration, Some(f64::from(12 * 60 + 34)));
+}
+
+#[test]
+fn comment_button_continuations_keep_replies_and_next_page() {
+    let page = serde_json::json!({
+        "onResponseReceivedEndpoints": [{
+            "appendContinuationItemsAction": { "continuationItems": [
+                { "commentThreadRenderer": {
+                    "comment": { "commentRenderer": {
+                        "commentId": "comment-id",
+                        "contentText": { "simpleText": "A comment" }
+                    } },
+                    "replies": { "commentRepliesRenderer": { "contents": [{
+                        "continuationItemRenderer": { "button": { "buttonRenderer": {
+                            "command": { "continuationCommand": { "token": "replies-next" } }
+                        } } }
+                    }] } }
+                } },
+                { "continuationItemRenderer": { "button": { "buttonRenderer": {
+                    "command": { "continuationCommand": { "token": "comments-next" } }
+                } } } }
+            ] }
+        }]
+    });
+    let (rows, next) = innertube::watch::parse_comments_page(&page, "aaaaaaaaaaa");
+    assert_eq!(rows[0].id, "comment-id");
+    assert_eq!(rows[0].replies_token.as_deref(), Some("replies-next"));
+    assert_eq!(next.as_deref(), Some("comments-next"));
+}
+
+fn modern_comment_surface_page(content: &str) -> Value {
+    serde_json::json!({
+        "onResponseReceivedEndpoints": [{
+            "reloadContinuationItemsCommand": { "continuationItems": [{
+                "commentThreadRenderer": {
+                    "commentViewModel": { "commentViewModel": {
+                        "commentId": "comment-id",
+                        "commentKey": "comment-entity",
+                        "commentSurfaceKey": "surface-entity"
+                    } }
+                }
+            }] }
+        }],
+        "frameworkUpdates": { "entityBatchUpdate": { "mutations": [
+            { "entityKey": "unrelated-surface", "payload": {
+                "commentSurfaceEntityPayload": {
+                    "voiceReplyContainerViewModel": { "voiceReplyContainerViewModel": {
+                        "transcriptText": { "content": "Another comment's transcript" }
+                    } }
+                }
+            } },
+            { "entityKey": "comment-entity", "payload": { "commentEntityPayload": {
+                "properties": { "commentId": "comment-id", "content": { "content": content } }
+            } } },
+            { "entityKey": "surface-entity", "payload": {
+                "commentSurfaceEntityPayload": {
+                    "imageAttachmentViewModel": { "commentImageAttachmentViewModel": {
+                        "image": { "sources": [
+                            { "url": "https://example.com/small.webp", "width": 160 },
+                            { "url": "https://example.com/attachment.webp", "width": 640 }
+                        ] }
+                    } },
+                    "voiceReplyContainerViewModel": { "voiceReplyContainerViewModel": {
+                        "transcriptText": { "content": "A voice transcript" }
+                    } }
+                }
+            } }
+        ] } }
+    })
+}
+
+#[test]
+fn modern_comment_surfaces_keep_images_and_voice_transcripts() {
+    let page = modern_comment_surface_page("");
+    let (rows, _) = innertube::watch::parse_comments_page(&page, "aaaaaaaaaaa");
+    assert_eq!(
+        rows[0].image.as_deref(),
+        Some("https://example.com/attachment.webp")
+    );
+    assert_eq!(
+        rows[0].text,
+        vec![youtfast_core::model::Span::Text(
+            "A voice transcript".into()
+        )]
+    );
+}
+
+#[test]
+fn modern_comment_surface_transcripts_do_not_replace_written_content() {
+    let page = modern_comment_surface_page("Written content");
+    let (rows, _) = innertube::watch::parse_comments_page(&page, "aaaaaaaaaaa");
+    assert_eq!(
+        rows[0].text,
+        vec![youtfast_core::model::Span::Text("Written content".into())]
+    );
+}
+
+#[test]
+fn comment_threads_keep_pinned_priority_in_both_models() {
+    for modern in [false, true] {
+        for pinned in [false, true] {
+            let mut page = modern_comment_surface_page("A comment");
+            let thread = &mut page["onResponseReceivedEndpoints"][0]["reloadContinuationItemsCommand"]
+                ["continuationItems"][0]["commentThreadRenderer"];
+            if !modern {
+                thread.as_object_mut().unwrap().remove("commentViewModel");
+                thread["comment"] = serde_json::json!({ "commentRenderer": {
+                    "commentId": "comment-id",
+                    "contentText": { "simpleText": "A comment" }
+                } });
+            }
+            thread["renderingPriority"] = serde_json::json!(if pinned {
+                "RENDERING_PRIORITY_PINNED_COMMENT"
+            } else {
+                "RENDERING_PRIORITY_UNKNOWN"
+            });
+            let (rows, _) = innertube::watch::parse_comments_page(&page, "aaaaaaaaaaa");
+            assert_eq!(rows[0].pinned, pinned, "modern={modern}, pinned={pinned}");
+        }
+    }
+}
+
+#[test]
+fn shorts_accessibility_counts_keep_spelled_out_multipliers() {
+    for (count, expected) in [
+        ("63 million", 63_000_000),
+        ("1.5 thousand", 1_500),
+        ("2.3 billion", 2_300_000_000),
+        ("1,234", 1_234),
+        ("63M", 63_000_000),
+        ("0", 0),
+    ] {
+        let short = serde_json::json!({ "shortsLockupViewModel": {
+            "entityId": "shorts-shelf-item-aaaaaaaaaaa",
+            "thumbnail": { "sources": [{ "url": "https://example.com/short.webp" }] },
+            "accessibilityText": format!("A short, {count} views - play Short")
+        } });
+        let videos = innertube::items::collect_videos_and_ctoken(&short).0;
+        assert_eq!(videos[0].views, Some(expected), "count={count}");
+    }
+}
+
+#[tokio::test]
+#[ignore = "manual public network check against YouTube"]
+async fn live_public_endpoints_round_trip() {
+    use youtfast_core::model::{ChannelTab, PageItems};
+
+    let rp = innertube::Client::default_client().unwrap();
+
+    // 1. Search (Videos)
+    let (items, more) =
+        innertube::search_filtered(&rp, "rust programming", innertube::SearchOptions::default())
+            .await
+            .expect("live search failed");
+    let PageItems::Videos(videos) = items else {
+        panic!("expected videos");
+    };
+    assert!(!videos.is_empty(), "search returned no videos");
+    assert!(more.is_some(), "search returned no continuation");
+
+    // 2. Channel RSS
+    let rss_videos = innertube::rss::fetch(&rp, "UCYO_jab_esuFRV4b17AJtAw")
+        .await
+        .expect("live RSS fetch failed");
+    assert!(!rss_videos.is_empty(), "RSS returned no videos");
+
+    // 3. Channel Videos tab + Popular sort
+    let (header, tab_videos, tab_more) = innertube::channel_tab(
+        &rp,
+        "UCYO_jab_esuFRV4b17AJtAw",
+        &ChannelTab::Videos,
+        ChannelOrder::Popular,
+    )
+    .await
+    .expect("live channel_tab failed");
+    assert_eq!(header.id, "UCYO_jab_esuFRV4b17AJtAw");
+    assert!(!header.name.is_empty());
+    assert!(header.subscribers.is_some());
+    assert!(!tab_videos.is_empty());
+    assert!(tab_more.is_some());
+
+    // 4. Channel Playlists tab
+    let (_, playlists, _) = innertube::channel_playlists_page(&rp, "UCYO_jab_esuFRV4b17AJtAw")
+        .await
+        .expect("live channel_playlists_page failed");
+    assert!(!playlists.is_empty(), "channel playlists returned empty");
+
+    // 5. Channel About tab
+    let (_, about) = innertube::channel_about(&rp, "UCYO_jab_esuFRV4b17AJtAw", false)
+        .await
+        .expect("live channel_about failed");
+    assert!(!about.description.is_empty());
+
+    // 6. Watch details + Comments
+    let details = innertube::details(&rp, "aircAruvnKk")
+        .await
+        .expect("live details failed");
+    assert!(!details.title.is_empty());
+    assert_eq!(details.channel.id, "UCYO_jab_esuFRV4b17AJtAw");
+    assert!(!details.related.is_empty());
+    let ctoken = details
+        .comments_token
+        .as_deref()
+        .expect("missing comments_token");
+    let (comments, _) =
+        innertube::comments(&rp, ctoken, details.visitor_data.as_deref(), "aircAruvnKk")
+            .await
+            .expect("live comments failed");
+    assert!(!comments.is_empty(), "comments returned empty");
 }

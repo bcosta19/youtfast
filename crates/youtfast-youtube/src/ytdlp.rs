@@ -3,7 +3,7 @@
 //! hook runs yt-dlp for the streams (its answer comes back here through
 //! [`ytdl_loaded`]). When YouTube changes something, updating yt-dlp
 //! fixes YouTFast without a release. Search and everything else go
-//! through rustypipe instead (`src/innertube.rs`).
+//! through InnerTube instead (`src/innertube.rs`).
 
 use std::cmp::Reverse;
 

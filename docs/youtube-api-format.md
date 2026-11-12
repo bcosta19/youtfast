@@ -1,18 +1,20 @@
 # YouTube response formats
 
 YouTFast reads YouTube through InnerTube, the internal JSON API that
-youtube.com itself calls, by way of YouTFast's rustypipe fork
-([bcosta19/rustypipe](https://github.com/bcosta19/rustypipe), branch
-`youtfast`), pinned by `rev` in `Cargo.toml`.
+youtube.com itself calls, implemented in `crates/youtfast-youtube/src/innertube/`.
 InnerTube has no public contract: YouTube changes request parameters and
 response layouts without notice. This file records every such change that broke
 YouTFast, so the next one is recognised quickly and none of them comes back.
 
-Regression tests are named after their entry (`yt<n>_…`).
+Regression tests are named after their entry (`yt<n>_…`) in
 [`crates/youtfast-youtube/tests/youtube_api.rs`](../crates/youtfast-youtube/tests/youtube_api.rs)
-tests the fork's formats; app-owned readers are tested in their module.
+and in the `crates/youtfast-youtube/src/innertube/` modules.
 Parser fixtures cover the current format and any supported older format;
 request routing and live latency are not inferred from parser tests.
+
+The entries below are dated records: the older ones name RustyPipe and its
+fork because that was the implementation then. Today the same readers and
+token builders live in `crates/youtfast-youtube/src/innertube/`.
 
 ## How a format change shows up
 
@@ -20,23 +22,24 @@ request routing and live latency are not inferred from parser tests.
   `BadRequest("Request contains an invalid argument.")`, and the page shows
   "Could not complete the YouTube request".
 - **Silently empty or wrong page.** YouTube accepts the request, but an item no
-  longer fits rustypipe's structs. Lists deserialize through `MapResult`/
-  `VecSkipError`, which skip such an item with only a log warning, so a tab can
-  come back empty ("No playlists"), or a field can take another field's value,
-  with no error. A wrong `params` can also make YouTube answer with another tab
-  than the one asked for.
+  longer fits the readers in `crates/youtfast-youtube/src/innertube/`, which
+  skip it, so a tab can come back empty ("No playlists"), or a field can take
+  another field's value, with no error. Renderers in an item list that no
+  reader recognises are logged (`items::UnrecognisedItems`), with a warning
+  when the page yielded nothing. A wrong `params` can also make YouTube answer
+  with another tab than the one asked for.
 
-rustypipe's own unit tests use recorded responses and keep passing after
-YouTube changes. They also do not run in YouTFast's CI, which builds the fork
-only as a dependency. Only a live request shows a new format.
+Recorded responses keep passing after YouTube changes. Only a live request
+shows a new format: `cargo test -p youtfast-youtube -- --ignored` covers the
+public endpoints.
 
 ## How to investigate
 
-1. Reproduce with the fork outside the app: a scratch crate that depends by
-   path on a checkout of the fork's `youtfast` branch. Call the query (for example
-   `channel_playlists`), and also fetch the raw response with
-   `RustyPipeQuery::raw(ClientType::Desktop, "browse", &body)`. Keep raw
-   responses out of the repository.
+1. Reproduce outside the app with a small test in
+   `crates/youtfast-youtube/tests/youtube_api.rs` (or a unit test next to the
+   reader): call the function that loads the page, and print the raw response
+   of `Client::post_raw` for the same endpoint. Keep raw responses out of the
+   repository.
 2. Compare with what youtube.com sends for the same page. The response itself
    carries most answers:
    - which tab is `selected`;
@@ -44,14 +47,9 @@ only as a dependency. Only a live request shows a new format.
    - the continuation tokens of the sort chips (`chipViewModel.tapCommand`);
    - the keys of each list item.
 3. Continuation tokens and `params` are base64 protobuf: decode them field by
-   field, and compare with what the fork's `src/client/channel.rs` builds.
-4. Fix the fork: commit on its `youtfast` branch, push it, and move `rev` in
-   YouTFast's `Cargo.toml` to that commit (Cargo.lock follows). Add the entry
-   below and its regression test in the same YouTFast PR. If the test needs a
-   code path the hooks do not reach yet, add one to the fork's
-   `src/client/regression.rs`. While working on both, build YouTFast against
-   the local checkout with
-   `cargo --config 'patch.crates-io.rustypipe.path="../rustypipe"' test`.
+   field, and compare with what `src/innertube/channel.rs` builds.
+4. Fix the reader or the token builder in `src/innertube/`, and add the entry
+   below and its regression test in the same PR.
 
 ## Known changes
 
@@ -186,7 +184,7 @@ only as a dependency. Only a live request shows a new format.
   first successful authenticated `browse` (`VLLL` / `VLWL`) supplies the
   videos and continuation in one request. `playlist::more` continues with
   the same authentication; the reader also accepts older first-page rows.
-  Public playlist details retain their rustypipe-first fallback.
+  Public playlist details use the same reader.
 - **Tests:** `yt8_account_playlist_lockups_keep_their_videos_and_authenticated_continuation`
   and `yt8_account_playlists_still_read_older_first_pages` in
   `crates/youtfast-youtube/src/innertube/playlist.rs` use trimmed synthetic
