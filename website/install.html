@@ -236,18 +236,19 @@ sed "s|^Exec=youtfast|Exec=$HOME/.local/bin/youtfast|" packaging/applications/yo
         <span class="recommended" hidden data-en="Recommended for your system" data-pt="Recomendado para o seu sistema">Recommended for your system</span>
       </div>
       <p class="requirement" data-en="For Macs with Apple Silicon (M1 or newer) on macOS 15 or newer; Intel Macs are not supported. You also need Homebrew." data-pt="Para Macs com Apple Silicon (M1 ou mais novo) e macOS 15 ou mais novo; Macs Intel não são suportados. Você também precisa do Homebrew.">For Macs with Apple Silicon (M1 or newer) on macOS 15 or newer; Intel Macs are not supported. You also need Homebrew.</p>
-      <p class="inline-links"><a href="https://brew.sh/">Homebrew ↗</a></p>
+      <p class="inline-links"><a href="https://brew.sh/">Homebrew ↗</a> <a href="https://github.com/bcosta19/homebrew-tap">Homebrew tap ↗</a></p>
       <ol class="steps">
-        <li data-en="Open Terminal and install yt-dlp and Deno:" data-pt="Abra o Terminal e instale o yt-dlp e o Deno:">Open Terminal and install yt-dlp and Deno:</li>
+        <li data-en="Option A (recommended): install YouTFast, yt-dlp and Deno in one command via the personal Homebrew tap:" data-pt="Opção A (recomendada): instale o YouTFast, yt-dlp e Deno em um comando pelo tap pessoal do Homebrew:">Option A (recommended): install YouTFast, yt-dlp and Deno in one command via the personal Homebrew tap:</li>
+      </ol>
+      <pre tabindex="0"><code>brew install --cask bcosta19/tap/youtfast</code></pre>
+      <ol class="steps" start="2">
+        <li data-en="Option B (manual ZIP): install yt-dlp and Deno first, then download YouTFast:" data-pt="Opção B (ZIP manual): instale primeiro o yt-dlp e o Deno e depois baixe o YouTFast:">Option B (manual ZIP): install yt-dlp and Deno first, then download YouTFast:</li>
       </ol>
       <pre tabindex="0"><code>brew install yt-dlp deno</code></pre>
-      <ol class="steps" start="2">
-        <li data-en="Download YouTFast:" data-pt="Baixe o YouTFast:">Download YouTFast:</li>
-      </ol>
       <p><a class="button primary" href="https://github.com/bcosta19/youtfast/releases/download/v{{VERSION}}/youtfast-v{{VERSION}}-aarch64-apple-darwin.zip" data-en="Download for macOS (.zip)" data-pt="Baixar para macOS (.zip)">Download for macOS (.zip)</a></p>
       <ol class="steps" start="3">
         <li data-en="Double-click the ZIP to unpack it, then drag YouTFast.app into Applications." data-pt="Dê dois cliques no ZIP para descompactar e arraste o YouTFast.app para Aplicativos.">Double-click the ZIP to unpack it, then drag YouTFast.app into Applications.</li>
-        <li data-en="Open YouTFast. The first time macOS refuses it, because Apple has not notarized it: click Done, open System Settings → Privacy &amp; Security, click Open Anyway next to the YouTFast message and confirm with your password." data-pt="Abra o YouTFast. Na primeira vez o macOS recusa, porque a Apple não o notarizou: clique em OK, abra Ajustes do Sistema → Privacidade e Segurança, clique em Abrir Mesmo Assim ao lado da mensagem do YouTFast e confirme com a sua senha.">Open YouTFast. The first time macOS refuses it, because Apple has not notarized it: click Done, open System Settings → Privacy &amp; Security, click Open Anyway next to the YouTFast message and confirm with your password.</li>
+        <li data-en="Open YouTFast. With the manual ZIP, macOS refuses it the first time because Apple has not notarized it: click Done, open System Settings → Privacy &amp; Security, click Open Anyway next to the YouTFast message and confirm with your password. (The Homebrew tap clears quarantine automatically.)" data-pt="Abra o YouTFast. Com o ZIP manual, o macOS recusa na primeira vez porque a Apple não o notarizou: clique em OK, abra Ajustes do Sistema → Privacidade e Segurança, clique em Abrir Mesmo Assim ao lado da mensagem do YouTFast e confirme com a sua senha. (O tap do Homebrew limpa a quarentena automaticamente.)">Open YouTFast. With the manual ZIP, macOS refuses it the first time because Apple has not notarized it: click Done, open System Settings → Privacy &amp; Security, click Open Anyway next to the YouTFast message and confirm with your password. (The Homebrew tap clears quarantine automatically.)</li>
       </ol>
       <p class="notice" data-en="To check the download first, run shasum -a 256 on the ZIP in Terminal and compare the result with its line in checksums.txt." data-pt="Para conferir o download antes, execute shasum -a 256 no ZIP pelo Terminal e compare o resultado com a linha dele no checksums.txt.">To check the download first, run shasum -a 256 on the ZIP in Terminal and compare the result with its line in checksums.txt.</p>
       <dl class="install-facts">

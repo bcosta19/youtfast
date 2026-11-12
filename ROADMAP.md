@@ -27,7 +27,7 @@ publishing 0.7.0 or promoting a release to latest:
 | Flathub | Not pursued directly; Linux users install the standalone `.flatpak` bundle directly or via `install.sh` | Optional future decision |
 | Signed pacman / Flatpak repository | Signing-key ownership, repository hosting and update policy | Verified repository install/update |
 | Windows | Publisher signing (Authenticode) and `microsoft/winget-pkgs` PR submission from the generated multi-file manifests (`channels.tar.gz`) | Clean-machine install/update/uninstall, Winget validation, and signature verification |
-| macOS | Developer ID, hardened runtime/notarization, DMG installer, `bcosta19/homebrew-tap` repository setup (`channels.tar.gz`), and Intel/universal support | Clean-machine Gatekeeper/playback tests and `brew install --cask` test |
+| macOS | Developer ID, hardened runtime/notarization, DMG installer, per-release `bcosta19/homebrew-tap` cask sync (`channels.tar.gz`), and Intel/universal support | Clean-machine Gatekeeper/playback tests and `brew install --cask bcosta19/tap/youtfast` verification |
 | Linux ARM64 | Native and Flatpak builds plus GPU validation | Published architecture-specific packages and tested playback |
 
 ## Product follow-ups

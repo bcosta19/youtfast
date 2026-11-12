@@ -10,8 +10,9 @@ no ARM Linux/Windows build and no Intel Mac build.
 Every file comes from the
 [latest GitHub release](https://github.com/bcosta19/youtfast/releases/latest).
 Flathub and the AUR are not used at this time (use the Flatpak bundle or Arch
-package directly instead); Winget and a personal Homebrew tap have prepared
-manifests but are not published in external repositories yet.
+package directly instead). On macOS, a personal Homebrew tap is available at
+`bcosta19/homebrew-tap`; Winget (`microsoft/winget-pkgs`) has prepared
+manifests pending PR acceptance.
 
 ## 1. Find your route
 
@@ -281,6 +282,19 @@ using the portable `.zip`.
 
 You need: a Mac with Apple Silicon (M1 or newer) on macOS 15 or newer, and
 [Homebrew](https://brew.sh/).
+
+### Option A: Homebrew tap — recommended
+
+```sh
+brew install --cask bcosta19/tap/youtfast
+```
+
+The cask installs `YouTFast.app`, links the `youtfast` command, installs
+`yt-dlp` and `deno` automatically, and clears `com.apple.quarantine` on the
+ad-hoc signed app bundle. (Note: update the tap cask alongside new YouTFast
+releases, or use in-app **Settings → About**.)
+
+### Option B: Manual ZIP
 
 1. Install yt-dlp and Deno. In **Terminal**:
 
