@@ -599,7 +599,7 @@ const QUALITY_KEY: &str = "quality";
 /// How many watch pages' details are kept: some 15 to 30 KB each.
 const DETAILS_KEPT: usize = 50;
 /// How long kept details are shown instead of asked for again, in seconds;
-/// views and likes move, and `r` asks again at once.
+/// views and likes move, and Refresh asks again at once.
 const DETAILS_FRESH: i64 = 30 * 60;
 /// How long the volume stays still before it is saved: a drag of the
 /// slider is one save, not one per frame.
@@ -1094,7 +1094,7 @@ impl App {
             }
             Action::Refresh => {
                 self.load(self.state.view, true);
-                // On the watch page, `r` also re-requests the details.
+                // On the watch page, Refresh also re-requests the details.
                 if self.state.view == View::Watch
                     && let Some(video) = self.state.watching.clone()
                 {

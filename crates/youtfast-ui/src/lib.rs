@@ -125,9 +125,9 @@ pub fn show(
 /// The top bar's height.
 const TOP_BAR: f32 = 56.0;
 
-/// The top bar: the back arrow when there is a page to go back to, the
-/// search field centred (Enter searches or opens a link, Esc leaves it),
-/// and the keyboard shortcuts' button at the right.
+/// The top bar: back, forward and refresh, the search field centred (Enter
+/// searches or opens a link, Esc leaves it), and the keyboard shortcuts'
+/// button at the right.
 fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
 
@@ -195,6 +195,16 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                             actions.push(Action::Forward);
                         }
                     });
+                    if widgets::icon_button(
+                        ui,
+                        Icon::Refresh,
+                        18.0,
+                        tr(locale, "Refresh page").as_ref(),
+                    )
+                    .clicked()
+                    {
+                        actions.push(Action::Refresh);
+                    }
                 },
             );
             ui.scope_builder(
@@ -271,7 +281,9 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                     }
                 },
             );
-            let left = bar.left() + if wide { 220.0 } else { 106.0 };
+            // Room for the sidebar, the title when wide, and the three
+            // navigation buttons.
+            let left = bar.left() + if wide { 268.0 } else { 160.0 };
             let right = bar.right() - 156.0;
             let width = (right - left - 36.0).clamp(80.0, 560.0);
             let center = egui::pos2((left + right - 36.0) / 2.0, bar.center().y);
@@ -843,7 +855,7 @@ fn keys_overlay(ctx: &egui::Context, state: &mut State) {
                 ("Ctrl+Tab / Ctrl+Shift+Tab", "Next / previous video tab"),
                 ("Ctrl/Cmd+W", "Close tab"),
                 ("Space", "Play/pause in miniplayer"),
-                ("r", "Refresh page"),
+                ("Ctrl/Cmd+R", "Refresh page"),
                 ("↑ / ↓", "Scroll page"),
                 ("j", "Next item"),
                 ("k", "Previous item"),
@@ -1248,11 +1260,21 @@ mod tests {
         events: Vec<egui::Event>,
         actions: &mut Vec<Action>,
     ) -> egui::FullOutput {
+        top_bar_frame_at(ctx, state, events, actions, 1280.0)
+    }
+
+    fn top_bar_frame_at(
+        ctx: &egui::Context,
+        state: &mut State,
+        events: Vec<egui::Event>,
+        actions: &mut Vec<Action>,
+        width: f32,
+    ) -> egui::FullOutput {
         let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
                     egui::Pos2::ZERO,
-                    vec2(1280.0, 800.0),
+                    vec2(width, 800.0),
                 )),
                 events,
                 ..Default::default()
@@ -1270,8 +1292,19 @@ mod tests {
         button: egui::PointerButton,
         actions: &mut Vec<Action>,
     ) {
+        pointer_click_at(ctx, state, pos, button, actions, 1280.0);
+    }
+
+    fn pointer_click_at(
+        ctx: &egui::Context,
+        state: &mut State,
+        pos: egui::Pos2,
+        button: egui::PointerButton,
+        actions: &mut Vec<Action>,
+        width: f32,
+    ) {
         for pressed in [true, false] {
-            let _ = top_bar_frame(
+            let _ = top_bar_frame_at(
                 ctx,
                 state,
                 vec![
@@ -1284,8 +1317,63 @@ mod tests {
                     },
                 ],
                 actions,
+                width,
             );
         }
+    }
+
+    #[test]
+    fn refresh_button_asks_the_page_to_reload() {
+        // 800 is just above the wide layout's threshold, where the search
+        // field is narrowest and closest to the navigation buttons.
+        for width in [1280.0, 800.0] {
+            let ctx = egui::Context::default();
+            youtfast_appearance::theme::install_fonts(&ctx);
+            let mut state = State::default();
+            let mut actions = Vec::new();
+            let _ = top_bar_frame_at(&ctx, &mut state, Vec::new(), &mut actions, width);
+            pointer_click_at(
+                &ctx,
+                &mut state,
+                egui::pos2(242.0, 28.0),
+                egui::PointerButton::Primary,
+                &mut actions,
+                width,
+            );
+            assert_eq!(
+                actions
+                    .iter()
+                    .filter(|action| matches!(action, Action::Refresh))
+                    .count(),
+                1,
+                "the refresh button should ask for one reload at {width}px"
+            );
+        }
+    }
+
+    #[test]
+    fn refresh_button_stays_clickable_in_a_narrow_window() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let mut state = State::default();
+        let mut actions = Vec::new();
+        let _ = top_bar_frame_at(&ctx, &mut state, Vec::new(), &mut actions, 760.0);
+        pointer_click_at(
+            &ctx,
+            &mut state,
+            egui::pos2(164.0, 28.0),
+            egui::PointerButton::Primary,
+            &mut actions,
+            760.0,
+        );
+        assert_eq!(
+            actions
+                .iter()
+                .filter(|action| matches!(action, Action::Refresh))
+                .count(),
+            1,
+            "the search field must not cover the refresh button"
+        );
     }
 
     #[test]

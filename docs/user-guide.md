@@ -44,6 +44,7 @@ cargo run --locked --release -- "rust egui"                      # or search
 | F, double click | Full screen |
 | /; ? | Focus search; open shortcut help |
 | Alt+← / →; mouse back / forward | Browse back / forward (Alt keys on Linux/Windows) |
+| Ctrl/Cmd+R | Refresh the current page |
 | Esc | Dismiss a menu/help/countdown, leave full screen, or go back |
 
 Text inputs and menus keep their own keys. Focused buttons own Space, and a

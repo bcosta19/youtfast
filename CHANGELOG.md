@@ -8,6 +8,11 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Changed
+
+- The top bar has a refresh button beside Back and Forward, and Refresh is
+  now Ctrl/Cmd+R instead of plain `r`.
+
 ## [0.6.2] - 2026-11-11
 
 ### Fixed
