@@ -28,6 +28,8 @@ FILES = {
     "assets/fonts/NotoSans-Bold.woff2": ROOT / "website/assets/fonts/NotoSans-Bold.woff2",
     "assets/fonts/OFL.txt": ROOT / "website/assets/fonts/OFL.txt",
     "site.js": ROOT / "website/site.js",
+    "install.sh": ROOT / "website/install.sh",
+    "install.ps1": ROOT / "website/install.ps1",
     "assets/player.webp": ROOT / "website/assets/player.webp",
     "assets/youtfast.svg": ROOT / "packaging/icons/youtfast.svg",
     "assets/youtfast-demo.mp4": ROOT / "assets/demo/youtfast-demo.mp4",

@@ -8,13 +8,27 @@ are the distribution record.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-12
+
+### Added
+
+- Per-user Windows graphical NSIS setup installer
+  (`youtfast-v0.7.0-x86_64-windows-setup.exe`) with Start Menu/Desktop
+  shortcuts, Windows Uninstall entry, and optional `winget` installation of
+  missing `yt-dlp` and `Deno`, alongside the portable ZIP.
+- One-command verified installers served at `https://youtfast.pages.dev/install.sh`
+  (Linux Flatpak, Arch `pacman -U`, and native `.tar.gz`) and
+  `https://youtfast.pages.dev/install.ps1` (Windows), checking SHA-256 against
+  `checksums.txt` before installing.
+
 ### Changed
 
+- Redesigned the notifications popup and its empty state (#92).
 - The top bar has a refresh button beside Back and Forward, and Refresh is
-  now Ctrl/Cmd+R instead of plain `r`.
+  now Ctrl/Cmd+R instead of plain `r` (#93).
 - YouTube data, search and the signed-in account now go through an InnerTube
   client developed in this repository (`crates/youtfast-youtube/src/innertube/`)
-  instead of the RustyPipe fork, which is no longer a dependency. Session
+  instead of the RustyPipe fork, which is no longer a dependency (#91). Session
   cookies stay in memory only: no client cache is written to disk any more.
   Playback extraction is unchanged and still uses yt-dlp through mpv.
 - The response-format regression tests (`YT-1`…`YT-8`) now run the in-tree
@@ -22,6 +36,9 @@ are the distribution record.
   the public endpoints live (search, RSS, channel tabs, watch page, comments).
   Unrecognised item renderers are logged so a YouTube layout change is visible
   instead of silently emptying a list.
+- `packaging/channels.py` now renders multi-file `microsoft/winget-pkgs` 1.6.0
+  manifests targeting the per-user NSIS setup installer, alongside the
+  Homebrew Cask for a personal tap.
 
 ### Fixed
 
@@ -408,7 +425,8 @@ macOS Apple Silicon. Interactive Windows/macOS qualification is still pending.
 These exclusions are scope decisions, not completed features promised for a
 specific next version. See [ROADMAP.md](ROADMAP.md) for follow-up gates.
 
-[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/bcosta19/youtfast/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/bcosta19/youtfast/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/bcosta19/youtfast/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/bcosta19/youtfast/compare/v0.5.2...v0.6.0

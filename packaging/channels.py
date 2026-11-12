@@ -51,44 +51,74 @@ def render_flathub(version: str, source_sha256: str, root: Path = ROOT, source_u
     return manifest
 
 
-def render_winget(version: str, windows_sha256: str, installer_url: str | None = None) -> str:
+def render_winget(version: str, windows_sha256: str, installer_url: str | None = None) -> dict[str, str]:
+    """Render microsoft/winget-pkgs multi-file manifest (1.6.0) for the NSIS setup installer."""
     if len(windows_sha256) != 64:
-        raise ValueError("Windows archive SHA-256 must be 64 hex characters")
+        raise ValueError("Windows installer SHA-256 must be 64 hex characters")
     url = installer_url or (
         f"https://github.com/bcosta19/youtfast/releases/download/v{version}/"
-        f"youtfast-v{version}-x86_64-pc-windows-gnu.zip"
+        f"youtfast-v{version}-x86_64-windows-setup.exe"
     )
     upper_sha = windows_sha256.upper()
-    return (
-        "# yaml-language-server: $schema=https://aka.ms/winget-manifest.singleton.1.6.0.schema.json\n"
+    version_yaml = (
+        "# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json\n"
         "PackageIdentifier: bcosta19.YouTFast\n"
         f"PackageVersion: {version}\n"
-        "PackageLocale: en-US\n"
-        "Publisher: bcosta19\n"
-        "PublisherUrl: https://github.com/bcosta19\n"
-        "PackageName: YouTFast\n"
-        "PackageUrl: https://github.com/bcosta19/youtfast\n"
-        "License: GPL-3.0-only\n"
-        f"LicenseUrl: https://github.com/bcosta19/youtfast/blob/v{version}/LICENSE\n"
-        "ShortDescription: Small native YouTube client built with Rust, egui, and libmpv\n"
-        "Commands:\n"
-        "  - youtfast\n"
+        "DefaultLocale: en-US\n"
+        "ManifestType: version\n"
+        "ManifestVersion: 1.6.0\n"
+    )
+    installer_yaml = (
+        "# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json\n"
+        "PackageIdentifier: bcosta19.YouTFast\n"
+        f"PackageVersion: {version}\n"
+        "InstallerType: nullsoft\n"
+        "Scope: user\n"
+        "InstallModes:\n"
+        "  - interactive\n"
+        "  - silent\n"
+        "UpgradeBehavior: install\n"
         "Dependencies:\n"
         "  PackageDependencies:\n"
         "    - PackageIdentifier: yt-dlp.yt-dlp\n"
         "    - PackageIdentifier: DenoLand.Deno\n"
         "Installers:\n"
         "  - Architecture: x64\n"
-        "    InstallerType: zip\n"
-        "    NestedInstallerType: portable\n"
-        "    NestedInstallerFiles:\n"
-        f"      - RelativeFilePath: youtfast-v{version}-x86_64-pc-windows-gnu\\youtfast.exe\n"
-        "        PortableCommandAlias: youtfast\n"
         f"    InstallerUrl: {url}\n"
         f"    InstallerSha256: {upper_sha}\n"
-        "ManifestType: singleton\n"
+        "ManifestType: installer\n"
         "ManifestVersion: 1.6.0\n"
     )
+    locale_yaml = (
+        "# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json\n"
+        "PackageIdentifier: bcosta19.YouTFast\n"
+        f"PackageVersion: {version}\n"
+        "PackageLocale: en-US\n"
+        "Publisher: bcosta19\n"
+        "PublisherUrl: https://github.com/bcosta19\n"
+        "PublisherSupportUrl: https://github.com/bcosta19/youtfast/issues\n"
+        "PackageName: YouTFast\n"
+        "PackageUrl: https://github.com/bcosta19/youtfast\n"
+        "License: GPL-3.0-only\n"
+        f"LicenseUrl: https://github.com/bcosta19/youtfast/blob/v{version}/LICENSE\n"
+        "ShortDescription: Small native YouTube client built with Rust, egui, and libmpv\n"
+        "Description: YouTFast is a native desktop YouTube client built with Rust, egui, and libmpv with local library persistence, privacy guards, and SponsorBlock support.\n"
+        "Moniker: youtfast\n"
+        "Tags:\n"
+        "  - youtube\n"
+        "  - video\n"
+        "  - player\n"
+        "  - mpv\n"
+        "  - rust\n"
+        f"ReleaseNotesUrl: https://github.com/bcosta19/youtfast/releases/tag/v{version}\n"
+        "ManifestType: defaultLocale\n"
+        "ManifestVersion: 1.6.0\n"
+    )
+    return {
+        "bcosta19.YouTFast.yaml": version_yaml,
+        "bcosta19.YouTFast.installer.yaml": installer_yaml,
+        "bcosta19.YouTFast.locale.en-US.yaml": locale_yaml,
+    }
 
 
 def render_homebrew_cask(version: str, macos_sha256: str, archive_url: str | None = None) -> str:
@@ -132,11 +162,11 @@ def render_homebrew_cask(version: str, macos_sha256: str, archive_url: str | Non
 def build_channels(dist: Path, output: Path, root: Path = ROOT) -> Path:
     current = check(root)
     source_archive = dist / f"youtfast-v{current}-source-with-dependencies.tar.gz"
-    windows_archive = dist / f"youtfast-v{current}-x86_64-pc-windows-gnu.zip"
+    windows_setup = dist / f"youtfast-v{current}-x86_64-windows-setup.exe"
     macos_archive = dist / f"youtfast-v{current}-aarch64-apple-darwin.zip"
 
     flathub = render_flathub(current, sha256_file(source_archive), root=root)
-    winget = render_winget(current, sha256_file(windows_archive))
+    winget = render_winget(current, sha256_file(windows_setup))
     cask = render_homebrew_cask(current, sha256_file(macos_archive))
 
     output.mkdir(parents=True, exist_ok=True)
@@ -148,7 +178,8 @@ def build_channels(dist: Path, output: Path, root: Path = ROOT) -> Path:
     homebrew_dir.mkdir(parents=True, exist_ok=True)
 
     (flathub_dir / f"{APP_ID}.json").write_text(json.dumps(flathub, indent=2) + "\n")
-    (winget_dir / f"bcosta19.YouTFast.yaml").write_text(winget)
+    for filename, content in winget.items():
+        (winget_dir / filename).write_text(content)
     (homebrew_dir / "youtfast.rb").write_text(cask)
     return output
 

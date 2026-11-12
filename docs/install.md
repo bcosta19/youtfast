@@ -9,22 +9,26 @@ no ARM Linux/Windows build and no Intel Mac build.
 
 Every file comes from the
 [latest GitHub release](https://github.com/bcosta19/youtfast/releases/latest).
-YouTFast is not yet in Flathub, the AUR, Winget or Homebrew.
+Flathub and the AUR are not used at this time (use the Flatpak bundle or Arch
+package directly instead); Winget and a personal Homebrew tap have prepared
+manifests but are not published in external repositories yet.
 
 ## 1. Find your route
 
 | Your computer | Follow | What you install |
 |---|---|---|
+| Any Linux (quick 1-command installer) | [Linux: Quick installer](#linux-quick-installer) | Picks Arch package or Flatpak bundle automatically and checks SHA-256 |
 | Any Linux with Flatpak (Fedora, Mint, Pop!_OS, elementary, Ubuntu with Flatpak added, Steam Deck…) | [Linux: Flatpak](#linux-flatpak) | One bundle that already contains libmpv, yt-dlp and Deno |
 | Arch Linux, Manjaro, EndeavourOS, CachyOS, Omarchy | [Linux: Arch package](#linux-arch-package) | A pacman package; pacman installs everything else |
 | Ubuntu 24.04+, Debian 13+, Linux Mint 22+ without Flatpak | [Linux: Ubuntu and Debian](#linux-ubuntu-and-debian) | The native archive plus three system steps |
 | Fedora 40+ without Flatpak | [Linux: Fedora](#linux-fedora) | The native archive plus three system steps |
-| Windows 10 or 11 (64-bit) | [Windows](#windows) | A ZIP folder, plus yt-dlp and Deno through Winget |
+| Windows 10 or 11 (64-bit) | [Windows](#windows) | Per-user installer (`.exe`), PowerShell one-liner, or portable `.zip` |
 | Mac with Apple Silicon (M1 or newer), macOS 15+ | [macOS](#macos) | An app, plus yt-dlp and Deno through Homebrew |
 
-Not sure which Linux route? Use **Flatpak**: it needs nothing else from your
-system. To see whether your Linux is new enough for the native archive, run
-`ldd --version`; the first line must end in 2.39 or higher.
+Not sure which Linux route? Run the [Linux quick installer](#linux-quick-installer)
+or install the **Flatpak** bundle: it needs nothing else from your system. To see
+whether your Linux is new enough for the native archive, run `ldd --version`;
+the first line must end in 2.39 or higher.
 
 Native Linux playback additionally requires **libmpv 0.42+ built with Lua**.
 Check your installed libmpv package version (`apt-cache policy libmpv2`,
@@ -33,6 +37,26 @@ below describe the glibc baseline, not a guarantee that their default mpv is
 new enough. If yours is older, upgrade libmpv from a trusted source or use a
 Flatpak release containing mpv 0.42+. Updating YouTFast alone does not
 update a native system's libmpv.
+
+## Linux: Quick installer
+
+The installer script downloads the latest release assets from GitHub, verifies
+the SHA-256 digest against `checksums.txt`, and installs the Arch package (via
+`sudo pacman -U` on Arch-based distributions) or the Flatpak bundle (`--user`
+everywhere else):
+
+```sh
+curl -fsSL https://youtfast.pages.dev/install.sh | sh
+```
+
+You can also choose the method explicitly or remove a Flatpak / user-local
+installation:
+
+```sh
+curl -fsSL https://youtfast.pages.dev/install.sh | sh -s -- --method flatpak
+curl -fsSL https://youtfast.pages.dev/install.sh | sh -s -- --method arch
+curl -fsSL https://youtfast.pages.dev/install.sh | sh -s -- --uninstall
+```
 
 ## Linux: Flatpak
 
@@ -199,8 +223,31 @@ rm ~/.local/bin/youtfast ~/.local/share/applications/youtfast.desktop \
 
 ## Windows
 
-You need: 64-bit Windows 10 or 11, and Winget (App Installer), which recent
-Windows versions include.
+You need: 64-bit Windows 10 or 11. Winget (App Installer), included in recent
+Windows versions, is used if `yt-dlp` or `Deno` are not already installed.
+
+### Option A: Windows installer (.exe) — recommended
+
+1. Download `youtfast-v<version>-x86_64-windows-setup.exe` from the
+   [latest release](https://github.com/bcosta19/youtfast/releases/latest), or
+   run the verified one-command PowerShell installer:
+
+   ```powershell
+   irm https://youtfast.pages.dev/install.ps1 | iex
+   ```
+
+2. When opening the `.exe`, Windows SmartScreen warns about apps without a
+   publisher signature, which YouTFast does not have: choose **More info**, then
+   **Run anyway**. To verify the file first, run
+   `Get-FileHash .\youtfast-v*-x86_64-windows-setup.exe` and compare with
+   `checksums.txt`.
+3. Follow the installer wizard. It installs per-user into
+   `%LOCALAPPDATA%\Programs\YouTFast` (no Administrator prompt), creates Start
+   Menu and Desktop shortcuts, and installs missing `yt-dlp` and `Deno` via
+   `winget` if enabled. Sign out and back in if you had to install `yt-dlp` or
+   `Deno` for the first time.
+
+### Option B: Portable ZIP (.zip)
 
 1. Install yt-dlp and Deno. Open **Terminal** or **PowerShell** and run:
 
@@ -221,15 +268,14 @@ Windows versions include.
 4. Right-click the ZIP, choose **Extract All…**, and pick a lasting place,
    for example `Documents\YouTFast`. Keep every file of the folder together:
    the program needs the DLLs next to it.
-5. Open `youtfast.exe` in the extracted folder. Windows SmartScreen warns
-   about apps without a publisher signature, which YouTFast does not have:
-   choose **More info**, then **Run anyway**.
-6. Optional: right-click `youtfast.exe` → **Show more options** → **Send to**
-   → **Desktop (create shortcut)**, or pin it to Start.
+5. Open `youtfast.exe` in the extracted folder and bypass SmartScreen (**More
+   info** → **Run anyway**).
 
 **Update:** YouTFast updates itself from **Settings → About**. Update yt-dlp
 with `winget upgrade --id yt-dlp.yt-dlp` when videos stop loading.
-**Remove:** delete the extracted folder.
+**Remove:** Use Windows **Settings → Apps → Installed apps → YouTFast** (or run
+`Uninstall.exe`) if installed via `.exe`, or delete the extracted folder if
+using the portable `.zip`.
 
 ## macOS
 

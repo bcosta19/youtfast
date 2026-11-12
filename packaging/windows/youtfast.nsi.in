@@ -1,0 +1,133 @@
+; NSIS installer script template for YouTFast (Windows x86_64, per-user by default).
+Unicode True
+SetCompressor /SOLID lzma
+
+!include "MUI2.nsh"
+!include "LogicLib.nsh"
+!include "x64.nsh"
+
+Name "YouTFast"
+OutFile "@OUT_FILE@"
+InstallDir "$LOCALAPPDATA\Programs\YouTFast"
+InstallDirRegKey HKCU "Software\YouTFast" "InstallDir"
+RequestExecutionLevel user
+ManifestDPIAware true
+ShowInstDetails show
+ShowUnInstDetails show
+
+VIProductVersion "@VI_VERSION@"
+VIAddVersionKey "ProductName" "YouTFast"
+VIAddVersionKey "CompanyName" "bcosta19"
+VIAddVersionKey "FileDescription" "YouTFast native YouTube desktop client"
+VIAddVersionKey "FileVersion" "@VERSION@"
+VIAddVersionKey "ProductVersion" "@VERSION@"
+VIAddVersionKey "LegalCopyright" "GPL-3.0-only"
+
+!define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\YouTFast"
+!define MUI_ABORTWARNING
+!define MUI_ICON "@ICON_FILE@"
+!define MUI_UNICON "@ICON_FILE@"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\youtfast.exe"
+!define MUI_FINISHPAGE_RUN_TEXT "Launch YouTFast"
+
+!insertmacro MUI_PAGE_WELCOME
+!insertmacro MUI_PAGE_LICENSE "@LICENSE_FILE@"
+!insertmacro MUI_PAGE_COMPONENTS
+!insertmacro MUI_PAGE_DIRECTORY
+!insertmacro MUI_PAGE_INSTFILES
+!insertmacro MUI_PAGE_FINISH
+
+!insertmacro MUI_UNPAGE_CONFIRM
+!insertmacro MUI_UNPAGE_INSTFILES
+
+!insertmacro MUI_LANGUAGE "English"
+!insertmacro MUI_LANGUAGE "PortugueseBR"
+
+Function .onInit
+  ${IfNot} ${RunningX64}
+    ${IfNot} ${Silent}
+      MessageBox MB_OK|MB_ICONSTOP "YouTFast requires 64-bit Windows (x86_64)."
+    ${EndIf}
+    Abort
+  ${EndIf}
+FunctionEnd
+
+Section "YouTFast (required)" SecCore
+  SectionIn RO
+  SetOutPath "$INSTDIR"
+
+@INSTALL_FILES@
+
+  WriteUninstaller "$INSTDIR\Uninstall.exe"
+
+  CreateDirectory "$SMPROGRAMS\YouTFast"
+  CreateShortcut "$SMPROGRAMS\YouTFast\YouTFast.lnk" "$INSTDIR\youtfast.exe" "" "$INSTDIR\youtfast.exe" 0
+  CreateShortcut "$SMPROGRAMS\YouTFast\Uninstall YouTFast.lnk" "$INSTDIR\Uninstall.exe" "" "$INSTDIR\Uninstall.exe" 0
+
+  WriteRegStr HKCU "Software\YouTFast" "InstallDir" "$INSTDIR"
+  WriteRegStr HKCU "${UNINST_KEY}" "DisplayName" "YouTFast"
+  WriteRegStr HKCU "${UNINST_KEY}" "DisplayVersion" "@VERSION@"
+  WriteRegStr HKCU "${UNINST_KEY}" "Publisher" "bcosta19"
+  WriteRegStr HKCU "${UNINST_KEY}" "URLInfoAbout" "https://github.com/bcosta19/youtfast"
+  WriteRegStr HKCU "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\youtfast.exe"
+  WriteRegStr HKCU "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
+  WriteRegStr HKCU "${UNINST_KEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
+  WriteRegStr HKCU "${UNINST_KEY}" "QuietUninstallString" '"$INSTDIR\Uninstall.exe" /S'
+  WriteRegDWORD HKCU "${UNINST_KEY}" "NoModify" 1
+  WriteRegDWORD HKCU "${UNINST_KEY}" "NoRepair" 1
+SectionEnd
+
+Section "Desktop shortcut" SecDesktop
+  CreateShortcut "$DESKTOP\YouTFast.lnk" "$INSTDIR\youtfast.exe" "" "$INSTDIR\youtfast.exe" 0
+SectionEnd
+
+Section "Install playback tools (yt-dlp & Deno)" SecDeps
+  ; Silent/winget installs declare yt-dlp and Deno via PackageDependencies;
+  ; avoid invoking winget recursively during a winget transaction.
+  ${IfNot} ${Silent}
+    nsExec::Exec 'cmd.exe /c where /Q winget'
+    Pop $0
+    ${If} $0 == 0
+      nsExec::Exec 'cmd.exe /c where /Q yt-dlp'
+      Pop $0
+      ${If} $0 != 0
+        DetailPrint "Installing yt-dlp via winget..."
+        nsExec::ExecToLog 'winget install -e --id yt-dlp.yt-dlp --accept-source-agreements --accept-package-agreements --silent'
+        Pop $0
+      ${EndIf}
+
+      nsExec::Exec 'cmd.exe /c where /Q deno'
+      Pop $0
+      ${If} $0 != 0
+        DetailPrint "Installing Deno via winget..."
+        nsExec::ExecToLog 'winget install -e --id DenoLand.Deno --accept-source-agreements --accept-package-agreements --silent'
+        Pop $0
+      ${EndIf}
+    ${Else}
+      DetailPrint "winget not found; install yt-dlp and Deno manually if needed."
+    ${EndIf}
+  ${EndIf}
+SectionEnd
+
+!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecCore} "YouTFast application, bundled libmpv runtime DLLs, and licenses."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "Create a YouTFast shortcut on your Desktop."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecDeps} "Install missing yt-dlp and Deno runtime tools using winget."
+!insertmacro MUI_FUNCTION_DESCRIPTION_END
+
+Section "Uninstall"
+  Delete "$DESKTOP\YouTFast.lnk"
+  Delete "$SMPROGRAMS\YouTFast\YouTFast.lnk"
+  Delete "$SMPROGRAMS\YouTFast\Uninstall YouTFast.lnk"
+  RMDir "$SMPROGRAMS\YouTFast"
+
+  Delete "$INSTDIR\Uninstall.exe"
+  Delete "$INSTDIR\*.exe.old-*"
+
+@UNINSTALL_FILES@
+
+  RMDir "$INSTDIR"
+
+  DeleteRegKey HKCU "${UNINST_KEY}"
+  DeleteRegKey HKCU "Software\YouTFast"
+SectionEnd

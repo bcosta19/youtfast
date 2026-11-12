@@ -1,8 +1,10 @@
 # Project website
 
 The site is static HTML/CSS/JavaScript, in English and Brazilian
-Portuguese: the landing page (`index.html`) and the install guide
-(`install.html`, the steps of `docs/install.md`). It has no package installation, external fonts, analytics, embeds
+Portuguese: the landing page (`index.html`), the install guide
+(`install.html`, the steps of `docs/install.md`), and the verified
+one-command installer scripts (`install.sh` for Linux, `install.ps1` for
+Windows). It has no package installation, external fonts, analytics, embeds
 or API calls. Download buttons and commands link directly to the current release assets on GitHub; the build reads the version from `Cargo.toml` and fills the `{{VERSION}}` placeholder in each page.
 
 ## Preview
