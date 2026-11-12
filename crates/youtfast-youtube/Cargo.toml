@@ -1,6 +1,6 @@
 [package]
 name = "youtfast-youtube"
-description = "YouTFast's network: InnerTube through rustypipe, yt-dlp, SponsorBlock, captions, thumbnails"
+description = "YouTFast's network: InnerTube, yt-dlp, SponsorBlock, captions, thumbnails"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 youtfast-core.workspace = true
 youtfast-storage.workspace = true
+base64.workspace = true
 egui.workspace = true
 ehttp.workspace = true
 image.workspace = true
@@ -18,20 +19,16 @@ jiff.workspace = true
 log.workspace = true
 rand.workspace = true
 reqwest.workspace = true
+roxmltree.workspace = true
 rustls.workspace = true
 rustls-platform-verifier.workspace = true
-rustypipe.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha1.workspace = true
 sha2.workspace = true
 tokio.workspace = true
 ureq.workspace = true
 url.workspace = true
-
-[dev-dependencies]
-# The fork's `client::regression` hooks, for the response-format regression
-# tests (tests/youtube_api.rs). Only test builds enable it.
-rustypipe = { workspace = true, features = ["regression"] }
 
 [lints]
 workspace = true

@@ -54,8 +54,8 @@ bottom). Hold the video to temporarily play at 2×; releasing restores the
 previous speed. The player menu also offers repeat, caption size/background,
 copying a timestamped link, and opening the video in a browser.
 
-Search uses RustyPipe directly, with separate video, channel and playlist
-results. Video filters include date, duration, live status and ordering.
+Search uses YouTube's InnerTube interface directly, with separate video,
+channel and playlist results. Video filters include date, duration, live status and ordering.
 Back/forward restores the page, query, filters, selection and scroll position.
 Cards have channel links, a menu and quick Watch later/queue actions. The queue
 can be reordered or trimmed; the mini player is a compact frameless 16:9 video
@@ -87,7 +87,7 @@ only the audio track (`ba/b` and `vid=no`) for the current video, resetting to
 standard video when opening another video or restarting the app.
 
 The watch page also shows the description (timestamps seek), chapters
-and comments, loaded through rustypipe. Comments and replies also display
+and comments, loaded through InnerTube. Comments and replies also display
 image and animated GIF/WebP attachments. Attachments use the bounded thumbnail
 cache, decode in the background and animate only while visible.
 Channel pages have tabs — videos,
@@ -308,8 +308,8 @@ Account changes clear private lists and caches immediately and dismiss open
 menus. Pending writes finish on their originating session before switching,
 and late responses cannot update the new account's interface. A session
 expiration or sign-in failure also discards private responses from the same
-pending batch. Credentials found in an older rustypipe cache are ignored;
-only the selected account's keyring entry can restore its session.
+pending batch. No client cache is written to disk; only the selected
+account's keyring entry can restore its session.
 
 Logs use fixed diagnostic categories rather than account names, video IDs,
 browser profiles, URLs or external error text. This redaction also applies

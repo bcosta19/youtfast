@@ -709,7 +709,7 @@ mod tests {
     fn channel_search_and_playlist_footers_are_reachable_and_clickable_after_long_lists() {
         let more = youtfast_youtube::innertube::More {
             ctoken: "synthetic-next-page".into(),
-            endpoint: rustypipe::model::paginator::ContinuationEndpoint::Browse,
+            endpoint: youtfast_youtube::innertube::ContinuationEndpoint::Browse,
             visitor_data: None,
             authenticated: false,
             ours: false,

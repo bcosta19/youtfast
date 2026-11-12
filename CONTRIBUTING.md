@@ -98,5 +98,5 @@ use that bypass to land failing changes.
 
 New contributions are provided under GPL-3.0-only, the project's license, unless
 explicitly documented otherwise. Retain existing copyright and license notices.
-Vendored RustyPipe and other dependencies keep their own notices and licenses;
+Dependencies keep their own notices and licenses;
 do not replace upstream license files. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

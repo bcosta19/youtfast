@@ -1,0 +1,237 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="920" viewBox="0 0 1400 920" role="img" aria-labelledby="title desc">
+  <title id="title">YouTFast architecture overview</title>
+  <desc id="desc">Architecture diagram of YouTFast native client showing 3 clean tiers: interfaces, core binary runtime, and local durable storage.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#334155" />
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb" />
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#15803d" />
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#dc2626" />
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#d97706" />
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9333ea" />
+    </marker>
+    <style>
+      .canvas { fill: #f8fafc; }
+      .title { font: 700 28px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .subtitle { font: 500 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; }
+      .group-label { font: 700 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; letter-spacing: .04em; text-transform: uppercase; }
+      .box-title { font: 700 16px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .box-crate { font: 600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; fill: #64748b; }
+      .box-text { font: 500 12.5px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
+      .small { font: 600 11px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #64748b; }
+      
+      .client-card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; rx: 14; }
+      .server-box { fill: #f8faff; stroke: #818cf8; stroke-width: 2; rx: 18; }
+      .route-card { fill: #ffffff; stroke: #93c5fd; stroke-width: 1.5; rx: 12; }
+      .auth-card { fill: #fffbeb; stroke: #f59e0b; stroke-width: 1.5; rx: 12; }
+      .player-card { fill: #fef2f2; stroke: #f87171; stroke-width: 1.5; rx: 12; }
+      .writer-card { fill: #f0fdf4; stroke: #4ade80; stroke-width: 1.5; rx: 12; }
+      .reader-card { fill: #f0f9ff; stroke: #38bdf8; stroke-width: 1.5; rx: 12; }
+      .cast-card { fill: #faf5ff; stroke: #c084fc; stroke-width: 1.5; rx: 12; }
+      .store-card { fill: #ffffff; stroke: #64748b; stroke-width: 1.5; rx: 14; }
+
+      .arrow-blue { fill: none; stroke: #2563eb; stroke-width: 2; marker-end: url(#arrow-blue); }
+      .arrow-green { fill: none; stroke: #15803d; stroke-width: 2; marker-end: url(#arrow-green); }
+      .arrow-red { fill: none; stroke: #dc2626; stroke-width: 2; marker-end: url(#arrow-red); }
+      .arrow-purple { fill: none; stroke: #9333ea; stroke-width: 2; marker-end: url(#arrow-purple); }
+      .arrow-amber { fill: none; stroke: #d97706; stroke-width: 2; marker-end: url(#arrow-amber); }
+      .arrow-neutral { fill: none; stroke: #475569; stroke-width: 2; marker-end: url(#arrow); }
+      .arrow-dashed { fill: none; stroke: #94a3b8; stroke-width: 1.5; stroke-dasharray: 6 5; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <!-- BACKGROUND -->
+  <rect class="canvas" x="0" y="0" width="1400" height="920" />
+
+  <!-- HEADER -->
+  <text class="title" x="700" y="46" text-anchor="middle">YouTFast Architecture Overview</text>
+  <text class="subtitle" x="700" y="72" text-anchor="middle">Native Rust client with libmpv playback, in-tree InnerTube API, and secure local persistence.</text>
+
+  <!-- TIER 1: CLIENTS & PLATFORM INTERFACES -->
+  <text class="group-label" x="60" y="110">Tier 1 · Interfaces &amp; External Platforms</text>
+
+  <!-- 1.1 egui UI -->
+  <rect class="client-card" x="60" y="125" width="290" height="115" />
+  <text class="box-title" x="80" y="155">egui Desktop UI</text>
+  <text class="box-crate" x="80" y="172">crates/youtfast-ui</text>
+  <text class="box-text" x="80" y="196">Aspect-aware inline/theater player</text>
+  <text class="box-text" x="80" y="216">Search, channel tabs, and mini player PiP</text>
+
+  <!-- 1.2 Desktop OS -->
+  <rect class="client-card" x="390" y="125" width="290" height="115" />
+  <text class="box-title" x="410" y="155">Desktop &amp; MPRIS</text>
+  <text class="box-crate" x="410" y="172">crates/youtfast-desktop</text>
+  <text class="box-text" x="410" y="196">Single-instance IPC server (URL opening)</text>
+  <text class="box-text" x="410" y="216">Media keys (MPRIS) &amp; SystemFonts worker</text>
+
+  <!-- 1.3 TVs & Cast -->
+  <rect class="client-card" x="720" y="125" width="290" height="115" />
+  <text class="box-title" x="740" y="155">TVs &amp; Cast Devices</text>
+  <text class="box-crate" x="740" y="172">Local Network (LAN / mDNS)</text>
+  <text class="box-text" x="740" y="196">Smart TVs via DIAL (Samsung, LG)</text>
+  <text class="box-text" x="740" y="216">Google Cast &amp; YouTube on TV Lounge</text>
+
+  <!-- 1.4 External Providers -->
+  <rect class="client-card" x="1050" y="125" width="290" height="115" />
+  <text class="box-title" x="1070" y="155">External Providers</text>
+  <text class="box-crate" x="1070" y="172">yt-dlp, SponsorBlock, GitHub</text>
+  <text class="box-text" x="1070" y="196">yt-dlp for signed-out stream extraction</text>
+  <text class="box-text" x="1070" y="216">SponsorBlock skip segments &amp; updater</text>
+
+  <!-- TIER 2: YOUTFAST NATIVE RUNTIME ENCLOSURE -->
+  <rect class="server-box" x="45" y="285" width="1310" height="415" />
+  <text class="group-label" x="65" y="315" fill="#4f46e5">Tier 2 · youtfast: One Native Rust Binary</text>
+
+  <!-- SUB-ROW 1: PRESENTATION & STATE (UI THREAD) -->
+  <text class="small" x="65" y="345">1. Presentation, State &amp; Security (UI Thread)</text>
+
+  <!-- 2.1 Views -->
+  <rect class="route-card" x="60" y="360" width="290" height="110" />
+  <text class="box-title" x="80" y="390">Views &amp; Render Callback</text>
+  <text class="box-crate" x="80" y="407">youtfast-ui &amp; appearance</text>
+  <text class="box-text" x="80" y="430">Injected egui_glow OpenGL blit callback</text>
+  <text class="box-text" x="80" y="450">Theme palettes &amp; rich-text spans</text>
+
+  <!-- 2.2 App State -->
+  <rect class="writer-card" x="390" y="360" width="290" height="110" />
+  <text class="box-title" x="410" y="390">App State &amp; Reducer</text>
+  <text class="box-crate" x="410" y="407">crates/youtfast-app</text>
+  <text class="box-text" x="410" y="430">Central reactive state container &amp; actions</text>
+  <text class="box-text" x="410" y="450">Drops stale generations &amp; session epochs</text>
+
+  <!-- 2.3 Domain Logic -->
+  <rect class="reader-card" x="720" y="360" width="290" height="110" />
+  <text class="box-title" x="740" y="390">Pure Domain Logic</text>
+  <text class="box-crate" x="740" y="407">youtfast-logic &amp; core</text>
+  <text class="box-text" x="740" y="430">Local recommendations &amp; history merge</text>
+  <text class="box-text" x="740" y="450">Pure functions without IO or side-effects</text>
+
+  <!-- 2.4 Auth & Security -->
+  <rect class="auth-card" x="1050" y="360" width="290" height="110" />
+  <text class="box-title" x="1070" y="390">Account &amp; Keyring Gate</text>
+  <text class="box-crate" x="1070" y="407">youtfast-storage::account</text>
+  <text class="box-text" x="1070" y="430">Session cookies kept in memory only</text>
+  <text class="box-text" x="1070" y="450">Atomic private event batch invalidation</text>
+
+  <!-- SUB-ROW 2: EXECUTION ENGINES & NETWORK (BACKGROUND THREADS) -->
+  <text class="small" x="65" y="520">2. Execution Engines, Async Runtime &amp; Network (Background Threads)</text>
+
+  <!-- 2.5 Playback Engine -->
+  <rect class="player-card" x="60" y="535" width="290" height="115" />
+  <text class="box-title" x="80" y="565">Video Engine (libmpv)</text>
+  <text class="box-crate" x="80" y="582">crates/youtfast-mpv</text>
+  <text class="box-text" x="80" y="605">Only crate with unsafe FFI code</text>
+  <text class="box-text" x="80" y="625">HW decoding &amp; OpenGL FBO render target</text>
+
+  <!-- 2.6 Backend Tokio -->
+  <rect class="writer-card" x="390" y="535" width="290" height="115" />
+  <text class="box-title" x="410" y="565">Backend Runtime (Tokio)</text>
+  <text class="box-crate" x="410" y="582">crates/youtfast-backend</text>
+  <text class="box-text" x="410" y="605">Multithreaded async runtime thread</text>
+  <text class="box-text" x="410" y="625">SaveGate serializes atomic disk writes</text>
+
+  <!-- 2.7 InnerTube Client -->
+  <rect class="reader-card" x="720" y="535" width="290" height="115" />
+  <text class="box-title" x="740" y="565">YouTube API (InnerTube)</text>
+  <text class="box-crate" x="740" y="582">crates/youtfast-youtube</text>
+  <text class="box-text" x="740" y="605">In-tree client (zero RustyPipe dependency)</text>
+  <text class="box-text" x="740" y="625">Search, channel tabs, watch &amp; Atom feeds</text>
+
+  <!-- 2.8 Casting Worker -->
+  <rect class="cast-card" x="1050" y="535" width="290" height="115" />
+  <text class="box-title" x="1070" y="565">Casting Worker</text>
+  <text class="box-crate" x="1070" y="582">crates/youtfast-cast</text>
+  <text class="box-text" x="1070" y="605">Lazy serialized worker off the UI thread</text>
+  <text class="box-text" x="1070" y="625">DIAL discovery &amp; YouTube Lounge transport</text>
+
+  <!-- TIER 3: DURABLE STATE -->
+  <text class="group-label" x="60" y="740">Tier 3 · Local Durable State &amp; Encrypted Keyring</text>
+
+  <!-- 3.1 Library -->
+  <rect class="store-card" x="60" y="755" width="290" height="115" />
+  <text class="box-title" x="80" y="785">Local Library</text>
+  <text class="box-crate" x="80" y="802">library.json</text>
+  <text class="box-text" x="80" y="825">Device subscriptions, history &amp; positions</text>
+  <text class="box-text" x="80" y="845">Atomic write with pre-write backup guard</text>
+
+  <!-- 3.2 Settings -->
+  <rect class="store-card" x="390" y="755" width="290" height="115" />
+  <text class="box-title" x="410" y="785">Settings</text>
+  <text class="box-crate" x="410" y="802">settings.json</text>
+  <text class="box-text" x="410" y="825">Buffer budget &amp; video quality profile</text>
+  <text class="box-text" x="410" y="845">Backward compatibility via serde(default)</text>
+
+  <!-- 3.3 Cache -->
+  <rect class="store-card" x="720" y="755" width="290" height="115" />
+  <text class="box-title" x="740" y="785">Thumbnail Cache</text>
+  <text class="box-crate" x="740" y="802">thumbs/ (LRU Bounded)</text>
+  <text class="box-text" x="740" y="825">Strict limit of 2,000 image files</text>
+  <text class="box-text" x="740" y="845">Maximum disk capacity of 128 MiB</text>
+
+  <!-- 3.4 Keyring -->
+  <rect class="store-card" x="1050" y="755" width="290" height="115" />
+  <text class="box-title" x="1070" y="785">Platform Keyring</text>
+  <text class="box-crate" x="1070" y="802">Secret Service / Credential Mgr</text>
+  <text class="box-text" x="1070" y="825">Encrypted secret: youtube-session-&lt;id&gt;</text>
+  <text class="box-text" x="1070" y="845">Zero credential tokens saved to disk files</text>
+
+  <!-- VERTICAL NON-CROSSING ARROWS -->
+  <!-- Column 1: UI -> Views & libmpv -> Library -->
+  <path class="arrow-blue" d="M 205 240 L 205 360" />
+  <text class="small" x="215" y="305">UI Actions</text>
+
+  <path class="arrow-red" d="M 180 535 L 180 470" />
+  <text class="small" x="80" y="505">OpenGL FBO blit</text>
+
+  <path class="arrow-green" d="M 205 650 L 205 755" />
+  <text class="small" x="215" y="710">SaveGate atomic write</text>
+
+  <!-- Column 2: Desktop -> App State -> Tokio Backend -> Settings -->
+  <path class="arrow-blue" d="M 535 240 L 535 360" />
+  <text class="small" x="545" y="305">IPC / Media keys</text>
+
+  <path class="arrow-green" d="M 535 470 L 535 535" />
+  <text class="small" x="545" y="505">Commands / Events with epoch</text>
+
+  <path class="arrow-green" d="M 535 650 L 535 755" />
+  <text class="small" x="545" y="710">SaveGate atomic write</text>
+
+  <!-- Column 3: Cast -> InnerTube -> Cache -->
+  <path class="arrow-purple" d="M 865 535 C 865 400 865 320 865 240" />
+  <text class="small" x="875" y="280">LAN TV casting</text>
+
+  <path class="arrow-blue" d="M 865 650 L 865 755" />
+  <text class="small" x="875" y="710">Bounded LRU cache</text>
+
+  <!-- Column 4: Providers -> Auth -> Keyring -->
+  <path class="arrow-amber" d="M 1195 470 L 1195 755" />
+  <text class="small" x="1205" y="710">Platform secret store</text>
+
+  <!-- HORIZONTAL CONNECTIONS (NO CROSSING) -->
+  <!-- Row 1 Internal -->
+  <path class="arrow-neutral" d="M 350 415 L 390 415" />
+  <path class="arrow-neutral" d="M 680 415 L 720 415" />
+  <path class="arrow-neutral" d="M 1010 415 L 1050 415" />
+
+  <!-- Row 2 Internal -->
+  <path class="arrow-neutral" d="M 350 590 L 390 590" />
+  <path class="arrow-neutral" d="M 680 590 L 720 590" />
+  <path class="arrow-neutral" d="M 1010 590 L 1050 590" />
+
+  <!-- External Hooks (Perimeter dashed line) -->
+  <path class="arrow-dashed" d="M 1195 240 C 1195 380 1280 480 1280 535" />
+  <text class="small" x="1220" y="270">yt-dlp hook / Updates</text>
+
+  <!-- LEGEND -->
+  <text class="small" x="60" y="895">Structured column-aligned vertical pipelines with direct horizontal messaging between adjacent modules (no crossing lines).</text>
+</svg>

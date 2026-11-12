@@ -1,18 +1,17 @@
 //! What the app changes on the account: a video's rating and the
-//! playlists that hold it. rustypipe reads the account but has no write
-//! calls, so these go through its `raw` request (signed in, as the web
+//! playlists that hold it. These are writes (signed in, as the web
 //! client) to YouTube's own endpoints, and read back only the fields they
 //! need.
 
-use rustypipe::client::{ClientType, RustyPipe};
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use super::client::Client;
 use youtfast_core::model::{Rating, SaveTarget};
 
 /// Sends `body` to an InnerTube endpoint as the signed-in web client.
 pub(super) async fn post(
-    rp: &RustyPipe,
+    rp: &Client,
     endpoint: &str,
     body: &impl Serialize,
 ) -> Result<Value, String> {
@@ -21,31 +20,24 @@ pub(super) async fn post(
 
 /// [`post`], signed in or not: a public list needs no session.
 pub(super) async fn post_as(
-    rp: &RustyPipe,
+    rp: &Client,
     endpoint: &str,
     body: &impl Serialize,
     authenticated: bool,
 ) -> Result<Value, String> {
-    let query = if authenticated {
-        rp.query().authenticated()
-    } else {
-        rp.query()
-    };
-    let text = query
-        .raw(ClientType::Desktop, endpoint, body)
+    rp.post_raw(endpoint, body, authenticated, None)
         .await
-        .map_err(|error| error.to_string())?;
-    serde_json::from_str(&text).map_err(|error| format!("YouTube's answer was unreadable: {error}"))
+        .map_err(|error| error.to_string())
 }
 
 /// The account's rating of a video, from the watch page's data.
-pub async fn rating(rp: &RustyPipe, id: &str) -> Result<Rating, String> {
+pub async fn rating(rp: &Client, id: &str) -> Result<Rating, String> {
     let page = post(rp, "next", &json!({ "videoId": id })).await?;
     Ok(rating_in(&page))
 }
 
 /// Likes, dislikes, or clears the account's rating of a video.
-pub async fn rate(rp: &RustyPipe, id: &str, rating: Rating) -> Result<(), String> {
+pub async fn rate(rp: &Client, id: &str, rating: Rating) -> Result<(), String> {
     let endpoint = match rating {
         Rating::Like => "like/like",
         Rating::Dislike => "like/dislike",
@@ -58,7 +50,7 @@ pub async fn rate(rp: &RustyPipe, id: &str, rating: Rating) -> Result<(), String
 
 /// The account's playlists, Watch later first, each with whether it holds
 /// the video: what YouTube's own save menu lists.
-pub async fn save_targets(rp: &RustyPipe, id: &str) -> Result<Vec<SaveTarget>, String> {
+pub async fn save_targets(rp: &Client, id: &str) -> Result<Vec<SaveTarget>, String> {
     let body = json!({ "videoIds": [id], "excludeWatchLater": false });
     let answer = post(rp, "playlist/get_add_to_playlist", &body).await?;
     let targets = save_targets_in(&answer);
@@ -69,12 +61,7 @@ pub async fn save_targets(rp: &RustyPipe, id: &str) -> Result<Vec<SaveTarget>, S
 }
 
 /// Adds the video to one of the account's playlists, or takes it out.
-pub async fn set_saved(
-    rp: &RustyPipe,
-    id: &str,
-    playlist: &str,
-    saved: bool,
-) -> Result<(), String> {
+pub async fn set_saved(rp: &Client, id: &str, playlist: &str, saved: bool) -> Result<(), String> {
     let action = if saved {
         json!({ "action": "ACTION_ADD_VIDEO", "addedVideoId": id })
     } else {
@@ -158,6 +145,29 @@ pub(super) fn collect<'a>(value: &'a Value, visit: &mut impl FnMut(&'a Value)) {
         Value::Array(items) => items.iter().for_each(|child| collect(child, visit)),
         _ => {}
     }
+}
+
+/// Like [`collect`], but `listed` tells the visitor whether the value is a
+/// direct entry of a YouTube item list (`contents`, `items`,
+/// `continuationItems`): an unrecognised renderer there is a dropped item,
+/// not just another field of the response.
+pub(super) fn collect_listed<'a>(value: &'a Value, visit: &mut impl FnMut(&'a Value, bool)) {
+    fn walk<'a>(value: &'a Value, listed: bool, visit: &mut impl FnMut(&'a Value, bool)) {
+        match value {
+            Value::Object(map) => {
+                visit(value, listed);
+                for (key, child) in map {
+                    let item_list =
+                        matches!(key.as_str(), "contents" | "items" | "continuationItems")
+                            && child.is_array();
+                    walk(child, item_list, visit);
+                }
+            }
+            Value::Array(items) => items.iter().for_each(|child| walk(child, listed, visit)),
+            _ => {}
+        }
+    }
+    walk(value, false, visit);
 }
 
 #[cfg(test)]

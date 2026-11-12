@@ -15,7 +15,7 @@ PUBLIC_FILES = [
     "SECURITY.md", "CODE_OF_CONDUCT.md", "AGENTS.md", "LICENSE", "THIRD_PARTY_NOTICES.md",
     "docs/actions.md", "docs/distribution.md", "docs/install.md", "docs/user-guide.md",
     "docs/ARCHITECTURE.md",
-    "packaging/arch/README.md", "assets/icons/LICENSE.txt", "assets/licenses/rustypipe/LICENSE",
+    "packaging/arch/README.md", "assets/icons/LICENSE.txt",
     "packaging/icons/youtfast.svg", "assets/screenshots/search.png",
 ]
 

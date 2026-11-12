@@ -245,7 +245,7 @@ mod tests {
         let sensitive = "video123456 private-account browser:private-profile https://youtube.com/watch?v=video123456 Cookie: SAPISID=synthetic-secret imported-title";
         for target in [
             "mpv",
-            "rustypipe::client",
+            "youtfast_youtube::innertube::client",
             "reqwest",
             "youtfast::backend",
             "youtfast::app::watch",
@@ -307,7 +307,7 @@ mod tests {
     #[test]
     fn startup_and_certificate_messages_are_kept_and_translated() {
         assert_eq!(safe_error(UNTRUSTED_CERTIFICATE), UNTRUSTED_CERTIFICATE);
-        // rustypipe's message for a reqwest error, causes included.
+        // The InnerTube client's message for a reqwest error, causes included.
         assert_eq!(
             safe_error(
                 "http error: error sending request for url (https://www.youtube.com/youtubei/v1/search?prettyPrint=false): client error (Connect): invalid peer certificate: UnknownIssuer"

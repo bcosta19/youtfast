@@ -1,10 +1,14 @@
-//! Search and discovery choices owned by the app, independent of RustyPipe.
+//! Search and discovery choices owned by the app.
 
-use rustypipe::client::RustyPipe;
-use rustypipe::model::{ChannelItem, PlaylistItem, VideoItem, richtext::ToPlaintext};
-use rustypipe::param::search_filter::{Feature, ItemType, Length, Order, SearchFilter, UploadDate};
+use serde_json::{Value, json};
 
-use super::{More, channel, largest, playlist, text, video};
+use super::More;
+use super::client::{
+    Client, ContinuationEndpoint, base64_urlencoded, proto_bytes, proto_varint, urlencoded,
+};
+use super::items::{
+    collect_channels_and_ctoken, collect_playlists_and_ctoken, collect_videos_and_ctoken,
+};
 use youtfast_core::model::PageItems;
 
 macro_rules! choices {
@@ -40,87 +44,135 @@ pub struct SearchOptions {
 }
 
 impl SearchOptions {
+    /// Encodes the search filter as YouTube's `params` (`sp`) protobuf.
     /// Video-only choices never leak into a channel or playlist request.
-    fn filter(self) -> SearchFilter {
-        let filter = SearchFilter::new().item_type(match self.kind {
-            SearchKind::Videos => ItemType::Video,
-            SearchKind::Channels => ItemType::Channel,
-            SearchKind::Playlists => ItemType::Playlist,
-        });
-        if self.kind != SearchKind::Videos {
-            return filter;
-        }
-        let filter = filter
-            .sort_opt(match self.order {
-                SearchOrder::Relevance => None,
-                SearchOrder::Date => Some(Order::Date),
-                SearchOrder::Views => Some(Order::Views),
-                SearchOrder::Rating => Some(Order::Rating),
-            })
-            .date_opt(match self.date {
+    pub fn params(self) -> Option<String> {
+        let mut filter = Vec::new();
+        if self.kind == SearchKind::Videos {
+            let date = match self.date {
                 SearchDate::Any => None,
-                SearchDate::Hour => Some(UploadDate::Hour),
-                SearchDate::Day => Some(UploadDate::Day),
-                SearchDate::Week => Some(UploadDate::Week),
-                SearchDate::Month => Some(UploadDate::Month),
-                SearchDate::Year => Some(UploadDate::Year),
-            })
-            .length_opt(match self.length {
-                SearchLength::Any => None,
-                SearchLength::Short => Some(Length::Short),
-                SearchLength::Medium => Some(Length::Medium),
-                SearchLength::Long => Some(Length::Long),
-            });
-        if self.live {
-            filter.feature(Feature::IsLive)
-        } else {
-            filter
+                SearchDate::Hour => Some(1),
+                SearchDate::Day => Some(2),
+                SearchDate::Week => Some(3),
+                SearchDate::Month => Some(4),
+                SearchDate::Year => Some(5),
+            };
+            if let Some(d) = date {
+                proto_varint(1, d, &mut filter);
+            }
         }
+        let item_type = match self.kind {
+            SearchKind::Videos => 1,
+            SearchKind::Channels => 2,
+            SearchKind::Playlists => 3,
+        };
+        proto_varint(2, item_type, &mut filter);
+
+        if self.kind == SearchKind::Videos {
+            let length = match self.length {
+                SearchLength::Any => None,
+                SearchLength::Short => Some(1),
+                SearchLength::Medium => Some(3),
+                SearchLength::Long => Some(2),
+            };
+            if let Some(l) = length {
+                proto_varint(3, l, &mut filter);
+            }
+            if self.live {
+                proto_varint(8, 1, &mut filter);
+            }
+        }
+
+        let mut root = Vec::new();
+        if self.kind == SearchKind::Videos {
+            let sort = match self.order {
+                SearchOrder::Relevance => None,
+                SearchOrder::Date => Some(2),
+                SearchOrder::Views => Some(3),
+                SearchOrder::Rating => Some(1),
+            };
+            if let Some(s) = sort {
+                proto_varint(1, s, &mut root);
+            }
+        }
+        proto_bytes(2, &filter, &mut root);
+        Some(base64_urlencoded(&root))
     }
 }
 
 pub async fn search_filtered(
-    rp: &RustyPipe,
+    rp: &Client,
     query: &str,
     options: SearchOptions,
 ) -> Result<(PageItems, Option<More>), String> {
-    let filter = options.filter();
-    let request = rp.query();
+    let mut body = json!({ "query": query });
+    if let Some(params) = options.params() {
+        body["params"] = Value::String(params);
+    }
+    let page = rp
+        .post_raw("search", &body, false, None)
+        .await
+        .map_err(super::text)?;
+    let visitor_data = page
+        .pointer("/responseContext/visitorData")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let make_more = |ctoken: Option<String>| {
+        ctoken.map(|ctoken| More {
+            ctoken,
+            endpoint: ContinuationEndpoint::Search,
+            visitor_data: visitor_data.clone(),
+            authenticated: false,
+            ours: false,
+            owner: None,
+        })
+    };
     Ok(match options.kind {
         SearchKind::Videos => {
-            let page = request
-                .search_filter::<VideoItem, _>(query, &filter)
-                .await
-                .map_err(text)?;
-            let more = More::of(&page.items);
-            (
-                PageItems::Videos(page.items.items.into_iter().map(video).collect()),
-                more,
-            )
+            let (videos, ctoken) = collect_videos_and_ctoken(&page);
+            (PageItems::Videos(videos), make_more(ctoken))
         }
         SearchKind::Channels => {
-            let page = request
-                .search_filter::<ChannelItem, _>(query, &filter)
-                .await
-                .map_err(text)?;
-            let more = More::of(&page.items);
-            (
-                PageItems::Channels(page.items.items.into_iter().map(channel).collect()),
-                more,
-            )
+            let (channels, ctoken) = collect_channels_and_ctoken(&page);
+            (PageItems::Channels(channels), make_more(ctoken))
         }
         SearchKind::Playlists => {
-            let page = request
-                .search_filter::<PlaylistItem, _>(query, &filter)
-                .await
-                .map_err(text)?;
-            let more = More::of(&page.items);
-            (
-                PageItems::Playlists(page.items.items.into_iter().map(playlist).collect()),
-                more,
-            )
+            let (playlists, ctoken) = collect_playlists_and_ctoken(&page);
+            (PageItems::Playlists(playlists), make_more(ctoken))
         }
     })
+}
+
+/// Fetches search suggestions from YouTube's autocomplete endpoint, signed out.
+pub async fn suggestions(rp: &Client, query: &str) -> Result<Vec<String>, String> {
+    let url = format!(
+        "https://clients1.google.com/complete/search?client=firefox&ds=yt&hl=en&q={}",
+        urlencoded(query)
+    );
+    let text = rp.get_text(&url).await.map_err(super::text)?;
+    Ok(parse_suggestions(&text))
+}
+
+fn parse_suggestions(raw: &str) -> Vec<String> {
+    let trimmed = raw.trim();
+    let json_str = trimmed
+        .strip_prefix("window.google.ac.h(")
+        .and_then(|s| s.strip_suffix(')'))
+        .unwrap_or(trimmed);
+    let Ok(val) = serde_json::from_str::<Value>(json_str) else {
+        return Vec::new();
+    };
+    let Some(items) = val.get(1).and_then(Value::as_array) else {
+        return Vec::new();
+    };
+    items
+        .iter()
+        .filter_map(|item| {
+            item.as_str()
+                .or_else(|| item.get(0).and_then(Value::as_str))
+                .map(str::to_owned)
+        })
+        .collect()
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -133,7 +185,7 @@ pub struct PlaylistDetails {
 }
 
 pub async fn playlist_details(
-    rp: &RustyPipe,
+    rp: &Client,
     id: &str,
 ) -> Result<
     (
@@ -143,33 +195,38 @@ pub async fn playlist_details(
     ),
     String,
 > {
-    match rp.query().playlist(id).await {
-        Ok(page) => {
-            let details = PlaylistDetails {
-                name: page.name.clone(),
-                thumbnail: largest(&page.thumbnail),
-                channel: page.channel.as_ref().map(|channel| channel.name.clone()),
-                description: page
-                    .description
-                    .as_ref()
-                    .map(ToPlaintext::to_plaintext)
-                    .unwrap_or_default(),
-                videos: Some(page.video_count),
-            };
-            let (videos, more) = super::playlist_page(page);
-            Ok((details, videos, more))
-        }
-        Err(error) if super::newer_layout(&error) => super::playlist::page_details(rp, id).await,
-        Err(error) => Err(text(error)),
-    }
+    super::playlist::page_details(rp, id).await
 }
 
-impl From<ChannelOrder> for rustypipe::param::ChannelOrder {
-    fn from(value: ChannelOrder) -> Self {
-        match value {
-            ChannelOrder::Latest => Self::Latest,
-            ChannelOrder::Popular => Self::Popular,
-            ChannelOrder::Oldest => Self::Oldest,
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn video_only_filters_do_not_leak_into_channel_or_playlist_params() {
+        let base_channel = SearchOptions {
+            kind: SearchKind::Channels,
+            ..SearchOptions::default()
+        };
+        let noisy_channel = SearchOptions {
+            kind: SearchKind::Channels,
+            order: SearchOrder::Views,
+            date: SearchDate::Week,
+            length: SearchLength::Long,
+            live: true,
+        };
+        assert_eq!(base_channel.params(), noisy_channel.params());
+    }
+
+    #[test]
+    fn parses_autocomplete_suggestions_in_both_formats() {
+        assert_eq!(
+            parse_suggestions(r#"["rust",["rust","rust tutorial","rust egui"]]"#),
+            vec!["rust", "rust tutorial", "rust egui"]
+        );
+        assert_eq!(
+            parse_suggestions(r#"window.google.ac.h(["rust",[["rust",0],["rust gui",0]]])"#),
+            vec!["rust", "rust gui"]
+        );
     }
 }

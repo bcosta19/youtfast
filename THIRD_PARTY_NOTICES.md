@@ -1,14 +1,9 @@
 # Third-party notices and corresponding source
 
-YouTFast is distributed under GPL-3.0-only. Earlier snapshots declared MIT;
-0.1.0 aligns distribution with the GPL RustyPipe dependency. Existing upstream
-notices are retained. Dependency sources keep their own copyright and licenses.
+YouTFast is distributed under GPL-3.0-only, its release license since 0.1.0;
+earlier snapshots declared MIT. Existing upstream notices are retained.
+Dependency sources keep their own copyright and licenses.
 
-- RustyPipe, by ThetaDev: GPLv3. YouTFast builds YouTFast's fork
-  (github.com/bcosta19/rustypipe, branch `youtfast`), whose commits on top of
-  0.11.4 are listed in its README; the source-with-dependencies archive carries
-  that exact source. The original license is `assets/licenses/rustypipe/LICENSE`.
-  No upstream source is relicensed.
 - libmpv, by mpv contributors: the upstream GPL/LGPL terms depend on build
   options. The native Linux archive links to the distribution's libmpv rather
   than bundling it. Install it through the distribution's package manager.

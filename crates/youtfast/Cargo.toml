@@ -38,7 +38,6 @@ egui.workspace = true
 egui_extras.workspace = true
 image.workspace = true
 fastframe-icons.workspace = true
-rustypipe.workspace = true
 url.workspace = true
 rfd.workspace = true
 resvg.workspace = true

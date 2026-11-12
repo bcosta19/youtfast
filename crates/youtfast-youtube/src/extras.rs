@@ -55,19 +55,18 @@ impl Preview {
 }
 
 pub async fn load(
-    rp: &rustypipe::client::RustyPipe,
+    rp: &crate::innertube::Client,
     id: &str,
     language: &str,
 ) -> Result<Extras, String> {
-    let player = tokio::time::timeout(
+    let (preview_frames, subtitles) = tokio::time::timeout(
         std::time::Duration::from_secs(25),
-        rp.query().unauthenticated().player(id),
+        crate::innertube::watch::player_extras(rp, id),
     )
     .await
     .map_err(|_| "The request timed out. Retry.".to_owned())?
     .map_err(|_| "Could not complete the YouTube request. Retry.".to_owned())?;
-    let preview = player
-        .preview_frames
+    let preview = preview_frames
         .iter()
         .filter(|p| {
             p.frame_width > 0
@@ -93,7 +92,6 @@ pub async fn load(
             count: p.total_count,
             interval_ms: p.duration_per_frame,
         });
-    let subtitles = player.subtitles;
     let subtitle = subtitles.iter().min_by_key(|s| {
         (
             u8::from(
@@ -193,12 +191,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "manual public network check; no account or storage"]
     async fn public_video_provides_optional_metadata_without_a_session() {
-        let rp = rustypipe::client::RustyPipe::builder()
-            .no_storage()
-            .no_reporter()
-            .no_botguard()
-            .build()
-            .unwrap();
+        let rp = crate::innertube::Client::default_client().unwrap();
         let extras = load(&rp, "aircAruvnKk", "en")
             .await
             .expect("Public metadata request failed");

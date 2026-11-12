@@ -197,7 +197,7 @@ The video rectangle is always black.
   once, with the device's metadata, resume bar and watched/left-at note.
   The remove button appears only on device-backed rows and deletes only that
   device entry; Google history remains read-only here.
-- The merge preserves account order and its day headings. RustyPipe supplies
+- The merge preserves account order and its day headings. InnerTube supplies
   the heading as text in the default English request language, without a time
   of day in `HistoryRow`. Only exact Today / Yesterday headings are mapped to
   dates in UTC, matching the request defaults, anchored to when the first page

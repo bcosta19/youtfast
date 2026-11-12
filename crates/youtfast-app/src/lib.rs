@@ -238,7 +238,7 @@ pub struct State {
     /// What the video being watched offers, highest first; empty until it
     /// loads.
     pub resolutions: Vec<Resolution>,
-    /// rustypipe's view of the video: description, chapters, comments.
+    /// The watch page's view of the video: description, chapters, comments.
     pub details: Fetch<Details>,
     /// The comments loaded so far.
     pub comments: Fetch<Vec<CommentRow>>,
@@ -392,7 +392,7 @@ impl State {
     }
 
     /// The video being watched is a live stream now: yt-dlp's word once it
-    /// has loaded, the list's or rustypipe's until then.
+    /// has loaded, the list's or the watch page's until then.
     pub fn watching_live(&self) -> bool {
         self.watching.as_ref().is_some_and(|video| video.live)
     }

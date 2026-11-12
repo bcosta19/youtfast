@@ -2,9 +2,10 @@
 //! The player response and tracking URL remain only on the backend thread.
 
 use rand::RngExt;
-use rustypipe::client::{ClientType, RustyPipe};
 use serde_json::{Value, json};
 use url::Url;
+
+use super::client::Client;
 
 const CPN_ALPHABET: &[u8; 64] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
 
@@ -19,7 +20,7 @@ fn tracking_url(player: &Value, cpn: &str) -> Option<Url> {
     let base = player
         .pointer("/playbackTracking/videostatsPlaybackUrl/baseUrl")?
         .as_str()?;
-    if !RustyPipe::history_tracking_url_allowed(base)
+    if !Client::history_tracking_url_allowed(base)
         || cpn.len() != 16
         || !cpn.bytes().all(|byte| CPN_ALPHABET.contains(&byte))
     {
@@ -56,14 +57,11 @@ impl std::fmt::Display for NotReported {
 impl std::error::Error for NotReported {}
 
 /// Reports one playback using the same session that requested the player.
-pub async fn mark_watched(rp: &RustyPipe, id: &str) -> Result<(), NotReported> {
-    let raw = rp
-        .query()
-        .authenticated()
-        .raw(ClientType::Desktop, "player", &json!({ "videoId": id }))
+pub async fn mark_watched(rp: &Client, id: &str) -> Result<(), NotReported> {
+    let player = rp
+        .post_raw("player", &json!({ "videoId": id }), true, None)
         .await
         .map_err(|_| NotReported)?;
-    let player: Value = serde_json::from_str(&raw).map_err(|_| NotReported)?;
     let url = tracking_url(&player, &cpn()).ok_or(NotReported)?;
     rp.history_tracking_get(url.as_str())
         .await
