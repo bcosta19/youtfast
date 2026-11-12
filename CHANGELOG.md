@@ -10,6 +10,8 @@ are the distribution record.
 
 ### Changed
 
+- The top bar has a refresh button beside Back and Forward, and Refresh is
+  now Ctrl/Cmd+R instead of plain `r`.
 - YouTube data, search and the signed-in account now go through an InnerTube
   client developed in this repository (`crates/youtfast-youtube/src/innertube/`)
   instead of the RustyPipe fork, which is no longer a dependency. Session

@@ -113,6 +113,12 @@ pub(super) fn handle(
             }
             return;
         }
+        if let Some(first) = consume_once(input, egui::Modifiers::COMMAND, Key::R) {
+            if first {
+                actions.push(Action::Refresh);
+            }
+            return;
+        }
         let chapter_modifier = if cfg!(target_os = "macos") {
             input.modifiers.alt
         } else {
@@ -133,9 +139,6 @@ pub(super) fn handle(
             || input.modifiers.mac_cmd
         {
             return;
-        }
-        if input.key_pressed(Key::R) {
-            actions.push(Action::Refresh);
         }
         if input.key_pressed(Key::B) {
             actions.push(Action::ToggleSidebar);
@@ -351,8 +354,8 @@ pub(super) fn handle(
     });
 }
 
-/// Consumes a tab shortcut: `Some(true)` on its first press, `Some(false)`
-/// for the repeats of a held key (each would load or close another tab),
+/// Consumes a shortcut that must act once: `Some(true)` on its first press,
+/// `Some(false)` for the repeats of a held key (each would act again), and
 /// `None` when it was not pressed.
 fn consume_once(
     input: &mut egui::InputState,
@@ -595,6 +598,15 @@ mod tests {
             vec![Action::SeekChapter(true)]
         );
         assert!(press(&mut state, Key::C, egui::Modifiers::CTRL).is_empty());
+    }
+    #[test]
+    fn refresh_needs_ctrl_or_cmd() {
+        let mut state = State::default();
+        assert_eq!(
+            press(&mut state, Key::R, egui::Modifiers::COMMAND),
+            vec![Action::Refresh]
+        );
+        assert!(press(&mut state, Key::R, egui::Modifiers::NONE).is_empty());
     }
     #[test]
     fn mini_player_controls_do_not_steal_the_lists_k_binding() {
