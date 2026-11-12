@@ -9,31 +9,11 @@ backend or YouTFast-operated account system.
 
 ## System boundaries
 
-Arrows below show runtime communication, not Cargo dependencies.
+![YouTFast architecture overview](architecture-overview.svg)
 
-```mermaid
-flowchart LR
-    subgraph Computer[User computer]
-        UI[egui views]
-        App[Application state]
-        Backend[Backend runtime]
-        Player[libmpv]
-        Extractor[yt-dlp + JavaScript runtime]
-        Files[Library, settings and thumbnails]
-        Keyring[Platform credential store]
-        UI -->|Actions| App
-        App -->|Commands| Backend
-        Backend -->|Events| App
-        App -->|Playback controls| Player
-        Player -->|Extraction hook| Extractor
-        Backend --> Files
-        Backend --> Keyring
-    end
-    Backend -->|InnerTube + RSS| YouTube[YouTube]
-    Backend -->|Opt-in segments| SponsorBlock[SponsorBlock]
-    Extractor --> YouTube
-    Player -->|Media streams| CDN[YouTube media CDN]
-```
+Solid arrows show runtime request, event, and command dispatch. Dashed arrows
+show background extraction hooks and encrypted keyring access. The application
+runs locally with no hosted backend, no browser engine, and no telemetry.
 
 Desktop services additionally contact GitHub Releases for updates; casting
 contacts the selected TV and YouTube's Lounge service. The application is not
@@ -47,14 +27,14 @@ in Cargo. A crate must not depend on its own or a higher layer.
 
 ```mermaid
 flowchart TB
-    L7["7 · youtfast"]
-    L6["6 · youtfast-ui"]
-    L5["5 · youtfast-app"]
-    L4["4 · youtfast-backend · youtfast-cast"]
-    L3["3 · youtfast-logic · youtfast-youtube"]
-    L2["2 · youtfast-storage · youtfast-desktop"]
-    L1["1 · youtfast-core"]
-    L0["0 · youtfast-i18n · youtfast-mpv · youtfast-appearance"]
+    L7["7 · youtfast<br/>CLI entry point & offline demo harness"]
+    L6["6 · youtfast-ui<br/>egui views, watch layout & player presentation"]
+    L5["5 · youtfast-app<br/>Application state reducer, action queue & MPRIS"]
+    L4["4 · youtfast-backend & youtfast-cast<br/>Tokio async runtime, SaveGate & TV casting"]
+    L3["3 · youtfast-logic & youtfast-youtube<br/>Pure domain decisions, InnerTube client & RSS feeds"]
+    L2["2 · youtfast-storage & youtfast-desktop<br/>Library, settings, platform keyring & single-instance IPC"]
+    L1["1 · youtfast-core<br/>Shared domain models, URL parsing & privacy error filters"]
+    L0["0 · youtfast-i18n, youtfast-mpv & youtfast-appearance<br/>Compiled locales, libmpv FFI & theme palettes"]
     L7 --> L6 --> L5 --> L4 --> L3 --> L2 --> L1 --> L0
 ```
 
