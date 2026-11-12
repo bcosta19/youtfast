@@ -650,6 +650,9 @@ msgstr "Apri nel browser"
 msgid "Open item"
 msgstr "Apri elemento"
 
+msgid "Open notifications"
+msgstr "Apri notifiche"
+
 msgid "Or a cookies.txt file"
 msgstr "O un file cookies.txt"
 
