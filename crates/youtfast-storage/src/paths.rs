@@ -13,7 +13,7 @@ pub struct Dirs {
     pub data: PathBuf,
     /// The settings (`~/.config/youtfast` on Linux).
     pub config: PathBuf,
-    /// rustypipe's client data, never credentials (`~/.cache/youtfast`).
+    /// Downloaded thumbnails (`~/.cache/youtfast`).
     pub cache: PathBuf,
 }
 
@@ -46,10 +46,6 @@ impl Dirs {
 
     pub fn settings(&self) -> PathBuf {
         self.config.join("settings.json")
-    }
-
-    pub fn youtube_cache(&self) -> PathBuf {
-        self.cache.join("rustypipe.json")
     }
 }
 

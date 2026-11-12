@@ -87,11 +87,6 @@ fastframe-now-playing = { git = "https://github.com/crmne/fastframe", tag = "v0.
 # The wheel step, the Linux touchpad scale and glide, and the axis a scroll
 # gesture holds.
 fastframe-scroll = { git = "https://github.com/crmne/fastframe", tag = "v0.15.5" }
-# YouTube's own API (InnerTube): the signed-in account's feed, history,
-# subscriptions, playlists, liked videos and Watch later (`userdata`), and
-# channel RSS for the feed without an account (`rss`). rustls, as in the
-# sibling apps, so there is no OpenSSL to link.
-rustypipe = { version = "0.11.4", default-features = false, features = ["rustls-tls-native-roots", "userdata", "rss"] }
 # Where the library and caches live (XDG on Linux).
 directories = "6"
 # Google Takeout's RFC 3339 times.
@@ -115,11 +110,18 @@ ureq = "3"
 resvg = { version = "0.45", default-features = false }
 # SponsorBlock's lookups name a prefix of the video id's SHA-256, not the id.
 sha2 = "0.11"
-# rustypipe's HTTP client checks certificates through the operating system
+# InnerTube's SAPISIDHASH authorization header is SHA-1 over
+# "timestamp SAPISID origin"; the protocol requires SHA-1, not a newer hash.
+sha1 = "0.10"
+# InnerTube's continuation tokens and search `params` are base64-encoded
+# protobuf messages.
+base64 = "0.22"
+# Channel feeds are Atom XML (`innertube::rss`).
+roxmltree = "0.20"
+# InnerTube's HTTP client checks certificates through the operating system
 # (`innertube::http`): a fresh Windows keeps few roots and fetches the rest
-# only when its own verifier asks. reqwest is the version rustypipe locks;
-# rustls and its ring provider are the ones reqwest already builds.
-reqwest = { version = "0.13", default-features = false, features = ["form", "query"] }
+# only when its own verifier asks.
+reqwest = { version = "0.13", default-features = false, features = ["form", "json", "query", "rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 rustls-platform-verifier = "0.7"
 # Each target's native credential store provider for keyring-core.
@@ -166,15 +168,5 @@ egui_extras = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b0
 egui_glow = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
 emath = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
 epaint = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
-# rustypipe 0.11.4 from YouTFast's fork (github.com/bcosta19/rustypipe, branch
-# `youtfast`; its README lists the changes and each commit names the YouTFast
-# change it comes from): ThetaDev/rustypipe PR #80 (comment authors' avatars,
-# the comment count, image/GIF attachments), a failed visitor-data fetch
-# returned as an error instead of a panic (`panic = "abort"` would end the
-# release build), channel pages in YouTube's October and November 2026
-# layouts, history playback reports, reqwest 0.13 with rustls and ring, and the
-# `regression` hooks. Move `rev` to fix a YouTube format there; drop the fork
-# once an upstream release carries these changes.
-rustypipe = { git = "https://github.com/bcosta19/rustypipe", rev = "1f387f3fea054ab8eb223aa72da75dd3f8b05ede" }
 epaint_default_fonts = { git = "https://github.com/crmne/egui", rev = "1cc61c8a83625855b08cb8fed912900cf3b01b70" }
 winit = { git = "https://github.com/crmne/winit", rev = "59ebfb727b8c83fcd28f8ca59c3733e32b4b4e9b" }

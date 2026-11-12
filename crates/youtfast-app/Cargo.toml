@@ -35,8 +35,5 @@ log.workspace = true
 raw-window-handle.workspace = true
 rfd.workspace = true
 
-[dev-dependencies]
-rustypipe.workspace = true
-
 [lints]
 workspace = true

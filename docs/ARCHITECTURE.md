@@ -10,9 +10,9 @@
 
 YouTFast is a small native YouTube client: Rust, egui for the interface and
 libmpv for playback, with no browser engine, telemetry or hosted backend.
-YouTube's data comes through InnerTube (rustypipe) and playback through mpv's
-yt-dlp hook. What it keeps (the library, the settings, the signed-in sessions)
-stays on the user's computer.
+YouTube's data comes through InnerTube (`youtfast-youtube::innertube`) and
+playback through mpv's yt-dlp hook. What it keeps (the library, the settings,
+the signed-in sessions) stays on the user's computer.
 
 ## Crates
 
@@ -88,8 +88,9 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
   blocking threads it owns; only `App::on_exit` writes the last state
   directly.
 - **The session stays in the credential store.** YouTube cookies live only in
-  the platform credential store (`storage::account`): never in a file, the
-  settings, the library, rustypipe's cache, a log line or an error message.
+  the platform credential store (`storage::account`) and in the InnerTube
+  client's memory: never in a file, the settings, the library, a cache,
+  a log line or an error message.
 - **Controlled messages.** External errors become one of `privacy`'s fixed
   messages, and every log record passes `diagnostics::redact_log`. The
   redactor and the log filters (`youtfast=info`) recognise the application by
@@ -191,11 +192,10 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
   called through `spawn_blocking` with a timeout. Each named account
   (`library::Account`) has its own keyring entry `youtube-session-<id>`; the
   single unnumbered entry of older files moves to account 1 on restore. A
-  browser source may carry a profile (`browser:profile`). rustypipe's cache
-  goes through `account::CacheFile`, which strips `auth_cookie` and
-  `oauth_token`; its error reports are off (`no_reporter`) because they hold
-  whole responses. A session from a browser is read again from the browser
-  when it expires (`backend::restore`).
+  browser source may carry a profile (`browser:profile`). The InnerTube
+  client keeps the cookie in memory only and writes no cache or error
+  reports: a report would hold a whole response. A session from a browser
+  is read again from the browser when it expires (`backend::restore`).
 
 ### youtfast-desktop
 
@@ -233,69 +233,47 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
 
 ### youtfast-youtube
 
-- `src/innertube.rs` is everything through rustypipe: the home feed (the
-  account's subscription feed plus RSS for channels subscribed on this
-  device, merged and deduplicated), a channel's RSS, and the account's
-  subscriptions, history, Watch later, liked videos and playlists. The watch
-  page's description, chapters, recommended videos and comments come from it
-  too (`details`, `comments`; comment requests carry the watched video id so
-  spans in comments, replies and descriptions map links on that video to
-  seeks, including `0:00`), and channel pages are its tabs (`channel_tab`, `channel_about`):
-  videos, shorts, live, playlists and the channel's own search, paged through
-  `More` continuations (`more_videos`, `more_playlists`), as is the home feed
-  (`more_videos` again). A channel tab's videos come without their channel;
-  `More::owner` carries the header's channel to every page, which fills the
-  name, id and avatar of the channel's own videos (`Owner::fill`).
-- Home's For you is the account's own recommendations
-  (`src/innertube/home.rs`: `browse` `FEwhat_to_watch` through rustypipe's
-  `raw`, read here, continued by rustypipe).
-- Playlists can come in a newer layout rustypipe fails to read.
-  Watch later and liked videos go straight to `src/innertube/playlist.rs`;
-  public playlist details use it when rustypipe's reader fails. It reads
-  through authenticated `raw` (`browse` `VL<id>`) when a session is available
-  and pages the list itself (`More::ours`). Its shorts land on the shelf,
-  filled further by `channel_shorts` (each device channel's Shorts tab).
-- rustypipe has no posts or podcasts tabs, no write actions and no home
-  recommendations call: subscribing acts on the local library. The watch
-  page's rating and the account playlists of `[ save ]` are explicit writes to
-  the account (`src/innertube/edit.rs`, through rustypipe's `raw` request to
-  InnerTube's `like/*`, `playlist/get_add_to_playlist` and
-  `browse/edit_playlist`); ratings are kept 30 minutes (`App::ratings`), and
-  each write is shown at once and undone if YouTube refuses it.
-- Opt-in History sync reports started playbacks through
-  `src/innertube/history_sync.rs`: an authenticated raw `player` request
-  supplies the playback tracking URL, and the forked client's
-  `history_tracking` transport sends it with the same session, only to HTTPS
-  YouTube hosts and without redirects. This does not change mpv's signed-out
-  extraction. A failed report is `NotReported`, which carries nothing; URLs,
-  cookies and response bodies never reach the interface or logs.
-  `youtfast-app`'s `history_sync.rs` gates one report per playback on two
-  seconds of active play and the session active at its start.
-- rustypipe is YouTFast's fork (github.com/bcosta19/rustypipe, branch
-  `youtfast`, pinned by `rev` in the root `[patch.crates-io]`): 0.11.4 with
-  upstream PR #80 (codeberg.org/ThetaDev/rustypipe) applied, for comment
-  authors' avatars and the comment count, and with a failed visitor-data
-  fetch returned as an error instead of unwrapped (a panic aborts the release
-  build), reqwest errors kept with their causes (the only place a refused
-  certificate shows up), history reports sent through the shared client, and
-  video lockups keeping their channel's avatar (YT-6). Channel pages follow
-  YouTube's October 2026 layout: `order_ctoken` builds the sort chips' token
-  (`{1: target, 3: order}` under field 8, 7 on Shorts), Shorts items read
-  their `thumbnailViewModel`, the Playlists tab sends its new `params`,
-  podcast lockups count as playlists, and header metadata parts are told apart
-  by their field (`MetadataPart` is untagged). The `regression` feature (a
-  dev-dependency feature only) exposes `client::regression`, the hooks
-  `tests/youtube_api.rs` calls. Drop the fork once a release carries these
-  changes.
-- rustypipe's reqwest client checks certificates through the operating
-  system (`innertube::http`, rustls-platform-verifier). Do not go back to a
+- `src/innertube.rs` and `src/innertube/` handle all InnerTube JSON and RSS
+  requests directly over `reqwest` (`innertube::client::Client`):
+  - `src/innertube/client.rs` owns the HTTP client, session authentication
+    (`SAPISIDHASH` header generation in memory, never persisted to disk),
+    `visitorData`, playback-tracking URL validation, and protobuf/base64 wire
+    encoding. The web client's version and user agent are pinned constants:
+    there is no client-version discovery and no disk cache, so `visitorData`
+    is fetched once per run and a refused client version is fixed in the
+    source. Requests ask for English/US (`hl`, `gl`), which
+    `youtfast-logic::history` relies on when it reads day headings.
+  - `src/innertube/items.rs` parses video cards (`videoRenderer`,
+    `lockupViewModel`, `shortsLockupViewModel`), playlists, channels, history
+    rows, and rich-text spans (`Span`). Renderers in an item list that no
+    reader recognises are logged (`UnrecognisedItems`), with a warning when
+    the page yielded nothing: a YouTube layout change must not look like an
+    empty tab with no explanation.
+  - `src/innertube/rss.rs` fetches public Atom feeds for subscribed channels
+    and parses them with `roxmltree`.
+  - `src/innertube/channel.rs` loads channel tabs (Videos, Shorts, Live,
+    Playlists, Search, About), builds channel sort continuation tokens
+    (`YT-1`), and parses channel headers (`YT-5`).
+  - `src/innertube/watch.rs` loads watch-page metadata, chapters, related
+    videos, comments (`commentViewModel` entity mutations and legacy
+    `commentRenderer`), and player storyboard/caption tracks for `src/extras.rs`.
+    Comment view models resolve their `commentSurfaceKey` against surface
+    entities for attachments and voice transcripts; written content takes
+    precedence over a transcript. Thread rendering priority supplies pinned
+    status, and both endpoint and button continuations can load replies.
+  - `src/innertube/discovery.rs` encodes search filter protobufs (`sp`), runs
+    filtered search, and fetches search autocomplete suggestions.
+  - `src/innertube/home.rs`, `src/innertube/playlist.rs`, `src/innertube/edit.rs`
+    and `src/innertube/history_sync.rs` handle Home's recommendations
+    (`FEwhat_to_watch`), playlists (`VL<id>`, Watch later, Liked videos),
+    account rating/playlist edits, and opt-in playback history reporting.
+- The InnerTube `reqwest` client checks certificates through the operating
+  system (`innertube::http`, `rustls-platform-verifier`). Do not go back to a
   root list read at startup: a fresh Windows holds few roots and downloads the
-  rest only when its own verifier asks, so rustypipe failed there until a
-  browser had reached Google. Thumbnails, SponsorBlock and the updater go
-  through ureq, which bundles Mozilla's roots.
-- `src/ytdlp.rs` parses yt-dlp's extraction JSON; search goes through
-  rustypipe. Search suggestions come from rustypipe's `search_suggestion`,
-  signed out, once typing pauses.
+  rest only when its own verifier asks. Thumbnails, SponsorBlock and the updater
+  go through `ureq`, which bundles Mozilla's roots.
+- `src/ytdlp.rs` parses yt-dlp's extraction JSON; search and suggestions go
+  through `src/innertube/discovery.rs`.
 - `src/sponsorblock.rs` asks sponsor.ajay.app for a video's segments by the
   first four hex digits of its id's SHA-256, never the id; it is off unless
   the settings turn it on.
@@ -312,7 +290,7 @@ backend: `ui` depends on `app`, `app` on `backend`, never the other way round.
   reads. Samsung also advertises AirPlay when SSDP is filtered: that is a
   discovery hint, never permission to send media through AirPlay.
 - `src/lounge.rs` is YouTube on TV's Lounge transport, independent of
-  rustypipe's account session: pairing identifiers and tokens live only in the
+  the InnerTube account session: pairing identifiers and tokens live only in the
   worker, and no cookies, response bodies or transport errors leave it.
 
 ### youtfast-backend

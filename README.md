@@ -166,8 +166,9 @@ Use the app signed out unless you deliberately choose that integration.
 YouTFast follows native desktop conventions from these projects and uses shared
 egui/winit forks. Thanks also to [mpv](https://mpv.io),
 [yt-dlp](https://github.com/yt-dlp/yt-dlp),
-[RustyPipe](https://codeberg.org/ThetaDev/rustypipe),
 [egui](https://github.com/emilk/egui) and [Lucide](https://lucide.dev).
+YouTFast's InnerTube client is developed in this repository; earlier releases
+used [RustyPipe](https://codeberg.org/ThetaDev/rustypipe).
 
 ## License and disclaimer
 

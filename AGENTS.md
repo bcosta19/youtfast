@@ -17,14 +17,16 @@ on it, and follow [YouTube response formats](#youtube-response-formats).
 - Video goes through libmpv. Do not decode video in-process the way ZapFast's
   `src/video.rs` does: that path is CPU-only and tops out far below what
   YouTube serves (VP9/AV1, 4K, 60 fps, HDR).
-- YouTube data/search goes through RustyPipe; playback extraction uses yt-dlp.
+- YouTube data/search goes through the in-tree InnerTube client
+  (`crates/youtfast-youtube/src/innertube/`); playback extraction uses yt-dlp.
   Do not scrape YouTube's HTML or reimplement signature or n-parameter
   deobfuscation here; that belongs to an extractor library.
 - The signed-in session (YouTube cookies) is the user's Google session.
-  It lives only in the platform credential store (`crates/youtfast-storage/src/account.rs`): never
-  in a file, settings, the library, rustypipe's cache, a log line or an
-  error message. Credential-store errors are mapped to fixed messages,
-  because their text can carry platform data.
+  It lives only in the platform credential store (`crates/youtfast-storage/src/account.rs`)
+  and in the InnerTube client's memory: never in a file, settings, the
+  library, a cache, a log line or an error message. Credential-store
+  errors are mapped to fixed messages, because their text can carry
+  platform data.
 - Do not read the user's browser cookies, library or history to debug.
   Hand the user the command and let them report back.
 - Do not broaden a task into adjacent features or a general refactor.
@@ -70,19 +72,20 @@ package fields, dependency versions, profiles and patches, and each crate in
 ## Roadmap
 
 See `ROADMAP.md` for pending work and `CHANGELOG.md` for implemented features.
-RustyPipe search, i18n, persistence and the offline demo are in the tree.
+InnerTube search, i18n, persistence and the offline demo are in the tree.
 0.x releases target Linux x86_64, Windows x86_64 and macOS Apple
 Silicon; candidate packaging is not completed interactive platform qualification.
 
 ## YouTube response formats
 
 YouTube changes InnerTube's parameters and responses without notice. A change
-either gets requests refused, or makes rustypipe skip items silently (lists
-deserialize through `MapResult`/`VecSkipError`), so a tab comes back empty or
-a field takes another's value without any error.
+either gets requests refused, or makes the parsers in
+`crates/youtfast-youtube/src/innertube/` skip items silently, so a tab comes
+back empty or a field takes another's value without any error. Unrecognised
+item renderers are logged (`items::…`) to make that visible.
 
 - Before changing anything that builds requests to YouTube or reads its
-  responses (the rustypipe fork, `crates/youtfast-youtube/src/innertube*`, `crates/youtfast-backend/src/lib.rs`
+  responses (`crates/youtfast-youtube/src/innertube*`, `crates/youtfast-backend/src/lib.rs`
   loads), and whenever a listing comes back empty, wrong or refused, read
   [docs/youtube-api-format.md](docs/youtube-api-format.md). Check the known
   changes (`YT-n`) first: a new symptom is often an old one in another place.
@@ -93,17 +96,15 @@ a field takes another's value without any error.
   2. add regression tests named `ytn_…` to `crates/youtfast-youtube/tests/youtube_api.rs` that pass
      on the new format and fail on the old one. Prove the second part: put
      the old behaviour back for a moment and watch the test fail.
-- `crates/youtfast-youtube/tests/youtube_api.rs` reaches the fork's code through
-  `rustypipe::client::regression`; add a hook there when a test needs a code
-  path it does not reach yet. Keep the JSON trimmed and synthetic: no raw
+- `crates/youtfast-youtube/tests/youtube_api.rs` calls the in-tree parsers
+  and token builders directly; unit tests next to a module cover what the
+  integration test cannot reach. Keep the JSON trimmed and synthetic: no raw
   responses, real tokens of accounts, or personal data.
-- A fix inside rustypipe is a commit on the fork's `youtfast` branch, then
-  `rev` in `Cargo.toml` (and Cargo.lock) moved to it in the same PR as its
-  `YT-n` entry and tests. rustypipe's own unit tests do not run in this
-  repository's CI: a guarantee that must hold belongs in
-  `crates/youtfast-youtube/tests/youtube_api.rs`.
 - Confirm a fix live, with a request to YouTube outside the app, before
   calling it done: recorded fixtures keep passing after YouTube changes.
+  `cargo test -p youtfast-youtube -- --ignored` runs the live public checks
+  (search, RSS, channel tabs, watch page, comments). Signed-in flows have no
+  live test: they need a session, so verify them in the app and say so.
 
 ## Definition of done
 
@@ -132,7 +133,7 @@ large scratch files in `/tmp`.
 
 ## Reliability regression rules
 
-- A backend session owns a fresh RustyPipe client. Authentication changes and
+- A backend session owns a fresh InnerTube `Client`. Authentication changes and
   account writes are ordered; events carry a session epoch. Authentication
   failure invalidates private events from the entire pending batch, including
   events preceding the failure. Device-local imports and thumbnails remain
@@ -158,9 +159,9 @@ large scratch files in `/tmp`.
   downloads wait, `thumbs::DOWNLOADS` at a time, through one keep-alive
   agent.
 - Logs and external errors use controlled messages, also under `--verbose`
-  and `RUST_LOG`. `account::CacheFile` sanitizes both reads and writes, retaining
-  only public client/deobfuscation data; a cache cannot restore credentials.
-  Never weaken these guards to expose raw dependency or credential-store data.
+  and `RUST_LOG`. The InnerTube client keeps the session in memory and writes
+  no cache, so no file can restore credentials. Never weaken these guards to
+  expose raw dependency or credential-store data.
 
 ## Contributor CI and releases
 

@@ -10,7 +10,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc;
 
-use rustypipe::client::RustyPipe;
 use tokio::sync::mpsc as async_mpsc;
 use tokio::sync::watch;
 
@@ -20,7 +19,7 @@ use youtfast_storage::library::Library;
 use youtfast_storage::paths::Dirs;
 use youtfast_storage::settings::Settings;
 use youtfast_storage::{account, takeout};
-use youtfast_youtube::innertube;
+use youtfast_youtube::innertube::{self, Client};
 
 mod protocol;
 pub use protocol::{Command, CommentsKey, Event, Payload, Request, SignInMethod, Slot};
@@ -60,7 +59,7 @@ pub struct Backend {
 /// What every task on the runtime shares.
 #[derive(Clone)]
 struct Context {
-    rp: RustyPipe,
+    rp: Client,
     dirs: Dirs,
     events: mpsc::Sender<(u64, Event)>,
     epoch: u64,
@@ -117,7 +116,7 @@ impl Backend {
         let writer_library_gate = library_gate.clone();
         let writer_settings_gate = settings_gate.clone();
         let mut context = Context {
-            rp: innertube::client(&dirs)?,
+            rp: innertube::client()?,
             dirs,
             events: outgoing,
             epoch: 0,
@@ -180,7 +179,7 @@ impl Backend {
                             for (_, task) in context.loads.lock().unwrap().drain() {
                                 task.abort();
                             }
-                            match innertube::client(&context.dirs) {
+                            match innertube::client() {
                                 Ok(client) => context.rp = client,
                                 Err(_) => {
                                     innertube::sign_out(&context.rp).await;
@@ -349,7 +348,7 @@ impl Drop for AbortOnDrop {
 }
 
 /// Runs `future` in its own task and answers its result, a panic (an
-/// `unwrap` on a missing line in rustypipe, say) or an overdue load with a
+/// `unwrap` on a missing line in a response, say) or an overdue load with a
 /// failure whose text carries no payload. Every ending sends the
 /// `Event::Loaded`: the interface is never left loading forever.
 ///
@@ -832,7 +831,7 @@ async fn writer<T: Clone + Send + Sync + 'static>(
 /// The seeds' related videos, asked for together, ranked. A seed whose
 /// details fail is skipped.
 async fn local_recommendations(
-    rp: &RustyPipe,
+    rp: &Client,
     seeds: Vec<youtfast_logic::recommend::Seed>,
     taste: &youtfast_logic::recommend::Taste,
 ) -> Vec<Video> {
@@ -1059,7 +1058,7 @@ impl RestoreFailure {
     }
 }
 
-fn sign_in_failure(error: rustypipe::error::Error, rejected: &str) -> RestoreFailure {
+fn sign_in_failure(error: innertube::Error, rejected: &str) -> RestoreFailure {
     if innertube::is_signed_out(&error) {
         RestoreFailure::Expired(rejected.to_owned())
     } else {
@@ -1507,7 +1506,7 @@ mod tests {
 
     #[test]
     fn restore_distinguishes_rejected_sessions_from_network_failures() {
-        use rustypipe::error::Error;
+        use innertube::Error;
         assert_eq!(
             sign_in_failure(Error::HttpStatus(401, "unauthorized".into()), "expired"),
             RestoreFailure::Expired("expired".into())
@@ -1730,7 +1729,7 @@ mod tests {
         std::fs::write(&kept, &png).unwrap();
         let (outgoing, events) = mpsc::channel();
         let context = Context {
-            rp: innertube::client(&dirs).unwrap(),
+            rp: innertube::client().unwrap(),
             dirs,
             events: outgoing,
             epoch: 0,

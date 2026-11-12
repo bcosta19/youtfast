@@ -27,8 +27,5 @@ fastframe-scroll.workspace = true
 fastframe-theme.workspace = true
 jiff.workspace = true
 
-[dev-dependencies]
-rustypipe.workspace = true
-
 [lints]
 workspace = true

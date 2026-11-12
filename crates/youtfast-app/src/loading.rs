@@ -908,7 +908,7 @@ mod tests {
     fn more(token: &str) -> innertube::More {
         innertube::More {
             ctoken: token.into(),
-            endpoint: rustypipe::model::paginator::ContinuationEndpoint::Search,
+            endpoint: innertube::ContinuationEndpoint::Search,
             visitor_data: None,
             authenticated: false,
             ours: false,

@@ -1,4 +1,4 @@
-//! The app's own types. Views see these, never yt-dlp's JSON, rustypipe's
+//! The app's own types. Views see these, never yt-dlp's JSON, InnerTube's
 //! types or mpv's.
 
 use serde::{Deserialize, Serialize};
@@ -209,7 +209,7 @@ pub struct Chapter {
     pub seconds: u32,
 }
 
-/// What rustypipe knows about the video being watched.
+/// What the watch page knows about the video being watched.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Details {
     pub id: String,

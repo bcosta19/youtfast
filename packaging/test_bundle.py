@@ -129,7 +129,7 @@ class BundleTests(unittest.TestCase):
         copy_public_files(directory)
         for path in ["docs/distribution.md", "docs/actions.md", "RELEASING.md",
                      "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md",
-                     "assets/icons/LICENSE.txt", "assets/licenses/rustypipe/LICENSE"]:
+                     "assets/icons/LICENSE.txt"]:
             with self.subTest(path=path):
                 self.assertEqual((directory / path).read_bytes(), (ROOT / path).read_bytes())
 

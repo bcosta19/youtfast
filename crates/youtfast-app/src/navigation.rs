@@ -415,7 +415,7 @@ mod tests {
         };
         let more = innertube::More {
             ctoken: "next".into(),
-            endpoint: rustypipe::model::paginator::ContinuationEndpoint::Browse,
+            endpoint: innertube::ContinuationEndpoint::Browse,
             visitor_data: None,
             authenticated: false,
             ours: true,

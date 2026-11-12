@@ -6,6 +6,8 @@
 /.cache/
 /dist/
 /tasks.md
+# Legacy: rustypipe wrote whole responses here. Still excluded so an old
+# directory can never be committed (packaging/release.py rejects it too).
 /rustypipe_reports/
 /.flatpak-builder/
 /build-dir/

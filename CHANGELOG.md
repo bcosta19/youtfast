@@ -8,6 +8,26 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Changed
+
+- YouTube data, search and the signed-in account now go through an InnerTube
+  client developed in this repository (`crates/youtfast-youtube/src/innertube/`)
+  instead of the RustyPipe fork, which is no longer a dependency. Session
+  cookies stay in memory only: no client cache is written to disk any more.
+  Playback extraction is unchanged and still uses yt-dlp through mpv.
+- The response-format regression tests (`YT-1`…`YT-8`) now run the in-tree
+  parsers directly, and `cargo test -p youtfast-youtube -- --ignored` checks
+  the public endpoints live (search, RSS, channel tabs, watch page, comments).
+  Unrecognised item renderers are logged so a YouTube layout change is visible
+  instead of silently emptying a list.
+
+### Fixed
+
+- Preserve comment reply/page continuation buttons, pinned-thread indicators,
+  image attachments and voice-reply transcripts when reading InnerTube directly.
+- Read spelled-out Shorts view counts correctly when only accessibility text
+  is available, including thousand, million and billion multipliers.
+
 ## [0.6.2] - 2026-11-11
 
 ### Fixed
