@@ -11,7 +11,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use youtfast_core::model::{
-    Channel, ChannelHeader, ChannelTab, HistoryRow, PlaylistSummary, Video,
+    Channel, ChannelHeader, ChannelMeta, ChannelTab, HistoryRow, PlaylistSummary, Video,
 };
 use youtfast_core::util;
 
@@ -33,7 +33,7 @@ pub use channel::{
 pub use client::{AuthError, Client, ContinuationEndpoint, Error};
 pub use discovery::{
     ChannelOrder, PlaylistDetails, SearchDate, SearchKind, SearchLength, SearchOptions,
-    SearchOrder, playlist_details, search_filtered, suggestions,
+    SearchOrder, playlist_details, search_filtered, search_filtered_with_meta, suggestions,
 };
 pub use edit::{rate, rating, save_targets, set_saved};
 pub use history_sync::mark_watched;
@@ -388,14 +388,23 @@ pub async fn more_playlists(
     Ok((playlists, next))
 }
 
+/// The next page of channels (the account's subscriptions) with metadata.
+pub async fn more_channels_with_meta(
+    rp: &Client,
+    more: &More,
+) -> Result<(Vec<Channel>, Vec<(String, ChannelMeta)>, Option<More>), String> {
+    let page = post_continuation(rp, more).await?;
+    let (channels, metas, ctoken) = items::collect_channels_with_meta_and_ctoken(&page);
+    let next = next_more(more, ctoken, &page);
+    Ok((channels, metas, next))
+}
+
 /// The next page of channels (the account's subscriptions).
 pub async fn more_channels(
     rp: &Client,
     more: &More,
 ) -> Result<(Vec<Channel>, Option<More>), String> {
-    let page = post_continuation(rp, more).await?;
-    let (channels, ctoken) = items::collect_channels_and_ctoken(&page);
-    let next = next_more(more, ctoken, &page);
+    let (channels, _, next) = more_channels_with_meta(rp, more).await?;
     Ok((channels, next))
 }
 
@@ -418,9 +427,11 @@ pub async fn more_history(
     Ok((rows, next))
 }
 
-/// The first page of the account's subscriptions and its continuation;
-/// the "Load more" rows ask for the next page.
-pub async fn subscriptions(rp: &Client) -> Result<(Vec<Channel>, Option<More>), Error> {
+/// The first page of the account's subscriptions, any channel metadata
+/// present in that listing, and its continuation.
+pub async fn subscriptions_with_meta(
+    rp: &Client,
+) -> Result<(Vec<Channel>, Vec<(String, ChannelMeta)>, Option<More>), Error> {
     let page = rp
         .post_raw("browse", &json!({ "browseId": "FEchannels" }), true, None)
         .await?;
@@ -428,7 +439,7 @@ pub async fn subscriptions(rp: &Client) -> Result<(Vec<Channel>, Option<More>), 
         .pointer("/responseContext/visitorData")
         .and_then(Value::as_str)
         .map(str::to_owned);
-    let (mut channels, ctoken) = items::collect_channels_and_ctoken(&page);
+    let (mut channels, metas, ctoken) = items::collect_channels_with_meta_and_ctoken(&page);
     channels.sort_by_cached_key(|channel| channel.name.to_lowercase());
     let more = ctoken.map(|ctoken| More {
         ctoken,
@@ -438,6 +449,13 @@ pub async fn subscriptions(rp: &Client) -> Result<(Vec<Channel>, Option<More>), 
         ours: false,
         owner: None,
     });
+    Ok((channels, metas, more))
+}
+
+/// The first page of the account's subscriptions and its continuation;
+/// the "Load more" rows ask for the next page.
+pub async fn subscriptions(rp: &Client) -> Result<(Vec<Channel>, Option<More>), Error> {
+    let (channels, _, more) = subscriptions_with_meta(rp).await?;
     Ok((channels, more))
 }
 

@@ -533,6 +533,15 @@ impl App {
     /// Shows a video's details on the watch page, fresh or from the cache,
     /// and asks for its first comments page.
     fn show_details(&mut self, details: Details) {
+        if let Some(subscribers) = details.subscribers {
+            self.state.merge_channel_meta(
+                details.channel.id.clone(),
+                youtfast_core::model::ChannelMeta {
+                    subscribers: Some(subscribers),
+                    ..Default::default()
+                },
+            );
+        }
         // Complete what the watch page and the library know.
         if let Some(watching) = self.state.watching.as_mut()
             && watching.id == details.id
@@ -574,17 +583,15 @@ impl App {
     /// The videos on screen, to offer as Up next beside one of them.
     fn visible_videos(&self) -> Vec<Video> {
         let state = &self.state;
-        let account = state.source() == Source::Account;
         match state.view {
             View::Home if state.feed_filter == youtfast_core::model::FeedFilter::ForYou => {
                 state.for_you.items().to_vec()
             }
             View::Home => state.feed.items().to_vec(),
             View::Results => state.results.items().to_vec(),
-            View::Liked => state.liked.items().to_vec(),
+            View::Liked => state.visible_liked().into_iter().cloned().collect(),
             View::Channel | View::Playlist => state.page_videos.items().to_vec(),
-            View::WatchLater if account => state.account_watch_later.items().to_vec(),
-            View::WatchLater => state.library.watch_later.clone(),
+            View::WatchLater => state.visible_watch_later().into_iter().cloned().collect(),
             View::History => state
                 .history_rows()
                 .iter()

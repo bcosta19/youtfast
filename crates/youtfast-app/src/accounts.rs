@@ -24,7 +24,7 @@ impl State {
     fn forget_account_data(&mut self, ctx: &egui::Context) {
         egui::Popup::close_all(ctx);
         ctx.request_repaint();
-        self.cursor = 0;
+        self.reset_cursor();
         self.account_subscriptions = Listing::Idle;
         self.subscriptions_more = None;
         self.subscriptions_more_state = Fetch::Idle;
@@ -39,9 +39,11 @@ impl State {
         self.watch_later_more = None;
         self.watch_later_more_state = Fetch::Idle;
         self.liked = Listing::Idle;
+        self.liked_query.clear();
         self.liked_more = None;
         self.liked_more_state = Fetch::Idle;
         self.playlists = Listing::Idle;
+        self.playlists_query.clear();
         self.playlists_more = None;
         self.playlists_more_state = Fetch::Idle;
         self.feed = Listing::Idle;
@@ -88,6 +90,9 @@ impl State {
         self.notifications_popup_open = false;
         self.alerts_checking = false;
         self.last_checked = None;
+        self.channel_info.clear();
+        self.subscriptions_query.clear();
+        self.subscriptions_sort = youtfast_core::model::SubscriptionSort::default();
     }
 }
 
@@ -333,6 +338,7 @@ mod tests {
                 ..Default::default()
             }),
             cursor: 99,
+            cursor_active: true,
             view: View::Playlist,
             ..State::default()
         };
@@ -347,6 +353,7 @@ mod tests {
         assert!(!egui::Popup::is_id_open(&ctx, menu));
         assert!(state.channel_header.is_none());
         assert_eq!(state.cursor, 0);
+        assert!(!state.cursor_active);
         assert!(matches!(state.account_history, Listing::Idle));
         assert!(matches!(state.account_watch_later, Listing::Idle));
         assert!(matches!(state.liked, Listing::Idle));

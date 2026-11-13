@@ -8,6 +8,23 @@ are the distribution record.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-13
+
+### Added
+
+- Multi-column Subscriptions and channel search cards displaying channel handles, subscriber and video counts, verified badges, bio snippets, watch counts, clickable latest-video previews, and inline filtering and sorting (`Name`, `Recent`, `Most watched`), backed by in-memory InnerTube channel metadata enrichment.
+- Inline live search filtering and `Play all` controls across Watch later and Liked videos, `Filter playlists` and visible video totals on Playlists, and scrollable `Load more` pagination inside History, Watch later, Liked videos, and Playlists.
+
+### Changed
+
+- Refined interface styling across cards, pill chips, hover actions, the top bar brand mark and search suggestions, integrated video tabs, player seek/volume controls, mini player backdrop, and built-in palette surface elevation.
+- Framed the Home Shorts shelf with scroll and collapse controls and optional channel attribution on Shorts cards.
+- Redesigned History with framed day sections, unified inline search (including account-only mode), and `{count} in progress` resume summaries; moved Watch later and Liked videos to responsive multi-column `video_card` grids; and gave Playlists stacked-tab grid cards.
+
+### Fixed
+
+- Fixed the 16:9-to-9:16 Shorts thumbnail crop to eliminate side bars and stretching, cleared Shorts card titles away from the `More` button, stopped highlighting card #0 before keyboard cursor navigation starts, and preserved horizontal wrapper spacing after `search_field` widgets.
+
 ## [0.7.0] - 2026-11-12
 
 ### Added
@@ -425,7 +442,8 @@ macOS Apple Silicon. Interactive Windows/macOS qualification is still pending.
 These exclusions are scope decisions, not completed features promised for a
 specific next version. See [ROADMAP.md](ROADMAP.md) for follow-up gates.
 
-[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/bcosta19/youtfast/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/bcosta19/youtfast/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/bcosta19/youtfast/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/bcosta19/youtfast/compare/v0.6.0...v0.6.1

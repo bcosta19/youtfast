@@ -40,7 +40,12 @@ impl State {
 
     fn fill_search(&mut self, result: Result<Payload, String>) {
         match result {
-            Ok(Payload::Search { items, more }) => {
+            Ok(Payload::Search {
+                items,
+                channel_meta,
+                more,
+            }) => {
+                self.merge_channel_metas(channel_meta);
                 self.results_more = more;
                 self.results_more_state = Fetch::Idle;
                 match items {
@@ -50,7 +55,12 @@ impl State {
                     _ => {}
                 }
             }
-            Ok(Payload::More { items, more }) => {
+            Ok(Payload::More {
+                items,
+                channel_meta,
+                more,
+            }) => {
+                self.merge_channel_metas(channel_meta);
                 self.results_more = more;
                 self.results_more_state = Fetch::Idle;
                 match items {
@@ -111,6 +121,22 @@ impl State {
         if let Some(header) = header {
             self.fill_channel_header(header);
         }
+        if let Some(Page::Channel(channel)) = &self.page {
+            let description = about
+                .description
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            self.merge_channel_meta(
+                channel.id.clone(),
+                youtfast_core::model::ChannelMeta {
+                    subscribers: about.subscribers,
+                    videos: about.videos,
+                    description: (!description.is_empty()).then_some(description),
+                    ..Default::default()
+                },
+            );
+        }
         self.channel_about = Fetch::Ready(about);
     }
 
@@ -124,6 +150,15 @@ impl State {
                 channel.avatar = header.avatar.clone();
             }
         }
+        self.merge_channel_meta(
+            header.id.clone(),
+            youtfast_core::model::ChannelMeta {
+                handle: header.handle.clone(),
+                subscribers: header.subscribers,
+                videos: header.videos,
+                ..Default::default()
+            },
+        );
         self.channel_header = Some(header);
     }
 
@@ -180,31 +215,19 @@ impl App {
                 if force || stale(&state.for_you) {
                     self.load_for_you();
                 }
-                let state = &self.state;
-                if !force && !stale(&state.feed) {
+                if !force && !stale(&self.state.feed) {
                     self.ask_shelf();
                     return;
                 }
-                let signed_in = state.signed_in();
-                let channels = state.device_only_subscriptions();
-                self.state.feed_shown = 40;
-                self.state.feed_more = None;
-                self.state.feed_more_state = Fetch::Idle;
-                self.state.shorts = Listing::Idle;
-                if channels.is_empty() && !signed_in {
-                    self.state.feed = Listing::Ready(Vec::new());
-                } else {
-                    self.request(
-                        Slot::Feed,
-                        Request::Feed {
-                            channels,
-                            account: signed_in,
-                        },
-                    );
-                }
+                self.load_feed();
             }
-            View::Subscriptions if account && (force || stale(&state.account_subscriptions)) => {
-                self.request(Slot::Subscriptions, Request::Subscriptions);
+            View::Subscriptions => {
+                if account && (force || stale(&state.account_subscriptions)) {
+                    self.request(Slot::Subscriptions, Request::Subscriptions);
+                }
+                if force || stale(&self.state.feed) {
+                    self.load_feed();
+                }
             }
             View::History
                 if state.history_source() != Some(Source::Device)
@@ -273,6 +296,28 @@ impl App {
         }
         // Back on Home with the feed already here, its shelf is due.
         self.ask_shelf();
+    }
+
+    /// Loads the combined account + RSS feed for Home and Subscriptions activity.
+    fn load_feed(&mut self) {
+        let state = &self.state;
+        let signed_in = state.signed_in();
+        let channels = state.device_only_subscriptions();
+        self.state.feed_shown = 40;
+        self.state.feed_more = None;
+        self.state.feed_more_state = Fetch::Idle;
+        self.state.shorts = Listing::Idle;
+        if channels.is_empty() && !signed_in {
+            self.state.feed = Listing::Ready(Vec::new());
+        } else {
+            self.request(
+                Slot::Feed,
+                Request::Feed {
+                    channels,
+                    account: signed_in,
+                },
+            );
+        }
     }
 
     /// Asks for Home's For you: the account's when signed in, with this
@@ -536,7 +581,7 @@ impl App {
                 state.feed_loaded_at = Some(util::now());
                 self.ask_shelf();
             }
-            (Slot::Feed, Ok(Payload::More { items, more })) => {
+            (Slot::Feed, Ok(Payload::More { items, more, .. })) => {
                 state.feed_more = more;
                 state.feed_more_state = Fetch::Idle;
                 if let PageItems::Videos(videos) = items {
@@ -600,7 +645,7 @@ impl App {
                 }
                 state.fill_channel_about(header.map(|header| *header), about);
             }
-            (Slot::Page, Ok(Payload::More { items, more })) => {
+            (Slot::Page, Ok(Payload::More { items, more, .. })) => {
                 state.page_more = more;
                 state.page_more_state = Fetch::Idle;
                 match items {
@@ -613,12 +658,28 @@ impl App {
                     _ => {}
                 }
             }
-            (Slot::Subscriptions, Ok(Payload::Channels { items, more })) => {
+            (
+                Slot::Subscriptions,
+                Ok(Payload::Channels {
+                    items,
+                    channel_meta,
+                    more,
+                }),
+            ) => {
+                state.merge_channel_metas(channel_meta);
                 state.subscriptions_more = more;
                 state.subscriptions_more_state = Fetch::Idle;
                 put(&mut state.account_subscriptions, Ok(items));
             }
-            (Slot::Subscriptions, Ok(Payload::More { items, more })) => {
+            (
+                Slot::Subscriptions,
+                Ok(Payload::More {
+                    items,
+                    channel_meta,
+                    more,
+                }),
+            ) => {
+                state.merge_channel_metas(channel_meta);
                 state.subscriptions_more = more;
                 state.subscriptions_more_state = Fetch::Idle;
                 if let PageItems::Channels(channels) = items {
@@ -634,7 +695,7 @@ impl App {
                 put(&mut state.account_history, Ok(items));
                 state.account_history_generation += 1;
             }
-            (Slot::History, Ok(Payload::More { items, more })) => {
+            (Slot::History, Ok(Payload::More { items, more, .. })) => {
                 state.history_more = more;
                 state.history_more_state = Fetch::Idle;
                 if let PageItems::History(rows) = items {
@@ -642,14 +703,14 @@ impl App {
                     state.account_history_generation += 1;
                 }
             }
-            (Slot::WatchLater, Ok(Payload::More { items, more })) => {
+            (Slot::WatchLater, Ok(Payload::More { items, more, .. })) => {
                 state.watch_later_more = more;
                 state.watch_later_more_state = Fetch::Idle;
                 if let PageItems::Videos(videos) = items {
                     state.account_watch_later.items_mut().extend(videos);
                 }
             }
-            (Slot::Liked, Ok(Payload::More { items, more })) => {
+            (Slot::Liked, Ok(Payload::More { items, more, .. })) => {
                 state.liked_more = more;
                 state.liked_more_state = Fetch::Idle;
                 if let PageItems::Videos(videos) = items {
@@ -661,7 +722,7 @@ impl App {
                 state.playlists_more_state = Fetch::Idle;
                 put(&mut state.playlists, Ok(items));
             }
-            (Slot::Playlists, Ok(Payload::More { items, more })) => {
+            (Slot::Playlists, Ok(Payload::More { items, more, .. })) => {
                 state.playlists_more = more;
                 state.playlists_more_state = Fetch::Idle;
                 if let PageItems::Playlists(lists) = items {
@@ -690,7 +751,7 @@ impl App {
                 state.for_you_from_account = from_account;
                 put(&mut state.for_you, Ok(videos));
             }
-            (Slot::ForYou, Ok(Payload::More { items, more })) => {
+            (Slot::ForYou, Ok(Payload::More { items, more, .. })) => {
                 state.for_you_more = more;
                 state.for_you_more_state = Fetch::Idle;
                 if let PageItems::Videos(videos) = items {
@@ -1036,6 +1097,7 @@ mod tests {
             state.start_search();
             state.fill_search(Ok(Payload::Search {
                 items: search_items(kind, "first"),
+                channel_meta: Vec::new(),
                 more: Some(more("page-2")),
             }));
             assert_eq!(search_ids(&state), ["first"]);
@@ -1060,6 +1122,7 @@ mod tests {
             state.results_more_state = Fetch::Loading;
             state.fill_search(Ok(Payload::More {
                 items: search_items(kind, "second"),
+                channel_meta: Vec::new(),
                 more: None,
             }));
             assert_eq!(search_ids(&state), ["first", "second"]);

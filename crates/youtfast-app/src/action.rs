@@ -10,6 +10,9 @@ pub enum Action {
     SetSearchOptions(youtfast_youtube::innertube::SearchOptions),
     SetChannelOrder(youtfast_youtube::innertube::ChannelOrder),
     SetHistoryQuery(String),
+    SetWatchLaterQuery(String),
+    SetLikedQuery(String),
+    SetPlaylistsQuery(String),
     RemoveHistory(String),
     PlayPlaylist,
     /// A search, or a YouTube link to open.
@@ -33,6 +36,8 @@ pub enum Action {
     Refresh,
     SetSource(Source),
     SetHistoryFilter(youtfast_logic::history::HistoryFilter),
+    SetSubscriptionsQuery(String),
+    SetSubscriptionsSort(youtfast_core::model::SubscriptionSort),
     TogglePause,
     /// The desktop's media controls ask for play or pause directly.
     SetPaused(bool),

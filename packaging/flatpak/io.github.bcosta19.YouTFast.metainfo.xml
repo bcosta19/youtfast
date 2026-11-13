@@ -15,6 +15,9 @@
   <url type="bugtracker">https://github.com/bcosta19/youtfast/issues</url>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.8.0" date="2026-11-13">
+      <description><p>Redesigns Subscriptions and channel search into a multi-column card grid with channel metadata, filters, sorting, and latest-video previews; frames the Home Shorts shelf with scroll/collapse controls and a true 9:16 thumbnail crop; and overhauls History, Watch later, Liked videos, and Playlists with framed day sections, live filtering, Play all controls, and stacked playlist cards.</p></description>
+    </release>
     <release version="0.7.0" date="2026-11-12">
       <description><p>Moves YouTube data and signed-in requests to an in-tree InnerTube client with memory-only session cookies, redesigns the notifications popup, moves Refresh to Ctrl/Cmd+R with a top-bar button, and adds a per-user Windows setup installer (.exe), verified one-command installers (install.sh and install.ps1), and multi-file Winget manifests.</p></description>
     </release>

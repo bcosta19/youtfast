@@ -247,6 +247,7 @@ sequenceDiagram
 | Image lifetime | `images::remote` forgets undrawn images after one minute; downloads are bounded by `thumbs::DOWNLOADS`, retry with backoff, and cannot recreate forgotten retry entries |
 | Kept thumbnails | `thumbs::cached` answers without waiting for a download turn |
 | Watch details | `App::details_cache`: latest 50 videos, 30-minute lifetime |
+| Channel metadata | `State::channel_info`: handles, counts, bio snippets and verified flags enriched in memory from InnerTube channel/search/header responses; cleared on account changes |
 
 ```mermaid
 sequenceDiagram

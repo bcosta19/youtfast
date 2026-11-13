@@ -26,6 +26,7 @@ pub(super) struct Location {
     history_filter: youtfast_logic::history::HistoryFilter,
     filter: FeedFilter,
     cursor: usize,
+    cursor_active: bool,
     watching: Option<Video>,
     up_next: Vec<Video>,
     playing_playlist: Option<String>,
@@ -57,6 +58,7 @@ impl Location {
             history_filter: s.history_filter,
             filter: s.feed_filter,
             cursor: s.cursor,
+            cursor_active: s.cursor_active,
             watching: s.watching.clone(),
             up_next: s.up_next.clone(),
             playing_playlist: s.playing_playlist.clone(),
@@ -104,6 +106,7 @@ impl Location {
         s.history_filter = self.history_filter;
         s.feed_filter = self.filter;
         s.cursor = self.cursor;
+        s.cursor_active = self.cursor_active;
         s.cursor_moved = false;
         let watching = self.watching.filter(|_| self.view == View::Watch);
         if watching.is_some() {
@@ -374,7 +377,9 @@ pub fn cursor_key(state: &State) -> usize {
             youtfast_youtube::innertube::SearchKind::Channels => tag(&state.results_channels),
             youtfast_youtube::innertube::SearchKind::Playlists => tag(&state.results_playlists),
         },
-        View::Subscriptions => tag(&state.account_subscriptions) + source,
+        View::Subscriptions => {
+            tag(&state.account_subscriptions) + 10 * state.subscriptions_sort as usize + source
+        }
         View::History => tag(&state.account_history) + 10 * state.history_filter as usize + source,
         View::WatchLater => tag(&state.account_watch_later) + source,
         View::Liked => tag(&state.liked),
@@ -530,6 +535,7 @@ mod tests {
             })),
             channel_tab: ChannelTab::Shorts,
             cursor: 4,
+            cursor_active: true,
             ..State::default()
         };
         let id = s.navigation_key();
@@ -545,6 +551,7 @@ mod tests {
         page.restore(&mut s);
         assert_eq!(s.navigation_key(), id);
         assert_eq!(s.cursor, 4);
+        assert!(s.cursor_active);
         assert_eq!(s.library.watch_later.len(), 1);
     }
     #[test]

@@ -5,7 +5,7 @@
 use serde_json::Value;
 
 use super::edit::{collect_listed, find, text};
-use youtfast_core::model::{Channel, HistoryRow, PlaylistSummary, Span, Video};
+use youtfast_core::model::{Channel, ChannelMeta, HistoryRow, PlaylistSummary, Span, Video};
 use youtfast_core::util;
 
 /// The item renderers the lists below know, by their JSON key. Anything else
@@ -587,32 +587,126 @@ pub fn collect_playlists_and_ctoken(page: &Value) -> (Vec<PlaylistSummary>, Opti
     (playlists, ctoken)
 }
 
-/// Reads a `Channel` from a `channelRenderer` or `gridChannelRenderer`.
-pub fn channel_from_value(value: &Value) -> Option<Channel> {
+/// Parses one stat slot from a channel card (`subscriberCountText` or
+/// `videoCountText`).
+///
+/// Modern `channelRenderer` responses put `@handle` in `subscriberCountText`
+/// and the subscriber count in `videoCountText`, while `gridChannelRenderer`
+/// keeps subscribers in `subscriberCountText` and video counts in
+/// `videoCountText`. Classifying each segment by prefix/keyword handles both.
+fn assign_channel_stat(text: &str, prefer_videos: bool, meta: &mut ChannelMeta) {
+    for raw in text.split(['•', '·']) {
+        let part = raw.trim();
+        if part.is_empty() {
+            continue;
+        }
+        if part.starts_with('@') {
+            if meta.handle.is_none() {
+                meta.handle = Some(part.to_owned());
+            }
+            continue;
+        }
+        let lower = part.to_ascii_lowercase();
+        if lower.contains("subscriber") || (!lower.contains("video") && !prefer_videos) {
+            if meta.subscribers.is_none() {
+                meta.subscribers = parse_count(part);
+            }
+        } else if meta.videos.is_none() {
+            meta.videos = parse_count(part);
+        }
+    }
+}
+
+fn channel_is_verified(renderer: &Value) -> bool {
+    ["ownerBadges", "badges"].into_iter().any(|key| {
+        renderer
+            .get(key)
+            .and_then(Value::as_array)
+            .is_some_and(|badges| {
+                badges.iter().any(|badge| {
+                    let mbr = badge.get("metadataBadgeRenderer").unwrap_or(badge);
+                    let style = mbr.get("style").and_then(Value::as_str).unwrap_or("");
+                    let icon = mbr
+                        .pointer("/icon/iconType")
+                        .and_then(Value::as_str)
+                        .unwrap_or("");
+                    style.contains("VERIFIED") || icon.contains("CHECK")
+                })
+            })
+    })
+}
+
+/// Reads a `Channel` and its metadata from a `channelRenderer` or
+/// `gridChannelRenderer`.
+pub fn channel_with_meta_from_value(value: &Value) -> Option<(Channel, ChannelMeta)> {
     let renderer = value
         .get("channelRenderer")
         .or_else(|| value.get("gridChannelRenderer"))?;
     let id = renderer.get("channelId")?.as_str()?.to_owned();
     let name = text(renderer.get("title")).unwrap_or_default();
     let avatar = widest(renderer.pointer("/thumbnail/thumbnails"));
-    Some(Channel { id, name, avatar })
+
+    let mut meta = ChannelMeta::default();
+    if let Some(canonical) = renderer
+        .pointer("/navigationEndpoint/browseEndpoint/canonicalBaseUrl")
+        .and_then(Value::as_str)
+    {
+        let trimmed = canonical.trim_start_matches('/');
+        if trimmed.starts_with('@') {
+            meta.handle = Some(trimmed.to_owned());
+        }
+    }
+    if let Some(sub_text) = text(renderer.get("subscriberCountText")) {
+        assign_channel_stat(&sub_text, false, &mut meta);
+    }
+    if let Some(vid_text) = text(renderer.get("videoCountText")) {
+        assign_channel_stat(&vid_text, true, &mut meta);
+    }
+    meta.description = text(renderer.get("descriptionSnippet"))
+        .map(|s| s.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|s| !s.is_empty());
+    meta.verified = channel_is_verified(renderer);
+
+    Some((Channel { id, name, avatar }, meta))
 }
 
-pub fn collect_channels_and_ctoken(page: &Value) -> (Vec<Channel>, Option<String>) {
+/// Reads a `Channel` from a `channelRenderer` or `gridChannelRenderer`.
+pub fn channel_from_value(value: &Value) -> Option<Channel> {
+    channel_with_meta_from_value(value).map(|(channel, _)| channel)
+}
+
+pub fn collect_channels_with_meta_and_ctoken(
+    page: &Value,
+) -> (Vec<Channel>, Vec<(String, ChannelMeta)>, Option<String>) {
     let mut channels: Vec<Channel> = Vec::new();
+    let mut metas: Vec<(String, ChannelMeta)> = Vec::new();
     let mut ctoken = None;
     let mut unknown = UnrecognisedItems::default();
     collect_listed(page, &mut |value, listed| {
         unknown.note(value, listed);
-        if let Some(ch) = channel_from_value(value) {
+        if let Some((ch, meta)) = channel_with_meta_from_value(value) {
             if !channels.iter().any(|known| known.id == ch.id) {
+                if !meta.is_empty() {
+                    metas.push((ch.id.clone(), meta));
+                }
                 channels.push(ch);
+            } else if !meta.is_empty() {
+                if let Some((_, known)) = metas.iter_mut().find(|(id, _)| id == &ch.id) {
+                    known.merge_from(meta);
+                } else {
+                    metas.push((ch.id, meta));
+                }
             }
         } else if ctoken.is_none() {
             ctoken = extract_ctoken(value);
         }
     });
     unknown.report("channels", channels.len());
+    (channels, metas, ctoken)
+}
+
+pub fn collect_channels_and_ctoken(page: &Value) -> (Vec<Channel>, Option<String>) {
+    let (channels, _, ctoken) = collect_channels_with_meta_and_ctoken(page);
     (channels, ctoken)
 }
 
@@ -837,6 +931,72 @@ mod tests {
         assert_eq!(
             unknown.0.into_iter().collect::<Vec<_>>(),
             vec!["brandNewVideoRenderer".to_owned()]
+        );
+    }
+
+    #[test]
+    fn channel_renderers_extract_handle_counts_bio_and_verified_badge() {
+        let page = serde_json::json!({
+            "contents": [
+                {
+                    "channelRenderer": {
+                        "channelId": "UC_modern",
+                        "title": { "simpleText": "Computerphile" },
+                        "navigationEndpoint": {
+                            "browseEndpoint": { "canonicalBaseUrl": "/@Computerphile" }
+                        },
+                        "thumbnail": { "thumbnails": [{ "url": "https://img/a.jpg", "width": 176 }] },
+                        "subscriberCountText": { "simpleText": "@Computerphile" },
+                        "videoCountText": { "simpleText": "2.64M subscribers" },
+                        "descriptionSnippet": { "runs": [{ "text": "Videos all about\n  computers." }] },
+                        "ownerBadges": [{
+                            "metadataBadgeRenderer": {
+                                "icon": { "iconType": "CHECK_CIRCLE_THICK" },
+                                "style": "BADGE_STYLE_TYPE_VERIFIED"
+                            }
+                        }]
+                    }
+                },
+                {
+                    "gridChannelRenderer": {
+                        "channelId": "UC_grid",
+                        "title": { "simpleText": "Grid Channel" },
+                        "navigationEndpoint": {
+                            "browseEndpoint": { "canonicalBaseUrl": "/@GridChan" }
+                        },
+                        "subscriberCountText": { "simpleText": "120K subscribers" },
+                        "videoCountText": { "simpleText": "340 videos" }
+                    }
+                }
+            ]
+        });
+        let (channels, metas, ctoken) = collect_channels_with_meta_and_ctoken(&page);
+        assert!(ctoken.is_none());
+        assert_eq!(channels.len(), 2);
+        assert_eq!(
+            metas,
+            vec![
+                (
+                    "UC_modern".to_owned(),
+                    ChannelMeta {
+                        handle: Some("@Computerphile".to_owned()),
+                        subscribers: Some(2_640_000),
+                        videos: None,
+                        description: Some("Videos all about computers.".to_owned()),
+                        verified: true,
+                    }
+                ),
+                (
+                    "UC_grid".to_owned(),
+                    ChannelMeta {
+                        handle: Some("@GridChan".to_owned()),
+                        subscribers: Some(120_000),
+                        videos: Some(340),
+                        description: None,
+                        verified: false,
+                    }
+                ),
+            ]
         );
     }
 }

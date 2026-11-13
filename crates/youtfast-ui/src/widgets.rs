@@ -558,27 +558,75 @@ pub fn channel_avatar(
     response
 }
 
+/// A compact overlay icon button over a thumbnail (Watch later, Add to queue).
+fn overlay_icon_button(
+    ui: &mut Ui,
+    rect: Rect,
+    id: Id,
+    icon: Icon,
+    tint: Color32,
+    hint: &str,
+) -> Response {
+    let response = ui
+        .interact(rect, id, Sense::click())
+        .on_hover_cursor(CursorIcon::PointingHand)
+        .on_hover_text(hint);
+    response
+        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), hint));
+    let hover = hover_fade(ui, &response);
+    let press = press_fade(ui, &response);
+    let radius = CornerRadius::same(RADIUS);
+    let bg = Color32::from_black_alpha((195.0 + 40.0 * hover - 15.0 * press) as u8);
+    ui.painter().rect_filled(rect, radius, bg);
+    ui.painter().rect_stroke(
+        rect,
+        radius,
+        Stroke::new(1.0, Color32::from_white_alpha((32.0 + 36.0 * hover) as u8)),
+        egui::StrokeKind::Inside,
+    );
+    focus_outline(ui, &response, radius);
+    let icon_size = 18.0;
+    icon.image(tint, icon_size).paint_at(
+        ui,
+        Rect::from_center_size(rect.center(), vec2(icon_size, icon_size)),
+    );
+    response
+}
+
 /// The duration (or LIVE) in the thumbnail's corner, YouTube's way.
 fn badge(ui: &Ui, thumbnail: Rect, video: &Video, palette: &Palette, locale: Locale) {
-    let (text, fill) = if video.live {
-        (tr(locale, "LIVE").into_owned(), palette.red)
+    let (text, fill, border) = if video.live {
+        (tr(locale, "LIVE").into_owned(), palette.red, false)
     } else if let Some(seconds) = video.duration {
-        (util::duration(seconds), Color32::from_black_alpha(200))
+        (
+            util::duration(seconds),
+            Color32::from_black_alpha(210),
+            true,
+        )
     } else {
         return;
     };
     let painter = ui.painter();
     let galley = painter.layout_no_wrap(text, theme::semibold(12.0), Color32::WHITE);
-    let size = galley.size() + vec2(8.0, 4.0);
+    let size = galley.size() + vec2(10.0, 4.0);
     let rect = Rect::from_min_size(thumbnail.right_bottom() - size - vec2(6.0, 6.0), size);
-    painter.rect_filled(rect, CornerRadius::same(RADIUS_SMALL), fill);
-    painter.galley(rect.min + vec2(4.0, 2.0), galley, Color32::WHITE);
+    let radius = CornerRadius::same(RADIUS_SMALL + 1);
+    painter.rect_filled(rect, radius, fill);
+    if border {
+        painter.rect_stroke(
+            rect,
+            radius,
+            Stroke::new(1.0, Color32::from_white_alpha(22)),
+            egui::StrokeKind::Inside,
+        );
+    }
+    painter.galley(rect.min + vec2(5.0, 2.0), galley, Color32::WHITE);
 }
 
 /// The thumbnail, rounded, with its corner badge, and the part watched
 /// (0..1) as YouTube's red bar along its bottom edge.
-fn thumbnail(
-    ui: &Ui,
+pub(crate) fn thumbnail(
+    ui: &mut Ui,
     palette: &Palette,
     video: &Video,
     rect: Rect,
@@ -594,20 +642,35 @@ fn thumbnail(
         .fit_to_exact_size(rect.size())
         .corner_radius(radius)
         .paint_at(ui, rect);
+    let hairline = thumbnail_hairline(palette);
+    ui.painter().rect_stroke(
+        rect,
+        radius,
+        Stroke::new(1.0, hairline),
+        egui::StrokeKind::Inside,
+    );
     badge(ui, rect, video, palette, locale);
     if let Some(watched) = watched.filter(|fraction| *fraction > 0.0) {
         let track = Rect::from_min_max(pos2(rect.left(), rect.bottom() - 4.0), rect.right_bottom());
-        let played = Rect::from_min_size(
-            track.min,
-            vec2(track.width() * watched.clamp(0.0, 1.0), track.height()),
+        ui.painter().rect_filled(
+            track,
+            CornerRadius {
+                nw: 0,
+                ne: 0,
+                sw: RADIUS,
+                se: RADIUS,
+            },
+            Color32::from_black_alpha(165),
         );
+        let fraction = watched.clamp(0.0, 1.0);
+        let played = Rect::from_min_size(track.min, vec2(track.width() * fraction, track.height()));
         ui.painter().rect_filled(
             played,
             CornerRadius {
                 nw: 0,
                 ne: 0,
                 sw: RADIUS,
-                se: 0,
+                se: if fraction >= 0.99 { RADIUS } else { 0 },
             },
             palette.accent,
         );
@@ -642,7 +705,7 @@ fn video_text(
     };
     let mut y = at.y;
     let title = lines(&video.title, theme::semibold(14.0), palette.text, 2);
-    y += title.rect.height() + 4.0;
+    y += title.rect.height() + 5.0;
     painter.galley(at, title, palette.text);
     if let Some(channel) = video.channel.as_deref().filter(|name| !name.is_empty()) {
         let galley = lines(channel, theme::regular(13.0), palette.secondary, 1);
@@ -651,7 +714,7 @@ fn video_text(
         ui.ctx()
             .data_mut(|d| d.insert_temp(id.with("channel-rect"), rect));
         painter.galley(pos2(at.x, y), galley, palette.secondary);
-        y += height + 1.0;
+        y += height + 2.0;
     }
     let mut rest = meta(video, locale);
     if let Some(note) = note.filter(|note| !note.is_empty()) {
@@ -672,21 +735,40 @@ fn video_text(
 /// The fill behind a row or card: `surface_active` when selected (the
 /// keyboard's cursor), `surface_hover` under the pointer; rounded.
 pub fn row_fill(ui: &Ui, palette: &Palette, rect: Rect, response: &Response, selected: bool) {
+    row_fill_radius(
+        ui,
+        palette,
+        rect,
+        response,
+        selected,
+        CornerRadius::same(RADIUS),
+    );
+}
+
+pub(crate) fn row_fill_radius(
+    ui: &Ui,
+    palette: &Palette,
+    rect: Rect,
+    response: &Response,
+    selected: bool,
+    radius: CornerRadius,
+) {
     if response.hovered() {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
     }
-    let fill = if selected {
-        Some(palette.surface_active)
-    } else if response.hovered() {
-        Some(palette.surface_hover)
-    } else {
-        None
-    };
-    if let Some(fill) = fill {
+    let hover = hover_fade(ui, response);
+    let press = press_fade(ui, response);
+    let on = ui
+        .ctx()
+        .animate_bool(response.id.with("selected"), selected);
+    let lit = hover.max(on);
+    if lit > 0.0 {
+        let hover_fill = mix(palette.surface_hover, palette.surface_active, press * 0.6);
+        let fill = mix(hover_fill, palette.surface_active, on);
         ui.painter()
-            .rect_filled(rect, CornerRadius::same(RADIUS), fill);
+            .rect_filled(rect, radius, fill.gamma_multiply(lit));
     }
-    focus_outline(ui, response, CornerRadius::same(RADIUS));
+    focus_outline(ui, response, radius);
 }
 
 /// The part of `video` watched (0..1), from its resume position.
@@ -763,7 +845,14 @@ fn video_row_sized(
     if !ui.is_rect_visible(rect) {
         return response;
     }
-    row_fill(ui, palette, rect, &response, selected);
+    row_fill_radius(
+        ui,
+        palette,
+        rect,
+        &response,
+        selected,
+        CornerRadius::same(RADIUS + 4),
+    );
     let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), thumb);
     thumbnail(ui, palette, video, thumb_rect, watched, locale);
     let text_x = thumb_rect.right() + 12.0;
@@ -836,16 +925,40 @@ pub fn video_interactions(
             }
         }
     }
-    let menu_rect = Rect::from_min_size(
-        pos2(response.rect.right() - 30.0, response.rect.bottom() - 62.0),
-        vec2(28.0, 28.0),
+    let menu_rect = Rect::from_center_size(
+        pos2(response.rect.right() - 16.0, response.rect.bottom() - 48.0),
+        vec2(30.0, 30.0),
     );
     let menu = ui
-        .put(
-            menu_rect,
-            egui::Button::new(Icon::More.image(state.palette.text, 18.0)).frame(false),
-        )
+        .interact(menu_rect, response.id.with("more-menu"), Sense::click())
+        .on_hover_cursor(CursorIcon::PointingHand)
         .on_hover_text(tr(locale, "More actions").as_ref());
+    menu.widget_info(|| {
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::Button,
+            ui.is_enabled(),
+            tr(locale, "More actions").as_ref(),
+        )
+    });
+    let menu_hover = hover_fade(ui, &menu);
+    if menu_hover > 0.0 {
+        let circle_fill = mix(
+            state.palette.surface_hover,
+            state.palette.surface_active,
+            press_fade(ui, &menu),
+        );
+        ui.painter().circle_filled(
+            menu_rect.center(),
+            15.0,
+            circle_fill.gamma_multiply(menu_hover),
+        );
+    }
+    focus_outline(ui, &menu, CornerRadius::same(15));
+    let menu_tint = mix(state.palette.secondary, state.palette.text, menu_hover);
+    Icon::More.image(menu_tint, 18.0).paint_at(
+        ui,
+        Rect::from_center_size(menu_rect.center(), vec2(18.0, 18.0)),
+    );
     handled |= menu.clicked();
     egui::Popup::menu(&menu).show(|ui| {
         for (label, action) in [
@@ -887,26 +1000,38 @@ pub fn video_interactions(
             vec2(32.0, 32.0),
         );
         let add = Rect::from_min_size(clock.min + vec2(36.0, 0.0), clock.size());
-        if ui
-            .put(
-                clock,
-                egui::Button::new(Icon::Clock.image(state.palette.text, 18.0))
-                    .fill(state.palette.overlay),
-            )
-            .on_hover_text(tr(locale, "Watch later on this device").as_ref())
-            .clicked()
+        let in_later = state.library.in_watch_later(&video.id);
+        let later_hint = if in_later {
+            tr(locale, "Remove from Watch later")
+        } else {
+            tr(locale, "Watch later on this device")
+        };
+        if overlay_icon_button(
+            ui,
+            clock,
+            response.id.with("watch-later"),
+            Icon::Clock,
+            if in_later {
+                state.palette.accent
+            } else {
+                Color32::WHITE
+            },
+            later_hint.as_ref(),
+        )
+        .clicked()
         {
             handled = true;
             actions.push(Action::ToggleWatchLater(video.clone()));
         }
-        if ui
-            .put(
-                add,
-                egui::Button::new(Icon::Queue.image(state.palette.text, 18.0))
-                    .fill(state.palette.overlay),
-            )
-            .on_hover_text(tr(locale, "Add to queue").as_ref())
-            .clicked()
+        if overlay_icon_button(
+            ui,
+            add,
+            response.id.with("add-queue"),
+            Icon::Queue,
+            Color32::WHITE,
+            tr(locale, "Add to queue").as_ref(),
+        )
+        .clicked()
         {
             handled = true;
             actions.push(Action::Enqueue {
@@ -946,7 +1071,14 @@ pub fn video_card(
     if !ui.is_rect_visible(rect) {
         return response;
     }
-    row_fill(ui, palette, rect, &response, selected);
+    row_fill_radius(
+        ui,
+        palette,
+        rect,
+        &response,
+        selected,
+        CornerRadius::same(RADIUS + 4),
+    );
     let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), thumb);
     thumbnail(ui, palette, video, thumb_rect, watched, locale);
     let avatar_rect = Rect::from_min_size(
@@ -995,7 +1127,14 @@ pub fn playlist_row(
     if !ui.is_rect_visible(rect) {
         return response;
     }
-    row_fill(ui, palette, rect, &response, selected);
+    row_fill_radius(
+        ui,
+        palette,
+        rect,
+        &response,
+        selected,
+        CornerRadius::same(RADIUS + 4),
+    );
     let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), size);
     let radius = CornerRadius::same(RADIUS);
     ui.painter()
@@ -1042,6 +1181,179 @@ pub fn playlist_row(
     response
 }
 
+pub(crate) fn thumbnail_hairline(palette: &Palette) -> Color32 {
+    if palette.dark {
+        Color32::from_white_alpha(18)
+    } else {
+        Color32::from_black_alpha(16)
+    }
+}
+
+pub fn playlist_card_height(ui: &Ui, width: f32) -> f32 {
+    let pad = 10.0;
+    let stack = 9.0;
+    let thumb_h = ((width - 2.0 * pad) * 9.0 / 16.0).round();
+    // Title (up to 2 lines) + channel/details line + vertical spacing.
+    pad + stack + thumb_h + 3.0 * line(ui) + 18.0 + pad
+}
+
+/// A playlist as a grid card: stacked silhouette above its 16:9 thumbnail,
+/// video-count badge, two-line name and channel attribution.
+pub fn playlist_card(
+    ui: &mut Ui,
+    palette: &Palette,
+    playlist: &PlaylistSummary,
+    selected: bool,
+    width: f32,
+    locale: Locale,
+) -> Response {
+    let pad = 10.0;
+    let stack = 9.0;
+    let height = playlist_card_height(ui, width);
+    let (rect, response) = ui.allocate_exact_size(vec2(width, height), Sense::click());
+    if !ui.is_rect_visible(rect) {
+        return response;
+    }
+
+    let card_radius = CornerRadius::same(RADIUS + 4);
+    ui.painter().rect_filled(rect, card_radius, palette.panel);
+    row_fill_radius(ui, palette, rect, &response, selected, card_radius);
+    let hover = hover_fade(ui, &response);
+    let border = mix(palette.outline, palette.secondary, hover * 0.45);
+    ui.painter().rect_stroke(
+        rect,
+        card_radius,
+        Stroke::new(1.0, border),
+        egui::StrokeKind::Inside,
+    );
+
+    let thumb_w = (width - 2.0 * pad).max(40.0);
+    let thumb_h = (thumb_w * 9.0 / 16.0).round();
+    let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad + stack), vec2(thumb_w, thumb_h));
+
+    // Subtle stacked tabs above the cover thumbnail to distinguish playlists from single videos.
+    let stack_radius = CornerRadius {
+        nw: 4,
+        ne: 4,
+        sw: 0,
+        se: 0,
+    };
+    let top_strip = Rect::from_min_max(
+        pos2(thumb_rect.left() + 14.0, thumb_rect.top() - 8.0),
+        pos2(thumb_rect.right() - 14.0, thumb_rect.top() - 4.5),
+    );
+    let mid_strip = Rect::from_min_max(
+        pos2(thumb_rect.left() + 7.0, thumb_rect.top() - 4.0),
+        pos2(thumb_rect.right() - 7.0, thumb_rect.top() - 0.5),
+    );
+    ui.painter().rect_filled(
+        top_strip,
+        stack_radius,
+        mix(palette.panel, palette.secondary, 0.14),
+    );
+    ui.painter().rect_filled(
+        mid_strip,
+        stack_radius,
+        mix(palette.panel, palette.secondary, 0.26),
+    );
+
+    let thumb_radius = CornerRadius::same(RADIUS);
+    ui.painter()
+        .rect_filled(thumb_rect, thumb_radius, palette.surface);
+    if let Some(url) = &playlist.thumbnail {
+        youtfast_app::images::remote(ui, url)
+            .fit_to_exact_size(thumb_rect.size())
+            .corner_radius(thumb_radius)
+            .paint_at(ui, thumb_rect);
+    } else {
+        Icon::Playlists.image(palette.secondary, 28.0).paint_at(
+            ui,
+            Rect::from_center_size(thumb_rect.center(), vec2(28.0, 28.0)),
+        );
+    }
+    ui.painter().rect_stroke(
+        thumb_rect,
+        thumb_radius,
+        Stroke::new(1.0, thumbnail_hairline(palette)),
+        egui::StrokeKind::Inside,
+    );
+
+    if let Some(count) = playlist.videos {
+        let count_text = video_count_label(count, locale);
+        let painter = ui.painter();
+        let galley = painter.layout_no_wrap(count_text, theme::tabular(11.5), Color32::WHITE);
+        let pill_w = 12.0 + 5.0 + galley.size().x + 14.0;
+        let pill_h = 22.0;
+        let pill = Rect::from_min_size(
+            pos2(
+                thumb_rect.right() - pill_w - 8.0,
+                thumb_rect.bottom() - pill_h - 8.0,
+            ),
+            vec2(pill_w, pill_h),
+        );
+        painter.rect_filled(
+            pill,
+            CornerRadius::same(theme::RADIUS_SMALL),
+            Color32::from_black_alpha(195),
+        );
+        Icon::Playlists.image(Color32::WHITE, 12.0).paint_at(
+            ui,
+            Rect::from_center_size(pos2(pill.left() + 13.0, pill.center().y), vec2(12.0, 12.0)),
+        );
+        painter.galley(
+            pos2(pill.left() + 24.0, pill.center().y - galley.size().y / 2.0),
+            galley,
+            Color32::WHITE,
+        );
+    }
+
+    let text_w = thumb_w;
+    let painter = ui.painter();
+    let mut job = LayoutJob::default();
+    job.append(
+        &playlist.name,
+        0.0,
+        egui::TextFormat::simple(theme::semibold(14.5), palette.text),
+    );
+    job.wrap.max_width = text_w;
+    job.wrap.max_rows = 2;
+    job.wrap.overflow_character = Some('…');
+    let title = painter.layout_job(job);
+    let title_pos = pos2(thumb_rect.left(), thumb_rect.bottom() + 10.0);
+    let title_h = title.size().y;
+    painter.galley(title_pos, title, palette.text);
+
+    let subtitle = playlist
+        .channel
+        .as_deref()
+        .filter(|c| !c.is_empty())
+        .map(str::to_owned)
+        .or_else(|| {
+            playlist
+                .videos
+                .map(|count| video_count_label(count, locale))
+        });
+    if let Some(sub) = subtitle {
+        let mut sub_job = LayoutJob::default();
+        sub_job.append(
+            &sub,
+            0.0,
+            egui::TextFormat::simple(theme::regular(12.5), palette.secondary),
+        );
+        sub_job.wrap.max_width = text_w;
+        sub_job.wrap.max_rows = 1;
+        sub_job.wrap.overflow_character = Some('…');
+        let sub_galley = painter.layout_job(sub_job);
+        painter.galley(
+            pos2(thumb_rect.left(), title_pos.y + title_h + 4.0),
+            sub_galley,
+            palette.secondary,
+        );
+    }
+
+    response
+}
+
 /// Count phrases use the selected catalog's plural rules, independently of content.
 pub fn video_count_label(count: u64, locale: Locale) -> String {
     let label = youtfast_i18n::ngettext(
@@ -1053,35 +1365,52 @@ pub fn video_count_label(count: u64, locale: Locale) -> String {
     youtfast_i18n::interpolate(&label, &[("count", util::thousands(count))])
 }
 
+/// Compact count label using catalog plural rules (`1.2M`, `340`, `2`, …).
+pub fn compact_count_label(
+    count: u64,
+    singular: &'static str,
+    plural: &'static str,
+    locale: Locale,
+) -> String {
+    let phrase =
+        youtfast_i18n::ngettext(locale, singular, plural, count.min(u32::MAX as u64) as u32);
+    youtfast_i18n::interpolate(&phrase, &[("count", util::compact(count))])
+}
+
 /// One of the chips over a list, YouTube's way: a pill on `surface`,
 /// `text` filled with the `window` colour when on.
 pub fn chip(ui: &mut Ui, palette: &Palette, label: &str, on: bool) -> Response {
-    let (fill, color) = if on {
-        (palette.text, palette.window)
-    } else {
-        (palette.surface, palette.text)
-    };
+    let text_color = if on { palette.window } else { palette.text };
     let galley = ui
         .painter()
-        .layout_no_wrap(label.to_owned(), theme::medium(14.0), color);
-    let size = vec2(galley.size().x + 24.0, 32.0);
+        .layout_no_wrap(label.to_owned(), theme::medium(14.0), text_color);
+    let height = 32.0;
+    let size = vec2(galley.size().x + 28.0, height);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     response.widget_info(|| {
         egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), on, label)
     });
-    let fill = if !on && response.hovered() {
-        palette.surface_hover
-    } else {
-        fill
-    };
     if response.hovered() {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
     }
+    let hover = hover_fade(ui, &response);
+    let press = press_fade(ui, &response);
+    let fill = if on {
+        palette
+            .text
+            .gamma_multiply(1.0 - 0.12 * hover - 0.1 * press)
+    } else {
+        mix(
+            mix(palette.surface, palette.surface_hover, hover),
+            palette.surface_active,
+            press,
+        )
+    };
+    let radius = CornerRadius::same((height / 2.0) as u8);
+    ui.painter().rect_filled(rect, radius, fill);
+    focus_outline(ui, &response, radius);
     ui.painter()
-        .rect_filled(rect, CornerRadius::same(RADIUS), fill);
-    focus_outline(ui, &response, CornerRadius::same(RADIUS));
-    ui.painter()
-        .galley(rect.center() - galley.size() / 2.0, galley, color);
+        .galley(rect.center() - galley.size() / 2.0, galley, text_color);
     response
 }
 
@@ -1098,26 +1427,27 @@ pub fn search_field(
     width: f32,
 ) -> Response {
     let height = 36.0;
-    let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
+    let (rect, hover_response) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
     let focused = ui.memory(|memory| memory.has_focus(id));
-    let fill = if focused {
-        palette.surface_hover
-    } else {
-        palette.surface
-    };
+    let focus_t = ui.ctx().animate_bool(id.with("focused"), focused);
+    let hover = hover_fade(ui, &hover_response);
+    let fill = mix(palette.surface, palette.surface_hover, hover.max(focus_t));
     let radius = CornerRadius::same((height / 2.0) as u8);
     ui.painter().rect_filled(rect, radius, fill);
-    if focused {
-        ui.painter().rect_stroke(
-            rect,
-            radius,
-            Stroke::new(1.5, palette.text.gamma_multiply(0.6)),
-            egui::StrokeKind::Inside,
-        );
-    }
+    let border_color = mix(
+        palette.outline.gamma_multiply(0.75),
+        mix(palette.text.gamma_multiply(0.5), palette.accent, 0.45),
+        focus_t,
+    );
+    ui.painter().rect_stroke(
+        rect,
+        radius,
+        Stroke::new(1.0 + 0.5 * focus_t, border_color),
+        egui::StrokeKind::Inside,
+    );
     let icon = Rect::from_center_size(pos2(rect.left() + 20.0, rect.center().y), vec2(16.0, 16.0));
     Icon::Search
-        .image(palette.secondary, 16.0)
+        .image(mix(palette.secondary, palette.text, focus_t), 16.0)
         .paint_at(ui, icon);
     let clear = !text.is_empty();
     let field_rect = Rect::from_min_max(
@@ -1127,8 +1457,9 @@ pub fn search_field(
             rect.bottom(),
         ),
     );
-    let response = ui.put(
-        field_rect,
+    let mut field_ui = ui.new_child(egui::UiBuilder::new().max_rect(field_rect));
+    let response = field_ui.add_sized(
+        field_rect.size(),
         egui::TextEdit::singleline(text)
             .id(id)
             .frame(egui::Frame::NONE)
@@ -1148,16 +1479,24 @@ pub fn search_field(
                 format!("{}: {hint}", tr(locale, "Clear")),
             )
         });
+        let clear_hover = hover_fade(ui, &clear_response);
         if clear_response.hovered() {
             ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
-            ui.painter()
-                .circle_filled(button.center(), 12.0, palette.surface_active);
+        }
+        if clear_hover > 0.0 {
+            ui.painter().circle_filled(
+                button.center(),
+                12.0,
+                palette.surface_active.gamma_multiply(clear_hover),
+            );
         }
         focus_outline(ui, &clear_response, CornerRadius::same(12));
-        Icon::Close.image(palette.secondary, 15.0).paint_at(
-            ui,
-            Rect::from_center_size(button.center(), vec2(15.0, 15.0)),
-        );
+        Icon::Close
+            .image(mix(palette.secondary, palette.text, clear_hover), 15.0)
+            .paint_at(
+                ui,
+                Rect::from_center_size(button.center(), vec2(15.0, 15.0)),
+            );
         if clear_response.clicked() {
             text.clear();
             ui.memory_mut(|memory| memory.request_focus(id));
@@ -1427,16 +1766,16 @@ pub fn more_row(
     }
 }
 
-/// The uv rect that crops a 4:3 thumbnail to 9:16, centered.
+/// The uv rect that crops a 16:9 thumbnail (`/mqdefault.jpg`) to 9:16, centered.
 pub fn short_uv() -> Rect {
-    // A 4:3 source's width fraction for 9:16 tall is 9/16 * 3/4.
-    let width = 9.0 / 16.0 * 3.0 / 4.0;
+    // A 16:9 source's width fraction for 9:16 tall is (9/16) / (16/9) = 81/256.
+    let width = (9.0 / 16.0) / (16.0 / 9.0);
     let left = (1.0 - width) / 2.0;
     Rect::from_min_max(pos2(left, 0.0), pos2(left + width, 1.0))
 }
 
 /// "1.2M views · 2 days ago", or "Live now".
-fn meta(video: &Video, locale: Locale) -> String {
+pub(crate) fn meta(video: &Video, locale: Locale) -> String {
     if video.live {
         return tr(locale, "Live now").into_owned();
     }
@@ -2020,10 +2359,26 @@ mod tests {
     #[test]
     fn the_shorts_crop_is_centered_9_of_16() {
         let uv = super::short_uv();
-        // 9:16 tall in a 4:3 source is 27/64 of the width, centered.
-        assert!((uv.width() - 27.0 / 64.0).abs() < 1e-6);
-        assert!((uv.left() - (1.0 - 27.0 / 64.0) / 2.0).abs() < 1e-6);
+        // 9:16 tall in a 16:9 source is 81/256 of the width, centered.
+        assert!((uv.width() - 81.0 / 256.0).abs() < 1e-6);
+        assert!((uv.left() - (1.0 - 81.0 / 256.0) / 2.0).abs() < 1e-6);
         assert_eq!(uv.top(), 0.0);
         assert_eq!(uv.bottom(), 1.0);
+    }
+
+    #[test]
+    fn chip_uses_pill_corners() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            chip(ui, &Palette::dark(), "All", false);
+        });
+        output.textures_delta.clear();
+        assert!(output.shapes.iter().any(|shape| {
+            matches!(
+                &shape.shape,
+                egui::Shape::Rect(rect) if rect.corner_radius == CornerRadius::same(16)
+            )
+        }));
     }
 }

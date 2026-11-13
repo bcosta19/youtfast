@@ -40,7 +40,7 @@ before decoration. Every keyboard binding stays; the `?` overlay lists them.
 | What | Colour |
 | --- | --- |
 | Window, page | `window` |
-| Sidebar, top bar | `panel` (the same as `window` in the built-in palettes) |
+| Sidebar, top bar | `panel` (slightly raised from `window` in the built-in palettes) |
 | Cards, inputs, chips, soft buttons | `surface`; hover `surface_hover`; pressed or the keyboard's selected row `surface_active` |
 | Menus, toasts, modals | `overlay` with a 1 px `outline` and the popup shadow |
 | Body text | `text`; channel names, counts, ages and other metadata `secondary`; helper text `secondary`; placeholders and disabled states `dim` |

@@ -12,9 +12,9 @@ use youtfast_backend::{
     Backend, Command, CommentsKey, Event, Payload, Request, SignInMethod, Slot,
 };
 use youtfast_core::model::{
-    AccountSource, Channel, ChannelAbout, ChannelHeader, ChannelTab, CommentRow, Details,
-    FeedFilter, Fetch, HistoryRow, Listing, PageItems, PlaylistSummary, Quality, Rating,
-    Resolution, Results, SaveTarget, Segment, Source, Video, View,
+    AccountSource, Channel, ChannelAbout, ChannelHeader, ChannelMeta, ChannelTab, CommentRow,
+    Details, FeedFilter, Fetch, HistoryRow, Listing, PageItems, PlaylistSummary, Quality, Rating,
+    Resolution, Results, SaveTarget, Segment, Source, SubscriptionSort, Video, View,
 };
 use youtfast_core::util;
 use youtfast_desktop::instance::{self, Queue as RemoteQueue};
@@ -114,6 +114,17 @@ pub struct HistoryCache {
     pub runs: Vec<youtfast_logic::history::Run>,
 }
 
+/// Per-channel activity indexed from the loaded feed and watch history.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ChannelActivity<'a> {
+    pub recent_count: usize,
+    pub latest_video: Option<&'a Video>,
+    pub feed_rank: Option<usize>,
+    pub watched_count: usize,
+    pub last_watched: Option<&'a Video>,
+    pub watch_rank: Option<usize>,
+}
+
 /// What the views draw from.
 #[derive(Default)]
 pub struct State {
@@ -127,7 +138,13 @@ pub struct State {
     pub search_query: String,
     pub results_channels: Listing<Channel>,
     pub results_playlists: Listing<PlaylistSummary>,
+    pub subscriptions_query: String,
+    pub subscriptions_sort: SubscriptionSort,
+    pub channel_info: HashMap<String, ChannelMeta>,
     pub history_query: String,
+    pub watch_later_query: String,
+    pub liked_query: String,
+    pub playlists_query: String,
     pub history_filter: youtfast_logic::history::HistoryFilter,
     pub history_needs_refresh: bool,
     pub history_requested_at: Option<i64>,
@@ -198,6 +215,10 @@ pub struct State {
     pub keys_open: bool,
     /// The keyboard cursor: the selected row in the current view's list.
     pub cursor: usize,
+    /// Whether keyboard navigation (`j`/`k`/`g`/`G`) has activated the cursor
+    /// highlight on the current list, so opening a view does not leave row 0
+    /// permanently looking hovered before the keyboard moves it.
+    pub cursor_active: bool,
     /// Set on the frame the cursor moved, so only that frame scrolls
     /// the row into view — asking every frame glues the page to it.
     pub cursor_moved: bool,
@@ -406,6 +427,17 @@ impl State {
         matches!(self.account, AccountState::SignedIn(_))
     }
 
+    /// Whether `index` is the active keyboard cursor row or card.
+    pub fn is_cursor(&self, index: usize) -> bool {
+        self.cursor_active && self.cursor == index
+    }
+
+    /// Clears and resets the keyboard cursor for a new or changed list.
+    pub fn reset_cursor(&mut self) {
+        self.cursor = 0;
+        self.cursor_active = false;
+    }
+
     /// The account the app is signed in as, by its library id.
     pub fn active_account(&self) -> Option<&Account> {
         self.library
@@ -472,8 +504,8 @@ impl State {
                 })
                 .collect(),
         };
-        if self.history_source() != Some(Source::Account) || self.merged_history() {
-            let query = self.history_query.trim().to_lowercase();
+        let query = self.history_query.trim().to_lowercase();
+        if !query.is_empty() {
             rows.retain(|row| row.matches_lowered(&query));
         }
         rows
@@ -572,6 +604,393 @@ impl State {
             .filter(|channel| !self.subscribed_in_account(&channel.id))
             .cloned()
             .collect()
+    }
+
+    pub fn merge_channel_meta(&mut self, channel_id: String, meta: ChannelMeta) {
+        if !meta.is_empty() && !channel_id.is_empty() {
+            self.channel_info
+                .entry(channel_id)
+                .or_default()
+                .merge_from(meta);
+        }
+    }
+
+    pub fn merge_channel_metas(&mut self, metas: Vec<(String, ChannelMeta)>) {
+        for (channel_id, meta) in metas {
+            self.merge_channel_meta(channel_id, meta);
+        }
+    }
+
+    /// Subscriptions for the currently selected source tab.
+    pub fn subscription_list(&self) -> &[Channel] {
+        match self.source() {
+            Source::Account => self.account_subscriptions.items(),
+            Source::Device => &self.library.subscriptions,
+        }
+    }
+
+    /// Indexes feed recency and watch counts once per frame for O(1) card lookup.
+    pub fn subscription_activity(&self) -> HashMap<&str, ChannelActivity<'_>> {
+        let mut map: HashMap<&str, ChannelActivity<'_>> = HashMap::new();
+        for (rank, video) in self.feed.items().iter().enumerate() {
+            let Some(channel_id) = video.channel_id.as_deref() else {
+                continue;
+            };
+            let entry = map.entry(channel_id).or_default();
+            entry.recent_count += 1;
+            if entry.latest_video.is_none() {
+                entry.latest_video = Some(video);
+                entry.feed_rank = Some(rank);
+            }
+        }
+        let account_history: &[HistoryRow] = if self.signed_in() {
+            self.account_history.items()
+        } else {
+            &[]
+        };
+        let mut seen_videos: HashSet<&str> = HashSet::new();
+        for (rank, video) in self
+            .library
+            .history
+            .iter()
+            .map(|watched| &watched.video)
+            .chain(account_history.iter().map(|row| &row.video))
+            .enumerate()
+        {
+            if !seen_videos.insert(video.id.as_str()) {
+                continue;
+            }
+            let Some(channel_id) = video.channel_id.as_deref() else {
+                continue;
+            };
+            let entry = map.entry(channel_id).or_default();
+            entry.watched_count += 1;
+            if entry.last_watched.is_none() {
+                entry.last_watched = Some(video);
+                entry.watch_rank = Some(rank);
+            }
+        }
+        map
+    }
+
+    /// Channels shown in the Subscriptions grid after applying the query filter
+    /// and sort order.
+    pub fn visible_subscriptions_with_activity<'a>(
+        &'a self,
+        activity: &HashMap<&str, ChannelActivity<'a>>,
+    ) -> Vec<&'a Channel> {
+        let query = self.subscriptions_query.trim().to_lowercase();
+        let mut channels: Vec<&Channel> = self
+            .subscription_list()
+            .iter()
+            .filter(|channel| {
+                if query.is_empty() {
+                    return true;
+                }
+                if channel.name.to_lowercase().contains(&query) {
+                    return true;
+                }
+                self.channel_info.get(&channel.id).is_some_and(|meta| {
+                    meta.handle
+                        .as_deref()
+                        .is_some_and(|handle| handle.to_lowercase().contains(&query))
+                        || meta
+                            .description
+                            .as_deref()
+                            .is_some_and(|desc| desc.to_lowercase().contains(&query))
+                })
+            })
+            .collect();
+
+        let cmp_name = |a: &&Channel, b: &&Channel| {
+            a.name
+                .to_lowercase()
+                .cmp(&b.name.to_lowercase())
+                .then_with(|| a.id.cmp(&b.id))
+        };
+
+        match self.subscriptions_sort {
+            SubscriptionSort::Name => channels.sort_by(cmp_name),
+            SubscriptionSort::Recent => channels.sort_by(|a, b| {
+                let ra = activity.get(a.id.as_str()).and_then(|act| act.feed_rank);
+                let rb = activity.get(b.id.as_str()).and_then(|act| act.feed_rank);
+                match (ra, rb) {
+                    (Some(ra), Some(rb)) => ra.cmp(&rb),
+                    (Some(_), None) => std::cmp::Ordering::Less,
+                    (None, Some(_)) => std::cmp::Ordering::Greater,
+                    (None, None) => std::cmp::Ordering::Equal,
+                }
+                .then_with(|| cmp_name(a, b))
+            }),
+            SubscriptionSort::Watched => channels.sort_by(|a, b| {
+                let wa = activity
+                    .get(a.id.as_str())
+                    .map_or(0, |act| act.watched_count);
+                let wb = activity
+                    .get(b.id.as_str())
+                    .map_or(0, |act| act.watched_count);
+                wb.cmp(&wa)
+                    .then_with(|| {
+                        let ra = activity
+                            .get(a.id.as_str())
+                            .and_then(|act| act.watch_rank)
+                            .unwrap_or(usize::MAX);
+                        let rb = activity
+                            .get(b.id.as_str())
+                            .and_then(|act| act.watch_rank)
+                            .unwrap_or(usize::MAX);
+                        ra.cmp(&rb)
+                    })
+                    .then_with(|| cmp_name(a, b))
+            }),
+        }
+        channels
+    }
+
+    pub fn visible_subscriptions(&self) -> Vec<&Channel> {
+        let activity = self.subscription_activity();
+        self.visible_subscriptions_with_activity(&activity)
+    }
+
+    /// Watch later list for the currently selected source tab.
+    pub fn watch_later_list(&self) -> &[Video] {
+        match self.source() {
+            Source::Account => self.account_watch_later.items(),
+            Source::Device => &self.library.watch_later,
+        }
+    }
+
+    /// Videos in Watch later matching `watch_later_query`.
+    pub fn visible_watch_later(&self) -> Vec<&Video> {
+        filter_videos(self.watch_later_list(), &self.watch_later_query)
+    }
+
+    /// Liked videos matching `liked_query`.
+    pub fn visible_liked(&self) -> Vec<&Video> {
+        filter_videos(self.liked.items(), &self.liked_query)
+    }
+
+    /// Account playlists matching `playlists_query`.
+    pub fn visible_playlists(&self) -> Vec<&PlaylistSummary> {
+        let query = self.playlists_query.trim().to_lowercase();
+        if query.is_empty() {
+            return self.playlists.items().iter().collect();
+        }
+        self.playlists
+            .items()
+            .iter()
+            .filter(|playlist| {
+                playlist.name.to_lowercase().contains(&query)
+                    || playlist
+                        .channel
+                        .as_deref()
+                        .unwrap_or_default()
+                        .to_lowercase()
+                        .contains(&query)
+            })
+            .collect()
+    }
+}
+
+fn filter_videos<'a>(videos: &'a [Video], raw_query: &str) -> Vec<&'a Video> {
+    let query = raw_query.trim().to_lowercase();
+    if query.is_empty() {
+        return videos.iter().collect();
+    }
+    videos
+        .iter()
+        .filter(|video| {
+            video.title.to_lowercase().contains(&query)
+                || video
+                    .channel
+                    .as_deref()
+                    .unwrap_or_default()
+                    .to_lowercase()
+                    .contains(&query)
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod subscription_state_tests {
+    use super::*;
+
+    #[test]
+    fn visible_subscriptions_filters_by_handle_or_bio_and_sorts_by_activity() {
+        let mut state = State::default();
+        state.library.subscriptions = vec![
+            Channel {
+                id: "UC_alpha".into(),
+                name: "Alpha Channel".into(),
+                avatar: None,
+            },
+            Channel {
+                id: "UC_beta".into(),
+                name: "Beta Systems".into(),
+                avatar: None,
+            },
+            Channel {
+                id: "UC_gamma".into(),
+                name: "Gamma Notes".into(),
+                avatar: None,
+            },
+        ];
+        state.merge_channel_meta(
+            "UC_beta".into(),
+            ChannelMeta {
+                handle: Some("@betahandle".into()),
+                description: Some("Deep dives on Postgres".into()),
+                ..Default::default()
+            },
+        );
+        state.feed = Listing::Ready(vec![Video {
+            title: "Latest Gamma".into(),
+            channel: Some("Gamma Notes".into()),
+            channel_id: Some("UC_gamma".into()),
+            ..Video::from_id("vid_gamma001".into())
+        }]);
+        state.library.record_watch(
+            Video {
+                title: "Postgres internals".into(),
+                channel: Some("Beta Systems".into()),
+                channel_id: Some("UC_beta".into()),
+                ..Video::from_id("vid_beta001".into())
+            },
+            10,
+        );
+
+        state.subscriptions_query = "postgres".into();
+        let filtered: Vec<&str> = state
+            .visible_subscriptions()
+            .into_iter()
+            .map(|ch| ch.id.as_str())
+            .collect();
+        assert_eq!(filtered, ["UC_beta"]);
+
+        state.subscriptions_query.clear();
+        state.subscriptions_sort = SubscriptionSort::Recent;
+        let by_recent: Vec<&str> = state
+            .visible_subscriptions()
+            .into_iter()
+            .map(|ch| ch.id.as_str())
+            .collect();
+        assert_eq!(by_recent, ["UC_gamma", "UC_alpha", "UC_beta"]);
+
+        state.subscriptions_sort = SubscriptionSort::Watched;
+        let by_watched: Vec<&str> = state
+            .visible_subscriptions()
+            .into_iter()
+            .map(|ch| ch.id.as_str())
+            .collect();
+        assert_eq!(by_watched, ["UC_beta", "UC_alpha", "UC_gamma"]);
+    }
+
+    #[test]
+    fn visible_library_lists_filter_by_title_and_channel() {
+        let mut state = State {
+            account: AccountState::SignedIn(1),
+            source: Source::Account,
+            account_watch_later: Listing::Ready(vec![
+                Video {
+                    title: "Rust Async".into(),
+                    channel: Some("Systems Lab".into()),
+                    ..Video::from_id("wl000000001".into())
+                },
+                Video {
+                    title: "Cooking Pasta".into(),
+                    channel: Some("Kitchen Notes".into()),
+                    ..Video::from_id("wl000000002".into())
+                },
+            ]),
+            liked: Listing::Ready(vec![
+                Video {
+                    title: "PostgreSQL Indexing".into(),
+                    channel: Some("Smart Postgres".into()),
+                    ..Video::from_id("lk000000001".into())
+                },
+                Video {
+                    title: "UI Design".into(),
+                    channel: Some("Design Weekly".into()),
+                    ..Video::from_id("lk000000002".into())
+                },
+            ]),
+            playlists: Listing::Ready(vec![
+                PlaylistSummary {
+                    id: "PL_rust".into(),
+                    name: "Systems Study".into(),
+                    thumbnail: None,
+                    channel: Some("Fabio Akita".into()),
+                    videos: Some(12),
+                },
+                PlaylistSummary {
+                    id: "PL_music".into(),
+                    name: "Focus Mix".into(),
+                    thumbnail: None,
+                    channel: Some("Chill Station".into()),
+                    videos: Some(8),
+                },
+            ]),
+            account_history: Listing::Ready(vec![
+                HistoryRow {
+                    video: Video {
+                        title: "Linear Algebra".into(),
+                        channel: Some("3Blue1Brown".into()),
+                        ..Video::from_id("hs000000001".into())
+                    },
+                    when: Some("Today".into()),
+                },
+                HistoryRow {
+                    video: Video {
+                        title: "Rust Lifetimes".into(),
+                        channel: Some("Jon Gjengset".into()),
+                        ..Video::from_id("hs000000002".into())
+                    },
+                    when: Some("Today".into()),
+                },
+            ]),
+            ..State::default()
+        };
+        state.settings.history_sync = youtfast_storage::settings::HistorySync::Separate;
+
+        state.watch_later_query = "systems".into();
+        assert_eq!(
+            state
+                .visible_watch_later()
+                .iter()
+                .map(|v| v.id.as_str())
+                .collect::<Vec<_>>(),
+            ["wl000000001"]
+        );
+
+        state.liked_query = "postgres".into();
+        assert_eq!(
+            state
+                .visible_liked()
+                .iter()
+                .map(|v| v.id.as_str())
+                .collect::<Vec<_>>(),
+            ["lk000000001"]
+        );
+
+        state.playlists_query = "akita".into();
+        assert_eq!(
+            state
+                .visible_playlists()
+                .iter()
+                .map(|p| p.id.as_str())
+                .collect::<Vec<_>>(),
+            ["PL_rust"]
+        );
+
+        state.history_query = "gjengset".into();
+        assert_eq!(
+            state
+                .history_rows()
+                .iter()
+                .map(|r| r.video.id.as_str())
+                .collect::<Vec<_>>(),
+            ["hs000000002"]
+        );
     }
 }
 
@@ -1111,7 +1530,27 @@ impl App {
             }
             Action::SetHistoryQuery(query) => {
                 self.state.history_query = query;
-                self.state.cursor = 0;
+                self.state.reset_cursor();
+            }
+            Action::SetWatchLaterQuery(query) => {
+                self.state.watch_later_query = query;
+                self.state.reset_cursor();
+            }
+            Action::SetLikedQuery(query) => {
+                self.state.liked_query = query;
+                self.state.reset_cursor();
+            }
+            Action::SetPlaylistsQuery(query) => {
+                self.state.playlists_query = query;
+                self.state.reset_cursor();
+            }
+            Action::SetSubscriptionsQuery(query) => {
+                self.state.subscriptions_query = query;
+                self.state.reset_cursor();
+            }
+            Action::SetSubscriptionsSort(sort) => {
+                self.state.subscriptions_sort = sort;
+                self.state.reset_cursor();
             }
             Action::RemoveHistory(id) => {
                 self.state.library.remove_history(&id);
@@ -1125,12 +1564,12 @@ impl App {
             Action::SetHistorySync(sync) => {
                 self.state.settings.history_sync = sync;
                 self.state.history_filter = youtfast_logic::history::HistoryFilter::All;
-                self.state.cursor = 0;
+                self.state.reset_cursor();
                 self.save_settings();
             }
             Action::SetHistoryFilter(filter) => {
                 self.state.history_filter = filter;
-                self.state.cursor = 0;
+                self.state.reset_cursor();
                 self.load(View::History, false);
             }
             Action::SetSource(source) => {
@@ -1600,7 +2039,7 @@ impl eframe::App for App {
         // The keyboard cursor restarts at the top of a changed list.
         let key = (self.state.view, navigation::cursor_key(&self.state));
         if key != self.cursor_key {
-            self.state.cursor = 0;
+            self.state.reset_cursor();
             self.cursor_key = key;
         }
         self.playback_tick(ctx);
