@@ -10,10 +10,10 @@ outstanding gates.
 | Target | Candidate artifact | Runtime requirements | Updates |
 |---|---|---|---|
 | Linux x86_64 native | `*-x86_64-unknown-linux-gnu.tar.gz` | glibc 2.39+, system libmpv 0.42+ with Lua, graphics libraries, current yt-dlp and JS runtime | In-app updater (`Settings → About`, SHA-256 verified) or replace archive; update system dependencies separately |
-| Linux x86_64 Flatpak | `*-x86_64.flatpak` and Flathub source manifest (`channels.tar.gz`) | Flatpak, Freedesktop 25.08 runtime, graphics drivers and portals | Install next bundle; no Flathub update remote until listing submission is accepted |
-| Arch Linux x86_64 | `.pkg.tar.zst` and `*-aur.tar.gz` recipe | System dependencies installed by pacman; AUR source builds also need Rust/Cargo | Local pacman package; AUR helper after entry acceptance |
-| Windows x86_64 | `*-x86_64-pc-windows-gnu.zip` and Winget manifest (`channels.tar.gz`) | Bundled libmpv/imported DLLs; current yt-dlp and Deno on PATH | In-app updater (`Settings → About`), replace extracted directory, or update via Winget |
-| macOS 15+ Apple Silicon | `*-aarch64-apple-darwin.zip` with `.app` and Homebrew Cask (`channels.tar.gz`) | Bundled libmpv/dylibs; current yt-dlp and Deno | In-app updater (`Settings → About`), replace `.app`, or update via Homebrew tap; update extraction tools separately |
+| Linux x86_64 Flatpak | `*-x86_64.flatpak` and Flathub source manifest (`channels.tar.gz`) | Flatpak, Freedesktop 25.08 runtime, graphics drivers and portals | Install next bundle or run `install.sh --method flatpak`; Flathub submission is not pursued |
+| Arch Linux x86_64 | `.pkg.tar.zst` and `*-aur.tar.gz` recipe | System dependencies installed by pacman; AUR source builds also need Rust/Cargo | Install `.pkg.tar.zst` directly with `sudo pacman -U` or `install.sh --method arch` |
+| Windows x86_64 | `*-x86_64-windows-setup.exe` (NSIS), `*-x86_64-pc-windows-gnu.zip` and multi-file Winget manifest (`channels.tar.gz`) | Bundled libmpv/imported DLLs; current yt-dlp and Deno on PATH | In-app updater (`Settings → About`), setup `.exe`, or Winget once PR accepted |
+| macOS 15+ Apple Silicon | `*-aarch64-apple-darwin.zip` with `.app` and Homebrew Cask (`channels.tar.gz`) | Bundled libmpv/dylibs; current yt-dlp and Deno | In-app updater (`Settings → About`), replace `.app`, or personal Homebrew tap (`bcosta19/homebrew-tap`) |
 
 Windows/macOS candidates include a native dependency inventory and collected
 notices. These are inputs to review, **not corresponding source archives**.
@@ -22,7 +22,10 @@ notices into separate native-source archives, which assembly requires and
 checksums. Review them before publication. The Rust source archive alone does
 not contain the MSYS2/Homebrew native sources.
 
-Windows has no publisher signature or MSI/MSIX installer. macOS uses ad-hoc
+Windows ships an unsigned per-user NSIS setup installer (`*-windows-setup.exe`,
+installing under `%LOCALAPPDATA%\Programs\YouTFast` so the in-app updater remains
+writable) and portable ZIP (`*-pc-windows-gnu.zip`), without a publisher
+signature (Authenticode) or MSIX store package. macOS uses ad-hoc
 signing for internal bundle consistency; it is not a Developer ID signature,
 notarization or proof that Gatekeeper accepts the download. Never recommend
 disabling system security globally. Intel Macs/universal binaries, ARM Windows

@@ -6,10 +6,9 @@ describe exactly what each version includes and excludes.
 
 ## Open release gates
 
-0.1.0 (pre-release), 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.5.1, 0.5.2 and 0.6.0 are
-published; the 0.6.1 tag/draft is preserved and 0.6.2 is being prepared as a
-candidate with the #84 playback fix. Before publishing 0.6.2 or promoting a
-release to latest:
+0.1.0 (pre-release) through 0.6.0, plus 0.6.2, are published; the 0.6.1
+tag/draft is preserved and 0.7.0 is being prepared as the next candidate. Before
+publishing 0.7.0 or promoting a release to latest:
 
 - Validate the exact candidate with the hosted Release dry run, inspect every
   package and its checksums, and review the matching Windows and macOS native
@@ -24,11 +23,11 @@ release to latest:
 
 | Channel | Work remaining | Completion evidence |
 |---|---|---|
-| Arch AUR `youtfast` | Generate recipe from final source asset, clean-chroot build, maintainer/name review, submit to AUR | Public AUR entry and successful clean install with `yay` |
-| Flathub | Submit generated source-build manifest (`channels.tar.gz`), metadata/screenshots, lint and submission review | Accepted listing, install and update through the remote |
-| Signed pacman repository | Signing-key ownership, package builds, repository database, hosting and update policy | Verified `pacman -S` install/update from configured repository |
-| Windows | Publisher signing, MSI/MSIX installer and Winget repository submission (`channels.tar.gz`) | Clean-machine install/update/uninstall and signature verification |
-| macOS | Developer ID, hardened runtime/notarization, DMG installer, Homebrew tap publication (`channels.tar.gz`) and Intel/universal support | Clean-machine Gatekeeper/playback tests on each architecture |
+| Arch AUR `youtfast` | Deferred while AUR new-account registrations remain closed (`HTTP 503`); Arch users install `.pkg.tar.zst` directly via `pacman -U` or `install.sh` | Re-evaluate if AUR registration opens |
+| Flathub | Not pursued directly; Linux users install the standalone `.flatpak` bundle directly or via `install.sh` | Optional future decision |
+| Signed pacman / Flatpak repository | Signing-key ownership, repository hosting and update policy | Verified repository install/update |
+| Windows | Publisher signing (Authenticode) and `microsoft/winget-pkgs` PR submission from the generated multi-file manifests (`channels.tar.gz`) | Clean-machine install/update/uninstall, Winget validation, and signature verification |
+| macOS | Developer ID, hardened runtime/notarization, DMG installer, per-release `bcosta19/homebrew-tap` cask sync (`channels.tar.gz`), and Intel/universal support | Clean-machine Gatekeeper/playback tests and `brew install --cask bcosta19/tap/youtfast` verification |
 | Linux ARM64 | Native and Flatpak builds plus GPU validation | Published architecture-specific packages and tested playback |
 
 ## Product follow-ups

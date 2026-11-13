@@ -65,6 +65,7 @@ class WebsiteTests(unittest.TestCase):
         assets = [f'youtfast-v{VERSION}-x86_64.flatpak',
                   f'youtfast-v{VERSION}-x86_64-unknown-linux-gnu.tar.gz',
                   f'youtfast-{VERSION}-1-x86_64.pkg.tar.zst',
+                  f'youtfast-v{VERSION}-x86_64-windows-setup.exe',
                   f'youtfast-v{VERSION}-x86_64-pc-windows-gnu.zip',
                   f'youtfast-v{VERSION}-aarch64-apple-darwin.zip', 'checksums.txt']
         for source in (SOURCE, INSTALL):

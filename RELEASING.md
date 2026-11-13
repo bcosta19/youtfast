@@ -7,10 +7,10 @@
 [ROADMAP.md](ROADMAP.md).
 
 0.3.0 was published on 2026-10-24, 0.4.0 and 0.5.0 on 2026-10-30, 0.5.1 on
-2026-11-05, and 0.5.2 and 0.6.0 on 2026-11-09. The existing 0.6.1 tag and
-draft are preserved; 0.6.2 is the next candidate, including the playback fix
-for #84. Its changelog and AppStream dates are prepared for 2026-11-11.
-Publication still requires the candidate and tag-build gates below.
+2026-11-05, 0.5.2 and 0.6.0 on 2026-11-09, and 0.6.2 on 2026-11-11. The
+existing 0.6.1 tag and draft are preserved; 0.7.0 is the next candidate,
+prepared for 2026-11-12. Publication still requires the candidate and tag-build
+gates below.
 
 Use stable SemVer tags `vMAJOR.MINOR.PATCH`. During 0.x, use patches for
 compatible fixes and minor versions for features or incompatible changes;
@@ -57,8 +57,8 @@ a patch release instead of replacing downloads.
 For a future authorized tag operation, with the validated commit selected:
 
 ```sh
-git tag -a v0.6.2 -m 'YouTFast 0.6.2'
-git push origin v0.6.2
+git tag -a v0.7.0 -m 'YouTFast 0.7.0'
+git push origin v0.7.0
 ```
 
 ## Draft, review and publication
@@ -81,11 +81,11 @@ completeness certification.
 Once approved, publish the reviewed draft in GitHub's release UI, or explicitly:
 
 ```sh
-gh release edit v0.6.2 --draft=false --latest
+gh release edit v0.7.0 --draft=false --latest
 ```
 
 Verify notes, release date and downloads as an anonymous reader after
-publication. `gh release download v0.6.2` retrieves a draft's assets for
+publication. `gh release download v0.7.0` retrieves a draft's assets for
 review. Run `sha256sum --check checksums.txt` in the download directory.
 Checksums detect corruption; they are not publisher signatures. Never claim
 code signing/notarization or interactive coverage that has not been performed.
@@ -106,14 +106,15 @@ package (`youtfast-X.Y.Z-1-x86_64.pkg.tar.zst`) and `checksums.txt`.
 | `x86_64-unknown-linux-gnu.tar.gz` | Ubuntu 24.04/glibc 2.39+ baseline; system libmpv |
 | `x86_64.flatpak` | Freedesktop 25.08 runtime; sandboxed app/native components |
 | `flatpak-sources.flatpak` | Flatpak builder's exported corresponding sources |
-| `x86_64-pc-windows-gnu.zip` | Windows executable, imported DLL closure, notices/inventory |
+| `x86_64-pc-windows-gnu.zip` | Windows portable executable, imported DLL closure, notices/inventory |
+| `x86_64-windows-setup.exe` | Per-user NSIS Windows setup installer built from the verified Windows bundle |
 | `aarch64-apple-darwin.zip` | macOS 15+ Apple Silicon app, dylibs, notices/inventory |
 | `source-with-dependencies.tar.gz` | App and locked Rust sources/notices; offline Cargo config |
 | `aur.tar.gz` | Tested PKGBUILD and `.SRCINFO`, with source SHA-256; not an AUR submission |
 | Arch `.pkg.tar.zst` | Candidate built/installed in a clean Arch container; install locally with `pacman -U` |
 | `windows-native-sources.tar.gz` | Matching full MSYS2 source packages, metadata/notices and manifest |
 | `macos-native-sources.tar.gz` | Matching Homebrew recipes, source/resource/patch downloads, notices and manifest |
-| `channels.tar.gz` | Rendered Flathub source manifest, Winget manifest and Homebrew Cask with exact asset SHA-256 digests |
+| `channels.tar.gz` | Rendered Flathub source manifest, multi-file Winget manifests (`bcosta19.YouTFast`) and Homebrew Cask (`Casks/youtfast.rb`) with exact asset SHA-256 digests |
 | `linux.png` | Fresh signed-out profile preview from CI |
 
 `checksums.txt` covers assembled candidates. Final publication must also contain
@@ -123,7 +124,8 @@ no Git history, raw reports, cookies or user files. GitHub's automatic tag sourc
 ZIP does **not** replace the source-with-dependencies or native source assets.
 
 Installation, architecture limits, external yt-dlp/Deno requirements and signing
-status are in [distribution.md](docs/distribution.md). Native bundles are not
-installers, a Flatpak bundle is not a Flathub listing, and an AUR recipe is not a
-pacman repository. Publish each channel only after its build/review gates pass;
+status are in [distribution.md](docs/distribution.md). Native archives are
+portable bundles, Windows also builds a per-user NSIS setup installer, a Flatpak
+bundle is not a Flathub listing, and an AUR recipe is not a pacman repository.
+Publish each channel only after its build/review gates pass;
 [Arch maintenance](packaging/arch/README.md) describes per-release package updates.

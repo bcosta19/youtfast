@@ -8,7 +8,7 @@ on:
       tag:
         description: Version to validate and package without publishing
         required: true
-        default: v0.6.2
+        default: v0.7.0
         type: string
 
 permissions:
@@ -249,11 +249,31 @@ jobs:
           $process = Start-Process -FilePath $exe.FullName -ArgumentList '--version' -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out
           $actual = (Get-Content $out -Raw).Trim()
           if ($process.ExitCode -ne 0 -or $actual -ne "youtfast $($env:RELEASE_TAG.Substring(1))") { throw "Packaged Windows startup failed: exit $($process.ExitCode), output '$actual'" }
+      - name: Build and smoke test Windows setup installer
+        shell: pwsh
+        run: |
+          python packaging/windows_installer.py "dist/youtfast-$env:RELEASE_TAG-x86_64-pc-windows-gnu"
+          $setup = Get-Item "dist/youtfast-$env:RELEASE_TAG-x86_64-windows-setup.exe"
+          $installDir = Join-Path $env:RUNNER_TEMP 'youtfast-setup-smoke'
+          $installProcess = Start-Process -FilePath $setup.FullName -ArgumentList "/S", "/D=$installDir" -Wait -PassThru
+          if ($installProcess.ExitCode -ne 0) { throw "Windows setup installer failed: exit $($installProcess.ExitCode)" }
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          $out = Join-Path $env:RUNNER_TEMP 'youtfast-setup-version.txt'
+          $runProcess = Start-Process -FilePath (Join-Path $installDir 'youtfast.exe') -ArgumentList '--version' -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out
+          $actual = (Get-Content $out -Raw).Trim()
+          if ($runProcess.ExitCode -ne 0 -or $actual -ne "youtfast $($env:RELEASE_TAG.Substring(1))") { throw "Installed Windows startup failed: exit $($runProcess.ExitCode), output '$actual'" }
+          $uninstaller = Join-Path $installDir 'Uninstall.exe'
+          $uninstallProcess = Start-Process -FilePath $uninstaller -ArgumentList "/S", "_?=$installDir" -Wait -PassThru
+          if ($uninstallProcess.ExitCode -ne 0) { throw "Windows uninstaller failed: exit $($uninstallProcess.ExitCode)" }
+          if (Test-Path (Join-Path $installDir 'youtfast.exe')) { throw "Windows uninstaller left youtfast.exe behind" }
+          Remove-Item $uninstaller -Force -ErrorAction SilentlyContinue
+          Remove-Item $installDir -Recurse -Force -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: windows
           path: |
             dist/*-x86_64-pc-windows-gnu.zip
+            dist/*-x86_64-windows-setup.exe
             dist/*-windows-native-sources.tar.gz
           if-no-files-found: error
           retention-days: 7
@@ -270,9 +290,22 @@ jobs:
         run: |
           toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
           rustup toolchain install "$toolchain" --profile minimal
-          # Hosted images can retain formula metadata from before the mpv release.
+          # Hosted images can retain formula metadata or older transitive kegs before mpv installs.
           brew update
-          brew install mpv dylibbundler
+          echo "HOMEBREW_NO_AUTO_UPDATE=1" >> "$GITHUB_ENV"
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install mpv dylibbundler
+          HOMEBREW_NO_AUTO_UPDATE=1 python3 - <<'PY'
+          import subprocess
+          deps = {"mpv", "dylibbundler", *subprocess.check_output(["brew", "deps", "mpv"], text=True).split()}
+          outdated = set(subprocess.check_output(["brew", "outdated", "--formula", "--quiet"], text=True).split())
+          upgrade = sorted(deps & outdated)
+          if upgrade:
+              print("Upgrading outdated mpv dependencies:", ", ".join(upgrade))
+              subprocess.run(["brew", "upgrade", *upgrade], check=True)
+          still = deps & set(subprocess.check_output(["brew", "outdated", "--formula", "--quiet"], text=True).split())
+          if still:
+              raise SystemExit(f"mpv dependencies remain outdated: {sorted(still)}")
+          PY
           echo "LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
       - name: Build and bundle application with libmpv
         run: |
@@ -317,13 +350,14 @@ jobs:
           test -s "dist/youtfast-$RELEASE_TAG-aur.tar.gz"
           test -s "dist/youtfast-${RELEASE_TAG#v}-1-x86_64.pkg.tar.zst"
           test -s "dist/youtfast-$RELEASE_TAG-x86_64-pc-windows-gnu.zip"
+          test -s "dist/youtfast-$RELEASE_TAG-x86_64-windows-setup.exe"
           test -s "dist/youtfast-$RELEASE_TAG-aarch64-apple-darwin.zip"
           test -s "dist/youtfast-$RELEASE_TAG-windows-native-sources.tar.gz"
           test -s "dist/youtfast-$RELEASE_TAG-macos-native-sources.tar.gz"
           python3 packaging/channels.py dist
           test -s "dist/youtfast-$RELEASE_TAG-channels.tar.gz"
           rm -rf dist/channels
-          (cd dist && sha256sum *.tar.gz *.flatpak *.png *.zip *.pkg.tar.zst > checksums.txt && sha256sum --check checksums.txt)
+          (cd dist && sha256sum *.tar.gz *.flatpak *.png *.zip *.pkg.tar.zst *.exe > checksums.txt && sha256sum --check checksums.txt)
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: checksums

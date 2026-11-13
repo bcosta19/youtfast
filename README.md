@@ -79,11 +79,11 @@ checks on clean Windows and macOS machines are still in progress. Download from
 
 | Platform | Package | Requirements |
 |---|---|---|
-| Linux x86_64 | Flatpak bundle | Flatpak, Freedesktop 25.08 runtime and desktop drivers/portals |
+| Linux x86_64 | Flatpak bundle or `install.sh` | Flatpak, Freedesktop 25.08 runtime and desktop drivers/portals |
 | Linux x86_64 | Native archive | glibc 2.39+, system libmpv 0.42+ with Lua and current yt-dlp/Deno; supports in-app updates |
-| Windows x86_64 | ZIP with libmpv and DLLs | Current yt-dlp/Deno on PATH; supports in-app updates; no MSI/MSIX or publisher signature |
+| Windows x86_64 | Setup `.exe` (NSIS), `install.ps1` or portable ZIP | Current yt-dlp/Deno on PATH (setup `.exe` installs missing ones via winget); supports in-app updates; no publisher signature |
 | macOS 15+ Apple Silicon | ZIP with app and dylibs | Current yt-dlp/Deno; supports in-app updates; ad-hoc signed, not notarized |
-| Arch Linux x86_64 | Pacman package and source PKGBUILD | Built and installed in a clean Arch container by CI; AUR submission pending |
+| Arch Linux x86_64 | Pacman package (`pacman -U` or `install.sh`) and source PKGBUILD | Built and installed in a clean Arch container by CI; AUR registration currently closed |
 
 Native archives/bundles include an in-app updater in **Settings → About**
 (SHA-256 verified against `checksums.txt`, with optional automatic minor/patch
@@ -131,7 +131,7 @@ do not need to know Rust to help:
   [good first issues](https://github.com/bcosta19/youtfast/labels/good%20first%20issue)
   and [help wanted](https://github.com/bcosta19/youtfast/labels/help%20wanted).
 - **Translate.** English, Brazilian Portuguese, Spanish, French, German, and Italian exist; more languages are welcome.
-- **Package it.** Flathub and AUR submissions are open tasks.
+- **Package it.** Winget, Homebrew tap and distribution packaging help is welcome.
 - **Measure it.** Run the [benchmarks](docs/benchmarks.md) on your machine.
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md); questions in issues are welcome.
