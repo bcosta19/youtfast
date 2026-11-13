@@ -290,9 +290,22 @@ jobs:
         run: |
           toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
           rustup toolchain install "$toolchain" --profile minimal
-          # Hosted images can retain formula metadata from before the mpv release.
+          # Hosted images can retain formula metadata or older transitive kegs before mpv installs.
           brew update
-          brew install mpv dylibbundler
+          echo "HOMEBREW_NO_AUTO_UPDATE=1" >> "$GITHUB_ENV"
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install mpv dylibbundler
+          HOMEBREW_NO_AUTO_UPDATE=1 python3 - <<'PY'
+          import subprocess
+          deps = {"mpv", "dylibbundler", *subprocess.check_output(["brew", "deps", "mpv"], text=True).split()}
+          outdated = set(subprocess.check_output(["brew", "outdated", "--formula", "--quiet"], text=True).split())
+          upgrade = sorted(deps & outdated)
+          if upgrade:
+              print("Upgrading outdated mpv dependencies:", ", ".join(upgrade))
+              subprocess.run(["brew", "upgrade", *upgrade], check=True)
+          still = deps & set(subprocess.check_output(["brew", "outdated", "--formula", "--quiet"], text=True).split())
+          if still:
+              raise SystemExit(f"mpv dependencies remain outdated: {sorted(still)}")
+          PY
           echo "LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
       - name: Build and bundle application with libmpv
         run: |
