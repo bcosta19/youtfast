@@ -74,11 +74,13 @@ To update the hero poster, extract the application window from the existing
 public demonstration (not a user's desktop or account data):
 
 ```sh
-ffmpeg -ss 11 -i assets/demo/youtfast-demo.mp4 -frames:v 1 \
-  -vf 'crop=1568:882:176:36,scale=1440:-2' -quality 88 website/assets/player.webp
+ffmpeg -ss 14 -i assets/demo/youtfast-demo.mp4 -frames:v 1 \
+  -vf 'crop=1664:936:128:30,scale=1440:-2' -quality 88 website/assets/player.webp
 ```
 
-The recording includes *Spring* by Blender Studio (CC BY 4.0); its credit and
-link appear beneath the demo. Performance figures are the documented 0.7.0
+The 62-second recording includes *Spring* and *Sprite Fright* by Blender Studio
+(CC BY 4.0); their credits and links appear beneath the demo. It uses editorial
+zooms and captions, cuts loading waits and speeds up some navigation; it is not
+a real-time performance measurement. Performance figures are the documented 0.7.0
 search and playback benchmarks (`docs/benchmarks.md`). Keep package claims
 aligned with `docs/distribution.md` and the actual releases.

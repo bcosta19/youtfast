@@ -18,13 +18,15 @@ backend. Start signed out; accounts are optional.
 
 <picture>
   <source type="image/avif" srcset="assets/demo/youtfast-demo.avif">
-  <img src="assets/demo/youtfast-demo.webp" alt="YouTFast 0.7.0 demo: search, video tabs, playback, theater and full screen, mini player, comments, notifications popup, six languages and keyboard shortcuts">
+  <img src="assets/demo/youtfast-demo.webp" alt="YouTFast 0.7.0 demo: search, video tabs, playback, timeline previews, theater and full screen, mini player, notifications, themes, six languages and keyboard shortcuts">
 </picture>
 
-*YouTFast 0.7.0 on Linux, signed out: a real screen recording, cut for length.
-[Download it in full quality](assets/demo/youtfast-demo.mp4) (MP4, 1080p, 5 MB).
-The film is [Spring](https://studio.blender.org/films/spring/) by Blender
-Studio (CC BY 4.0).*
+*YouTFast 0.7.0 on Linux, signed out: a real screen recording, edited with
+zooms and captions; loading waits are cut and some navigation is sped up.
+[Download it in full quality](assets/demo/youtfast-demo.mp4) (MP4, 1080p, 62 seconds, 13.4 MB, silent).
+The films are [Spring](https://studio.blender.org/films/spring/) and
+[Sprite Fright](https://studio.blender.org/films/sprite-fright/) by Blender
+Studio ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).*
 
 > [!NOTE]
 > **YouTFast is young and still needs work.** It has a single maintainer and
