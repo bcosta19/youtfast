@@ -4,27 +4,87 @@ How much does a native client save compared with a "YouTube desktop app" that
 wraps the website in Electron? These numbers come from one machine and one
 scenario; treat them as an indication, rerun them on yours and send results.
 
-## Setup (2026-10-17)
+## Setup (2026-11-12 — 0.7.0)
 
 - **Machine:** AMD Ryzen 7 7735HS (16 threads), Radeon 680M, 6 GiB RAM visible
-  to the system, Arch Linux, Hyprland 0.56.
-- **YouTFast:** the 0.1.0 Linux x86_64 build produced by the release workflow,
-  system mpv 0.41 and yt-dlp.
-- **Electron baseline:** Electron 44.8 from Arch running
-  [a minimal app](../tools/benchmark/electron-app/main.js) whose only window
-  loads youtube.com, which is what website-wrapper apps do.
+  to the system, Arch Linux, Hyprland 0.56.2.
+- **YouTFast:** the `0.7.0` Linux x86_64 build produced by the release workflow
+  (`28,691,240` bytes; `.tar.gz` `13,086,988` bytes), system `mpv 0.41.0` and
+  `yt-dlp 2026.08.19`.
+- **Electron baseline:** Electron `44.10.2` (`electron44-bin`, `301.24 MiB`
+  installed size) running [a minimal app](../tools/benchmark/electron-app/main.js)
+  whose only window loads `youtube.com`, which is what website-wrapper apps do.
 - Both signed out, each run with a new empty profile, full screen at 1920×1080
   on a headless output, so nothing else drew on top of them.
-- **Scenario:** search results for "blender open movie". After the window
-  appeared, wait 10 s, then sample CPU for 20 s and read memory.
+- **Search scenario:** search results for `"blender open movie"`. After the
+  window appeared, wait 10 s, then sample CPU for 20 s and read memory.
+- **Playback scenario:** `https://www.youtube.com/watch?v=WhWc3b3KhnY` (*Spring*,
+  Blender Studio, 1080p). After the window appeared, wait 20 s so playback is
+  underway, then sample CPU for 20 s and read memory.
 - **Metrics:** proportional set size (PSS) summed over the whole process tree,
   which counts shared libraries fairly between processes; CPU time of the tree
   per wall-clock second, where 100% is one core; time until the first window
   maps.
 
-## Results
+## Results (0.7.0)
+
+### Search results page
 
 Median of three alternating runs:
+
+| Search results page | YouTFast 0.7.0 | Electron 44 + youtube.com |
+|---|---:|---:|
+| Memory (PSS, all processes) | **136 MiB** | 662 MiB |
+| CPU while idle on the page | **0.0%** | 5.6% |
+| Processes | **1** | 8 |
+| First window on screen | **0.5 s** | 0.7 s |
+| On disk | **29 MB** binary (13 MB download) | 316 MB (301 MiB) Electron runtime |
+
+All runs:
+
+| Run | YouTFast PSS | Electron PSS | YouTFast CPU | Electron CPU | YouTFast window | Electron window |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 | 132.1 MiB | 662.0 MiB | 0.0% | 5.6% | 1.027 s | 1.547 s |
+| 2 | 136.3 MiB | 687.5 MiB | 0.0% | 28.4% | 0.505 s | 0.701 s |
+| 3 | 141.7 MiB | 644.9 MiB | 0.0% | 4.9% | 0.339 s | 0.698 s |
+
+### Video playback (1080p, *Spring*)
+
+Median of three alternating runs:
+
+| Playback (1080p, *Spring*) | YouTFast 0.7.0 | Electron 44 + youtube.com |
+|---|---:|---:|
+| Memory (PSS, all processes) | **206 MiB** | 625 MiB |
+| CPU during playback | **13.9%** | 41.2% |
+| Processes | **1** | 8 |
+| First window on screen | **0.5 s** | 0.8 s |
+
+All runs:
+
+| Run | YouTFast PSS | Electron PSS | YouTFast CPU | Electron CPU | YouTFast window | Electron window |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 | 206.6 MiB | 621.7 MiB | 13.9% | 40.3% | 1.005 s | 0.808 s |
+| 2 | 206.1 MiB | 625.7 MiB | 14.4% | 41.2% | 0.451 s | 0.756 s |
+| 3 | 202.6 MiB | 625.0 MiB | 13.8% | 41.9% | 0.453 s | 0.694 s |
+
+### UI frame cost (`0.7.0`)
+
+Measured with `cargo test --release -p youtfast-ui --lib frame_cost -- --ignored --nocapture --test-threads=1`
+(300 frames per view; UI CPU work per frame, excluding compositor presentation):
+
+| View | Mean | p50 | p95 | Allocations / frame |
+|---|---:|---:|---:|---:|
+| `results` | 0.074 ms | 0.073 ms | 0.089 ms | 388 |
+| `home` | 0.274 ms | 0.269 ms | 0.301 ms | 824 |
+| `watch` | 0.278 ms | 0.271 ms | 0.369 ms | 558 |
+| `notifications` | 0.303 ms | 0.296 ms | 0.338 ms | 697 |
+| `history_search` | 0.447 ms | 0.442 ms | 0.480 ms | 1414 |
+| `history` | 0.453 ms | 0.450 ms | 0.485 ms | 1440 |
+
+## Previous baseline (2026-10-17 — 0.1.0)
+
+Setup: same laptop, Hyprland 0.56, YouTFast 0.1.0 release binary, Electron 44.8 (`296 MB`).
+Median of three alternating runs on the search results page:
 
 | Search results page | YouTFast 0.1.0 | Electron 44 + youtube.com |
 |---|---:|---:|
@@ -34,7 +94,7 @@ Median of three alternating runs:
 | First window on screen | 1.1 s | **0.4 s** |
 | On disk | **31 MB** binary (13 MB download) | 296 MB Electron runtime |
 
-All runs:
+All `0.1.0` runs:
 
 | Run | YouTFast PSS | Electron PSS | YouTFast CPU | Electron CPU | YouTFast window | Electron window |
 |---|---:|---:|---:|---:|---:|---:|
@@ -44,20 +104,19 @@ All runs:
 
 ## Reading the numbers
 
-- Electron's idle CPU comes from the page itself: animated previews and the ad
-  that autoplays at the top of the results. That is what users of wrapper apps
-  get, but it varies with what YouTube serves, hence the spread between runs.
-- Electron maps an empty window sooner. The time until results are usable was
-  not measured for either client, so the "first window" row says nothing about
-  which one shows content first.
+- Dropping RustyPipe in `0.7.0` (`#91`) for the in-tree InnerTube client
+  reduced search-page RSS/PSS (`161 → 136 MiB`) and binary size (`31 → 29 MB`),
+  bringing memory usage to roughly **4.9× less** than Electron on search results.
+- On 1080p playback (*Spring*), YouTFast uses libmpv inside the same single
+  process (`206 MiB`, `13.9%` CPU) instead of eight Chromium/renderer/GPU
+  processes (`625 MiB`, `41.2%` CPU): about **3.0× less** memory and CPU.
+- Electron's idle CPU on search results comes from the page itself (animated
+  previews and top-slot ads), so it varies with what YouTube serves (`4.9%–28.4%`
+  in the `0.7.0` session, `7.7%–19.0%` in `0.1.0`). YouTFast stays at `0.0%`
+  once idle.
 - YouTFast's disk figure excludes the system libmpv/FFmpeg and yt-dlp it uses;
   the Flatpak bundles them. Most Electron apps ship their own copy of the
   runtime instead of sharing the system one.
-- **Playback is not compared yet.** During this session YouTube answered this
-  machine's signed-out requests with HTTP 429 (too many requests), so yt-dlp
-  could not extract streams, while the website kept working. A playback
-  comparison measured under that block would not be fair. Contributions with
-  playback measurements are welcome.
 
 ## Reproduce
 
@@ -109,7 +168,25 @@ binary, its libraries, Mesa's drivers and the installed fonts from the page
 cache ([`evict.py`](../tools/benchmark/startup/evict.py)), as after a while
 without opening the app on a machine short of memory.
 
-Same machine as above, 2026-10-17. Before is 0.1.0, after is the change that
+Same machine, `0.7.0` official release binary on 2026-11-12 (4 runs each,
+median and min–max in milliseconds; *files out of memory* evicted `1,181` files):
+
+| Scenario (`0.7.0`) | Libraries loaded | First frame | Content drawn | Last thumbnail | Content → last thumb | TLS connections |
+|---|---:|---:|---:|---:|---:|---:|
+| Search, empty cache | 215 (107–451) | 590 (350–1250) | 1292 (999–1911) | 1471 (1130–2286) | 181 (127–375) | 6 (6–6) |
+| Search, thumbnails on disk | 147 (103–157) | 376 (328–389) | 1067 (1004–1087) | **1112** (1095–1122) | 35 (34–111) | **2** (2–3) |
+| Home, empty cache | 119 (102–314) | 364 (331–536) | 1325 (1212–1417) | 2250 (2101–2456) | 974 (684–1148) | **24** (23–25) |
+| Home, thumbnails on disk | 132 (108–191) | 355 (326–445) | 1275 (1226–1320) | **1760** (1499–1916) | 458 (272–651) | 23 (23–24) |
+| Home, files out of memory | 549 (547–590) | 1044 (1041–1120) | 1995 (1922–1999) | **2663** (2509–3020) | 665 (587–1027) | 23 (23–24) |
+
+Compared with `0.1.0` and the 2026-10-17 optimisation below, `0.7.0` reduces
+TLS connections on cold Home from 50 → 36 → **24** (and warm Search to **2–3**),
+and lowers median last-thumbnail completion on warm Search from 1740 → 1268 → **1112 ms**.
+First-frame latency (`355–376 ms` warm on the release binary vs `153–172 ms` in
+the local October build) reflects both three weeks of feature growth and host
+stack updates across separate test dates.
+
+Earlier comparison on the same machine, 2026-10-17. Before is 0.1.0, after is the change that
 looks for the installed fonts on a thread and reads kept thumbnails without a
 download turn; both built locally with the release profile and run
 alternately. Median (minimum–maximum) in milliseconds, 4 or 5 runs each:

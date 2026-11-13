@@ -18,18 +18,17 @@ backend. Start signed out; accounts are optional.
 
 <picture>
   <source type="image/avif" srcset="assets/demo/youtfast-demo.avif">
-  <img src="assets/demo/youtfast-demo.webp" alt="One minute with YouTFast: search, playback, theater and full screen, the mini player, six languages and the Omarchy theme followed live">
+  <img src="assets/demo/youtfast-demo.webp" alt="YouTFast 0.7.0 demo: search, video tabs, playback, theater and full screen, mini player, comments, notifications popup, six languages and keyboard shortcuts">
 </picture>
 
-*One minute with YouTFast on Linux (Omarchy), signed out: a real screen
-recording, cut for length. [Download it in full quality](assets/demo/youtfast-demo.mp4)
-(MP4, 1080p, 6 MB).
+*YouTFast 0.7.0 on Linux, signed out: a real screen recording, cut for length.
+[Download it in full quality](assets/demo/youtfast-demo.mp4) (MP4, 1080p, 5 MB).
 The film is [Spring](https://studio.blender.org/films/spring/) by Blender
-Studio (CC BY 4.0); the other thumbnails are Blender Studio's too.*
+Studio (CC BY 4.0).*
 
 > [!NOTE]
 > **YouTFast is young and still needs work.** It has a single maintainer and
-> 0.1.0 is its first release: it already plays, searches and keeps a library,
+> is in active `0.x` development: it already plays, searches and keeps a library,
 > but expect rough edges and missing pieces. If something
 > breaks or feels less polished than YouTube in the browser, that is a great
 > place to help. See [how to contribute](#help-wanted).
@@ -52,18 +51,21 @@ stay local. [Read about accounts and stored data](docs/user-guide.md#your-librar
 ## Lighter than a website in a window
 
 Many "YouTube desktop apps" are the website inside Electron. Measured on one
-Linux laptop with the same search results, full screen, signed out
+Linux laptop with the same search results (`"blender open movie"`) and 1080p
+playback of *Spring*, full screen, signed out
 ([method, all runs and caveats](docs/benchmarks.md)):
 
-| | YouTFast 0.1.0 | Electron + youtube.com |
+| | YouTFast 0.7.0 | Electron 44 + youtube.com |
 |---|---:|---:|
-| Memory (PSS, all processes) | **161 MiB** | 658 MiB |
-| CPU while idle on the page | **0%** | 18% of a core |
+| Search: memory (PSS, all processes) | **136 MiB** | 662 MiB |
+| Search: CPU while idle | **0.0%** | 5.6% of a core |
+| Playback (1080p): memory | **206 MiB** | 625 MiB |
+| Playback (1080p): CPU | **13.9%** | 41.2% of a core |
 | Processes | **1** | 8 |
-| On disk | **31 MB** (13 MB download) | 296 MB runtime alone |
+| First window on screen | **0.5 s** | 0.7 s |
+| On disk | **29 MB** (13 MB download) | 316 MB (301 MiB) runtime alone |
 
-Electron does show its first, still empty, window sooner. Playback has not
-been compared yet; numbers from other machines are welcome.
+Numbers from other machines are welcome.
 
 ## Installation
 
