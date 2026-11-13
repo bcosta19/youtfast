@@ -27,7 +27,7 @@ struct Lease {
 impl Budget {
     fn reserve(self: &Arc<Self>, bytes: usize) -> Result<Lease, &'static str> {
         self.0
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
                 used.checked_add(bytes)
                     .filter(|total| *total <= GLOBAL_BYTES)
             })
