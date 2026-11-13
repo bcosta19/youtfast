@@ -205,14 +205,17 @@ pub(super) fn handle(
             if count > 0 {
                 if input.key_pressed(Key::J) {
                     state.cursor = (state.cursor + 1).min(count - 1);
+                    state.cursor_active = true;
                     state.cursor_moved = true;
                 }
                 if input.key_pressed(Key::K) {
                     state.cursor = state.cursor.saturating_sub(1);
+                    state.cursor_active = true;
                     state.cursor_moved = true;
                 }
                 if input.key_pressed(Key::G) {
                     state.cursor = if input.modifiers.shift { count - 1 } else { 0 };
+                    state.cursor_active = true;
                     state.cursor_moved = true;
                 }
                 if !focused
@@ -669,23 +672,30 @@ mod tests {
         };
         assert!(press(&mut state, Key::ArrowDown, egui::Modifiers::NONE).is_empty());
         assert_eq!(state.cursor, 0);
+        assert!(!state.cursor_active);
+        assert!(!state.is_cursor(0));
         assert!(!state.cursor_moved);
         assert_eq!(state.page_scroll, -KEY_SCROLL_STEP);
 
         state.page_scroll = 0.0;
         assert!(press(&mut state, Key::ArrowUp, egui::Modifiers::NONE).is_empty());
         assert_eq!(state.cursor, 0);
+        assert!(!state.cursor_active);
         assert!(!state.cursor_moved);
         assert_eq!(state.page_scroll, KEY_SCROLL_STEP);
 
         state.page_scroll = 0.0;
         assert!(press(&mut state, Key::J, egui::Modifiers::NONE).is_empty());
         assert_eq!(state.cursor, 1);
+        assert!(state.cursor_active);
+        assert!(state.is_cursor(1));
         assert!(state.cursor_moved);
         assert_eq!(state.page_scroll, 0.0);
 
         assert!(press(&mut state, Key::K, egui::Modifiers::NONE).is_empty());
         assert_eq!(state.cursor, 0);
+        assert!(state.cursor_active);
+        assert!(state.is_cursor(0));
         assert!(state.cursor_moved);
         assert_eq!(state.page_scroll, 0.0);
     }

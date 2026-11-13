@@ -7,8 +7,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use youtfast_core::model::{
-    Channel, ChannelAbout, ChannelHeader, HistoryRow, PageItems, PlaylistSummary, Rating,
-    SaveTarget, Video,
+    Channel, ChannelAbout, ChannelHeader, ChannelMeta, HistoryRow, PageItems, PlaylistSummary,
+    Rating, SaveTarget, Video,
 };
 use youtfast_storage::library::{Account, Import, Library};
 use youtfast_storage::settings::Settings;
@@ -109,6 +109,7 @@ pub enum Request {
 pub enum Payload {
     Search {
         items: PageItems,
+        channel_meta: Vec<(String, ChannelMeta)>,
         more: Option<innertube::More>,
     },
     PlaylistPage {
@@ -131,6 +132,7 @@ pub enum Payload {
     /// The first page of the account's subscriptions and its continuation.
     Channels {
         items: Vec<Channel>,
+        channel_meta: Vec<(String, ChannelMeta)>,
         more: Option<youtfast_youtube::innertube::More>,
     },
     /// The first page of the account's history and its continuation.
@@ -163,6 +165,7 @@ pub enum Payload {
     /// A continued page of a paged list.
     More {
         items: PageItems,
+        channel_meta: Vec<(String, ChannelMeta)>,
         more: Option<youtfast_youtube::innertube::More>,
     },
 }

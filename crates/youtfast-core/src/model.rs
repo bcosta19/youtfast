@@ -97,6 +97,95 @@ pub struct Channel {
     pub avatar: Option<String>,
 }
 
+/// Extra channel metadata learned in memory from InnerTube responses.
+///
+/// Kept outside [`Channel`] so stored subscriptions and Takeout merges stay
+/// compact while the Subscriptions and search views can render richer cards.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ChannelMeta {
+    pub handle: Option<String>,
+    pub subscribers: Option<u64>,
+    pub videos: Option<u64>,
+    pub description: Option<String>,
+    pub verified: bool,
+}
+
+impl ChannelMeta {
+    /// Merges newly parsed metadata into `self` without erasing richer
+    /// fields learned from channel pages or search results.
+    pub fn merge_from(&mut self, incoming: Self) {
+        if incoming.handle.is_some() {
+            self.handle = incoming.handle;
+        }
+        if incoming.subscribers.is_some() {
+            self.subscribers = incoming.subscribers;
+        }
+        if incoming.videos.is_some() {
+            self.videos = incoming.videos;
+        }
+        if incoming
+            .description
+            .as_deref()
+            .is_some_and(|text| !text.trim().is_empty())
+        {
+            self.description = incoming.description;
+        }
+        self.verified |= incoming.verified;
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.handle.is_none()
+            && self.subscribers.is_none()
+            && self.videos.is_none()
+            && self.description.is_none()
+            && !self.verified
+    }
+}
+
+/// Sort order for the Subscriptions grid.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SubscriptionSort {
+    #[default]
+    Name,
+    Recent,
+    Watched,
+}
+
+impl SubscriptionSort {
+    pub const ALL: [Self; 3] = [Self::Name, Self::Recent, Self::Watched];
+}
+
+#[cfg(test)]
+mod channel_meta_tests {
+    use super::ChannelMeta;
+
+    #[test]
+    fn channel_meta_merge_preserves_existing_fields_when_incoming_is_sparse() {
+        let mut meta = ChannelMeta {
+            handle: Some("@Computerphile".into()),
+            subscribers: Some(2_640_000),
+            videos: Some(850),
+            description: Some("Videos about computers and stuff.".into()),
+            verified: true,
+        };
+        meta.merge_from(ChannelMeta {
+            handle: None,
+            subscribers: Some(2_650_000),
+            videos: None,
+            description: Some("   ".into()),
+            verified: false,
+        });
+        assert_eq!(meta.handle.as_deref(), Some("@Computerphile"));
+        assert_eq!(meta.subscribers, Some(2_650_000));
+        assert_eq!(meta.videos, Some(850));
+        assert_eq!(
+            meta.description.as_deref(),
+            Some("Videos about computers and stuff.")
+        );
+        assert!(meta.verified);
+    }
+}
+
 /// A playlist in the account's library.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlaylistSummary {

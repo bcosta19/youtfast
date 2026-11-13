@@ -863,25 +863,34 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
     let text = innertube::text;
     Ok(match request {
         Request::Search { query, options } => {
-            let (items, more) = innertube::search_filtered(rp, &query, options).await?;
-            Payload::Search { items, more }
+            let (items, channel_meta, more) =
+                innertube::search_filtered_with_meta(rp, &query, options).await?;
+            Payload::Search {
+                items,
+                channel_meta,
+                more,
+            }
         }
         Request::MoreSearch { more, kind } => {
-            let (items, more) = match kind {
+            let (items, channel_meta, more) = match kind {
                 innertube::SearchKind::Videos => {
                     let (items, more) = innertube::more_videos(rp, &more).await?;
-                    (PageItems::Videos(items), more)
+                    (PageItems::Videos(items), Vec::new(), more)
                 }
                 innertube::SearchKind::Channels => {
-                    let (items, more) = innertube::more_channels(rp, &more).await?;
-                    (PageItems::Channels(items), more)
+                    let (items, meta, more) = innertube::more_channels_with_meta(rp, &more).await?;
+                    (PageItems::Channels(items), meta, more)
                 }
                 innertube::SearchKind::Playlists => {
                     let (items, more) = innertube::more_playlists(rp, &more).await?;
-                    (PageItems::Playlists(items), more)
+                    (PageItems::Playlists(items), Vec::new(), more)
                 }
             };
-            Payload::More { items, more }
+            Payload::More {
+                items,
+                channel_meta,
+                more,
+            }
         }
         Request::Feed { channels, account } => {
             let (videos, more) = innertube::feed(rp, channels, account, &context.rss).await?;
@@ -920,6 +929,7 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
             let (videos, next) = innertube::more_videos(rp, &more).await?;
             Payload::More {
                 items: PageItems::Videos(videos),
+                channel_meta: Vec::new(),
                 more: next,
             }
         }
@@ -931,13 +941,19 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
             Payload::Feed { videos, more: None }
         }
         Request::Subscriptions => {
-            let (items, more) = innertube::subscriptions(rp).await.map_err(text)?;
-            Payload::Channels { items, more }
+            let (items, channel_meta, more) =
+                innertube::subscriptions_with_meta(rp).await.map_err(text)?;
+            Payload::Channels {
+                items,
+                channel_meta,
+                more,
+            }
         }
         Request::MoreSubscriptions(more) => {
-            let (items, next) = innertube::more_channels(rp, &more).await?;
+            let (items, channel_meta, next) = innertube::more_channels_with_meta(rp, &more).await?;
             Payload::More {
                 items: PageItems::Channels(items),
+                channel_meta,
                 more: next,
             }
         }
@@ -949,6 +965,7 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
             let (items, next) = innertube::more_history(rp, &more).await?;
             Payload::More {
                 items: PageItems::History(items),
+                channel_meta: Vec::new(),
                 more: next,
             }
         }
@@ -1005,6 +1022,7 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
             let (items, next) = innertube::more_playlists(rp, &more).await?;
             Payload::More {
                 items: PageItems::Playlists(items),
+                channel_meta: Vec::new(),
                 more: next,
             }
         }
@@ -1296,7 +1314,11 @@ mod tests {
                         Event::Loaded {
                             slot: Slot::Search,
                             generation: epoch,
-                            result: Ok(Payload::Search { items, more: None }),
+                            result: Ok(Payload::Search {
+                                items,
+                                channel_meta: Vec::new(),
+                                more: None,
+                            }),
                         },
                     ))
                     .unwrap();
@@ -1343,6 +1365,7 @@ mod tests {
                     generation: 1,
                     result: Ok(Payload::Search {
                         items: PageItems::Channels(vec![Channel::default()]),
+                        channel_meta: Vec::new(),
                         more: None,
                     }),
                 },

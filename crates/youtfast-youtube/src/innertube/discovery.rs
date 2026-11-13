@@ -7,9 +7,9 @@ use super::client::{
     Client, ContinuationEndpoint, base64_urlencoded, proto_bytes, proto_varint, urlencoded,
 };
 use super::items::{
-    collect_channels_and_ctoken, collect_playlists_and_ctoken, collect_videos_and_ctoken,
+    collect_channels_with_meta_and_ctoken, collect_playlists_and_ctoken, collect_videos_and_ctoken,
 };
-use youtfast_core::model::PageItems;
+use youtfast_core::model::{ChannelMeta, PageItems};
 
 macro_rules! choices {
     ($name:ident, $default:ident => $label:literal, $($variant:ident => $text:literal),+ $(,)?) => {
@@ -100,11 +100,11 @@ impl SearchOptions {
     }
 }
 
-pub async fn search_filtered(
+pub async fn search_filtered_with_meta(
     rp: &Client,
     query: &str,
     options: SearchOptions,
-) -> Result<(PageItems, Option<More>), String> {
+) -> Result<(PageItems, Vec<(String, ChannelMeta)>, Option<More>), String> {
     let mut body = json!({ "query": query });
     if let Some(params) = options.params() {
         body["params"] = Value::String(params);
@@ -130,17 +130,30 @@ pub async fn search_filtered(
     Ok(match options.kind {
         SearchKind::Videos => {
             let (videos, ctoken) = collect_videos_and_ctoken(&page);
-            (PageItems::Videos(videos), make_more(ctoken))
+            (PageItems::Videos(videos), Vec::new(), make_more(ctoken))
         }
         SearchKind::Channels => {
-            let (channels, ctoken) = collect_channels_and_ctoken(&page);
-            (PageItems::Channels(channels), make_more(ctoken))
+            let (channels, metas, ctoken) = collect_channels_with_meta_and_ctoken(&page);
+            (PageItems::Channels(channels), metas, make_more(ctoken))
         }
         SearchKind::Playlists => {
             let (playlists, ctoken) = collect_playlists_and_ctoken(&page);
-            (PageItems::Playlists(playlists), make_more(ctoken))
+            (
+                PageItems::Playlists(playlists),
+                Vec::new(),
+                make_more(ctoken),
+            )
         }
     })
+}
+
+pub async fn search_filtered(
+    rp: &Client,
+    query: &str,
+    options: SearchOptions,
+) -> Result<(PageItems, Option<More>), String> {
+    let (items, _, more) = search_filtered_with_meta(rp, query, options).await?;
+    Ok((items, more))
 }
 
 /// Fetches search suggestions from YouTube's autocomplete endpoint, signed out.

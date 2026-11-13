@@ -77,26 +77,6 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     });
 }
 
-/// A titled list of video rows, or what stands in for it: the spinner,
-/// the error with Retry, or the empty state with `empty` as its hint.
-pub fn videos(
-    ui: &mut Ui,
-    state: &State,
-    title: &str,
-    listing: &Listing<Video>,
-    empty: &str,
-    actions: &mut Vec<Action>,
-) {
-    self::title(ui, state, title, Some(listing.items().len()));
-    match listing {
-        Listing::Idle => {}
-        Listing::Loading => loading(ui, state, "videos"),
-        Listing::Failed(error) => failed(ui, state, error, actions),
-        Listing::Ready(videos) if videos.is_empty() => nothing(ui, state, empty),
-        Listing::Ready(videos) => video_rows(ui, state, videos, actions),
-    }
-}
-
 /// The rows themselves, in a scroll area.
 pub fn video_rows<'a>(
     ui: &mut Ui,
@@ -146,7 +126,7 @@ fn rows<'a>(
                 state.cursor_moved.then_some(state.cursor),
                 |ui, index| {
                     let video = videos[index];
-                    let selected = index == state.cursor;
+                    let selected = state.is_cursor(index);
                     let watched = widgets::watched(&state.library, video);
                     let response = if large {
                         widgets::video_row_large(

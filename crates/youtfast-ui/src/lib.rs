@@ -159,16 +159,7 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                     {
                         actions.push(Action::ToggleSidebar);
                     }
-                    if wide
-                        && ui
-                            .add(
-                                egui::Button::new(
-                                    RichText::new("YouTFast").font(theme::bold(18.0)),
-                                )
-                                .frame(false),
-                            )
-                            .clicked()
-                    {
+                    if wide && brand_mark(ui, &palette).clicked() {
                         actions.push(Action::Navigate(View::Home));
                     }
                     ui.add_enabled_ui(state.can_go_back, |ui| {
@@ -281,12 +272,12 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                     }
                 },
             );
-            // Room for the sidebar, the title when wide, and the three
+            // Room for the sidebar, the brand mark when wide, and the three
             // navigation buttons.
-            let left = bar.left() + if wide { 268.0 } else { 160.0 };
+            let left = bar.left() + if wide { 296.0 } else { 160.0 };
             let right = bar.right() - 156.0;
-            let width = (right - left - 36.0).clamp(80.0, 560.0);
-            let center = egui::pos2((left + right - 36.0) / 2.0, bar.center().y);
+            let width = (right - left - 44.0).clamp(80.0, 560.0);
+            let center = egui::pos2((left + right - 44.0) / 2.0, bar.center().y);
             let field_rect = egui::Rect::from_center_size(center, vec2(width, 36.0));
             ui.scope_builder(
                 UiBuilder::new()
@@ -323,7 +314,7 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                 },
             );
             let button = egui::Rect::from_center_size(
-                egui::pos2(field_rect.right() + 20.0, bar.center().y),
+                egui::pos2(field_rect.right() + 24.0, bar.center().y),
                 vec2(36.0, 36.0),
             );
             ui.scope_builder(
@@ -331,19 +322,98 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                     .max_rect(button)
                     .layout(Layout::left_to_right(Align::Center)),
                 |ui| {
-                    if widgets::icon_button(
-                        ui,
-                        Icon::Search,
-                        20.0,
-                        tr(locale, "Search (Enter)").as_ref(),
-                    )
-                    .clicked()
+                    if search_submit_button(ui, &palette, tr(locale, "Search (Enter)").as_ref())
+                        .clicked()
                     {
                         actions.push(Action::Search(state.query.clone()));
                     }
                 },
             );
         });
+}
+
+/// Brand mark in the top bar: a crisp rounded play emblem beside the wordmark.
+fn brand_mark(ui: &mut egui::Ui, palette: &youtfast_appearance::theme::Palette) -> egui::Response {
+    let galley =
+        ui.painter()
+            .layout_no_wrap("YouTFast".to_owned(), theme::bold(17.0), palette.text);
+    let badge_w = 20.0;
+    let badge_h = 14.0;
+    let gap = 5.0;
+    let pad_x = 4.0;
+    let total = vec2(pad_x * 2.0 + badge_w + gap + galley.size().x, 32.0);
+    let (rect, response) = ui.allocate_exact_size(total, Sense::click());
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "YouTFast"));
+    if response.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    let hover = widgets::hover_fade(ui, &response);
+    if hover > 0.0 {
+        ui.painter().rect_filled(
+            rect,
+            CornerRadius::same(RADIUS),
+            palette.surface_hover.gamma_multiply(hover * 0.7),
+        );
+    }
+    widgets::focus_outline(ui, &response, CornerRadius::same(RADIUS));
+    let badge = egui::Rect::from_center_size(
+        egui::pos2(rect.left() + pad_x + badge_w / 2.0, rect.center().y),
+        vec2(badge_w, badge_h),
+    );
+    let painter = ui.painter();
+    painter.rect_filled(badge, CornerRadius::same(4), palette.accent);
+    let cx = badge.center().x + 0.5;
+    let cy = badge.center().y;
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            egui::pos2(cx - 2.5, cy - 3.5),
+            egui::pos2(cx + 3.5, cy),
+            egui::pos2(cx - 2.5, cy + 3.5),
+        ],
+        palette.on_accent,
+        Stroke::NONE,
+    ));
+    painter.galley(
+        egui::pos2(badge.right() + gap, rect.center().y - galley.size().y / 2.0),
+        galley,
+        palette.text,
+    );
+    response
+}
+
+/// Circular pill search button beside the search input.
+fn search_submit_button(
+    ui: &mut egui::Ui,
+    palette: &youtfast_appearance::theme::Palette,
+    hint: &str,
+) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(vec2(36.0, 36.0), Sense::click());
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, hint));
+    if response.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    let hover = widgets::hover_fade(ui, &response);
+    let press = widgets::press_fade(ui, &response);
+    let fill = widgets::mix(
+        widgets::mix(palette.surface, palette.surface_hover, hover),
+        palette.surface_active,
+        press,
+    );
+    let painter = ui.painter();
+    painter.circle_filled(rect.center(), 18.0, fill);
+    painter.circle_stroke(
+        rect.center(),
+        18.0,
+        Stroke::new(1.0, palette.outline.gamma_multiply(0.75)),
+    );
+    widgets::focus_outline(ui, &response, CornerRadius::same(18));
+    Icon::Search
+        .image(widgets::mix(palette.secondary, palette.text, hover), 18.0)
+        .paint_at(
+            ui,
+            egui::Rect::from_center_size(rect.center(), vec2(18.0, 18.0)),
+        );
+    response.on_hover_text(hint)
 }
 
 /// YouTube's suggestions under the search field while it is focused; ↑/↓
@@ -393,31 +463,38 @@ fn suggestions(
                 .fill(palette.overlay)
                 .stroke(Stroke::new(1.0, palette.outline))
                 .corner_radius(CornerRadius::same(RADIUS + 4))
-                .inner_margin(Margin::symmetric(0, 8))
+                .inner_margin(Margin::same(6))
                 .shadow(ui.visuals().popup_shadow)
                 .show(ui, |ui| {
-                    ui.set_width(field_rect.width());
-                    ui.spacing_mut().item_spacing.y = 0.0;
+                    let row_width = (field_rect.width() - 12.0).max(40.0);
+                    ui.set_width(row_width);
+                    ui.spacing_mut().item_spacing.y = 2.0;
                     for (index, text) in state.suggestions.iter().enumerate() {
                         let (rect, response) =
-                            ui.allocate_exact_size(vec2(field_rect.width(), 32.0), Sense::click());
+                            ui.allocate_exact_size(vec2(row_width, 34.0), Sense::click());
                         let selected = state.suggestion_cursor == Some(index);
-                        if response.hovered() || selected {
+                        let hover = widgets::hover_fade(ui, &response);
+                        if selected || hover > 0.0 {
+                            let fill = if selected {
+                                palette.surface_active
+                            } else {
+                                palette.surface_hover.gamma_multiply(hover)
+                            };
                             ui.painter().rect_filled(
                                 rect,
-                                CornerRadius::ZERO,
-                                palette.surface_hover,
+                                CornerRadius::same(theme::RADIUS_SMALL + 2),
+                                fill,
                             );
                         }
                         let icon = egui::Rect::from_center_size(
-                            egui::pos2(rect.left() + 20.0, rect.center().y),
+                            egui::pos2(rect.left() + 14.0, rect.center().y),
                             vec2(14.0, 14.0),
                         );
                         Icon::Search
-                            .image(palette.secondary, 14.0)
+                            .image(widgets::mix(palette.secondary, palette.text, hover), 14.0)
                             .paint_at(ui, icon);
                         ui.painter().text(
-                            egui::pos2(rect.left() + 40.0, rect.center().y),
+                            egui::pos2(rect.left() + 34.0, rect.center().y),
                             egui::Align2::LEFT_CENTER,
                             text,
                             theme::regular(14.0),
@@ -637,23 +714,28 @@ fn sidebar_channels(ui: &mut egui::Ui, state: &State, collapsed: bool, actions: 
 fn notice_toast(ctx: &egui::Context, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
 
+    let reveal = ctx.animate_bool(egui::Id::new("notice-visible"), state.notice.is_some());
     let Some(notice) = &state.notice else {
         return;
     };
     let palette = &state.palette;
-    let (icon, tint) = if notice.starts_with("Could not") {
-        (Icon::Alert, palette.red)
+    let is_error = notice.starts_with("Could not");
+    let (icon, tint, border) = if is_error {
+        (Icon::Alert, palette.red, palette.red.gamma_multiply(0.55))
     } else {
-        (Icon::Info, palette.secondary)
+        (Icon::Info, palette.secondary, palette.outline)
     };
     egui::Area::new(egui::Id::new("notice"))
         .order(egui::Order::Foreground)
-        .anchor(egui::Align2::RIGHT_BOTTOM, vec2(-20.0, -20.0))
+        .anchor(
+            egui::Align2::RIGHT_BOTTOM,
+            vec2(-20.0, -20.0 + 10.0 * (1.0 - reveal)),
+        )
         .show(ctx, |ui| {
             Frame::new()
                 .fill(palette.overlay)
-                .stroke(Stroke::new(1.0, palette.outline))
-                .corner_radius(CornerRadius::same(RADIUS))
+                .stroke(Stroke::new(1.0, border))
+                .corner_radius(CornerRadius::same(RADIUS + 2))
                 .inner_margin(Margin::symmetric(14, 10))
                 .shadow(ui.visuals().popup_shadow)
                 .show(ui, |ui| {
@@ -725,17 +807,11 @@ fn cursor_count(state: &State) -> usize {
                 state.results_playlists.items().len()
             }
         },
-        View::Subscriptions => match state.source() {
-            youtfast_core::model::Source::Account => state.account_subscriptions.items().len(),
-            youtfast_core::model::Source::Device => state.library.subscriptions.len(),
-        },
+        View::Subscriptions => state.visible_subscriptions().len(),
         View::History => state.history_rows().len(),
-        View::WatchLater => match state.source() {
-            youtfast_core::model::Source::Account => state.account_watch_later.items().len(),
-            youtfast_core::model::Source::Device => state.library.watch_later.len(),
-        },
-        View::Liked => state.liked.items().len(),
-        View::Playlists => state.playlists.items().len(),
+        View::WatchLater => state.visible_watch_later().len(),
+        View::Liked => state.visible_liked().len(),
+        View::Playlists => state.visible_playlists().len(),
         View::Playlist => state.page_videos.items().len(),
         View::Notifications => state.alerts_visit.len(),
         View::Channel => match state.channel_tab {
@@ -773,33 +849,27 @@ fn open_at(state: &State, index: usize) -> Option<Action> {
                     name: p.name.clone(),
                 }),
         },
-        View::Subscriptions => match state.source() {
-            youtfast_core::model::Source::Account => state
-                .account_subscriptions
-                .items()
-                .get(index)
-                .cloned()
-                .map(Action::OpenChannel),
-            youtfast_core::model::Source::Device => state
-                .library
-                .subscriptions
-                .get(index)
-                .cloned()
-                .map(Action::OpenChannel),
-        },
+        View::Subscriptions => state
+            .visible_subscriptions()
+            .get(index)
+            .cloned()
+            .cloned()
+            .map(Action::OpenChannel),
         View::History => state
             .history_rows()
             .get(index)
             .map(|row| Action::Open(row.video.clone())),
-        View::WatchLater => match state.source() {
-            youtfast_core::model::Source::Account => video(state.account_watch_later.items()),
-            youtfast_core::model::Source::Device => video(&state.library.watch_later),
-        },
-        View::Liked => video(state.liked.items()),
+        View::WatchLater => state
+            .visible_watch_later()
+            .get(index)
+            .map(|video| Action::Open((*video).clone())),
+        View::Liked => state
+            .visible_liked()
+            .get(index)
+            .map(|video| Action::Open((*video).clone())),
         View::Playlists => {
             state
-                .playlists
-                .items()
+                .visible_playlists()
                 .get(index)
                 .map(|playlist| Action::OpenPlaylist {
                     id: playlist.id.clone(),
@@ -1335,7 +1405,7 @@ mod tests {
             pointer_click_at(
                 &ctx,
                 &mut state,
-                egui::pos2(242.0, 28.0),
+                egui::pos2(267.0, 28.0),
                 egui::PointerButton::Primary,
                 &mut actions,
                 width,

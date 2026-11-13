@@ -637,9 +637,14 @@ fn buttons(
         actions.push(Action::ToggleMute);
     }
     if mode != Mode::Short && left_rect.width() >= 300.0 {
-        ui.spacing_mut().slider_width = 80.0;
         let mut volume = if status.muted { 0.0 } else { status.volume };
-        let response = ui.add(Slider::new(&mut volume, 0.0..=100.0).show_value(false));
+        let response = ui
+            .scope(|ui| {
+                ui.spacing_mut().slider_width = 80.0;
+                ui.spacing_mut().interact_size.y = 14.0;
+                ui.add(Slider::new(&mut volume, 0.0..=100.0).show_value(false))
+            })
+            .inner;
         remember_control_focus(&response);
         if response.changed() {
             actions.push(Action::SetVolume(volume));
@@ -931,7 +936,9 @@ fn seek_bar(
     if active {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
     }
-    let thickness = if active { 5.0 } else { 3.0 };
+    let active_t = ui.ctx().animate_bool(response.id.with("active"), active);
+    let thickness = 3.0 + 2.5 * active_t;
+    let radius = CornerRadius::same((thickness / 2.0).ceil() as u8);
     let track = Rect::from_center_size(rect.center(), vec2(rect.width(), thickness));
     let x_at = |seconds: f64| {
         let fraction = if duration > 0.0 {
@@ -949,21 +956,17 @@ fn seek_bar(
             pos2(x_at(to), track.bottom()),
         )
     };
-    painter.rect_filled(track, CornerRadius::ZERO, Color32::from_white_alpha(60));
+    painter.rect_filled(track, radius, Color32::from_white_alpha(60));
     painter.rect_filled(
         span(0.0, status.cached_until),
-        CornerRadius::ZERO,
+        radius,
         Color32::from_white_alpha(110),
     );
-    painter.rect_filled(
-        span(0.0, position),
-        CornerRadius::ZERO,
-        state.palette.accent,
-    );
+    painter.rect_filled(span(0.0, position), radius, state.palette.accent);
     for segment in &state.segments {
         painter.rect_filled(
             span(segment.start, segment.end),
-            CornerRadius::ZERO,
+            radius,
             segment_color(segment),
         );
     }
@@ -979,21 +982,23 @@ fn seek_bar(
             painter.rect_filled(gap, CornerRadius::ZERO, Color32::from_black_alpha(200));
         }
     }
-    if active {
+    if active_t > 0.01 {
+        let knob = pos2(x_at(position), track.center().y);
         painter.circle_filled(
-            pos2(x_at(position), track.center().y),
-            7.0,
-            state.palette.accent,
+            knob,
+            8.0 * active_t,
+            Color32::from_black_alpha((110.0 * active_t) as u8),
         );
-        if let Some(pointer) = response.hover_pos().or(response.interact_pointer_pos()) {
-            let seconds = at_pointer(pointer);
-            let mut text = util::duration(seconds);
-            if let Some(chapter) = chapter_at(state, seconds) {
-                text = format!("{chapter}\n{text}");
-            }
-            super::extras::seek_preview(ui, rect, state, seconds, actions);
-            bubble(ui, pos2(pointer.x, rect.top() - 6.0), &text);
+        painter.circle_filled(knob, 6.5 * active_t, state.palette.accent);
+    }
+    if active && let Some(pointer) = response.hover_pos().or(response.interact_pointer_pos()) {
+        let seconds = at_pointer(pointer);
+        let mut text = util::duration(seconds);
+        if let Some(chapter) = chapter_at(state, seconds) {
+            text = format!("{chapter}\n{text}");
         }
+        super::extras::seek_preview(ui, rect, state, seconds, actions);
+        bubble(ui, pos2(pointer.x, rect.top() - 6.0), &text);
     }
 }
 
@@ -1022,7 +1027,14 @@ fn bubble(ui: &Ui, bottom: egui::Pos2, text: &str) {
         (bottom.x - size.x / 2.0).clamp(clip.left(), (clip.right() - size.x).max(clip.left()));
     let rect = Rect::from_min_size(pos2(left, bottom.y - size.y), size);
     let painter = ui.painter();
-    painter.rect_filled(rect, CornerRadius::same(6), Color32::from_black_alpha(210));
+    let radius = CornerRadius::same(theme::RADIUS);
+    painter.rect_filled(rect, radius, Color32::from_black_alpha(220));
+    painter.rect_stroke(
+        rect,
+        radius,
+        Stroke::new(1.0, Color32::from_white_alpha(28)),
+        egui::StrokeKind::Inside,
+    );
     painter.galley(rect.min + vec2(8.0, 4.0), galley, Color32::WHITE);
 }
 
@@ -1617,6 +1629,15 @@ pub fn mini(
             // The part played, along the picture's bottom edge.
             if status.duration > 0.0 && !state.watching_live() {
                 let fraction = (status.position / status.duration).clamp(0.0, 1.0) as f32;
+                let track = Rect::from_min_max(pos2(rect.left(), rect.bottom() - 3.0), rect.max);
+                let track_radius = CornerRadius {
+                    nw: 0,
+                    ne: 0,
+                    sw: theme::RADIUS - 1,
+                    se: theme::RADIUS - 1,
+                };
+                ui.painter()
+                    .rect_filled(track, track_radius, Color32::from_white_alpha(45));
                 let line = Rect::from_min_max(
                     pos2(rect.left(), rect.bottom() - 3.0),
                     pos2(rect.left() + rect.width() * fraction, rect.bottom()),
@@ -1639,14 +1660,21 @@ pub fn mini(
             let mut control_clicked = false;
             let mini_controls = egui::Id::new("mini-player-control-focus");
             let keyboard_focus = keyboard_video_focus(&response);
-            if ui.rect_contains_pointer(rect)
+            let controls_visible = ui.rect_contains_pointer(rect)
                 || status.paused
                 || keyboard_focus
-                || focused_control(ctx, mini_controls)
-            {
+                || focused_control(ctx, mini_controls);
+            let overlay_fade =
+                ctx.animate_bool(egui::Id::new("mini-player-overlay-fade"), controls_visible);
+            if overlay_fade > 0.0 {
+                ui.painter().rect_filled(
+                    rect,
+                    radius,
+                    Color32::from_black_alpha((120.0 * overlay_fade) as u8),
+                );
+            }
+            if controls_visible {
                 ctx.data_mut(|data| data.insert_temp(mini_controls, Vec::<egui::Id>::new()));
-                ui.painter()
-                    .rect_filled(rect, radius, Color32::from_black_alpha(110));
                 let mut over = ui.new_child(UiBuilder::new().max_rect(rect));
                 on_video_style(&mut over);
                 let place = |size: f32, center: egui::Pos2| {
@@ -1655,6 +1683,8 @@ pub fn mini(
                         vec2(size + 12.0, size + 12.0),
                     ))
                 };
+                over.painter()
+                    .circle_filled(rect.center(), 24.0, Color32::from_black_alpha(145));
                 let (icon, hint) = if status.paused {
                     (Icon::Play, tr(locale, "Play"))
                 } else {

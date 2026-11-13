@@ -1708,3 +1708,79 @@ msgstr "Allgemein"
 
 msgid "Player"
 msgstr "Player"
+
+msgid "Filter channels"
+msgstr "Kanäle filtern"
+
+msgid "Name"
+msgstr "Name"
+
+msgid "Recent"
+msgstr "Aktuell"
+
+msgid "Most watched"
+msgstr "Meistgesehen"
+
+msgid "Verified channel"
+msgstr "Verifizierter Kanal"
+
+msgid "YouTube channel"
+msgstr "YouTube-Kanal"
+
+msgid "Open latest video"
+msgstr "Neuestes Video öffnen"
+
+msgid "Copy channel link"
+msgstr "Kanallink kopieren"
+
+msgid "Last watched"
+msgstr "Zuletzt angesehen"
+
+msgid "No channels match this filter"
+msgstr "Keine Kanäle entsprechen diesem Filter"
+
+msgid "Clear filter"
+msgstr "Filter zurücksetzen"
+
+msgid "{count} watched"
+msgid_plural "{count} watched"
+msgstr[0] "{count} angesehen"
+msgstr[1] "{count} angesehen"
+
+msgid "{count} new"
+msgid_plural "{count} new"
+msgstr[0] "{count} neu"
+msgstr[1] "{count} neu"
+
+msgid "{count} active"
+msgid_plural "{count} active"
+msgstr[0] "{count} aktiv"
+msgstr[1] "{count} aktiv"
+
+msgid "{count} matching"
+msgid_plural "{count} matching"
+msgstr[0] "{count} passend"
+msgstr[1] "{count} passend"
+
+msgid "Previous Shorts"
+msgstr "Vorherige Shorts"
+
+msgid "Next Shorts"
+msgstr "Nächste Shorts"
+
+msgid "Hide Shorts"
+msgstr "Shorts ausblenden"
+
+msgid "Show Shorts"
+msgstr "Shorts anzeigen"
+
+msgid "Filter videos"
+msgstr "Videos filtern"
+
+msgid "Filter playlists"
+msgstr "Playlists filtern"
+
+msgid "{count} in progress"
+msgid_plural "{count} in progress"
+msgstr[0] "{count} läuft noch"
+msgstr[1] "{count} laufen noch"

@@ -163,7 +163,7 @@ fn header(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Actio
                     parts.push(handle.clone());
                 }
                 if let Some(subscribers) = header.subscribers {
-                    parts.push(channel_count(
+                    parts.push(widgets::compact_count_label(
                         subscribers,
                         "{count} subscriber",
                         "{count} subscribers",
@@ -171,7 +171,7 @@ fn header(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Actio
                     ));
                 }
                 if let Some(videos) = header.videos {
-                    parts.push(channel_count(
+                    parts.push(widgets::compact_count_label(
                         videos,
                         "{count} video",
                         "{count} videos",
@@ -192,17 +192,6 @@ fn header(ui: &mut Ui, state: &State, channel: &Channel, actions: &mut Vec<Actio
             }
         });
     });
-}
-
-fn channel_count(
-    count: u64,
-    singular: &'static str,
-    plural: &'static str,
-    locale: Locale,
-) -> String {
-    let phrase =
-        youtfast_i18n::ngettext(locale, singular, plural, count.min(u32::MAX as u64) as u32);
-    youtfast_i18n::interpolate(&phrase, &[("count", util::compact(count))])
 }
 
 /// The tab's name in the bar.
@@ -359,7 +348,7 @@ fn videos(ui: &mut Ui, state: &State, tab: &ChannelTab, actions: &mut Vec<Action
                     ui.spacing_mut().item_spacing.x = GAP;
                     for &index in row {
                         let video = &videos[index];
-                        let selected = index == state.cursor;
+                        let selected = state.is_cursor(index);
                         let watched = widgets::watched(&state.library, video);
                         let response = widgets::video_card(
                             ui,
@@ -423,7 +412,7 @@ fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 state.cursor_moved.then_some(state.cursor),
                 |ui, index| {
                     let playlist = &playlists[index];
-                    let selected = index == state.cursor;
+                    let selected = state.is_cursor(index);
                     let response = widgets::playlist_row(
                         ui,
                         &state.palette,

@@ -133,7 +133,7 @@ pub fn other_results(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                                     ui,
                                     &state.palette,
                                     playlist,
-                                    index == state.cursor,
+                                    state.is_cursor(index),
                                     true,
                                     locale,
                                 );

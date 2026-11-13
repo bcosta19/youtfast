@@ -374,7 +374,7 @@ fn rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>, page: bool) {
             .map_or(videos.len(), |offset| start + offset);
         let mut render_items = |ui: &mut Ui| {
             for (index, video) in videos.iter().enumerate().take(end).skip(start) {
-                let selected = page && index == state.cursor;
+                let selected = page && state.is_cursor(index);
                 let watched = widgets::watched(&state.library, video);
                 let response =
                     widgets::video_row(ui, &state.palette, video, None, watched, selected, locale);
