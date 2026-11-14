@@ -8,6 +8,11 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed characters that drew as empty boxes in comments, titles, descriptions and channel names on every platform: emoji from 2016 on (🤣, 🥹, 🫠, 🥳…), "small caps" and styled letters (ᴛʜɪs, 𝓗𝓮𝓵𝓵𝓸, ⓑⓤⓑⓑⓛⓔ), symbols and kaomoji (ʕ•ᴥ•ʔ, ᕕ( ᐛ )ᕗ, ༼ ◕_◕ ༽, ┻━┻). Emoji now show in colour in the platform's own style where it has a colour emoji font (Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji), with skin tones, families and flags joined.
+- Kept the text around a link or mention in a comment when YouTube's run boundaries fall inside an emoji, instead of dropping it.
+
 ## [0.8.0] - 2026-11-13
 
 ### Added

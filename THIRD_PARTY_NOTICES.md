@@ -16,6 +16,12 @@ Dependency sources keep their own copyright and licenses.
 - Lucide icons are ISC; Feather-derived icons carry the MIT notice. The
   combined original notice is `assets/icons/LICENSE.txt` and accompanies the
   binary archive.
+- The binary embeds two fonts under the SIL Open Font License 1.1: Noto
+  Emoji 3.002 (`assets/fonts/NotoEmoji-LICENSE.txt`), and a subset of Noto
+  Sans, Sans Mono, Sans Symbols, Sans Symbols 2, Sans Math, Sans Yi, Sans
+  Kannada, Sans Canadian Aboriginal and Serif Tibetan merged by
+  `tools/fonts.py` (`assets/fonts/NotoFallback-LICENSE.txt`). Both notices
+  accompany the binary archive.
 
 The Flatpak builds its additional native components from checksum- or
 commit-pinned sources. The `flatpak-sources.flatpak` asset exports the builder's

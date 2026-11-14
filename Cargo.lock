@@ -1502,6 +1502,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "fastframe-emoji"
+version = "0.15.5"
+source = "git+https://github.com/crmne/fastframe?tag=v0.15.5#a44efc58d7142642ec46db7aaa671f98bd8c4ce2"
+dependencies = [
+ "egui",
+ "fastframe-fonts",
+ "harfrust",
+ "log",
+ "memmap2",
+ "png 0.18.1",
+ "skrifa",
+ "unicode-segmentation",
+ "windows 0.62.2",
+ "windows-core",
+ "windows-numerics",
+]
+
+[[package]]
 name = "fastframe-fonts"
 version = "0.15.5"
 source = "git+https://github.com/crmne/fastframe?tag=v0.15.5#a44efc58d7142642ec46db7aaa671f98bd8c4ce2"
@@ -6105,12 +6123,14 @@ name = "youtfast-appearance"
 version = "0.8.0"
 dependencies = [
  "egui",
+ "fastframe-emoji",
  "fastframe-fonts",
  "fastframe-icons",
  "fastframe-text",
  "fastframe-theme",
  "log",
  "serde",
+ "skrifa",
  "url",
 ]
 

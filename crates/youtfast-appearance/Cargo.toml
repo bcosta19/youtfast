@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 # Palette colours and font choices are saved in the settings.
 egui = { workspace = true, features = ["serde"] }
+fastframe-emoji.workspace = true
 fastframe-fonts.workspace = true
 fastframe-icons.workspace = true
 fastframe-text.workspace = true
@@ -18,6 +19,9 @@ fastframe-theme.workspace = true
 log.workspace = true
 serde.workspace = true
 url.workspace = true
+
+[dev-dependencies]
+skrifa.workspace = true
 
 [lints]
 workspace = true
