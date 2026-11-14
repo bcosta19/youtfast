@@ -22,6 +22,12 @@ Dependency sources keep their own copyright and licenses.
   Kannada, Sans Canadian Aboriginal and Serif Tibetan merged by
   `tools/fonts.py` (`assets/fonts/NotoFallback-LICENSE.txt`). Both notices
   accompany the binary archive.
+- `EmojiSupplement.ttf` contains 14 Unicode 16/17 emoji from OpenMoji
+  17.0.0 by the OpenMoji contributors at HfG Schwaebisch Gmuend
+  (https://openmoji.org/), under CC BY-SA 4.0. YouTFast subsets and renames
+  the font with `tools/emoji_supplement.py`; the modified subset retains
+  that license. Attribution and the original license accompany the binary
+  in `assets/fonts/OpenMoji-LICENSE.txt`.
 
 The Flatpak builds its additional native components from checksum- or
 commit-pinned sources. The `flatpak-sources.flatpak` asset exports the builder's

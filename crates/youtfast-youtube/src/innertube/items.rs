@@ -816,8 +816,9 @@ fn spans_from_attributed(
         let Some(len) = run.get("length").and_then(Value::as_u64) else {
             continue;
         };
+        // Both offsets refer to the original run, before either is snapped.
+        let end = char_start(&utf16, (start as usize).saturating_add(len as usize));
         let start = char_start(&utf16, start as usize);
-        let end = char_start(&utf16, start.saturating_add(len as usize));
         if start > cursor
             && let Ok(prefix) = String::from_utf16(&utf16[cursor..start])
             && !prefix.is_empty()
@@ -923,6 +924,26 @@ fn unwrap_redirect(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn snapping_a_run_start_keeps_its_original_end() {
+        let value = serde_json::json!({
+            "content": "🤣ab",
+            "commandRuns": [{ "startIndex": 1, "length": 2, "onTap": {
+                "innertubeCommand": { "browseEndpoint": { "browseId": "UCsomeone" } }
+            } }]
+        });
+        assert_eq!(
+            spans_from_value(Some(&value), "aaaaaaaaaaa"),
+            vec![
+                Span::Channel {
+                    text: "🤣a".into(),
+                    id: "UCsomeone".into()
+                },
+                Span::Text("b".into()),
+            ]
+        );
+    }
 
     #[test]
     fn a_run_between_the_halves_of_an_emoji_keeps_every_character() {

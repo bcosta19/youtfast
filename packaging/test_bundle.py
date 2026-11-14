@@ -130,7 +130,7 @@ class BundleTests(unittest.TestCase):
         for path in ["docs/distribution.md", "docs/actions.md", "RELEASING.md",
                      "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md",
                      "assets/icons/LICENSE.txt", "assets/fonts/NotoEmoji-LICENSE.txt",
-                     "assets/fonts/NotoFallback-LICENSE.txt"]:
+                     "assets/fonts/NotoFallback-LICENSE.txt", "assets/fonts/OpenMoji-LICENSE.txt"]:
             with self.subTest(path=path):
                 self.assertEqual((directory / path).read_bytes(), (ROOT / path).read_bytes())
 

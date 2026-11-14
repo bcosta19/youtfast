@@ -25,12 +25,21 @@
 //! UI Emoji on Windows, the desktop's colour emoji font on Linux, joined as
 //! the platform joins sequences (skin tones, families, flags, keycaps).
 //! Where no colour font is installed the monochrome glyph stays.
+//! Unicode 16/17 emoji absent from Noto come from a small OpenMoji subset
+//! immediately after it, rebuilt with `tools/emoji_supplement.py`.
 
 use std::sync::Arc;
 
 /// Noto Emoji 3.002, monochrome, from Google Fonts (`ofl/notoemoji`),
 /// SIL Open Font License 1.1 (`assets/fonts/NotoEmoji-LICENSE.txt`).
 pub const NOTO_EMOJI: &[u8] = include_bytes!("../../../assets/fonts/NotoEmoji.ttf");
+
+/// Unicode 16/17 emoji outlines from OpenMoji 17.0.0, subset by
+/// `tools/emoji_supplement.py`; CC BY-SA 4.0 (`assets/fonts/OpenMoji-LICENSE.txt`).
+const EMOJI_SUPPLEMENT: &[u8] = include_bytes!("../../../assets/fonts/EmojiSupplement.ttf");
+const SUPPLEMENT_KEY: &str = "youtfast-emoji-supplement";
+/// Match Noto's 1.27 em advance at its emoji scale; OpenMoji uses 1320/1024 em.
+const SUPPLEMENT_SCALE: f32 = EMOJI_SCALE * 1.27 / (1320.0 / 1024.0);
 
 /// Symbol and letter blocks of Noto Sans, Noto Sans Symbols, Symbols 2 and
 /// Math, and the kaomoji's few characters of Canadian syllabics, Tibetan,
@@ -62,7 +71,13 @@ pub fn register(setup: fastframe_fonts::FontSetup) -> fastframe_fonts::FontSetup
         scale: EMOJI_SCALE,
         ..Default::default()
     });
-    setup.companion(EMOJI_KEY, Arc::new(emoji))
+    let supplement = egui::FontData::from_static(EMOJI_SUPPLEMENT).tweak(egui::FontTweak {
+        scale: SUPPLEMENT_SCALE,
+        ..Default::default()
+    });
+    setup
+        .companion(EMOJI_KEY, Arc::new(emoji))
+        .companion(SUPPLEMENT_KEY, Arc::new(supplement))
 }
 
 /// Puts [`NOTO_FALLBACK`] last in every family, behind the installed
@@ -101,6 +116,7 @@ mod tests {
     /// What people write in comments and names: emoji old and new, the
     /// sequences, "small caps", styled letters, symbols and kaomoji.
     const SAMPLES: &[&str] = &[
+        "🫩🫆🪾🫜🪉🪏🫟🫪🛘🫍🫈🪊🪎🫯",
         "😂🤣❤️👍🙏🔥✨🥹🫠🫶🩷🪿🫨🤌🫡🥲🥳🤯😭💀",
         "👍🏽 👋🏻 👨\u{200D}👩\u{200D}👧 🏳️\u{200D}🌈 👩🏽\u{200D}💻 ❤️\u{200D}🔥",
         "🇧🇷 🇵🇹 🏴\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F} 1️⃣ #️⃣ ☠️ ✌️ ☺️",
@@ -201,6 +217,13 @@ mod tests {
                 "{c}"
             );
         }
+        for c in "🫩🫆🪾🫜🪉🪏🫟🫪🛘🫍🫈🪊🪎🫯".chars() {
+            assert_eq!(
+                face_for(&fonts, &family, c).as_deref(),
+                Some(SUPPLEMENT_KEY),
+                "{c}"
+            );
+        }
         for c in ['a', 'ç', 'ã', '7', '©', '™', 'Ж'] {
             assert_eq!(
                 face_for(&fonts, &family, c).as_deref(),
@@ -219,6 +242,7 @@ mod tests {
         for weight in fastframe_fonts::Weight::ALL {
             let family = &fonts.families[&weight.family()];
             assert_eq!(family[1], EMOJI_KEY, "{weight:?}");
+            assert_eq!(family[2], SUPPLEMENT_KEY, "{weight:?}");
             assert_eq!(family.last().map(String::as_str), Some(FALLBACK_KEY));
         }
         assert_eq!(
@@ -252,9 +276,9 @@ mod tests {
 
     #[test]
     fn an_emoji_keeps_the_width_egui_gave_it() {
-        let advance = |bytes: &[u8]| {
+        let advance = |bytes: &[u8], c: char| {
             let font = skrifa::FontRef::new(bytes).expect("a font");
-            let glyph = font.charmap().map('😀').expect("😀");
+            let glyph = font.charmap().map(c).expect("an emoji glyph");
             let metrics = font.glyph_metrics(
                 skrifa::instance::Size::unscaled(),
                 skrifa::instance::LocationRef::default(),
@@ -271,10 +295,51 @@ mod tests {
         let defaults = egui::FontDefinitions::default();
         if let Some(builtin) = defaults.font_data.get("NotoEmoji-Regular") {
             assert!(
-                (advance(&builtin.font) * builtin.tweak.scale - advance(NOTO_EMOJI) * EMOJI_SCALE)
+                (advance(&builtin.font, '😀') * builtin.tweak.scale
+                    - advance(NOTO_EMOJI, '😀') * EMOJI_SCALE)
                     .abs()
                     < 1e-3
             );
         }
+        for c in "🫩🫆🪾🫜🪉🪏🫟🫪🛘🫍🫈🪊🪎🫯".chars() {
+            assert!(
+                (advance(EMOJI_SUPPLEMENT, c) * SUPPLEMENT_SCALE
+                    - advance(NOTO_EMOJI, '😀') * EMOJI_SCALE)
+                    .abs()
+                    < 1e-3,
+                "{c} keeps the existing emoji advance"
+            );
+        }
+    }
+
+    #[test]
+    fn supplementary_emoji_lay_out_with_visible_glyphs_without_system_fonts() {
+        let ctx = egui::Context::default();
+        ctx.set_fonts(bundled_only());
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            for c in "🫩🫆🪾🫜🪉🪏🫟🫪🛘🫍🫈🪊🪎🫯".chars() {
+                let galley = ui.painter().layout_no_wrap(
+                    c.to_string(),
+                    egui::FontId::proportional(20.0),
+                    egui::Color32::WHITE,
+                );
+                assert!(galley.size().x > 0.0, "{c} has an advance");
+                assert!(
+                    galley.rows.iter().any(|placed| placed
+                        .row
+                        .glyphs
+                        .iter()
+                        .any(|glyph| glyph.chr == c && !glyph.uv_rect.is_nothing())),
+                    "{c} has a visible glyph"
+                );
+                ui.painter()
+                    .galley(egui::Pos2::ZERO, galley, egui::Color32::WHITE);
+            }
+        });
+        assert!(
+            !ctx.tessellate(output.shapes, output.pixels_per_point)
+                .is_empty()
+        );
+        output.textures_delta.clear();
     }
 }
