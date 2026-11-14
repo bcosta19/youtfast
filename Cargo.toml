@@ -98,7 +98,7 @@ url = "2"
 # Desktop notifications for new uploads; "z" is zbus for the D-Bus.
 notify-rust = { version = "4", default-features = false, features = ["z"] }
 # Native file selection (desktop portal on Linux) for Takeout and cookies.txt.
-rfd = "0.17.2"
+rfd = "0.18.0"
 # The signed-in session's cookies live in the platform credential store,
 # never in a file. One API, with each target's native provider below.
 keyring-core = "1"
