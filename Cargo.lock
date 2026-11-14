@@ -1558,8 +1558,8 @@ dependencies = [
 
 [[package]]
 name = "fastframe-scroll"
-version = "0.15.5"
-source = "git+https://github.com/crmne/fastframe?tag=v0.15.5#a44efc58d7142642ec46db7aaa671f98bd8c4ce2"
+version = "0.17.0"
+source = "git+https://github.com/crmne/fastframe?tag=v0.17.0#3617b1471763e3a36fed15d5da67c95e178173e9"
 dependencies = [
  "egui",
 ]
