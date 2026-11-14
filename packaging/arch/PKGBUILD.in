@@ -43,6 +43,9 @@ package() {
     install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/youtfast/LICENSE"
     install -Dm644 THIRD_PARTY_NOTICES.md "${pkgdir}/usr/share/licenses/youtfast/THIRD_PARTY_NOTICES.md"
     install -Dm644 assets/icons/LICENSE.txt "${pkgdir}/usr/share/licenses/youtfast/icons/LICENSE.txt"
+    install -Dm644 assets/fonts/NotoEmoji-LICENSE.txt "${pkgdir}/usr/share/licenses/youtfast/fonts/NotoEmoji-LICENSE.txt"
+    install -Dm644 assets/fonts/NotoFallback-LICENSE.txt "${pkgdir}/usr/share/licenses/youtfast/fonts/NotoFallback-LICENSE.txt"
+    install -Dm644 assets/fonts/OpenMoji-LICENSE.txt "${pkgdir}/usr/share/licenses/youtfast/fonts/OpenMoji-LICENSE.txt"
     install -Dm644 README.md "${pkgdir}/usr/share/doc/youtfast/README.md"
     install -Dm644 CHANGELOG.md "${pkgdir}/usr/share/doc/youtfast/CHANGELOG.md"
 }

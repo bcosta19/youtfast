@@ -16,6 +16,8 @@ PUBLIC_FILES = [
     "docs/actions.md", "docs/distribution.md", "docs/install.md", "docs/user-guide.md",
     "docs/ARCHITECTURE.md",
     "packaging/arch/README.md", "assets/icons/LICENSE.txt",
+    "assets/fonts/NotoEmoji-LICENSE.txt", "assets/fonts/NotoFallback-LICENSE.txt",
+    "assets/fonts/OpenMoji-LICENSE.txt",
     "packaging/icons/youtfast.svg", "assets/screenshots/search.png",
 ]
 

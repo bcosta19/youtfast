@@ -816,8 +816,9 @@ fn spans_from_attributed(
         let Some(len) = run.get("length").and_then(Value::as_u64) else {
             continue;
         };
-        let start = (start as usize).min(utf16.len());
-        let end = start.saturating_add(len as usize).min(utf16.len());
+        // Both offsets refer to the original run, before either is snapped.
+        let end = char_start(&utf16, (start as usize).saturating_add(len as usize));
+        let start = char_start(&utf16, start as usize);
         if start > cursor
             && let Ok(prefix) = String::from_utf16(&utf16[cursor..start])
             && !prefix.is_empty()
@@ -841,6 +842,19 @@ fn spans_from_attributed(
         out.push(Span::Text(rest));
     }
     out
+}
+
+/// `index`, a UTF-16 offset into `utf16`, moved back to the start of the
+/// character it falls in and kept inside the text. A run that starts or
+/// ends between the two halves of an emoji would otherwise make
+/// `String::from_utf16` fail, and its text, or the text before it,
+/// disappear from the comment.
+fn char_start(utf16: &[u16], index: usize) -> usize {
+    let index = index.min(utf16.len());
+    match utf16.get(index) {
+        Some(0xDC00..=0xDFFF) if index > 0 => index - 1,
+        _ => index,
+    }
 }
 
 pub fn span_from_endpoint(text: String, endpoint: Option<&Value>, watching_id: &str) -> Span {
@@ -910,6 +924,66 @@ fn unwrap_redirect(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn snapping_a_run_start_keeps_its_original_end() {
+        let value = serde_json::json!({
+            "content": "🤣ab",
+            "commandRuns": [{ "startIndex": 1, "length": 2, "onTap": {
+                "innertubeCommand": { "browseEndpoint": { "browseId": "UCsomeone" } }
+            } }]
+        });
+        assert_eq!(
+            spans_from_value(Some(&value), "aaaaaaaaaaa"),
+            vec![
+                Span::Channel {
+                    text: "🤣a".into(),
+                    id: "UCsomeone".into()
+                },
+                Span::Text("b".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_run_between_the_halves_of_an_emoji_keeps_every_character() {
+        // "🤣 @someone 👍": 🤣 and 👍 are two UTF-16 units each. Runs that
+        // start or end inside them lose no text.
+        let text = |spans: &[Span]| spans.iter().map(Span::text).collect::<String>();
+        let content = "🤣 @someone 👍";
+        for (start, length) in [(3, 8), (1, 10), (3, 10), (12, 1), (0, 1)] {
+            let value = serde_json::json!({
+                "content": content,
+                "commandRuns": [{
+                    "startIndex": start,
+                    "length": length,
+                    "onTap": { "innertubeCommand": {
+                        "browseEndpoint": { "browseId": "UCsomeone" }
+                    } }
+                }]
+            });
+            let spans = spans_from_value(Some(&value), "aaaaaaaaaaa");
+            assert_eq!(text(&spans), content, "run at {start}+{length}: {spans:?}");
+        }
+        // A run on whole characters is cut exactly there.
+        let value = serde_json::json!({
+            "content": content,
+            "commandRuns": [{ "startIndex": 3, "length": 8, "onTap": { "innertubeCommand": {
+                "browseEndpoint": { "browseId": "UCsomeone" }
+            } } }]
+        });
+        assert_eq!(
+            spans_from_value(Some(&value), "aaaaaaaaaaa"),
+            vec![
+                Span::Text("🤣 ".into()),
+                Span::Channel {
+                    text: "@someone".into(),
+                    id: "UCsomeone".into()
+                },
+                Span::Text(" 👍".into()),
+            ]
+        );
+    }
 
     #[test]
     fn only_unrecognised_renderers_in_item_lists_are_reported() {

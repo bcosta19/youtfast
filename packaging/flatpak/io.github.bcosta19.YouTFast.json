@@ -169,6 +169,9 @@
         "install -Dm644 packaging/flatpak/io.github.bcosta19.YouTFast.metainfo.xml /app/share/metainfo/io.github.bcosta19.YouTFast.metainfo.xml",
         "install -Dm644 LICENSE /app/share/licenses/youtfast/LICENSE",
         "install -Dm644 assets/icons/LICENSE.txt /app/share/licenses/youtfast/icons/LICENSE.txt",
+        "install -Dm644 assets/fonts/NotoEmoji-LICENSE.txt /app/share/licenses/youtfast/fonts/NotoEmoji-LICENSE.txt",
+        "install -Dm644 assets/fonts/NotoFallback-LICENSE.txt /app/share/licenses/youtfast/fonts/NotoFallback-LICENSE.txt",
+        "install -Dm644 assets/fonts/OpenMoji-LICENSE.txt /app/share/licenses/youtfast/fonts/OpenMoji-LICENSE.txt",
         "install -Dm644 THIRD_PARTY_NOTICES.md /app/share/licenses/youtfast/THIRD_PARTY_NOTICES.md"
       ],
       "sources": [

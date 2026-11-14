@@ -60,7 +60,7 @@ All paths below are relative to [`crates/`](../crates/).
 | `youtfast-core` | `model`, `util`, `links`, `privacy`: shared types, formatting, URL parsing and controlled errors; no IO or drawing |
 | `youtfast-i18n` | Build script compiles catalogs from `assets/i18n` |
 | `youtfast-mpv` | `ffi`: client API 2.x; `Mpv`: player ownership/status; `render`: OpenGL video surface |
-| `youtfast-appearance` | `theme`, `icons`, `desktop_font`: palette, transitions, installed fonts and desktop integration |
+| `youtfast-appearance` | `theme`, `icons`, `desktop_font`, `coverage`: palette, transitions, installed fonts, the bundled emoji and fallback faces, colour emoji, and desktop integration |
 
 ## Startup and one frame
 
@@ -339,6 +339,7 @@ flowchart LR
 | Theme | `Settings::palette` resolves cached palettes; `fastframe_theme::Transition` reveals changes; filesystem notifications and `contrib/omarchy/youtfast-theme` trigger reload |
 | Fonts | `SystemFonts` discovers fonts off-thread; `App` installs them when ready. Linux uses `fc-match` per weight and `fc-list :lang=en`; missing families fall back to Inter and set `face_missing` |
 | Font memory | Loaded face bytes are shared for the process lifetime; tests/demo may use synchronous `theme::install_fonts` |
+| Character coverage | `coverage` puts the bundled monochrome Noto Emoji right behind the interface face, a 14-glyph OpenMoji subset for Unicode 16/17 (`tools/emoji_supplement.py`) after Noto, and the bundled Noto fallback (`tools/fonts.py`) last in every family, to cover emoji through Unicode 17, "small caps", styled letters, symbols and common kaomoji without relying on installed fonts for those glyphs; `App::new` adds fastframe-emoji's plugin, which paints the platform's colour emoji over the monochrome glyphs (not in the demo) |
 | Media controls | `now_playing` maps desktop commands to `Action`; Linux uses MPRIS; `SeekBy` is milliseconds and `SetVolume` is 0..1 |
 | Notifications | Popup and full page share a visit snapshot and mark-seen action; new arrivals join the open snapshot; `logic::alerts` compares seen/notified stamps, backend schedules checks and off-thread notifications |
 | Local recommendations | `logic::recommend` ranks related videos from recent history when account recommendations are unavailable |

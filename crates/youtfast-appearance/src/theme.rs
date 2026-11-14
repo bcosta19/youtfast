@@ -350,8 +350,9 @@ pub fn face_missing() -> bool {
     FACE_MISSING.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// The interface face at its four weights, the installed faces behind it
-/// for other scripts, drawn the way the desktop renders text. Always
+/// The interface face at its four weights, the bundled emoji face, the
+/// installed faces behind it for other scripts and the bundled fallback
+/// last ([`super::coverage`]), drawn the way the desktop renders text. Always
 /// Inter and not the system's face: the same on every machine, for tests
 /// and the demo.
 pub fn install_fonts(ctx: &egui::Context) {
@@ -412,7 +413,7 @@ fn looked_up(
             )
         }
     };
-    let mut fonts = fastframe_fonts::FontSetup::default()
+    let mut fonts = super::coverage::register(fastframe_fonts::FontSetup::default())
         .primary(primary)
         .system_fallbacks(system_fallbacks)
         .definitions();
@@ -426,6 +427,7 @@ fn looked_up(
             && matches!(replacement, Replacement::None)
             && draws_with_inter(&fonts)
     });
+    super::coverage::append_fallback(&mut fonts);
     add_tabular(&mut fonts);
     text_rendering().apply_to(&mut fonts);
     (fonts, missing)

@@ -1112,6 +1112,7 @@ impl App {
         egui_extras::install_image_loaders(ctx);
         images::install_animation_loader(ctx);
         fastframe_icons::install::<youtfast_appearance::icons::Icon>(ctx);
+        youtfast_appearance::coverage::install_colour_emoji(ctx);
         let dirs = Dirs::new().context("could not make the data folders")?;
         images::init(dirs.cache.join("thumbnails"));
         let backend =

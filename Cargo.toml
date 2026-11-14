@@ -73,6 +73,13 @@ fastframe-icons = { git = "https://github.com/crmne/fastframe", tag = "v0.15.5" 
 # Inter at its four weights (or the platform's interface face), with the
 # installed faces behind it for the scripts Inter lacks, as in the siblings.
 fastframe-fonts = { git = "https://github.com/crmne/fastframe", tag = "v0.15.5" }
+# Colour emoji in comments, titles and every other text, in the platform's
+# own style (Apple Color Emoji, Segoe UI Emoji, the desktop's emoji font on
+# Linux), painted over the bundled monochrome Noto Emoji, as in the siblings.
+fastframe-emoji = { git = "https://github.com/crmne/fastframe", tag = "v0.15.5" }
+# Reads the bundled faces' character maps and metrics in tests. The parser
+# epaint 0.36 already uses, at its version.
+skrifa = "0.44"
 # How the desktop renders text (hinting, coverage), applied to egui's.
 fastframe-text = { git = "https://github.com/crmne/fastframe", tag = "v0.15.5" }
 # Bundled translations, compiled from gettext catalogs; no runtime files.
