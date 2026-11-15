@@ -576,8 +576,9 @@ fn yt7_a_lockup_with_a_channel_row_keeps_every_field() {
 // Members-only badges
 // ---------------------------------------------------------------------------
 
-/// A channel-tab video with YouTube's "Members only" badge on a metadata row,
-/// as @SamayRainaOfficial's Videos tab sent on 2026-11-16.
+/// A channel-tab video with YouTube's "Members only" badge and age sharing a
+/// metadata row, as @SamayRainaOfficial's Videos tab sent on 2026-11-16: the
+/// channel row, then `[age] + badges`, with no view count.
 const MEMBERS_ONLY_LOCKUP: &str = r#"[{ "richItemRenderer": { "content": { "lockupViewModel": {
     "contentId": "ccccccccccc",
     "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
@@ -587,12 +588,15 @@ const MEMBERS_ONLY_LOCKUP: &str = r#"[{ "richItemRenderer": { "content": { "lock
     "metadata": { "lockupMetadataViewModel": {
         "title": { "content": "A members-only video" },
         "metadata": { "contentMetadataViewModel": { "metadataRows": [
-            { "metadataParts": [ { "text": { "content": "2 months ago" } } ] },
-            { "badges": [ { "badgeViewModel": {
-                "badgeText": "Members only",
-                "badgeStyle": "BADGE_MEMBERS_ONLY",
-                "iconName": "SPONSORSHIP_STAR"
-            } } ] }
+            { "metadataParts": [ { "text": { "content": "Samay Raina",
+                "commandRuns": [ { "onTap": { "innertubeCommand":
+                    { "browseEndpoint": { "browseId": "UCAov2BBv1ZJav0c_yHEciAw" } } } } ] } } ] },
+            { "metadataParts": [ { "text": { "content": "2 months ago" } } ],
+                "badges": [ { "badgeViewModel": {
+                    "badgeText": "Members only",
+                    "badgeStyle": "BADGE_MEMBERS_ONLY",
+                    "iconName": "SPONSORSHIP_STAR"
+                } } ] }
         ] } }
     } }
 } } } }]"#;
@@ -602,6 +606,78 @@ fn a_channel_lockup_keeps_the_members_only_badge() {
     let items = parse_videos(MEMBERS_ONLY_LOCKUP);
     assert_eq!(items.len(), 1);
     assert!(items[0].members_only);
+}
+
+// YT-10: the badge shares the age's metadata row and the card has no view
+// count, so the age must not be read as views.
+#[test]
+fn yt10_a_members_only_channel_lockup_keeps_its_age() {
+    let items = parse_videos(MEMBERS_ONLY_LOCKUP);
+    let video = &items[0];
+    assert_eq!(video.channel.as_deref(), Some("Samay Raina"));
+    assert_eq!(
+        video.channel_id.as_deref(),
+        Some("UCAov2BBv1ZJav0c_yHEciAw")
+    );
+    assert_eq!(video.views, None);
+    assert_eq!(video.published.as_deref(), Some("2 months ago"));
+    assert!(video.published_at.is_some());
+}
+
+#[test]
+fn yt10_a_scheduled_card_keeps_its_date_and_views() {
+    let json = r#"[{ "richItemRenderer": { "content": { "lockupViewModel": {
+        "contentId": "eeeeeeeeeee",
+        "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+        "metadata": { "lockupMetadataViewModel": {
+            "title": { "content": "A scheduled premiere" },
+            "metadata": { "contentMetadataViewModel": { "metadataRows": [
+                { "metadataParts": [
+                    { "text": { "content": "105K views" } },
+                    { "text": { "content": "Scheduled for Nov 23, 2026" } }
+                ] }
+            ] } }
+        } }
+    } } } }]"#;
+    let items = parse_videos(json);
+    let video = &items[0];
+    assert_eq!(video.views, Some(105_000));
+    assert_eq!(
+        video.published.as_deref(),
+        Some("Scheduled for Nov 23, 2026")
+    );
+}
+
+#[test]
+fn yt10_an_unlinked_channel_name_is_not_read_as_a_view_count() {
+    let json = r#"[{ "richItemRenderer": { "content": { "lockupViewModel": {
+        "contentId": "fffffffffff",
+        "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+        "metadata": { "lockupMetadataViewModel": {
+            "title": { "content": "A members-only video" },
+            "metadata": { "contentMetadataViewModel": { "metadataRows": [
+                { "metadataParts": [ { "text": { "content": "50 Cent" } } ] },
+                { "metadataParts": [ { "text": { "content": "2 months ago" } } ],
+                    "badges": [ { "badgeViewModel": {
+                        "badgeStyle": "BADGE_MEMBERS_ONLY"
+                    } } ] }
+            ] } }
+        } }
+    } } } }]"#;
+    let items = parse_videos(json);
+    let video = &items[0];
+    assert_eq!(video.channel.as_deref(), Some("50 Cent"));
+    assert_eq!(video.channel_id, None);
+    assert_eq!(video.views, None);
+    assert_eq!(video.published.as_deref(), Some("2 months ago"));
+    assert!(video.members_only);
+}
+
+#[test]
+fn a_stored_video_without_members_only_still_loads() {
+    let video: youtfast_core::model::Video =
+        serde_json::from_str(r#"{"id":"aaaaaaaaaaa","title":"Old card"}"#).unwrap();
+    assert!(!video.members_only);
 }
 
 #[test]

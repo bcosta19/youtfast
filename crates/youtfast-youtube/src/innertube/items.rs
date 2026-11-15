@@ -279,6 +279,97 @@ pub fn from_renderer(renderer: &Value) -> Option<Video> {
     })
 }
 
+/// The metadata row that names a lockup's channel, found by its `UC…` browse
+/// endpoint rather than by position: a members-only badge adds a second row
+/// that carries no metadata parts. A channel row without that link still
+/// counts when its text is neither an age nor a view count.
+pub(super) fn lockup_channel_row(rows: &[Value]) -> Option<usize> {
+    rows.iter()
+        .position(|row| {
+            find(row, &|value| {
+                value
+                    .pointer("/browseEndpoint/browseId")
+                    .and_then(Value::as_str)
+                    .filter(|id| id.starts_with("UC"))
+            })
+            .is_some()
+        })
+        .or_else(|| {
+            rows.first()
+                .filter(|row| {
+                    row.pointer("/metadataParts/0/text/content")
+                        .and_then(Value::as_str)
+                        .is_some_and(|text| !looks_like_age(text) && !looks_like_views(text))
+                })
+                .map(|_| 0)
+        })
+}
+
+/// Age or schedule text, which starts with a number but is not a count.
+fn looks_like_age(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    parse_relative_age(text).is_some()
+        || lower.contains(" ago")
+        || lower.starts_with("scheduled")
+        || lower.starts_with("premier")
+        || lower.starts_with("will ")
+        || lower.starts_with("upcoming")
+        || lower.starts_with("started streaming")
+        || lower.starts_with("streaming")
+}
+
+/// A view or watching count, including the bare `1.2M` some cards send.
+fn looks_like_views(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    if lower.contains("view") || lower.contains("watching") {
+        return true;
+    }
+    let word = text.trim();
+    !word.is_empty()
+        && word.chars().any(|c| c.is_ascii_digit())
+        && word.chars().all(|c| {
+            c.is_ascii_digit() || matches!(c, '.' | ',' | 'K' | 'k' | 'M' | 'm' | 'B' | 'b')
+        })
+}
+
+/// The views and age of a lockup, from the metadata parts that carry them.
+/// A members-only card can hold the age alone (`[2 months ago]`), while an
+/// ordinary card sends `[views, age]`; neither view count nor age is assumed
+/// to come first, and the badge's row holds neither.
+pub(super) fn lockup_stats(
+    rows: &[Value],
+    channel_row: Option<usize>,
+) -> (Option<u64>, Option<String>) {
+    let parts: Vec<&str> = rows
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| Some(*index) != channel_row)
+        .flat_map(|(_, row)| {
+            row.get("metadataParts")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+        })
+        .filter_map(|part| part.pointer("/text/content").and_then(Value::as_str))
+        .collect();
+    let age = parts.iter().position(|text| looks_like_age(text));
+    let views = parts
+        .iter()
+        .enumerate()
+        .filter(|(index, text)| Some(*index) != age && looks_like_views(text))
+        .find_map(|(_, text)| parse_count(text));
+    let published = age.map(|index| parts[index].to_owned()).or_else(|| {
+        // A schedule or another date wording: keep it rather than read it
+        // as a count, and never mistake the view count for a date.
+        parts
+            .iter()
+            .enumerate()
+            .find(|(index, text)| Some(*index) != age && !looks_like_views(text))
+            .map(|(_, text)| (*text).to_owned())
+    });
+    (views, published)
+}
+
 /// Reads a modern `lockupViewModel` of a video (`YT-6` and `YT-7`).
 pub fn from_lockup(lockup: &Value) -> Option<Video> {
     if lockup.get("contentType")?.as_str()? != "LOCKUP_CONTENT_TYPE_VIDEO" {
@@ -294,31 +385,26 @@ pub fn from_lockup(lockup: &Value) -> Option<Video> {
     let rows = metadata
         .pointer("/metadata/contentMetadataViewModel/metadataRows")
         .and_then(Value::as_array);
+    let channel_row = rows.and_then(|rows| lockup_channel_row(rows));
     let part = |row: usize, part: usize| {
         rows.and_then(|rows| rows.get(row))
             .and_then(|row| row.pointer(&format!("/metadataParts/{part}/text/content")))
             .and_then(Value::as_str)
             .map(str::to_owned)
     };
-    let first_row_channel_id = rows
-        .and_then(|rows| rows.first())
+    let channel = channel_row.and_then(|row| part(row, 0));
+    let channel_id = channel_row
         .and_then(|row| {
-            find(row, &|value| {
-                value
-                    .pointer("/browseEndpoint/browseId")
-                    .and_then(Value::as_str)
-                    .filter(|id| id.starts_with("UC"))
+            rows.and_then(|rows| rows.get(row)).and_then(|row| {
+                find(row, &|value| {
+                    value
+                        .pointer("/browseEndpoint/browseId")
+                        .and_then(Value::as_str)
+                        .filter(|id| id.starts_with("UC"))
+                })
             })
         })
         .map(str::to_owned);
-    let row_count = rows.map_or(0, Vec::len);
-    // YT-7: on a channel's own tab there is only one metadata row (`[views, age]`)
-    // with no channel link; home/search/related send `[channel, views · age]`.
-    let (channel, channel_id, stats_row) = if row_count >= 2 || first_row_channel_id.is_some() {
-        (part(0, 0), first_row_channel_id, 1)
-    } else {
-        (None, None, 0)
-    };
     // The badge over the thumbnail: the length (in either overlay shape, YT-7), or LIVE.
     let badge = lockup.get("contentImage").and_then(|image| {
         find(image, &|value| {
@@ -332,11 +418,7 @@ pub fn from_lockup(lockup: &Value) -> Option<Video> {
         rows.iter()
             .any(|row| members_only_badges(row.get("badges")))
     });
-    let (views, published) = match (part(stats_row, 0), part(stats_row, 1)) {
-        // A live stream's row is `N watching`, with no age.
-        (Some(first), second) => (parse_count(&first), second),
-        (None, _) => (None, None),
-    };
+    let (views, published) = rows.map_or((None, None), |rows| lockup_stats(rows, channel_row));
     let published_at = published.as_deref().and_then(parse_relative_age);
     // YT-6: The channel's avatar, left of the title.
     let avatar = metadata
