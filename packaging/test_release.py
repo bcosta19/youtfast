@@ -1,6 +1,9 @@
 import importlib.util
 import json
+import os
 import re
+import subprocess
+import sys
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -11,6 +14,15 @@ spec.loader.exec_module(release)
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_release_check_reads_utf8_with_non_utf8_default_encoding(self):
+        env = os.environ.copy()
+        env.update(LC_ALL="C", PYTHONCOERCECLOCALE="0", PYTHONUTF8="0")
+        result = subprocess.run(
+            [sys.executable, str(release.ROOT / "packaging/release.py"), "check"],
+            cwd=release.ROOT, env=env, capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode("ascii", errors="replace"))
+
     def test_draft_changelog_requires_a_date_only_when_freezing_a_tag(self):
         draft = "## [Unreleased]\n\n## [0.1.0] - Unreleased\n"
         release.validate_changelog(draft, "0.1.0", "2026-10-17")

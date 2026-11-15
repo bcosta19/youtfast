@@ -24,7 +24,7 @@ PUBLIC_FILES = [
 
 def workspace_package(root=ROOT):
     """The workspace's shared package fields (version, license, rust-version)."""
-    return tomllib.loads((root / "Cargo.toml").read_text())["workspace"]["package"]
+    return tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))["workspace"]["package"]
 
 
 def version(root=ROOT):
@@ -63,7 +63,7 @@ def validate_changelog(text, current, metadata_date, require_date=False):
 def check(root=ROOT, tag=None, candidate=False):
     current = version(root)
     validate_tag(tag or f"v{current}", current)
-    lock = tomllib.loads((root / "Cargo.lock").read_text())
+    lock = tomllib.loads((root / "Cargo.lock").read_text(encoding="utf-8"))
     package = next(item for item in lock["package"] if item["name"] == "youtfast")
     if package["version"] != current:
         raise ValueError("Cargo.lock version does not match Cargo.toml")
@@ -73,12 +73,12 @@ def check(root=ROOT, tag=None, candidate=False):
     desktop_release = metadata.find("releases/release")
     if desktop_release.get("version") != current:
         raise ValueError("Desktop release version does not match Cargo.toml")
-    validate_changelog((root / "CHANGELOG.md").read_text(), current,
+    validate_changelog((root / "CHANGELOG.md").read_text(encoding="utf-8"), current,
                        desktop_release.get("date"), require_date=tag is not None and not candidate)
     notes_path = root / f"packaging/release-notes/v{current}.md"
     if not notes_path.is_file():
         raise ValueError("Committed release notes are required")
-    notes = notes_path.read_text()
+    notes = notes_path.read_text(encoding="utf-8")
     for section in ["## Included", "## Not included", "## Known limitations"]:
         if section not in notes:
             raise ValueError("Release notes must describe included features, exclusions and limitations")
