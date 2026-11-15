@@ -8,6 +8,8 @@ are the distribution record.
 
 ## [Unreleased]
 
+## [0.8.1] - Unreleased
+
 ### Fixed
 
 - Added bundled monochrome fallback glyphs for Unicode 16/17 emoji when the platform's colour font lacks them, and preserved a comment link's original end when snapping its start around an emoji.
@@ -448,7 +450,8 @@ macOS Apple Silicon. Interactive Windows/macOS qualification is still pending.
 These exclusions are scope decisions, not completed features promised for a
 specific next version. See [ROADMAP.md](ROADMAP.md) for follow-up gates.
 
-[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/bcosta19/youtfast/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/bcosta19/youtfast/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/bcosta19/youtfast/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/bcosta19/youtfast/compare/v0.6.1...v0.6.2
