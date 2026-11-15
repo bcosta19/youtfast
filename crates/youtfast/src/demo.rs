@@ -127,6 +127,7 @@ pub(crate) fn fixture(page: &str) -> State {
             duration: Some(600.0 + i as f64 * 30.0),
             views: Some(12000 + i as u64 * 1300),
             published: Some("2 days ago".into()),
+            members_only: i == 0,
             ..Video::from_id(format!("demo{i:07}"))
         })
         .collect();
@@ -926,6 +927,7 @@ fn populate_subscriptions_demo(state: &mut State) {
                 duration: (!live).then_some(780.0 + idx as f64 * 95.0),
                 views: Some(views),
                 live,
+                members_only: false,
                 published_at: (!live).then_some(now - (idx as i64 + 1) * 7_200),
                 published: Some(published.into()),
                 short: false,

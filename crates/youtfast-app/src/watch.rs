@@ -565,6 +565,7 @@ impl App {
                 duration: None,
                 views: Some(details.views),
                 live: details.live,
+                members_only: details.members_only,
                 published_at: None,
                 published: details.published.clone(),
                 short: false,

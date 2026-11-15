@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use super::More;
 use super::client::{Client, ContinuationEndpoint};
 use super::edit::{collect, find, post, text};
+use super::items::members_only_badges;
 use youtfast_core::model::Video;
 
 /// What YouTube recommends to the account, and the next page. An account
@@ -94,6 +95,7 @@ pub(super) fn from_renderer(renderer: &Value) -> Option<Video> {
         duration: text(renderer.get("lengthText")).and_then(|length| parse_length(&length)),
         views: text(renderer.get("viewCountText")).and_then(|views| parse_count(&views)),
         live,
+        members_only: members_only_badges(renderer.get("badges")),
         published_at: None,
         published: text(renderer.get("publishedTimeText")),
         short: false,
@@ -159,6 +161,10 @@ pub(super) fn from_lockup(lockup: &Value) -> Option<Video> {
         duration: badge.and_then(parse_length),
         views,
         live,
+        members_only: rows.is_some_and(|rows| {
+            rows.iter()
+                .any(|row| members_only_badges(row.get("badges")))
+        }),
         published_at: None,
         published,
         short: false,

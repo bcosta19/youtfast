@@ -509,6 +509,9 @@ msgstr "Video wiederholen"
 msgid "Mark all as seen"
 msgstr "Alle als gesehen markieren"
 
+msgid "Members only"
+msgstr "Nur für Mitglieder"
+
 msgid "Miniplayer"
 msgstr "Miniplayer"
 

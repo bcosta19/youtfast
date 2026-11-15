@@ -25,6 +25,9 @@ pub struct Video {
     pub views: Option<u64>,
     #[serde(default)]
     pub live: bool,
+    /// Behind a channel membership ("Members only" on YouTube).
+    #[serde(default)]
+    pub members_only: bool,
     /// When it was published, in Unix seconds, for ordering a feed.
     #[serde(default)]
     pub published_at: Option<i64>,
@@ -48,6 +51,7 @@ impl Video {
             duration: None,
             views: None,
             live: false,
+            members_only: false,
             published_at: None,
             published: None,
             short: false,
@@ -83,6 +87,7 @@ impl Video {
             .or_else(|| other.channel_avatar.clone());
         self.duration = self.duration.or(other.duration);
         self.views = self.views.or(other.views);
+        self.members_only |= other.members_only;
         self.published_at = self.published_at.or(other.published_at);
     }
 }
@@ -656,6 +661,8 @@ pub struct Details {
     /// "2026-10-04", parsed from the date.
     pub published_date: Option<String>,
     pub live: bool,
+    /// Behind a channel membership ("Members only" on YouTube).
+    pub members_only: bool,
     pub description: Vec<Span>,
     pub chapters: Vec<Chapter>,
     /// The recommended videos.

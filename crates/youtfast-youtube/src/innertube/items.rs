@@ -173,6 +173,20 @@ pub fn parse_relative_age(text: &str) -> Option<i64> {
     Some(util::now().saturating_sub(seconds))
 }
 
+/// Whether a `badges` list marks its item as members-only. Older renderers
+/// put the marker in `metadataBadgeRenderer.style`, modern lockups in
+/// `badgeViewModel.badgeStyle`.
+pub fn members_only_badges(badges: Option<&Value>) -> bool {
+    badges.and_then(Value::as_array).is_some_and(|badges| {
+        badges.iter().any(|badge| {
+            ["/metadataBadgeRenderer/style", "/badgeViewModel/badgeStyle"]
+                .into_iter()
+                .filter_map(|path| badge.pointer(path).and_then(Value::as_str))
+                .any(|style| style.contains("MEMBERS_ONLY"))
+        })
+    })
+}
+
 /// Reads an older `videoRenderer`, `gridVideoRenderer` or `compactVideoRenderer`.
 pub fn from_renderer(renderer: &Value) -> Option<Video> {
     let id = renderer.get("videoId")?.as_str()?.to_owned();
@@ -258,6 +272,7 @@ pub fn from_renderer(renderer: &Value) -> Option<Video> {
         duration,
         views,
         live,
+        members_only: members_only_badges(renderer.get("badges")),
         published_at,
         published,
         short,
@@ -313,6 +328,10 @@ pub fn from_lockup(lockup: &Value) -> Option<Video> {
         })
     });
     let live = badge.is_some_and(|badge| badge.eq_ignore_ascii_case("live"));
+    let members_only = rows.is_some_and(|rows| {
+        rows.iter()
+            .any(|row| members_only_badges(row.get("badges")))
+    });
     let (views, published) = match (part(stats_row, 0), part(stats_row, 1)) {
         // A live stream's row is `N watching`, with no age.
         (Some(first), second) => (parse_count(&first), second),
@@ -332,6 +351,7 @@ pub fn from_lockup(lockup: &Value) -> Option<Video> {
         duration: badge.and_then(parse_length),
         views,
         live,
+        members_only,
         published_at,
         published,
         short: false,
@@ -399,6 +419,7 @@ pub fn from_short(short: &Value) -> Option<Video> {
         duration: None,
         views,
         live: false,
+        members_only: false,
         published_at: None,
         published: None,
         short: true,

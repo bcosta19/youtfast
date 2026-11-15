@@ -8,6 +8,10 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Fixed
+
+- Marked members-only videos with a "Members only" badge on their thumbnails and on the watch page, instead of presenting them like any other video.
+
 ## [0.10.0] - 2026-11-22
 
 ### Added

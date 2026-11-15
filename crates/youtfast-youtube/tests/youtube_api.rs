@@ -572,6 +572,84 @@ fn yt7_a_lockup_with_a_channel_row_keeps_every_field() {
     assert_eq!(video.duration, Some(f64::from(12 * 60 + 34)));
 }
 
+// ---------------------------------------------------------------------------
+// Members-only badges
+// ---------------------------------------------------------------------------
+
+/// A channel-tab video with YouTube's "Members only" badge on a metadata row,
+/// as @SamayRainaOfficial's Videos tab sent on 2026-11-16.
+const MEMBERS_ONLY_LOCKUP: &str = r#"[{ "richItemRenderer": { "content": { "lockupViewModel": {
+    "contentId": "ccccccccccc",
+    "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+    "contentImage": { "thumbnailViewModel": {
+        "image": { "sources": [ { "url": "https://i.ytimg.com/vi/ccccccccccc/hq720.jpg", "width": 720, "height": 404 } ] }
+    } },
+    "metadata": { "lockupMetadataViewModel": {
+        "title": { "content": "A members-only video" },
+        "metadata": { "contentMetadataViewModel": { "metadataRows": [
+            { "metadataParts": [ { "text": { "content": "2 months ago" } } ] },
+            { "badges": [ { "badgeViewModel": {
+                "badgeText": "Members only",
+                "badgeStyle": "BADGE_MEMBERS_ONLY",
+                "iconName": "SPONSORSHIP_STAR"
+            } } ] }
+        ] } }
+    } }
+} } } }]"#;
+
+#[test]
+fn a_channel_lockup_keeps_the_members_only_badge() {
+    let items = parse_videos(MEMBERS_ONLY_LOCKUP);
+    assert_eq!(items.len(), 1);
+    assert!(items[0].members_only);
+}
+
+#[test]
+fn an_ordinary_channel_lockup_is_not_members_only() {
+    let items = parse_videos(CHANNEL_TAB_LOCKUP);
+    assert!(!items[0].members_only);
+}
+
+#[test]
+fn an_older_video_renderer_keeps_the_members_only_badge() {
+    let json = r#"[{ "videoRenderer": {
+        "videoId": "ddddddddddd",
+        "title": { "simpleText": "A members-only video" },
+        "badges": [ { "metadataBadgeRenderer": {
+            "style": "BADGE_STYLE_TYPE_MEMBERS_ONLY",
+            "label": "Members only"
+        } } ]
+    } }]"#;
+    let items = parse_videos(json);
+    assert_eq!(items.len(), 1);
+    assert!(items[0].members_only);
+}
+
+#[test]
+fn a_watch_page_keeps_the_members_only_badge() {
+    let page = serde_json::json!({
+        "contents": { "twoColumnWatchNextResults": { "results": { "results": { "contents": [
+            { "videoPrimaryInfoRenderer": {
+                "title": { "runs": [ { "text": "A members-only video" } ] },
+                "badges": [ { "metadataBadgeRenderer": {
+                    "style": "BADGE_STYLE_TYPE_MEMBERS_ONLY",
+                    "label": "Members only"
+                } } ]
+            } },
+            { "videoSecondaryInfoRenderer": {
+                "owner": { "videoOwnerRenderer": {
+                    "title": { "runs": [ { "text": "A channel" } ] },
+                    "navigationEndpoint": { "browseEndpoint": { "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa" } }
+                } },
+                "attributedDescription": { "content": "" }
+            } }
+        ] } } } }
+    });
+    let details = innertube::watch::parse_details(&page, "ddddddddddd");
+    assert!(details.members_only);
+    assert_eq!(details.title, "A members-only video");
+}
+
 #[test]
 fn comment_button_continuations_keep_replies_and_next_page() {
     let page = serde_json::json!({

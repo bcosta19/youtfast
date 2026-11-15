@@ -551,6 +551,20 @@ fn about_video(
             &[("title", original_title)],
         ));
     }
+    if watching.members_only
+        || state
+            .details
+            .ready()
+            .is_some_and(|details| details.members_only)
+    {
+        ui.add_space(6.0);
+        widgets::label_pill(
+            ui,
+            &palette,
+            &tr(locale, "Members only"),
+            widgets::MEMBERS_GOLD,
+        );
+    }
     ui.add_space(12.0);
     channel_line(ui, state, watching, status, actions);
     ui.add_space(16.0);
