@@ -8,8 +8,11 @@ are the distribution record.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-15
+
 ### Fixed
 
+- Fixed release packaging on Windows when the system's default text encoding is not UTF-8.
 - Added bundled monochrome fallback glyphs for Unicode 16/17 emoji when the platform's colour font lacks them, and preserved a comment link's original end when snapping its start around an emoji.
 - Fixed characters that drew as empty boxes in comments, titles, descriptions and channel names on every platform: emoji from 2016 on (🤣, 🥹, 🫠, 🥳…), "small caps" and styled letters (ᴛʜɪs, 𝓗𝓮𝓵𝓵𝓸, ⓑⓤⓑⓑⓛⓔ), symbols and kaomoji (ʕ•ᴥ•ʔ, ᕕ( ᐛ )ᕗ, ༼ ◕_◕ ༽, ┻━┻). Emoji now show in colour in the platform's own style where it has a colour emoji font (Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji), with skin tones, families and flags joined.
 - Kept the text around a link or mention in a comment when YouTube's run boundaries fall inside an emoji, instead of dropping it.
@@ -448,7 +451,8 @@ macOS Apple Silicon. Interactive Windows/macOS qualification is still pending.
 These exclusions are scope decisions, not completed features promised for a
 specific next version. See [ROADMAP.md](ROADMAP.md) for follow-up gates.
 
-[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/bcosta19/youtfast/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/bcosta19/youtfast/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/bcosta19/youtfast/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/bcosta19/youtfast/compare/v0.6.1...v0.6.2
