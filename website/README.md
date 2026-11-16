@@ -21,8 +21,8 @@ guide is `/install.html` and `/pt/install.html`. The language
 switch works without storing anything; all content and links remain usable
 in both languages without JavaScript. The theme selector offers System, Light and
 Dark. System follows `prefers-color-scheme`; a manual choice is stored only in
-this browser's local storage. The demo MP4 loads only on user
-interaction. The Cinema layout centers the introduction above a large product
+this browser's local storage. The screenshots below the introduction load
+lazily. The Cinema layout centers the introduction above a large product
 image. Noto Sans is bundled locally as Latin and Latin-Extended WOFF2 subsets (made with `pyftsubset` from fonttools in a throwaway virtual environment), with its SIL Open Font License in
 `assets/fonts/OFL.txt`; the page makes no font requests to external services.
 Language navigation uses native cross-document View Transitions where supported.
@@ -70,17 +70,17 @@ site owner's Google account; they are not performed by the site build.
 Google decides whether to index the pages and which snippets or AI summaries
 to show. Metadata and structured data do not control that text verbatim.
 
-To update the hero poster, extract the application window from the existing
-public demonstration (not a user's desktop or account data):
+The screenshots in `assets/screenshots/` (the README's and this page's) show the
+application signed out, with settings and data of their own (never a user's
+desktop or account), at 1600×900. They carry no version number, so they stay
+valid until the interface they show changes; retake them then. The hero image
+is the watch screenshot, scaled down:
 
 ```sh
-ffmpeg -ss 14 -i assets/demo/youtfast-demo.mp4 -frames:v 1 \
-  -vf 'crop=1664:936:128:30,scale=1440:-2' -quality 88 website/assets/player.webp
+magick assets/screenshots/watch.webp -resize 1440x810 -quality 86 website/assets/player.webp
 ```
 
-The 62-second recording includes *Spring* and *Sprite Fright* by Blender Studio
-(CC BY 4.0); their credits and links appear beneath the demo. It uses editorial
-zooms and captions, cuts loading waits and speeds up some navigation; it is not
-a real-time performance measurement. Performance figures are the documented 0.7.0
-search and playback benchmarks (`docs/benchmarks.md`). Keep package claims
-aligned with `docs/distribution.md` and the actual releases.
+The screenshots show *Spring* and *Sprite Fright* by Blender Studio
+(CC BY 4.0); their credits and links appear beneath them. Performance figures
+are the documented 0.7.0 search and playback benchmarks (`docs/benchmarks.md`).
+Keep package claims aligned with `docs/distribution.md` and the actual releases.

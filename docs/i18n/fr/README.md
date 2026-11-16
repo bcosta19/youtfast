@@ -35,16 +35,18 @@ avec le décodage vidéo matériel lorsqu'il est pris en charge. Pas de moteur d
 navigateur, pas de télémétrie, pas de serveur exploité par YouTFast. Vous
 démarrez sans être connecté ; les comptes sont facultatifs.
 
-<picture>
-  <source type="image/avif" srcset="../../../assets/demo/youtfast-demo.avif">
-  <img src="../../../assets/demo/youtfast-demo.webp" alt="Démonstration de YouTFast 0.7.0 : recherche, onglets vidéo, lecture, aperçus sur la barre de progression, mode cinéma et plein écran, mini-lecteur, notifications, thèmes, six langues et raccourcis clavier">
-</picture>
+<img src="../../../assets/screenshots/watch.webp" alt="YouTFast lisant Sprite Fright du Blender Studio, en pause, avec les chapitres sur la barre de progression et À suivre à côté">
 
-*YouTFast 0.7.0 sous Linux, sans être connecté : un véritable enregistrement
-d'écran, monté avec des zooms et des légendes ; les temps de chargement sont
-coupés et certaines navigations sont accélérées.
-[Téléchargez-le en pleine qualité](../../../assets/demo/youtfast-demo.mp4) (MP4, 1080p, 62 secondes, 13,4 Mo, sans son).
-Les films sont [Spring](https://studio.blender.org/films/spring/) et
+<table>
+  <tr>
+    <td width="33%"><img src="../../../assets/screenshots/theater.webp" alt="Mode cinéma lisant Spring du Blender Studio"><br>Mode cinéma</td>
+    <td width="33%"><img src="../../../assets/screenshots/miniplayer.webp" alt="Résultats de recherche avec Spring dans le mini-lecteur"><br>Mini-lecteur pendant la navigation</td>
+    <td width="33%"><img src="../../../assets/screenshots/channel-light-pt-br.webp" alt="La page de la chaîne Blender Studio en thème clair, avec l'interface en portugais du Brésil"><br>Thème clair, interface en portugais</td>
+  </tr>
+</table>
+
+*Captures d'écran de YouTFast sous Linux, sans être connecté. Les films sont
+[Spring](https://studio.blender.org/films/spring/) et
 [Sprite Fright](https://studio.blender.org/films/sprite-fright/) du Blender
 Studio ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).*
 

@@ -38,14 +38,10 @@ function setLanguage(next) {
   languageButton.setAttribute('aria-label', next === 'en' ? 'Mudar idioma para português' : 'Switch language to English');
   document.querySelector('nav[aria-label]').setAttribute('aria-label', next === 'en' ? 'Main navigation' : 'Navegação principal');
   document.querySelector('.footer nav')?.setAttribute('aria-label', next === 'en' ? 'Project links' : 'Links do projeto');
-  document.querySelector('.product-image')?.setAttribute('aria-label', next === 'en' ? 'Watch the YouTFast demo' : 'Assistir à demonstração do YouTFast');
-  const productImage = document.querySelector('.product-image img');
-  if (productImage) {
-    productImage.alt = next === 'en'
-      ? 'YouTFast playing Spring by Blender Studio, with the video library and recommendations in its native window.'
-      : 'YouTFast reproduzindo Spring, do Blender Studio, com biblioteca e recomendações na janela nativa.';
+  document.querySelector('.product-image')?.setAttribute('aria-label', next === 'en' ? 'See YouTFast screenshots' : 'Ver capturas de tela do YouTFast');
+  for (const image of document.querySelectorAll('img[data-alt-en][data-alt-pt]')) {
+    image.alt = next === 'en' ? image.dataset.altEn : image.dataset.altPt;
   }
-  document.querySelector('video')?.setAttribute('aria-label', next === 'en' ? 'YouTFast product demonstration' : 'Demonstração do YouTFast');
   applyTheme(themePreference, false);
 }
 // Point the main button at the visitor's platform, and mark that platform's

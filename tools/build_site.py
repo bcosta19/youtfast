@@ -32,7 +32,9 @@ FILES = {
     "install.ps1": ROOT / "website/install.ps1",
     "assets/player.webp": ROOT / "website/assets/player.webp",
     "assets/youtfast.svg": ROOT / "packaging/icons/youtfast.svg",
-    "assets/youtfast-demo.mp4": ROOT / "assets/demo/youtfast-demo.mp4",
+    "assets/screenshots/theater.webp": ROOT / "assets/screenshots/theater.webp",
+    "assets/screenshots/miniplayer.webp": ROOT / "assets/screenshots/miniplayer.webp",
+    "assets/screenshots/channel-light-pt-br.webp": ROOT / "assets/screenshots/channel-light-pt-br.webp",
 }
 
 
@@ -58,7 +60,8 @@ class Page(HTMLParser):
         self.headings += tag == "h1"
         if tag == "img" and "alt" not in attrs:
             raise ValueError("Image without alternative text")
-        if ("data-en" in attrs) != ("data-pt" in attrs):
+        if ("data-en" in attrs) != ("data-pt" in attrs) or (
+                ("data-alt-en" in attrs) != ("data-alt-pt" in attrs)):
             raise ValueError("Incomplete English/Portuguese translation")
         for key in ("src", "href", "poster"):
             if attrs.get(key):

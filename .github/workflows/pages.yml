@@ -8,7 +8,7 @@ on:
       - 'tools/build_site.py'
       - 'tools/site_locale.py'
       - 'tools/test_site.py'
-      - 'assets/demo/youtfast-demo.mp4'
+      - 'assets/screenshots/**'
       - 'packaging/icons/youtfast.svg'
       - '.github/workflows/pages.yml'
   pull_request:

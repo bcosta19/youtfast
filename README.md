@@ -32,15 +32,18 @@ Search, watch and keep your library in a desktop interface, with hardware video
 decoding where supported. No browser engine, telemetry or YouTFast-operated
 backend. Start signed out; accounts are optional.
 
-<picture>
-  <source type="image/avif" srcset="assets/demo/youtfast-demo.avif">
-  <img src="assets/demo/youtfast-demo.webp" alt="YouTFast 0.7.0 demo: search, video tabs, playback, timeline previews, theater and full screen, mini player, notifications, themes, six languages and keyboard shortcuts">
-</picture>
+<img src="assets/screenshots/watch.webp" alt="YouTFast playing Sprite Fright by Blender Studio, paused with chapters on the seek bar and Up next beside it">
 
-*YouTFast 0.7.0 on Linux, signed out: a real screen recording, edited with
-zooms and captions; loading waits are cut and some navigation is sped up.
-[Download it in full quality](assets/demo/youtfast-demo.mp4) (MP4, 1080p, 62 seconds, 13.4 MB, silent).
-The films are [Spring](https://studio.blender.org/films/spring/) and
+<table>
+  <tr>
+    <td width="33%"><img src="assets/screenshots/theater.webp" alt="Theater mode playing Spring by Blender Studio"><br>Theater mode</td>
+    <td width="33%"><img src="assets/screenshots/miniplayer.webp" alt="Search results with Spring playing in the mini player"><br>Mini player while browsing</td>
+    <td width="33%"><img src="assets/screenshots/channel-light-pt-br.webp" alt="The Blender Studio channel page in the light theme, with the interface in Brazilian Portuguese"><br>Light theme, interface in Portuguese</td>
+  </tr>
+</table>
+
+*Screenshots of YouTFast on Linux, signed out. The films are
+[Spring](https://studio.blender.org/films/spring/) and
 [Sprite Fright](https://studio.blender.org/films/sprite-fright/) by Blender
 Studio ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).*
 
