@@ -46,6 +46,9 @@ regression tests. Document changes to settings, files, network access and
 user-visible behaviour. Record implemented changes in CHANGELOG.md under
 `Unreleased`; future work goes in ROADMAP.md. Interface changes need matching
 before/after captures in light/dark themes and representative sizes, without private data.
+Edit documentation in English: the translations in `docs/i18n/` are generated
+from it. If your change adds or removes sections and the translation check
+fails, say so in the PR and the maintainer will update the translations.
 
 Fork the project, or use a topic branch if you have write access.
 Open a PR against `main`; maintainer release changes should also be reviewable

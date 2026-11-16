@@ -2,6 +2,9 @@
 
 [Back to the overview](../README.md) · [Install YouTFast](install.md) · [Platform details](distribution.md)
 
+**English** · [Português (Brasil)](i18n/pt-BR/user-guide.md) · [Español](i18n/es/user-guide.md) ·
+[Français](i18n/fr/user-guide.md) · [Deutsch](i18n/de/user-guide.md) · [Italiano](i18n/it/user-guide.md)
+
 ## Requirements
 
 | What | Why | Arch | Debian/Ubuntu |
