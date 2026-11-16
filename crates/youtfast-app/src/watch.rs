@@ -769,6 +769,12 @@ pub fn failure_message(failure: mpv::Failure) -> &'static str {
         mpv::Failure::Extraction => {
             "yt-dlp could not extract the stream signature. Try updating yt-dlp and reopening the video."
         }
+        mpv::Failure::YtdlMissing => {
+            "YouTFast could not start yt-dlp, which it needs to play videos. Install yt-dlp and Deno, then restart YouTFast (sign out and back in first if you just installed them)."
+        }
+        mpv::Failure::YtdlFailed => {
+            "yt-dlp could not get this video's streams. Update yt-dlp, make sure Deno is installed, and try reopening the video."
+        }
         mpv::Failure::Loading => {
             "mpv could not open the video stream. Check your connection and try reopening the video."
         }

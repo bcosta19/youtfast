@@ -8,6 +8,11 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Fixed
+
+- Playback now says when yt-dlp could not be started or could not get a video's streams, instead of "mpv could not recognize the stream format.", which mpv reported after opening the watch page itself.
+- On Windows, the setup installer launches YouTFast with the `PATH` that includes the yt-dlp and Deno it just installed through winget, and tells the desktop to reload `PATH` for programs started afterwards.
+
 ## [0.9.0] - 2026-11-16
 
 ### Added
