@@ -15,6 +15,9 @@
   <url type="bugtracker">https://github.com/bcosta19/youtfast/issues</url>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.9.0" date="2026-11-16">
+      <description><p>Matches in-app updates to the active installation method (native Linux, Arch pacman, Windows setup and portable, macOS bundle, and Flatpak), adds periodic release checks and one-click restarts, hardens Windows portable and Linux noexec replacement paths, and adds translated documentation in five languages.</p></description>
+    </release>
     <release version="0.8.1" date="2026-11-15">
       <description><p>Fixes missing emoji, symbols and styled characters across the interface, and preserves text around comment links when their boundaries fall inside an emoji.</p></description>
     </release>

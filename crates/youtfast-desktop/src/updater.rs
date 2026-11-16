@@ -1399,12 +1399,33 @@ fn set_executable_mode(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn run_with_etxtbsy_retry<T>(mut run: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    // On Linux, a concurrent thread spawning a child process can briefly hold
+    // a newly closed O_WRONLY fd across fork() before execve() closes O_CLOEXEC,
+    // causing execve() of the freshly written binary to fail with ETXTBSY.
+    let mut attempts = 0;
+    loop {
+        match run() {
+            Ok(value) => return Ok(value),
+            Err(error)
+                if error.kind() == std::io::ErrorKind::ExecutableFileBusy && attempts < 10 =>
+            {
+                attempts += 1;
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
 fn verify_extracted_binary(bin: &Path, expected_version: &str) -> Result<(), String> {
-    let output = hidden_command(&bin.to_string_lossy())
-        .arg("--version")
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|_| ERROR_INCOMPATIBLE.to_owned())?;
+    let output = run_with_etxtbsy_retry(|| {
+        hidden_command(&bin.to_string_lossy())
+            .arg("--version")
+            .stdin(Stdio::null())
+            .output()
+    })
+    .map_err(|_| ERROR_INCOMPATIBLE.to_owned())?;
     if !output.status.success() {
         return Err(ERROR_INCOMPATIBLE.to_owned());
     }
@@ -1955,6 +1976,31 @@ mod tests {
             b"#!/bin/sh\nprintf 'youtfast 1.2.3\\n'\n"
         );
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn etxtbsy_retry_recovers_transient_busy_without_retrying_other_errors() {
+        let mut calls = 0;
+        let ok = run_with_etxtbsy_retry(|| {
+            calls += 1;
+            if calls < 3 {
+                Err(std::io::Error::from(std::io::ErrorKind::ExecutableFileBusy))
+            } else {
+                Ok("verified")
+            }
+        })
+        .unwrap();
+        assert_eq!(ok, "verified");
+        assert_eq!(calls, 3);
+
+        let mut perm_calls = 0;
+        let err = run_with_etxtbsy_retry::<()>(|| {
+            perm_calls += 1;
+            Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
+        })
+        .unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+        assert_eq!(perm_calls, 1);
     }
 
     #[cfg(windows)]
