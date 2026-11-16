@@ -753,36 +753,62 @@ fn notice_toast(ctx: &egui::Context, state: &State, actions: &mut Vec<Action>) {
                                 .wrap(),
                             );
                         });
-                        if matches!(
-                            notice.as_str(),
-                            "A new version of YouTFast is available."
-                                | "A new major version of YouTFast is available."
-                        ) && matches!(
-                            state.update,
-                            youtfast_desktop::updater::UpdateState::Available(_)
-                        ) {
-                            let raised = widgets::on_card(palette);
-                            if widgets::button(
-                                ui,
-                                &raised,
-                                tr(locale, "Update now").as_ref(),
-                                widgets::ButtonStyle::Primary,
-                            )
-                            .clicked()
+                        match &state.update {
+                            youtfast_desktop::updater::UpdateState::Available(release)
+                                if matches!(
+                                    notice.as_str(),
+                                    "A new version of YouTFast is available."
+                                        | "A new major version of YouTFast is available."
+                                ) =>
                             {
-                                actions.push(Action::InstallUpdate);
+                                let raised = widgets::on_card(palette);
+                                if release.can_self_update()
+                                    && widgets::button(
+                                        ui,
+                                        &raised,
+                                        tr(locale, "Update now").as_ref(),
+                                        widgets::ButtonStyle::Primary,
+                                    )
+                                    .clicked()
+                                {
+                                    actions.push(Action::InstallUpdate);
+                                }
+                                if state.view != View::Settings
+                                    && widgets::button(
+                                        ui,
+                                        &raised,
+                                        tr(locale, "About").as_ref(),
+                                        if release.can_self_update() {
+                                            widgets::ButtonStyle::Normal
+                                        } else {
+                                            widgets::ButtonStyle::Primary
+                                        },
+                                    )
+                                    .clicked()
+                                {
+                                    actions.push(Action::Navigate(View::Settings));
+                                }
                             }
-                            if state.view != View::Settings
-                                && widgets::button(
+                            youtfast_desktop::updater::UpdateState::Installed { .. }
+                                if matches!(
+                                    notice.as_str(),
+                                    "Update installed. Restart YouTFast to use the new version."
+                                        | "Update ready. Restart YouTFast to finish installing."
+                                ) =>
+                            {
+                                let raised = widgets::on_card(palette);
+                                if widgets::button(
                                     ui,
                                     &raised,
-                                    tr(locale, "About").as_ref(),
-                                    widgets::ButtonStyle::Normal,
+                                    tr(locale, "Restart now").as_ref(),
+                                    widgets::ButtonStyle::Primary,
                                 )
                                 .clicked()
-                            {
-                                actions.push(Action::Navigate(View::Settings));
+                                {
+                                    actions.push(Action::RestartToUpdate);
+                                }
                             }
+                            _ => {}
                         }
                         if widgets::icon_button(ui, Icon::Close, 16.0, tr(locale, "Close").as_ref())
                             .clicked()
@@ -1948,5 +1974,74 @@ mod tests {
             "ArrowUp must scroll the page back up: y0={y0}, y_down={y_down}, y_up={y_up}"
         );
         assert_eq!(state.cursor, 0, "ArrowUp must not move the card cursor");
+    }
+
+    #[test]
+    fn update_notice_toast_shows_restart_now_and_hides_update_now_for_flatpak() {
+        use youtfast_desktop::updater::{InstallMethod, ReleaseInfo, UpdateKind, UpdateState};
+
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1280.0, 800.0));
+        let mut actions = Vec::new();
+
+        let run_toast = |state: &State, actions: &mut Vec<Action>| {
+            let mut out = egui::FullOutput::default();
+            for frame in 0..3 {
+                out = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(screen),
+                        time: Some(frame as f64 / 10.0),
+                        ..Default::default()
+                    },
+                    |_ui| notice_toast(&ctx, state, actions),
+                );
+                out.textures_delta.clear();
+            }
+            out.shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+
+        // Sandboxed Flatpak hides "Update now" and leaves "About" in the toast.
+        let flatpak_state = State {
+            view: View::Home,
+            notice: Some("A new version of YouTFast is available.".into()),
+            update: UpdateState::Available(ReleaseInfo {
+                version: "0.9.0".into(),
+                kind: UpdateKind::Minor,
+                method: InstallMethod::Flatpak,
+                install_supported: false,
+                changelog: String::new(),
+                html_url: "https://github.com/bcosta19/youtfast/releases/tag/v0.9.0".into(),
+                asset_name: Some("youtfast-v0.9.0-x86_64.flatpak".into()),
+                asset_url: Some("https://github.com/bcosta19/youtfast/releases/download/v0.9.0/youtfast-v0.9.0-x86_64.flatpak".into()),
+                checksums_url: Some("https://github.com/bcosta19/youtfast/releases/download/v0.9.0/checksums.txt".into()),
+            }),
+            ..Default::default()
+        };
+        let texts = run_toast(&flatpak_state, &mut actions);
+        assert!(!texts.contains(&"Update now".to_owned()));
+        assert!(texts.contains(&"About".to_owned()));
+
+        // Installed/staged update offers a direct "Restart now" button in the toast.
+        let installed_state = State {
+            view: View::Home,
+            notice: Some("Update ready. Restart YouTFast to finish installing.".into()),
+            update: UpdateState::Installed {
+                version: "0.9.0".into(),
+                kind: UpdateKind::Minor,
+                changelog: String::new(),
+                auto: false,
+                pending_apply_on_exit: true,
+            },
+            ..Default::default()
+        };
+        let texts = run_toast(&installed_state, &mut actions);
+        assert!(texts.contains(&"Restart now".to_owned()));
     }
 }

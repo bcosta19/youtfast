@@ -346,7 +346,7 @@ flowchart LR
 | Rich text | `widgets` uses glyph logical rectangles for links; `Action::OpenUrl` enforces scheme restrictions; eframe's `links` feature is required |
 | Idle rendering | `hover_fade` / `press_fade` request frames only during animation, using the style's `animation_time` |
 | Shared page layout | Settings and Account use the same centered column/cards; index position and scroll selection remain view state in egui memory |
-| Updater | GitHub Releases → SemVer classification → SHA-256 check against `checksums.txt` → atomic install; opt-in minor/patch updates may be automatic, major updates never are |
+| Updater | GitHub Releases → install-method detection (`LinuxNative`, `ArchPacman`, `WindowsSetup`, `WindowsPortable`, `MacosBundle`, `Flatpak`) → validated redirects, retries, SHA-256 check against `checksums.txt`, and pre-swap binary/package verification → atomic install (or Windows post-exit apply) and one-click restart; unattended minor/patch updates apply only when non-interactive |
 | Offline demo | `demo` has no backend, keyring, user files, network, media controls or single-instance channel |
 | Desktop icons | `tools/icons.py` generates Windows/macOS icons from SVG; Windows `build.rs` invokes windres directly, including MSVC-host/GNU-target runners |
 

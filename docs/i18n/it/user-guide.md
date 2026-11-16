@@ -466,16 +466,25 @@ anche senza l'hook dove i file del tema sono accessibili.
 
 Impostazioni → Informazioni mostra la versione di YouTFast installata, la licenza e
 il changelog incluso, e controlla in GitHub Releases la presenza di versioni stabili
-più recenti:
+più recenti all'avvio e ogni 12 ore mentre è aperto:
 
 - **Notifica nuove versioni** (attivo per impostazione predefinita) invia una
   notifica desktop di sistema quando viene pubblicata una nuova release ed
   evidenzia Impostazioni nella barra laterale, con azioni rapide nel messaggio di
-  notifica per aggiornare o aprire Informazioni.
+  notifica per aggiornare, aprire Informazioni o **Riavvia ora** quando è pronto.
 - **Aggiornamenti automatici (minor e patch)** (disattivato per impostazione
   predefinita) scarica, verifica (SHA-256 rispetto al `checksums.txt` della release)
   e installa automaticamente in background gli aggiornamenti minor (`0.x.0`) e patch
-  (`0.0.x`), poi mostra il changelog delle novità in Impostazioni → Informazioni.
+  (`0.0.x`) per le installazioni scrivibili dall'utente (Linux nativo, Windows
+  setup/portatile, macOS `.app`), poi mostra il changelog delle novità in
+  Impostazioni → Informazioni.
+- **Allineamento al metodo di installazione**: le installazioni `pacman` su Arch
+  si aggiornano tramite `pkexec pacman -U` al clic (mai automaticamente in
+  background), le installazioni Windows setup/portatili preparano e applicano
+  l'aggiornamento in modo pulito al riavvio o alla chiusura per evitare DLL
+  caricate incompatibili, e le installazioni Flatpak in sandbox inviano la
+  notifica e offrono la copia del comando con un clic in Impostazioni →
+  Informazioni.
 - **Le versioni major (`x.0.0`)** non si installano mai automaticamente; richiedono
   un clic sul pulsante **Aggiorna** nell'app per confermare e installare la release.
 

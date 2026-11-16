@@ -1094,6 +1094,12 @@ pub struct App {
     /// Held so the instance lock and channel outlive the app; the app
     /// creator closure is dropped once it has run.
     _instance: std::sync::Arc<instance::Guard>,
+    /// Verified Windows update waiting for process exit before applying.
+    pending_update: Option<youtfast_desktop::updater::PendingUpdate>,
+    /// Launch the updated binary once `on_exit` finishes cleanup.
+    relaunch_after_exit: bool,
+    /// Ensures `on_exit` spawns any update/relaunch helper at most once.
+    update_dispatched: bool,
     views: Views,
 }
 
@@ -1216,6 +1222,9 @@ impl App {
             media: now_playing::MediaControls::start(ctx),
             fonts,
             _instance: guard,
+            pending_update: None,
+            relaunch_after_exit: false,
+            update_dispatched: false,
             views,
         };
         app.set_alerts_timer();
@@ -1231,7 +1240,11 @@ impl App {
         {
             app.state.full_changelog_open = true;
         }
-        if app.state.settings.update_notifications || app.state.settings.auto_update {
+        let schedule_updates =
+            app.state.settings.update_notifications || app.state.settings.auto_update;
+        app.backend
+            .send(Command::SetUpdateSchedule(schedule_updates));
+        if schedule_updates {
             app.state.update = youtfast_desktop::updater::UpdateState::Checking;
             app.backend.send(Command::CheckForUpdates { manual: false });
         }
@@ -1380,6 +1393,22 @@ impl App {
                 self.state.accept_segments(&id, segments);
             }
             Event::Notice(notice) => self.state.notice = Some(notice),
+            Event::CheckUpdates => {
+                let want_updates =
+                    self.state.settings.update_notifications || self.state.settings.auto_update;
+                if want_updates
+                    && !matches!(
+                        self.state.update,
+                        youtfast_desktop::updater::UpdateState::Checking
+                            | youtfast_desktop::updater::UpdateState::Installing(_)
+                            | youtfast_desktop::updater::UpdateState::Installed { .. }
+                    )
+                {
+                    self.state.update = youtfast_desktop::updater::UpdateState::Checking;
+                    self.backend
+                        .send(Command::CheckForUpdates { manual: false });
+                }
+            }
             Event::UpdateChecked { result, manual } => self.on_update_checked(result, manual),
             Event::UpdateInstalled {
                 release,
@@ -1819,6 +1848,7 @@ impl App {
                     self.state.update,
                     youtfast_desktop::updater::UpdateState::Checking
                         | youtfast_desktop::updater::UpdateState::Installing(_)
+                        | youtfast_desktop::updater::UpdateState::Installed { .. }
                 ) {
                     self.state.update = youtfast_desktop::updater::UpdateState::Checking;
                     self.backend.send(Command::CheckForUpdates { manual: true });
@@ -1840,9 +1870,20 @@ impl App {
                     }
                 }
             }
+            Action::RestartToUpdate => {
+                self.relaunch_after_exit = true;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+            Action::CopyUpdateCommand(command) => {
+                ctx.copy_text(command);
+                self.state.notice = Some("Update command copied".to_owned());
+            }
             Action::SetUpdateNotifications(on) => {
                 self.state.settings.update_notifications = on;
                 self.save_settings();
+                self.backend.send(Command::SetUpdateSchedule(
+                    self.state.settings.update_notifications || self.state.settings.auto_update,
+                ));
                 if on
                     && matches!(
                         self.state.update,
@@ -1857,11 +1898,13 @@ impl App {
             Action::SetAutoUpdate(on) => {
                 self.state.settings.auto_update = on;
                 self.save_settings();
+                self.backend.send(Command::SetUpdateSchedule(
+                    self.state.settings.update_notifications || self.state.settings.auto_update,
+                ));
                 if on {
                     if let youtfast_desktop::updater::UpdateState::Available(release) =
                         self.state.update.clone()
-                        && youtfast_desktop::updater::should_auto_update(true, release.kind)
-                        && release.can_self_update()
+                        && youtfast_desktop::updater::should_auto_install(true, &release)
                     {
                         self.state.update =
                             youtfast_desktop::updater::UpdateState::Installing(release.clone());
@@ -1890,12 +1933,10 @@ impl App {
         result: Result<Option<youtfast_desktop::updater::ReleaseInfo>, String>,
         manual: bool,
     ) {
-        use youtfast_desktop::updater::{UpdateState, should_auto_update};
+        use youtfast_desktop::updater::{UpdateState, should_auto_install};
         match result {
             Ok(Some(release)) => {
-                if should_auto_update(self.state.settings.auto_update, release.kind)
-                    && release.can_self_update()
-                {
+                if should_auto_install(self.state.settings.auto_update, &release) {
                     self.state.update = UpdateState::Installing(release.clone());
                     self.backend.send(Command::InstallUpdate {
                         release,
@@ -1941,11 +1982,18 @@ impl App {
         &mut self,
         release: youtfast_desktop::updater::ReleaseInfo,
         auto: bool,
-        result: Result<(), String>,
+        result: Result<youtfast_desktop::updater::InstallOutcome, String>,
     ) {
-        use youtfast_desktop::updater::UpdateState;
+        use youtfast_desktop::updater::{InstallOutcome, UpdateState};
         match result {
-            Ok(()) => {
+            Ok(outcome) => {
+                let pending_apply_on_exit = match outcome {
+                    InstallOutcome::Applied => false,
+                    InstallOutcome::StagedForExit(pending) => {
+                        self.pending_update = Some(pending);
+                        true
+                    }
+                };
                 self.state.settings.last_updated_version = Some(release.version.clone());
                 self.state.settings.last_updated_changelog = Some(release.changelog.clone());
                 self.state.full_changelog_open = true;
@@ -1958,13 +2006,17 @@ impl App {
                         language: self.state.settings.language,
                     });
                 }
-                self.state.notice =
-                    Some("Update installed. Restart YouTFast to use the new version.".to_owned());
+                self.state.notice = Some(if pending_apply_on_exit {
+                    "Update ready. Restart YouTFast to finish installing.".to_owned()
+                } else {
+                    "Update installed. Restart YouTFast to use the new version.".to_owned()
+                });
                 self.state.update = UpdateState::Installed {
                     version: release.version,
                     kind: release.kind,
                     changelog: release.changelog,
                     auto,
+                    pending_apply_on_exit,
                 };
             }
             Err(error) => {
@@ -2098,6 +2150,14 @@ impl eframe::App for App {
             surface.destroy(gl);
         }
         self.player = None;
+        if !self.update_dispatched {
+            self.update_dispatched = true;
+            if let Some(pending) = self.pending_update.take() {
+                pending.spawn_on_exit(self.relaunch_after_exit);
+            } else if self.relaunch_after_exit {
+                youtfast_desktop::updater::spawn_relaunch_after_exit();
+            }
+        }
     }
 }
 

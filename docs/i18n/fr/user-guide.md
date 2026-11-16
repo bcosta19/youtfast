@@ -508,16 +508,26 @@ fichiers de thème sont accessibles.
 
 Paramètres → À propos affiche la version de YouTFast installée, la licence et le
 journal des modifications inclus, et vérifie les GitHub Releases pour trouver de
-nouvelles versions stables :
+nouvelles versions stables au démarrage et toutes les 12 heures tant que
+l'application est ouverte :
 
 - **Notifier les nouvelles versions** (activé par défaut) envoie une
   notification système sur le bureau lorsqu'une nouvelle version est publiée et
   met en évidence Paramètres dans le volet latéral, avec des actions rapides dans
-  la notification pour mettre à jour ou ouvrir À propos.
+  la notification pour mettre à jour, ouvrir À propos ou **Redémarrer maintenant**
+  une fois prête.
 - **Mises à jour automatiques (mineures et correctifs)** (désactivé par défaut)
   télécharge, vérifie (SHA-256 par rapport au `checksums.txt` de la version) et
   installe automatiquement en arrière-plan les mises à jour mineures (`0.x.0`)
-  et correctives (`0.0.x`), puis affiche le journal des changements dans
+  et correctives (`0.0.x`) pour les installations modifiables par l'utilisateur
+  (Linux natif, Windows installeur/portable, macOS `.app`), puis affiche le
+  journal des changements dans Paramètres → À propos.
+- **Adaptation à la méthode d'installation** : les installations Arch `pacman`
+  se mettent à jour via `pkexec pacman -U` au clic (jamais en arrière-plan sans
+  interaction), les installations Windows (installeur/portable) préparent et
+  appliquent la mise à jour proprement au redémarrage ou à la fermeture afin de ne
+  jamais laisser de DLL chargées incompatibles, et les installations Flatpak en
+  bac à sable notifient et permettent de copier la commande en un clic dans
   Paramètres → À propos.
 - **Les versions majeures (`x.0.0`)** ne s'installent jamais automatiquement ;
   elles nécessitent de cliquer sur le bouton **Mettre à jour** dans

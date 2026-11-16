@@ -836,7 +836,7 @@ fn notifications(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 /// minor/patch updates, manual major update button, and changelog notes.
 fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     use youtfast_appearance::icons::Icon;
-    use youtfast_desktop::updater::{self, UpdateState};
+    use youtfast_desktop::updater::{self, InstallMethod, UpdateState};
 
     let locale = state.settings.language;
     let palette = &state.palette;
@@ -855,6 +855,21 @@ fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 .into_owned(),
                 UpdateState::Checking => tr(locale, "Checking for updates…").into_owned(),
                 UpdateState::UpToDate => tr(locale, "YouTFast is up to date.").into_owned(),
+                UpdateState::Available(release) if !release.can_self_update() => {
+                    if release.method == InstallMethod::Flatpak {
+                        trf(
+                            locale,
+                            "Version v{version} is available. Flatpak updates cannot run inside the sandbox; update with the command below or from GitHub Releases.",
+                            &[("version", release.version.clone())],
+                        )
+                    } else {
+                        trf(
+                            locale,
+                            "Version v{version} is available. In-app updates are not available for this installation method; update from GitHub Releases.",
+                            &[("version", release.version.clone())],
+                        )
+                    }
+                }
                 UpdateState::Available(release) if release.kind.is_major() => trf(
                     locale,
                     "Major version v{version} is available. Major updates require manual installation.",
@@ -869,6 +884,15 @@ fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     locale,
                     "Downloading and installing YouTFast v{version}…",
                     &[("version", release.version.clone())],
+                ),
+                UpdateState::Installed {
+                    version,
+                    pending_apply_on_exit: true,
+                    ..
+                } => trf(
+                    locale,
+                    "Update to v{version} is ready. Restart YouTFast to finish installing.",
+                    &[("version", version.clone())],
                 ),
                 UpdateState::Installed {
                     version,
@@ -899,7 +923,7 @@ fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 |ui| {
                     let raised = widgets::on_card(palette);
                     match &state.update {
-                        UpdateState::Available(release) => {
+                        UpdateState::Available(release) if release.can_self_update() => {
                             let label = trf(
                                 locale,
                                 "Update to v{version}",
@@ -909,6 +933,42 @@ fn about(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                                 .clicked()
                             {
                                 actions.push(Action::InstallUpdate);
+                            }
+                        }
+                        UpdateState::Available(release) => {
+                            if let Some(cmd) = release.method.manual_update_command() {
+                                if widgets::button(
+                                    ui,
+                                    &raised,
+                                    &tr(locale, "Copy update command"),
+                                    widgets::ButtonStyle::Primary,
+                                )
+                                .clicked()
+                                {
+                                    actions.push(Action::CopyUpdateCommand(cmd.to_owned()));
+                                }
+                            } else if widgets::icon_text_button(
+                                ui,
+                                &raised,
+                                Some(Icon::ExternalLink),
+                                &tr(locale, "Open release page"),
+                                widgets::ButtonStyle::Primary,
+                            )
+                            .clicked()
+                            {
+                                actions.push(Action::OpenUrl(release.html_url.clone()));
+                            }
+                        }
+                        UpdateState::Installed { .. } => {
+                            if widgets::button(
+                                ui,
+                                &raised,
+                                &tr(locale, "Restart now"),
+                                widgets::ButtonStyle::Primary,
+                            )
+                            .clicked()
+                            {
+                                actions.push(Action::RestartToUpdate);
                             }
                         }
                         UpdateState::Checking | UpdateState::Installing(_) => {
@@ -2069,7 +2129,9 @@ mod tests {
 
     #[test]
     fn about_section_shows_version_auto_update_changelog_and_major_manual_button() {
-        use youtfast_desktop::updater::{CURRENT_VERSION, ReleaseInfo, UpdateKind, UpdateState};
+        use youtfast_desktop::updater::{
+            CURRENT_VERSION, InstallMethod, ReleaseInfo, UpdateKind, UpdateState,
+        };
 
         let ctx = egui::Context::default();
         theme::install_fonts(&ctx);
@@ -2079,6 +2141,7 @@ mod tests {
                 kind: UpdateKind::Minor,
                 changelog: "Added\n• Automatic minor and patch updates".into(),
                 auto: true,
+                pending_apply_on_exit: false,
             },
             ..Default::default()
         };
@@ -2104,6 +2167,7 @@ mod tests {
         let expected_version = format!("YouTFast {CURRENT_VERSION}");
         assert!(labels.contains(&"About".to_owned()));
         assert!(labels.contains(&expected_version));
+        assert!(labels.contains(&"Restart now".to_owned()));
         assert!(labels.contains(&"Notify about new versions".to_owned()));
         assert!(labels.contains(&"Automatic updates (minor and patch)".to_owned()));
         assert!(labels.contains(&"What changed in v0.3.0 (Changelog)".to_owned()));
@@ -2118,11 +2182,13 @@ mod tests {
         state.update = UpdateState::Available(ReleaseInfo {
             version: "1.0.0".into(),
             kind: UpdateKind::Major,
+            method: InstallMethod::LinuxNative,
+            install_supported: true,
             changelog: "Added\n• Major release".into(),
             html_url: "https://github.com/bcosta19/youtfast/releases/tag/v1.0.0".into(),
-            asset_name: None,
-            asset_url: None,
-            checksums_url: None,
+            asset_name: Some("youtfast-v1.0.0-x86_64-unknown-linux-gnu.tar.gz".into()),
+            asset_url: Some("https://github.com/bcosta19/youtfast/releases/download/v1.0.0/youtfast-v1.0.0-x86_64-unknown-linux-gnu.tar.gz".into()),
+            checksums_url: Some("https://github.com/bcosta19/youtfast/releases/download/v1.0.0/checksums.txt".into()),
         });
         let mut output = ctx.run_ui(
             egui::RawInput {
@@ -2150,6 +2216,39 @@ mod tests {
         );
         assert!(labels.contains(&"Update to v1.0.0".to_owned()));
         assert!(labels.contains(&"What's new in v1.0.0".to_owned()));
+        output.textures_delta.clear();
+
+        // Flatpak keeps sandbox boundaries and exposes the copy-command action.
+        state.update = UpdateState::Available(ReleaseInfo {
+            version: "1.0.0".into(),
+            kind: UpdateKind::Major,
+            method: InstallMethod::Flatpak,
+            install_supported: false,
+            changelog: String::new(),
+            html_url: "https://github.com/bcosta19/youtfast/releases/tag/v1.0.0".into(),
+            asset_name: Some("youtfast-v1.0.0-x86_64.flatpak".into()),
+            asset_url: None,
+            checksums_url: None,
+        });
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(900.0, 800.0),
+                )),
+                ..Default::default()
+            },
+            |ui| about(ui, &state, &mut actions),
+        );
+        let labels: Vec<_> = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                _ => None,
+            })
+            .collect();
+        assert!(labels.contains(&"Copy update command".to_owned()));
         output.textures_delta.clear();
     }
 }
