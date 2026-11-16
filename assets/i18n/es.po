@@ -1784,3 +1784,36 @@ msgid "{count} in progress"
 msgid_plural "{count} in progress"
 msgstr[0] "{count} en curso"
 msgstr[1] "{count} en curso"
+
+msgid "Update authentication was cancelled or unavailable."
+msgstr "La autenticación para actualizar fue cancelada o no está disponible."
+
+msgid "The downloaded update is incompatible with this system."
+msgstr "La actualización descargada es incompatible con este sistema."
+
+msgid "The installation directory is not writable."
+msgstr "El directorio de instalación no tiene permisos de escritura."
+
+msgid "Update command copied"
+msgstr "Comando de actualización copiado"
+
+msgid "Update ready. Restart YouTFast to finish installing."
+msgstr "Actualización lista. Reinicia YouTFast para completar la instalación."
+
+msgid "Restart now"
+msgstr "Reiniciar ahora"
+
+msgid "Version v{version} is available. Flatpak updates cannot run inside the sandbox; update with the command below or from GitHub Releases."
+msgstr "La versión v{version} está disponible. Las actualizaciones de Flatpak no pueden ejecutarse dentro del sandbox; actualiza con el comando de abajo o desde GitHub Releases."
+
+msgid "Version v{version} is available. In-app updates are not available for this installation method; update from GitHub Releases."
+msgstr "La versión v{version} está disponible. Las actualizaciones dentro de la aplicación no están disponibles para este método de instalación; actualiza desde GitHub Releases."
+
+msgid "Update to v{version} is ready. Restart YouTFast to finish installing."
+msgstr "La actualización a v{version} está lista. Reinicia YouTFast para completar la instalación."
+
+msgid "Copy update command"
+msgstr "Copiar comando de actualización"
+
+msgid "Open release page"
+msgstr "Abrir página de la versión"

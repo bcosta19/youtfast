@@ -27,6 +27,9 @@ pub fn safe_error(error: &str) -> String {
         "The downloaded update failed integrity verification.",
         "Could not install the update on this system.",
         "Automatic installation is not supported for this package format.",
+        "Update authentication was cancelled or unavailable.",
+        "The downloaded update is incompatible with this system.",
+        "The installation directory is not writable.",
     ]
     .contains(&error)
     {

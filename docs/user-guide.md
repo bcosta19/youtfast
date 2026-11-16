@@ -419,15 +419,23 @@ the hook where theme files are accessible.
 ## About and updates
 
 Settings → About shows the installed YouTFast version, license, and bundled
-changelog, and checks GitHub Releases for newer stable versions:
+changelog, and checks GitHub Releases for newer stable versions on startup and
+every 12 hours while open:
 
 - **Notify about new versions** (on by default) sends a system desktop
   notification when a new release is published and highlights Settings in the
-  sidebar, with quick actions in the notification toast to update or open About.
+  sidebar, with quick actions in the notification toast to update, open About,
+  or **Restart now** once ready.
 - **Automatic updates (minor and patch)** (off by default) automatically
   downloads, verifies (SHA-256 against the release's `checksums.txt`), and
-  installs minor (`0.x.0`) and patch (`0.0.x`) updates in the background, then
-  displays the changelog of what changed in Settings → About.
+  installs minor (`0.x.0`) and patch (`0.0.x`) updates in the background for
+  user-writable installs (native Linux, Windows setup/portable, macOS `.app`),
+  then displays the changelog of what changed in Settings → About.
+- **Installation-method matching**: Arch `pacman` installs update via
+  `pkexec pacman -U` on click (never unattended in the background), Windows
+  setup/portable installs stage and apply cleanly on restart/exit so loaded
+  DLLs are never left mismatched, and sandboxed Flatpak installs notify and
+  provide a one-click command copy in Settings → About.
 - **Major versions (`x.0.0`)** never install automatically; they require
   clicking the **Update** button in the app to confirm and install the release.
 

@@ -493,18 +493,26 @@ zugänglich sind.
 ## Info und Updates
 
 Einstellungen → Kanalinfo zeigt die installierte YouTFast-Version, die Lizenz und
-das mitgelieferte Änderungsprotokoll und prüft GitHub Releases auf neuere stabile
-Versionen:
+das mitgelieferte Änderungsprotokoll und prüft GitHub Releases beim Start sowie
+alle 12 Stunden im laufenden Betrieb auf neuere stabile Versionen:
 
 - **Über neue Versionen benachrichtigen** (standardmäßig an) sendet eine
   Desktop-Benachrichtigung des Systems, wenn eine neue Version veröffentlicht
   wird, und hebt Einstellungen in der Seitenleiste hervor, mit Schnellaktionen in
-  der Benachrichtigung zum Aktualisieren oder zum Öffnen von Kanalinfo.
+  der Benachrichtigung zum Aktualisieren, zum Öffnen von Kanalinfo oder zum
+  **Jetzt neu starten**, sobald das Update bereit ist.
 - **Automatische Updates (Minor und Patch)** (standardmäßig aus) lädt Minor-
-  (`0.x.0`) und Patch-Updates (`0.0.x`) automatisch herunter, prüft sie (SHA-256
-  gegen die `checksums.txt` der Version) und installiert sie im Hintergrund;
-  anschließend zeigt es unter Einstellungen → Kanalinfo das Änderungsprotokoll
-  mit den Neuerungen an.
+  (`0.x.0`) und Patch-Updates (`0.0.x`) für vom Benutzer beschreibbare
+  Installationen (natives Linux, Windows-Setup/-Portable, macOS `.app`)
+  automatisch herunter, prüft sie (SHA-256 gegen die `checksums.txt` der Version)
+  und installiert sie im Hintergrund; anschließend zeigt es unter
+  Einstellungen → Kanalinfo das Änderungsprotokoll mit den Neuerungen an.
+- **Abstimmung auf die Installationsmethode**: Arch-`pacman`-Installationen
+  aktualisieren sich per Klick über `pkexec pacman -U` (nie unbeaufsichtigt im
+  Hintergrund), Windows-Setup-/-Portable-Installationen bereiten das Update vor
+  und wenden es sauber beim Neustart oder Beenden an, damit geladene DLLs nie
+  inkonsistent bleiben, und Flatpak-Installationen in der Sandbox benachrichtigen
+  und bieten unter Einstellungen → Kanalinfo das Kopieren des Befehls per Klick.
 - **Hauptversionen (`x.0.0`)** werden nie automatisch installiert; sie erfordern
   einen Klick auf die Schaltfläche **Aktualisieren** in der App, um die
   Version zu bestätigen und zu installieren.

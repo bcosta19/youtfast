@@ -208,6 +208,10 @@ pub enum Action {
     CheckForUpdates,
     /// Download, verify and install the available update.
     InstallUpdate,
+    /// Close YouTFast, finish any staged update, and launch the new version.
+    RestartToUpdate,
+    /// Copy a terminal update command to the clipboard.
+    CopyUpdateCommand(String),
     /// Toggle desktop notifications when a new version is available.
     SetUpdateNotifications(bool),
     /// Toggle automatic installation of minor and patch updates.

@@ -464,15 +464,24 @@ estiverem acessíveis.
 
 Configurações → Sobre mostra a versão instalada do YouTFast, a licença e o
 changelog incluído, e consulta o GitHub Releases em busca de versões estáveis
-mais novas:
+mais novas ao iniciar e a cada 12 horas enquanto estiver aberto:
 
 - **Notificar sobre novas versões** (ativado por padrão) envia uma notificação na
   área de trabalho quando uma nova versão é publicada e destaca Configurações no
-  menu lateral, com ações rápidas na notificação para atualizar ou abrir Sobre.
+  menu lateral, com ações rápidas na notificação para atualizar, abrir Sobre ou
+  **Reiniciar agora** quando estiver pronta.
 - **Atualizações automáticas (minor e patch)** (desativado por padrão) baixa,
   verifica (SHA-256 contra o `checksums.txt` da versão) e instala automaticamente
-  em segundo plano as atualizações minor (`0.x.0`) e patch (`0.0.x`) e, depois,
-  mostra o changelog do que mudou em Configurações → Sobre.
+  em segundo plano as atualizações minor (`0.x.0`) e patch (`0.0.x`) em
+  instalações graváveis pelo usuário (Linux nativo, Windows setup/portátil,
+  macOS `.app`) e, depois, mostra o changelog do que mudou em Configurações →
+  Sobre.
+- **Correspondência ao método de instalação**: instalações `pacman` no Arch
+  atualizam via `pkexec pacman -U` ao clicar (nunca de forma automática em
+  segundo plano), instalações Windows setup/portátil preparam e aplicam a
+  atualização com segurança ao reiniciar/sair para que DLLs carregadas nunca
+  fiquem incompatíveis, e instalações Flatpak em sandbox notificam e oferecem a
+  cópia do comando em um clique em Configurações → Sobre.
 - **Versões major (`x.0.0`)** nunca são instaladas automaticamente; é preciso
   clicar no botão **Atualizar** no app para confirmar e instalar a versão.
 

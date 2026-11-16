@@ -95,6 +95,8 @@ pub fn redact_log(
             "update check failed",
             "update installation failed",
             "updated youtfast",
+            "pending update helper failed",
+            "relaunch helper failed",
         ]
         .into_iter()
         .find(|prefix| message.starts_with(prefix))

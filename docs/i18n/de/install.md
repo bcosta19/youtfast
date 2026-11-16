@@ -98,8 +98,9 @@ andernfalls folgen Sie der
 4. Öffnen Sie **YouTFast** über Ihr Anwendungsmenü oder führen Sie
    `flatpak run io.github.bcosta19.YouTFast` aus.
 
-**Aktualisieren:** Wiederholen Sie die Schritte 2 und 3 mit der neuen Version.
-Das Bundle hat noch keinen automatischen Update-Kanal.
+**Aktualisieren:** Wiederholen Sie die Schritte 2 und 3 (oder führen Sie
+`install.sh --method flatpak` aus **Einstellungen → Kanalinfo** aus). Das
+Sandbox-Bundle hat keinen automatischen Update-Kanal.
 **Entfernen:** `flatpak uninstall --user io.github.bcosta19.YouTFast`.
 
 Das Flatpak kann das Profil Ihres Browsers nicht lesen. Um sich anzumelden,
@@ -131,8 +132,10 @@ Sie benötigen: ein Arch-basiertes System mit `sudo`.
 
 4. Öffnen Sie **YouTFast** über Ihr Anwendungsmenü oder führen Sie `youtfast` aus.
 
-**Aktualisieren:** Wiederholen Sie die Schritte 2 und 3 mit der neuen Version;
-halten Sie das System mit `sudo pacman -Syu` aktuell, damit yt-dlp aktuell bleibt.
+**Aktualisieren:** YouTFast aktualisiert sich über **Einstellungen → Kanalinfo**
+(lädt das `.pkg.tar.zst`-Paket herunter, prüft es und führt `pkexec pacman -U`
+aus), oder wiederholen Sie die Schritte 2 und 3 mit der neuen Version. Halten
+Sie das System mit `sudo pacman -Syu` aktuell, damit yt-dlp aktuell bleibt.
 **Entfernen:** `sudo pacman -R youtfast`.
 
 ## Linux: Ubuntu und Debian

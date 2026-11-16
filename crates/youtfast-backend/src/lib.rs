@@ -66,6 +66,8 @@ struct Context {
     waker: egui::Context,
     /// The running alerts timer, restarted when the interval changes.
     alerts_timer: Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    /// Periodic background release-check timer (every 12 hours when enabled).
+    update_timer: Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>,
     /// The newest library and settings to write; one writer each takes
     /// them in turn (see [`writer`]).
     library_saves: Arc<watch::Sender<Option<Library>>>,
@@ -122,6 +124,7 @@ impl Backend {
             epoch: 0,
             waker,
             alerts_timer: Arc::new(tokio::sync::Mutex::new(None)),
+            update_timer: Arc::new(tokio::sync::Mutex::new(None)),
             library_saves: Arc::new(library_saves),
             settings_saves: Arc::new(settings_saves),
             account_writes: Arc::new(tokio::sync::Mutex::new(())),
@@ -148,9 +151,17 @@ impl Backend {
             .spawn(move || {
                 runtime.block_on(async move {
                     {
-                        // The thumbnail cache is bounded once per run.
+                        // The thumbnail cache is bounded once per run; stale
+                        // update folders from interrupted runs are pruned too.
                         let dir = context.dirs.cache.join("thumbnails");
-                        tokio::task::spawn_blocking(move || youtfast_youtube::thumbs::prune(&dir));
+                        let cache_dir = context.dirs.cache.clone();
+                        tokio::task::spawn_blocking(move || {
+                            youtfast_youtube::thumbs::prune(&dir);
+                            youtfast_desktop::updater::cleanup_stale_staging(
+                                &cache_dir,
+                                youtfast_desktop::updater::CURRENT_VERSION,
+                            );
+                        });
                     }
                     tokio::spawn(writer(
                         context.clone(),
@@ -696,6 +707,23 @@ async fn handle(command: Command, context: Context) {
                 log::warn!("update check failed");
             }
             context.send(Event::UpdateChecked { result, manual });
+        }
+        Command::SetUpdateSchedule(enabled) => {
+            let mut guard = context.update_timer.lock().await;
+            if let Some(timer) = guard.take() {
+                timer.abort();
+            }
+            if enabled {
+                let context = context.clone();
+                *guard = Some(tokio::spawn(async move {
+                    const CHECK_EVERY: std::time::Duration =
+                        std::time::Duration::from_secs(12 * 60 * 60);
+                    loop {
+                        tokio::time::sleep(CHECK_EVERY).await;
+                        context.send(Event::CheckUpdates);
+                    }
+                }));
+            }
         }
         Command::InstallUpdate { release, auto } => {
             let cache_dir = context.dirs.cache.clone();
@@ -1758,6 +1786,7 @@ mod tests {
             epoch: 0,
             waker: egui::Context::default(),
             alerts_timer: Arc::default(),
+            update_timer: Arc::default(),
             library_saves: Arc::new(watch::channel(None).0),
             settings_saves: Arc::new(watch::channel(None).0),
             account_writes: Arc::default(),

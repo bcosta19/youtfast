@@ -11,7 +11,7 @@ outstanding gates.
 |---|---|---|---|
 | Linux x86_64 native | `*-x86_64-unknown-linux-gnu.tar.gz` | glibc 2.39+, system libmpv 0.42+ with Lua, graphics libraries, current yt-dlp and JS runtime | In-app updater (`Settings → About`, SHA-256 verified) or replace archive; update system dependencies separately |
 | Linux x86_64 Flatpak | `*-x86_64.flatpak` and Flathub source manifest (`channels.tar.gz`) | Flatpak, Freedesktop 25.08 runtime, graphics drivers and portals | Install next bundle or run `install.sh --method flatpak`; Flathub submission is not pursued |
-| Arch Linux x86_64 | `.pkg.tar.zst` and `*-aur.tar.gz` recipe | System dependencies installed by pacman; AUR source builds also need Rust/Cargo | Install `.pkg.tar.zst` directly with `sudo pacman -U` or `install.sh --method arch` |
+| Arch Linux x86_64 | `.pkg.tar.zst` and `*-aur.tar.gz` recipe | System dependencies installed by pacman; AUR source builds also need Rust/Cargo | In-app updater (`Settings → About`, SHA-256 verified `pkexec pacman -U`), `sudo pacman -U` or `install.sh --method arch` |
 | Windows x86_64 | `*-x86_64-windows-setup.exe` (NSIS), `*-x86_64-pc-windows-gnu.zip` and multi-file Winget manifest (`channels.tar.gz`) | Bundled libmpv/imported DLLs; current yt-dlp and Deno on PATH | In-app updater (`Settings → About`), setup `.exe`, or Winget once PR accepted |
 | macOS 15+ Apple Silicon | `*-aarch64-apple-darwin.zip` with `.app` and Homebrew Cask (`channels.tar.gz`) | Bundled libmpv/dylibs; current yt-dlp and Deno | In-app updater (`Settings → About`), replace `.app`, or personal Homebrew tap (`bcosta19/homebrew-tap`) |
 
@@ -66,8 +66,8 @@ cookies.txt through the portal or remain signed out. Do not broaden permissions
 to make a smoke test pass.
 
 The native archive installs into the user's `~/.local` (see the install guide)
-so the in-app updater can replace the binary in place; it falls back to
-`~/.local/bin/youtfast` when the running binary is not writable.
+so the in-app updater can replace the binary atomically in place; non-writable
+system or sandboxed installs never drop a duplicate binary into `~/.local/bin`.
 
 A bundle is not a Flathub listing or automatic-update channel. A repository is
 the preferred Flatpak distribution channel for updates; see [single-file bundles](https://docs.flatpak.org/en/latest/single-file-bundles.html).

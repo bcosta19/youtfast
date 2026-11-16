@@ -11,6 +11,12 @@ are the distribution record.
 ### Added
 
 - The README, user guide and installation guide in Brazilian Portuguese, Spanish, French, German and Italian, linked from a language switcher at the top of each.
+- Installation-method-matched in-app updates: Arch Linux `pacman` updates via `pkexec pacman -U`, staged Windows setup and portable updates applied cleanly on exit/restart, sandboxed Flatpak update command copy, one-click **Restart now** actions, and periodic 12-hour background release checks.
+
+### Fixed
+
+- Fixed portable Windows updates to preserve unrelated DLLs, replace renamed executables without mixing old binaries with new dependencies, and conservatively retain files from legacy installs without a dependency manifest.
+- Prevented self-updates from replacing mbx development-cache binaries and made Linux native updates verify an executable copy beside the install target before the atomic replacement.
 
 ## [0.8.1] - 2026-11-15
 

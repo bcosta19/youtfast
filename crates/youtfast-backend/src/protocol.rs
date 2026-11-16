@@ -273,6 +273,8 @@ pub enum Command {
     CheckForUpdates {
         manual: bool,
     },
+    /// Enable or disable the periodic background release-check timer.
+    SetUpdateSchedule(bool),
     /// Download, verify SHA-256 and install `release`.
     InstallUpdate {
         release: youtfast_desktop::updater::ReleaseInfo,
@@ -394,6 +396,8 @@ pub enum Event {
         id: String,
         segments: Vec<youtfast_core::model::Segment>,
     },
+    /// The update timer fired; the app triggers a background check if idle.
+    CheckUpdates,
     UpdateChecked {
         result: Result<Option<youtfast_desktop::updater::ReleaseInfo>, String>,
         manual: bool,
@@ -401,7 +405,7 @@ pub enum Event {
     UpdateInstalled {
         release: youtfast_desktop::updater::ReleaseInfo,
         auto: bool,
-        result: Result<(), String>,
+        result: Result<youtfast_desktop::updater::InstallOutcome, String>,
     },
 }
 
@@ -429,6 +433,7 @@ impl Command {
                     | Self::SaveLibrary(_)
                     | Self::SaveSettings(_)
                     | Self::SetAlertsEvery(_)
+                    | Self::SetUpdateSchedule(_)
             )
     }
 }
@@ -458,9 +463,13 @@ impl Event {
             | Self::SaveFailed { error, .. }
             | Self::SignInFailed(error)
             | Self::SessionExpired(error)
-            | Self::SessionUnavailable { error, .. } => {
-                *error = youtfast_core::privacy::safe_error(error)
+            | Self::SessionUnavailable { error, .. }
+            | Self::UpdateChecked {
+                result: Err(error), ..
             }
+            | Self::UpdateInstalled {
+                result: Err(error), ..
+            } => *error = youtfast_core::privacy::safe_error(error),
             Self::Details { result, .. } => {
                 if let Err(error) = result.as_mut() {
                     *error = youtfast_core::privacy::safe_error(error);
@@ -479,6 +488,7 @@ impl Event {
                     | Self::ImportMerged { .. }
                     | Self::Notice(_)
                     | Self::CheckAlerts
+                    | Self::CheckUpdates
                     | Self::Thumbnail { .. }
                     | Self::Suggestions { .. }
                     | Self::Segments { .. }
