@@ -115,7 +115,9 @@ item renderers are logged (`items::…`) to make that visible.
 - A change to a user-facing behaviour, option, requirement or install step
   updates the English docs, and any change to `README.md`,
   `docs/user-guide.md` or `docs/install.md` updates their translations
-  ([Translated documentation](#translated-documentation)).
+  ([Translated documentation](#translated-documentation)); changes to
+  `docs/install.md` also update `website/install.html` (and `website/index.html`
+  where applicable) and pass `python3 -m unittest discover -s tools -p 'test_site.py'`.
 - Run the checks before finishing:
 
   ```sh
@@ -205,6 +207,14 @@ large scratch files in `/tmp`.
   The release workflow creates a draft only after reusable CI and all required
   artifact jobs pass. Final publication requires privacy/source/platform review.
   Native platform tests are not interactive QA.
+- `https://youtfast.pages.dev/` uses Cloudflare Pages Direct Upload (`.github/workflows/pages.yml`
+  only validates and never deploys). Never deploy before the GitHub release for
+  `Cargo.toml`'s version is published (not a draft); immediately after
+  publishing a release, keep `website/install.html` aligned with `docs/install.md`,
+  run `python3 -m unittest discover -s tools -p 'test_site.py'` and
+  `python3 tools/build_site.py`, and deploy `dist/site` per `website/README.md`
+  (`wrangler pages deploy dist/site --project-name youtfast --branch main`),
+  then verify the live pages serve the new version.
 - Keep Actions pinned to reviewed SHAs and contributor permissions read-only.
   Never execute contributor code through `pull_request_target` with secrets.
 - Never commit raw API reports, cookies, logs or personal data. The
