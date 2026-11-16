@@ -20,10 +20,7 @@ LABELS = {
         'Aplicativo YouTFast reproduzindo um vídeo com biblioteca local e recomendações.',
     'Main navigation': 'Navegação principal',
     'Project links': 'Links do projeto',
-    'Watch the YouTFast demo': 'Assistir à demonstração do YouTFast',
-    'YouTFast product demonstration': 'Demonstração do YouTFast',
-    'YouTFast playing Spring by Blender Studio, with the video library and recommendations in its native window.':
-        'YouTFast reproduzindo Spring, do Blender Studio, com biblioteca e recomendações na janela nativa.',
+    'See YouTFast screenshots': 'Ver capturas de tela do YouTFast',
 }
 VOID = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta',
         'param', 'source', 'track', 'wbr'}
@@ -54,6 +51,8 @@ class PortuguesePage(HTMLParser):
         for key in ('aria-label', 'alt', 'content'):
             if key in attrs:
                 attrs[key] = LABELS.get(attrs[key], attrs[key])
+        if 'data-alt-pt' in attrs:
+            attrs['alt'] = attrs['data-alt-pt']
         if tag == 'meta':
             field = attrs.get('property', attrs.get('name'))
             if field in ('description', 'og:description', 'twitter:description'):

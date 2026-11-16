@@ -36,16 +36,18 @@ decodificación de vídeo por hardware donde esté disponible. Sin motor de nave
 sin telemetría y sin servidores operados por YouTFast. Empiezas sin iniciar sesión;
 las cuentas son opcionales.
 
-<picture>
-  <source type="image/avif" srcset="../../../assets/demo/youtfast-demo.avif">
-  <img src="../../../assets/demo/youtfast-demo.webp" alt="Demostración de YouTFast 0.7.0: búsqueda, pestañas de vídeo, reproducción, vistas previas en la línea de tiempo, modo cine y pantalla completa, minirreproductor, notificaciones, temas, seis idiomas y atajos de teclado">
-</picture>
+<img src="../../../assets/screenshots/watch.webp" alt="YouTFast reproduciendo Sprite Fright de Blender Studio, en pausa, con capítulos en la barra de progreso y A continuación al lado">
 
-*YouTFast 0.7.0 en Linux, sin iniciar sesión: una grabación de pantalla real, editada
-con zooms y subtítulos; se recortaron las esperas de carga y parte de la navegación
-está acelerada.
-[Descárgala en calidad completa](../../../assets/demo/youtfast-demo.mp4) (MP4, 1080p, 62 segundos, 13.4 MB, sin sonido).
-Las películas son [Spring](https://studio.blender.org/films/spring/) y
+<table>
+  <tr>
+    <td width="33%"><img src="../../../assets/screenshots/theater.webp" alt="Modo cine reproduciendo Spring de Blender Studio"><br>Modo cine</td>
+    <td width="33%"><img src="../../../assets/screenshots/miniplayer.webp" alt="Resultados de búsqueda con Spring en el minirreproductor"><br>Minirreproductor mientras navegas</td>
+    <td width="33%"><img src="../../../assets/screenshots/channel-light-pt-br.webp" alt="La página del canal Blender Studio en el tema claro, con la interfaz en portugués de Brasil"><br>Tema claro, interfaz en portugués</td>
+  </tr>
+</table>
+
+*Capturas de pantalla de YouTFast en Linux, sin iniciar sesión. Las películas son
+[Spring](https://studio.blender.org/films/spring/) y
 [Sprite Fright](https://studio.blender.org/films/sprite-fright/) de Blender
 Studio ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).*
 

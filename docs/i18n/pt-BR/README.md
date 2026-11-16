@@ -35,16 +35,18 @@ decodificação de vídeo por hardware onde houver suporte. Sem motor de navegad
 sem telemetria e sem servidor operado pelo YouTFast. Comece sem entrar em uma
 conta; contas são opcionais.
 
-<picture>
-  <source type="image/avif" srcset="../../../assets/demo/youtfast-demo.avif">
-  <img src="../../../assets/demo/youtfast-demo.webp" alt="Demonstração do YouTFast 0.7.0: pesquisa, abas de vídeos, reprodução, prévias na linha do tempo, modo cinema e tela cheia, miniplayer, notificações, temas, seis idiomas e atalhos do teclado">
-</picture>
+<img src="../../../assets/screenshots/watch.webp" alt="YouTFast reproduzindo Sprite Fright, do Blender Studio, pausado com capítulos na barra de progresso e A seguir ao lado">
 
-*YouTFast 0.7.0 no Linux, sem conta conectada: uma gravação de tela real, editada
-com zooms e legendas; as esperas de carregamento foram cortadas e parte da
-navegação foi acelerada.
-[Baixe em qualidade total](../../../assets/demo/youtfast-demo.mp4) (MP4, 1080p, 62 segundos, 13,4 MB, sem som).
-Os filmes são [Spring](https://studio.blender.org/films/spring/) e
+<table>
+  <tr>
+    <td width="33%"><img src="../../../assets/screenshots/theater.webp" alt="Modo cinema reproduzindo Spring, do Blender Studio"><br>Modo cinema</td>
+    <td width="33%"><img src="../../../assets/screenshots/miniplayer.webp" alt="Resultados de pesquisa com Spring tocando no miniplayer"><br>Miniplayer enquanto navega</td>
+    <td width="33%"><img src="../../../assets/screenshots/channel-light-pt-br.webp" alt="A página do canal Blender Studio no tema claro, com a interface em português do Brasil"><br>Tema claro, interface em português</td>
+  </tr>
+</table>
+
+*Capturas de tela do YouTFast no Linux, sem conta conectada. Os filmes são
+[Spring](https://studio.blender.org/films/spring/) e
 [Sprite Fright](https://studio.blender.org/films/sprite-fright/), do Blender
 Studio ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).*
 
