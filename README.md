@@ -4,11 +4,27 @@
 <h1 align="center">YouTFast</h1>
 <p align="center"><strong>YouTube, native and fast.</strong></p>
 <p align="center">
+  <a href="https://github.com/bcosta19/youtfast/actions/workflows/ci.yml"><img src="https://github.com/bcosta19/youtfast/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/bcosta19/youtfast/releases/latest"><img src="https://img.shields.io/github/v/release/bcosta19/youtfast?sort=semver" alt="Latest release"></a>
+  <a href="https://github.com/bcosta19/youtfast/releases"><img src="https://img.shields.io/github/downloads/bcosta19/youtfast/total" alt="Downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-blue" alt="License: GPL-3.0-only"></a>
+  <img src="https://img.shields.io/badge/rust-1.98%2B-orange?logo=rust" alt="Rust 1.98+">
+  <img src="https://img.shields.io/badge/platforms-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey" alt="Platforms: Linux, Windows, macOS">
+</p>
+<p align="center">
   <a href="https://github.com/bcosta19/youtfast/releases">Releases</a> ·
   <a href="https://youtfast.pages.dev/">Website</a> ·
   <a href="docs/user-guide.md">User guide</a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
   <a href="CONTRIBUTING.md">Contribute</a>
+</p>
+<p align="center">
+  <strong>English</strong> ·
+  <a href="docs/i18n/pt-BR/README.md">Português (Brasil)</a> ·
+  <a href="docs/i18n/es/README.md">Español</a> ·
+  <a href="docs/i18n/fr/README.md">Français</a> ·
+  <a href="docs/i18n/de/README.md">Deutsch</a> ·
+  <a href="docs/i18n/it/README.md">Italiano</a>
 </p>
 
 A small native YouTube desktop client built with **Rust, egui and libmpv**.

@@ -112,6 +112,10 @@ item renderers are logged (`items::…`) to make that visible.
   `crates/youtfast-core/src/util.rs`).
 - A bug caused by a YouTube format change also gets its `YT-n` entry and
   regression tests ([YouTube response formats](#youtube-response-formats)).
+- A change to a user-facing behaviour, option, requirement or install step
+  updates the English docs, and any change to `README.md`,
+  `docs/user-guide.md` or `docs/install.md` updates their translations
+  ([Translated documentation](#translated-documentation)).
 - Run the checks before finishing:
 
   ```sh
@@ -124,6 +128,33 @@ item renderers are logged (`items::…`) to make that visible.
   compiled. Windows/macOS candidates bundle libmpv but still need interactive
   QA and matching native-source review. Windows' Credential Manager caps a
   secret at 2560 bytes, which a YouTube session can exceed.
+
+## Translated documentation
+
+`README.md`, `docs/user-guide.md` and `docs/install.md` are written in
+English and translated by the agent, never by hand, into
+`docs/i18n/<language>/` for the interface's languages: `pt-BR`, `es`, `fr`,
+`de` and `it`. English is the source; the translations follow it.
+
+- Every edit to one of those English files is made, in the same change, to
+  its five translations: the same sections in the same order, the same
+  tables, commands, code blocks and version numbers. Translate the prose
+  only; never commands, code, file names, setting keys or product names.
+- The interface's own words (menu entries, buttons, settings) are written as
+  the app shows them in that language: take them from `assets/i18n/<language>.po`.
+  A label with no translation there shows in English, so the document keeps
+  it in English with a translated gloss in parentheses the first time.
+- Relative links point from `docs/i18n/<language>/` (`../../../CHANGELOG.md`,
+  `../../distribution.md`), links between translated documents stay in the
+  same language (`user-guide.md#…`) and anchors use the translated headings.
+- Each document carries the language switcher under its title; a new
+  translated document or language goes into it in every file, and into
+  `DOCS`/`LANGUAGES` in `packaging/test_docs_i18n.py`.
+- `python3 -m unittest discover -s packaging -p 'test_*.py'` fails when a
+  translation is missing, its sections differ from English, a link, anchor or
+  language-switcher entry is broken, or the README badges drift from
+  `Cargo.toml` / English. It cannot see a sentence left stale, so compare the
+  changed English text with each translation.
 
 ## Disk use
 

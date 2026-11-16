@@ -8,6 +8,10 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Added
+
+- The README, user guide and installation guide in Brazilian Portuguese, Spanish, French, German and Italian, linked from a language switcher at the top of each.
+
 ## [0.8.1] - 2026-11-15
 
 ### Fixed

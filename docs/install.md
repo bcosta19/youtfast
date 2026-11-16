@@ -3,6 +3,9 @@
 [Back to the overview](../README.md) · [User guide](user-guide.md) ·
 [Platform details](distribution.md) · [This guide on the website](https://youtfast.pages.dev/install)
 
+**English** · [Português (Brasil)](i18n/pt-BR/install.md) · [Español](i18n/es/install.md) ·
+[Français](i18n/fr/install.md) · [Deutsch](i18n/de/install.md) · [Italiano](i18n/it/install.md)
+
 YouTFast runs on 64-bit Intel/AMD Linux (x86_64), 64-bit Windows 10/11 and
 Macs with Apple Silicon on macOS 15 or newer. There is no phone version,
 no ARM Linux/Windows build and no Intel Mac build.
