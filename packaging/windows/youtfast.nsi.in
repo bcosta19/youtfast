@@ -5,6 +5,7 @@ SetCompressor /SOLID lzma
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !include "x64.nsh"
+!include "WinMessages.nsh"
 
 Name "YouTFast"
 OutFile "@OUT_FILE@"
@@ -29,6 +30,7 @@ VIAddVersionKey "LegalCopyright" "GPL-3.0-only"
 !define MUI_UNICON "@ICON_FILE@"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\youtfast.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "Launch YouTFast"
+!define MUI_FINISHPAGE_RUN_FUNCTION LaunchYouTFast
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "@LICENSE_FILE@"
@@ -50,6 +52,13 @@ Function .onInit
     ${EndIf}
     Abort
   ${EndIf}
+FunctionEnd
+
+; Through Explorer, which reloads PATH on the broadcast in SecDeps: this
+; installer keeps the PATH it started with, from before winget added yt-dlp
+; and Deno, and the app's playback cannot start yt-dlp without them.
+Function LaunchYouTFast
+  Exec '"$WINDIR\explorer.exe" "$INSTDIR\youtfast.exe"'
 FunctionEnd
 
 Section "YouTFast (required)" SecCore
@@ -103,6 +112,9 @@ Section "Install playback tools (yt-dlp & Deno)" SecDeps
         nsExec::ExecToLog 'winget install -e --id DenoLand.Deno --accept-source-agreements --accept-package-agreements --silent'
         Pop $0
       ${EndIf}
+      ; winget only writes PATH to the registry; programs started later
+      ; still inherit the old one until the shell is told to reload it.
+      SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=5000
     ${Else}
       DetailPrint "winget not found; install yt-dlp and Deno manually if needed."
     ${EndIf}

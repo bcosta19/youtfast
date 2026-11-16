@@ -227,6 +227,12 @@ pub enum Failure {
     Forbidden,
     RateLimited,
     Extraction,
+    /// yt-dlp could not be started: it is not installed, not on the `PATH`
+    /// YouTFast was started with, or not allowed to run.
+    YtdlMissing,
+    /// yt-dlp ran but handed back no streams, for a reason not classified
+    /// above. mpv then opens the watch page itself, which is no video.
+    YtdlFailed,
     Loading,
     Interrupted,
     AudioOutput,
@@ -237,10 +243,14 @@ pub enum Failure {
 }
 
 impl Failure {
-    /// Reads a line yt-dlp wrote through mpv's ytdl hook; `None` when it is
-    /// not an error.
+    /// Reads a line mpv's ytdl hook logged: yt-dlp's own errors, or the
+    /// hook's summary when yt-dlp handed back nothing (`youtube-dl failed:
+    /// …`). `None` when it is not an error.
     fn from_ytdl(line: &str) -> Option<Self> {
-        if !line.contains("ERROR:") {
+        if line.contains("youtube-dl failed: not found") {
+            return Some(Self::YtdlMissing);
+        }
+        if !line.contains("ERROR:") && !line.contains("youtube-dl failed:") {
             return None;
         }
         Some(if line.contains("not a bot") {
@@ -258,13 +268,26 @@ impl Failure {
         {
             Self::Extraction
         } else {
-            Self::Other
+            Self::YtdlFailed
         })
     }
 
+    /// The diagnosis after one more line from the ytdl hook. Its summary
+    /// follows yt-dlp's own error, and a generic failure never replaces the
+    /// specific one before it.
+    fn after_ytdl(previous: Option<Self>, line: &str) -> Option<Self> {
+        match (previous, Self::from_ytdl(line)) {
+            (Some(previous), Some(Self::YtdlFailed)) | (Some(previous), None) => Some(previous),
+            (_, next) => next,
+        }
+    }
+
     fn from_playback(code: c_int, loaded: bool, diagnostic: Option<Self>) -> Self {
-        if let Some(failure) = diagnostic.filter(|failure| *failure != Self::Other) {
-            return failure;
+        match diagnostic {
+            // A file that loaded did not come from a failed yt-dlp run.
+            Some(Self::YtdlFailed) if loaded => {}
+            Some(failure) => return failure,
+            None => {}
         }
         match code {
             ffi::MPV_ERROR_AO_INIT_FAILED => Self::AudioOutput,
@@ -888,11 +911,8 @@ impl Mpv {
                         )
                     };
                     log::warn!(target: "mpv", "mpv reported a playback diagnostic");
-                    if self.playback_events.active
-                        && prefix == "ytdl_hook"
-                        && let Some(failure) = Failure::from_ytdl(&text)
-                    {
-                        self.ytdl_failure = Some(failure);
+                    if self.playback_events.active && prefix == "ytdl_hook" {
+                        self.ytdl_failure = Failure::after_ytdl(self.ytdl_failure, &text);
                     }
                 }
                 ffi::MPV_EVENT_SHUTDOWN => break,
@@ -1168,11 +1188,7 @@ mod tests {
             Failure::Interrupted
         );
         assert_eq!(
-            Failure::from_playback(-20, false, Some(Failure::Other)),
-            Failure::Other
-        );
-        assert_eq!(
-            Failure::from_playback(-20, true, Some(Failure::Other)),
+            Failure::from_playback(-20, true, Some(Failure::YtdlFailed)),
             Failure::Interrupted
         );
         assert_eq!(
@@ -1190,6 +1206,50 @@ mod tests {
         ] {
             assert_eq!(Failure::from_playback(code, true, None), expected);
         }
+    }
+
+    /// The lines mpv's ytdl hook logs when yt-dlp hands back nothing; mpv
+    /// then opens the watch page itself and ends with an unknown format.
+    #[test]
+    fn a_failed_yt_dlp_run_is_not_reported_as_a_stream_format() {
+        let ended = |lines: &[&str]| {
+            let diagnostic = lines
+                .iter()
+                .fold(None, |previous, line| Failure::after_ytdl(previous, line));
+            Failure::from_playback(ffi::MPV_ERROR_UNKNOWN_FORMAT, false, diagnostic)
+        };
+        assert_eq!(
+            ended(&[
+                "Subprocess failed: init",
+                "",
+                "youtube-dl failed: not found or not enough permissions",
+            ]),
+            Failure::YtdlMissing
+        );
+        assert_eq!(
+            ended(&[
+                "ERROR: [youtube] abc: Requested format is not available",
+                "youtube-dl failed: unexpected error occurred",
+            ]),
+            Failure::YtdlFailed
+        );
+        // A crash prints no ERROR line, only the hook's summary.
+        assert_eq!(
+            ended(&[
+                "Traceback (most recent call last):",
+                "youtube-dl failed: unexpected error occurred",
+            ]),
+            Failure::YtdlFailed
+        );
+        // The summary keeps the cause yt-dlp named.
+        assert_eq!(
+            ended(&[
+                "ERROR: [youtube] abc: Sign in to confirm you\u{2019}re not a bot.",
+                "youtube-dl failed: unexpected error occurred",
+            ]),
+            Failure::BotCheck
+        );
+        assert_eq!(ended(&[]), Failure::UnknownFormat);
     }
 
     #[test]

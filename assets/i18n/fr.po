@@ -1169,6 +1169,9 @@ msgstr "Sans compte"
 msgid "Yesterday"
 msgstr "Hier"
 
+msgid "YouTFast could not start yt-dlp, which it needs to play videos. Install yt-dlp and Deno, then restart YouTFast (sign out and back in first if you just installed them)."
+msgstr "YouTFast n'a pas pu démarrer yt-dlp, dont il a besoin pour lire les vidéos. Installez yt-dlp et Deno, puis redémarrez YouTFast (si vous venez de les installer, déconnectez-vous puis reconnectez-vous d'abord)."
+
 msgid "YouTFast — demo"
 msgstr "YouTFast — démo"
 
@@ -1339,6 +1342,9 @@ msgstr "vidéos"
 
 msgid "yt-dlp could not extract the stream signature. Try updating yt-dlp and reopening the video."
 msgstr "yt-dlp n'a pas pu extraire la signature du flux. Mettez à jour yt-dlp et rouvrez la vidéo."
+
+msgid "yt-dlp could not get this video's streams. Update yt-dlp, make sure Deno is installed, and try reopening the video."
+msgstr "yt-dlp n'a pas pu obtenir les flux de cette vidéo. Mettez à jour yt-dlp, vérifiez que Deno est installé et essayez de rouvrir la vidéo."
 
 msgid "yt-dlp is not installed for Python, so the browser cannot be read."
 msgstr "yt-dlp n'est pas installé pour Python, le navigateur ne peut donc pas être lu."

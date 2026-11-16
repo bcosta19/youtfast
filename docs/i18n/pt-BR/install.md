@@ -355,6 +355,9 @@ não nestas pastas: saia da conta no app antes de removê-lo.
 | O que você vê | O que fazer |
 |---|---|
 | A janela abre, mas os vídeos nunca começam | Atualize o yt-dlp (veja o seu caminho acima). Confira se `yt-dlp --version` e `deno --version` funcionam em um novo terminal. |
+| `O YouTFast não conseguiu iniciar o yt-dlp…` | O yt-dlp não está instalado, ou o YouTFast foi aberto com um `PATH` de antes da instalação dele. Confira se `yt-dlp --version` e `deno --version` funcionam em um novo terminal e instale o que faltar (veja o seu caminho acima). No Windows, saia da sessão e entre de novo depois de instalá-los e abra o YouTFast pelo Menu Iniciar. |
+| `O yt-dlp não conseguiu obter as transmissões deste vídeo…` | Atualize o yt-dlp (veja o seu caminho acima) e confira se `deno --version` funciona em um novo terminal. Se persistir com um yt-dlp atual, relate o problema. |
+| `O mpv não conseguiu reconhecer o formato da transmissão.` (0.9.0 e anteriores) | Essas versões mostram isso quando o yt-dlp falta ou falha: siga as duas linhas acima. |
 | De vez em quando: `Não foi possível reproduzir este vídeo. O player não identificou a causa. Tente reabrir o vídeo.` | Confira a versão do pacote libmpv instalado. Antes da 0.42, o hook do yt-dlp dela pode abrir os streams cedo demais e receber HTTP 403. Atualize a libmpv para 0.42+ com Lua, ou use uma versão Flatpak que a contenha. Reabrir depois de alguns segundos é um contorno temporário, não uma correção. Se persistir na 0.42+, relate o problema; essa mensagem pode ter outras causas. |
 | `youtfast: command not found` depois do arquivo compactado nativo | Use a entrada do menu, ou saia da sessão e entre de novo para que `~/.local/bin` esteja no `PATH`. |
 | `error while loading shared libraries: libmpv.so.2` | Instale a libmpv da sua distribuição (etapa 1 do seu caminho), ou use o [Flatpak](#linux-flatpak). |
