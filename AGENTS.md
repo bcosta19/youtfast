@@ -201,20 +201,26 @@ large scratch files in `/tmp`.
 - Run `python3 -m unittest discover -s packaging -p 'test_*.py'` and
   `python3 packaging/release.py check` alongside the Rust checks. Validate
   workflows with actionlint when available. Version tags must match Cargo,
-  Cargo.lock, AppStream metadata and committed written release notes.
+  Cargo.lock, AppStream metadata and committed written release notes:
+  `python3 packaging/release.py prepare X.Y.Z --summary '…'` writes all of
+  them from `Unreleased`, and `release.py freeze` re-dates them.
+- CI also runs `cargo deny check advisories licenses` (`deny.toml`). Fix an
+  advisory with a lockfile update; ignore one only with its reason in
+  `deny.toml`, and allow a licence only if it is GPL-3.0-compatible.
 - CI builds Linux, macOS and Windows on hosted GitHub runners. Do not perform
   heavy local release builds when the maintainer asks to use those runners.
   The release workflow creates a draft only after reusable CI and all required
   artifact jobs pass. Final publication requires privacy/source/platform review.
   Native platform tests are not interactive QA.
-- `https://youtfast.pages.dev/` uses Cloudflare Pages Direct Upload (`.github/workflows/pages.yml`
-  only validates and never deploys). Never deploy before the GitHub release for
-  `Cargo.toml`'s version is published (not a draft); immediately after
-  publishing a release, keep `website/install.html` aligned with `docs/install.md`,
-  run `python3 -m unittest discover -s tools -p 'test_site.py'` and
-  `python3 tools/build_site.py`, and deploy `dist/site` per `website/README.md`
-  (`wrangler pages deploy dist/site --project-name youtfast --branch main`),
-  then verify the live pages serve the new version.
+- Publishing a release triggers `.github/workflows/publish.yml`, the only
+  workflow with deployment secrets (the `publish` environment): it pushes the
+  release's verified cask to `bcosta19/homebrew-tap`, submits its Winget
+  manifests and deploys `https://youtfast.pages.dev/` (Cloudflare Pages Direct
+  Upload) from the tag, then verifies the live pages serve the new version.
+  Never deploy before the GitHub release for `Cargo.toml`'s version is published
+  (not a draft): the workflow refuses to. `.github/workflows/pages.yml` only
+  validates. A manual run of Publish redeploys the site from its branch or
+  re-pushes one channel; do not hand-edit the tap.
 - Keep Actions pinned to reviewed SHAs and contributor permissions read-only.
   Never execute contributor code through `pull_request_target` with secrets.
 - Never commit raw API reports, cookies, logs or personal data. The

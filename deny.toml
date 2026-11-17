@@ -1,0 +1,43 @@
+# cargo-deny policy, checked in CI by `cargo deny check advisories licenses`.
+# It covers every target, so Windows- and macOS-only crates are included.
+
+[graph]
+all-features = true
+
+[advisories]
+# Every RustSec advisory (vulnerability, unmaintained, unsound, notice) fails
+# the check unless it is ignored below with the reason it does not apply.
+ignore = [
+    # zvariant, zbus_names and zvariant_derive were folded into zbus 6. The
+    # D-Bus users in the graph (accesskit/atspi, fastframe, mpris-server,
+    # notify-rust, secret-service) still require zbus 5. Remove these entries
+    # once they move to zbus 6.
+    { id = "RUSTSEC-2026-0370", reason = "required through zbus 5 by the D-Bus crates; no zbus 6 path yet" },
+    { id = "RUSTSEC-2026-0371", reason = "required through zbus 5 by the D-Bus crates; no zbus 6 path yet" },
+    { id = "RUSTSEC-2026-0372", reason = "required through zbus 5 by the D-Bus crates; no zbus 6 path yet" },
+]
+
+[licenses]
+# Licences compatible with distributing YouTFast under GPL-3.0-only.
+# A dual-licensed crate passes when one of its alternatives is listed
+# (self_cell's GPL-2.0-only and r-efi's LGPL-2.1-or-later are such alternatives).
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "GPL-3.0-only",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.9

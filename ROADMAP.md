@@ -25,8 +25,8 @@ preserved. Before publishing 0.9.0 or promoting a release to latest:
 | Arch AUR `youtfast` | Deferred while AUR new-account registrations remain closed (`HTTP 503`); Arch users install `.pkg.tar.zst` directly via `pacman -U` or `install.sh` | Re-evaluate if AUR registration opens |
 | Flathub | Not pursued directly; Linux users install the standalone `.flatpak` bundle directly or via `install.sh` | Optional future decision |
 | Signed pacman / Flatpak repository | Signing-key ownership, repository hosting and update policy | Verified repository install/update |
-| Windows | Publisher signing (Authenticode) and `microsoft/winget-pkgs` PR submission from the generated multi-file manifests (`channels.tar.gz`) | Clean-machine install/update/uninstall, Winget validation, and signature verification |
-| macOS | Developer ID, hardened runtime/notarization, DMG installer, per-release `bcosta19/homebrew-tap` cask sync (`channels.tar.gz`), and Intel/universal support | Clean-machine Gatekeeper/playback tests and `brew install --cask bcosta19/tap/youtfast` verification |
+| Windows | Publisher signing (Authenticode) and acceptance of the `microsoft/winget-pkgs` pull request that the Publish workflow opens from each release's manifests (needs the `WINGET_TOKEN` secret) | Clean-machine install/update/uninstall, Winget validation, and signature verification |
+| macOS | Developer ID, hardened runtime/notarization, DMG installer and Intel/universal support. The Publish workflow syncs the `bcosta19/homebrew-tap` cask per release (needs the `HOMEBREW_TAP_TOKEN` secret) | Clean-machine Gatekeeper/playback tests and `brew install --cask bcosta19/tap/youtfast` verification |
 | Linux ARM64 | Native and Flatpak builds plus GPU validation | Published architecture-specific packages and tested playback |
 
 ## Product follow-ups

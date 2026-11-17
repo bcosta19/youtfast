@@ -29,11 +29,14 @@
 
 *Ceci est une traduction du [document original en anglais](../../../README.md) ; en cas de divergence, la version anglaise fait foi.*
 
-Un petit client YouTube natif pour ordinateur, conçu avec **Rust, egui et libmpv**.
-Recherchez, regardez et gérez votre bibliothèque dans une interface de bureau,
-avec le décodage vidéo matériel lorsqu'il est pris en charge. Pas de moteur de
+Regardez, recherchez et gérez votre bibliothèque YouTube dans une application de
+bureau native plutôt que dans un onglet du navigateur. Elle utilise une fraction
+de la mémoire et du processeur du site dans une fenêtre Electron
+([mesuré plus bas](#plus-léger-quun-site-web-dans-une-fenêtre)), avec le
+décodage vidéo matériel lorsqu'il est pris en charge. Pas de moteur de
 navigateur, pas de télémétrie, pas de serveur exploité par YouTFast. Vous
-démarrez sans être connecté ; les comptes sont facultatifs.
+démarrez sans être connecté ; les comptes sont facultatifs. Conçue avec
+**Rust, egui et libmpv**.
 
 <img src="../../../assets/screenshots/watch.webp" alt="YouTFast lisant Sprite Fright du Blender Studio, en pause, avec les chapitres sur la barre de progression et À suivre à côté">
 
@@ -49,6 +52,29 @@ démarrez sans être connecté ; les comptes sont facultatifs.
 [Spring](https://studio.blender.org/films/spring/) et
 [Sprite Fright](https://studio.blender.org/films/sprite-fright/) du Blender
 Studio ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).*
+
+## Installation rapide
+
+Linux (x86_64) : le paquet Flatpak, ou le paquet pacman sur les systèmes basés sur Arch :
+
+```sh
+curl -fsSL https://youtfast.pages.dev/install.sh | sh
+```
+
+Windows 10/11, dans PowerShell :
+
+```powershell
+irm https://youtfast.pages.dev/install.ps1 | iex
+```
+
+macOS 15+ sur Apple Silicon, avec Homebrew :
+
+```sh
+brew install --cask bcosta19/tap/youtfast
+```
+
+Chaque commande vérifie le SHA-256 du téléchargement. L'installateur `.exe`, les
+archives ZIP et les autres méthodes se trouvent sous [Installation](#installation).
 
 > [!NOTE]
 > **YouTFast est jeune et a encore besoin de travail.** Il n'a qu'un seul

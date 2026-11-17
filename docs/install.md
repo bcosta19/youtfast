@@ -296,8 +296,8 @@ brew install --cask bcosta19/tap/youtfast
 
 The cask installs `YouTFast.app`, links the `youtfast` command, installs
 `yt-dlp` and `deno` automatically, and clears `com.apple.quarantine` on the
-ad-hoc signed app bundle. (Note: update the tap cask alongside new YouTFast
-releases, or use in-app **Settings → About**.)
+ad-hoc signed app bundle. The tap follows every published release: update
+with `brew upgrade --cask youtfast`, or in-app **Settings → About**.
 
 ### Option B: Manual ZIP
 
