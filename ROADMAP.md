@@ -6,8 +6,8 @@ describe exactly what each version includes and excludes.
 
 ## Open release gates
 
-0.1.0 (pre-release) through 0.8.1 are published; the 0.6.1 tag/draft is
-preserved. Before publishing 0.9.0 or promoting a release to latest:
+Published versions are the [GitHub releases](https://github.com/bcosta19/youtfast/releases);
+the 0.6.1 tag/draft is preserved. Before publishing a version or promoting one to latest:
 
 - Validate the exact candidate with the hosted Release dry run, inspect every
   package and its checksums, and review the matching Windows and macOS native
