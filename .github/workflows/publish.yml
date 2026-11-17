@@ -2,7 +2,7 @@ name: Publish
 
 # Runs after the maintainer publishes a reviewed draft. It pushes the release's
 # own channel manifests (rendered and checksummed by the Release workflow) to
-# the Homebrew tap and to Winget, and deploys the website. Nothing is rebuilt:
+# the Homebrew tap and deploys the website. Nothing is rebuilt:
 # every channel points at the published assets.
 
 on:
@@ -19,7 +19,7 @@ on:
         required: true
         default: all
         type: choice
-        options: [all, homebrew, winget, website]
+        options: [all, homebrew, website]
 
 permissions:
   contents: read
@@ -99,34 +99,6 @@ jobs:
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit -am "youtfast $new"
           git push origin HEAD
-
-  winget:
-    needs: channels
-    if: github.event_name == 'release' || inputs.target == 'all' || inputs.target == 'winget'
-    runs-on: windows-2022
-    timeout-minutes: 15
-    environment: publish
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        with:
-          name: channels
-          path: channels
-      # wingetcreate forks microsoft/winget-pkgs under the token's account and
-      # opens the pull request there; Microsoft's review accepts or rejects it.
-      - name: Submit the manifests to microsoft/winget-pkgs
-        shell: pwsh
-        env:
-          WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
-          WINGETCREATE_URL: https://github.com/microsoft/winget-create/releases/download/v1.28.1.0/wingetcreate.exe
-          WINGETCREATE_SHA256: 63d980ba79e97042395bd6eb5992c2db9e01e9e7a8a22958a95c288f27310413
-        run: |
-          if (-not $env:WINGET_CREATE_GITHUB_TOKEN) { throw 'Set the WINGET_TOKEN secret of the publish environment (RELEASING.md)' }
-          $exe = Join-Path $env:RUNNER_TEMP 'wingetcreate.exe'
-          Invoke-WebRequest -Uri $env:WINGETCREATE_URL -OutFile $exe
-          if ((Get-FileHash $exe -Algorithm SHA256).Hash -ne $env:WINGETCREATE_SHA256) { throw 'wingetcreate.exe digest mismatch' }
-          $version = $env:RELEASE_TAG.Substring(1)
-          & $exe submit --no-open --prtitle "New version: bcosta19.YouTFast version $version" channels/winget
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   website:
     if: >-

@@ -109,10 +109,14 @@ draft, verifies `channels.tar.gz` against the release's `checksums.txt`, and the
 
 - commits `Casks/youtfast.rb` to `bcosta19/homebrew-tap` (never to an older
   version than the tap already offers);
-- submits the Winget manifests to `microsoft/winget-pkgs` with `wingetcreate`
-  (pinned by digest). Microsoft's review accepts or rejects the pull request;
 - deploys the website from the tag and waits until `/install` and
   `/pt/install` link to the new version.
+
+Winget catalog submission is not pursued: the maintainer has not accepted
+Microsoft's Contributor License Agreement. Release archives still contain
+Winget manifests for local use; generating them does not submit a pull request
+or accept an agreement. Windows users can install the setup `.exe` or portable
+ZIP directly from GitHub releases.
 
 A failed job does not affect the release; fix the cause and run **Publish**
 manually with the tag and the failed channel. A manual `website` run deploys
@@ -127,7 +131,6 @@ branches and tags to `main` and `v*`, and add these environment secrets:
 | Secret | Scope |
 |---|---|
 | `HOMEBREW_TAP_TOKEN` | Fine-grained token for `bcosta19/homebrew-tap` only, Contents read/write |
-| `WINGET_TOKEN` | Classic token with `public_repo`, used by `wingetcreate` to fork `winget-pkgs` and open the pull request |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API token with Pages edit permission for the account |
 | `CLOUDFLARE_ACCOUNT_ID` | The Cloudflare account that owns the `youtfast` Pages project |
 
