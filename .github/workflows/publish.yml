@@ -1,0 +1,173 @@
+name: Publish
+
+# Runs after the maintainer publishes a reviewed draft. It pushes the release's
+# own channel manifests (rendered and checksummed by the Release workflow) to
+# the Homebrew tap and to Winget, and deploys the website. Nothing is rebuilt:
+# every channel points at the published assets.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release whose manifests to push (vX.Y.Z)
+        required: true
+        type: string
+      target:
+        description: Channel to publish; the website deploys the selected branch
+        required: true
+        default: all
+        type: choice
+        options: [all, homebrew, winget, website]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+
+jobs:
+  # Pre-releases never reach the package channels or the website.
+  channels:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.target != 'website') ||
+      (github.event_name == 'release' && !github.event.release.prerelease)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.tag || github.event.release.tag_name }}
+          persist-credentials: false
+      - name: Require a published release and verify its channel manifests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 packaging/release.py check --tag "$RELEASE_TAG"
+          state=$(gh release view "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --json isDraft,isPrerelease --jq '"\(.isDraft) \(.isPrerelease)"')
+          test "$state" = "false false"
+          release="$RUNNER_TEMP/release"
+          gh release download "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" -D "$release" -p checksums.txt -p "youtfast-$RELEASE_TAG-channels.tar.gz"
+          (cd "$release" && grep -F "  youtfast-$RELEASE_TAG-channels.tar.gz" checksums.txt | sha256sum --check --strict)
+          tar -xzf "$release/youtfast-$RELEASE_TAG-channels.tar.gz" -C "$release"
+          grep -qx "  version \"${RELEASE_TAG#v}\"" "$release/channels/homebrew/Casks/youtfast.rb"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: channels
+          path: ${{ runner.temp }}/release/channels
+          if-no-files-found: error
+          retention-days: 7
+
+  homebrew:
+    needs: channels
+    if: github.event_name == 'release' || inputs.target == 'all' || inputs.target == 'homebrew'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: publish
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: channels
+          path: channels
+      - name: Commit the cask to bcosta19/homebrew-tap
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN" || { echo "::error::Set the HOMEBREW_TAP_TOKEN secret of the publish environment (RELEASING.md)"; exit 1; }
+          ruby -c channels/homebrew/Casks/youtfast.rb
+          gh auth setup-git
+          tap="$RUNNER_TEMP/homebrew-tap"
+          git clone --depth 1 https://github.com/bcosta19/homebrew-tap.git "$tap"
+          new="${RELEASE_TAG#v}"
+          old=$(sed -n 's/^  version "\(.*\)"$/\1/p' "$tap/Casks/youtfast.rb")
+          # Never move the tap backwards when an older tag is re-published.
+          if [ "$(printf '%s\n%s\n' "$old" "$new" | sort -V | tail -n1)" != "$new" ]; then
+            echo "::notice::The tap already offers $old, newer than $new"
+            exit 0
+          fi
+          cp channels/homebrew/Casks/youtfast.rb "$tap/Casks/youtfast.rb"
+          cd "$tap"
+          if git diff --quiet; then
+            echo "::notice::The tap already offers $new"
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -am "youtfast $new"
+          git push origin HEAD
+
+  winget:
+    needs: channels
+    if: github.event_name == 'release' || inputs.target == 'all' || inputs.target == 'winget'
+    runs-on: windows-2022
+    timeout-minutes: 15
+    environment: publish
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: channels
+          path: channels
+      # wingetcreate forks microsoft/winget-pkgs under the token's account and
+      # opens the pull request there; Microsoft's review accepts or rejects it.
+      - name: Submit the manifests to microsoft/winget-pkgs
+        shell: pwsh
+        env:
+          WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          WINGETCREATE_URL: https://github.com/microsoft/winget-create/releases/download/v1.28.1.0/wingetcreate.exe
+          WINGETCREATE_SHA256: 63d980ba79e97042395bd6eb5992c2db9e01e9e7a8a22958a95c288f27310413
+        run: |
+          if (-not $env:WINGET_CREATE_GITHUB_TOKEN) { throw 'Set the WINGET_TOKEN secret of the publish environment (RELEASING.md)' }
+          $exe = Join-Path $env:RUNNER_TEMP 'wingetcreate.exe'
+          Invoke-WebRequest -Uri $env:WINGETCREATE_URL -OutFile $exe
+          if ((Get-FileHash $exe -Algorithm SHA256).Hash -ne $env:WINGETCREATE_SHA256) { throw 'wingetcreate.exe digest mismatch' }
+          $version = $env:RELEASE_TAG.Substring(1)
+          & $exe submit --no-open --prtitle "New version: bcosta19.YouTFast version $version" channels/winget
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  website:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && (inputs.target == 'all' || inputs.target == 'website')) ||
+      (github.event_name == 'release' && !github.event.release.prerelease)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: publish
+    steps:
+      # A release deploys its tag; a manual run deploys the branch it runs on.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+          persist-credentials: false
+      - name: Require the site's version to be a published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(python3 packaging/release.py check)
+          test "$(gh release view "v$version" -R "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = false
+          echo "SITE_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Validate and build the site
+        run: |
+          python3 -m unittest discover -s tools -p 'test_site.py'
+          python3 tools/build_site.py
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" && test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in the publish environment (RELEASING.md)"; exit 1; }
+          npm exec --yes --package=wrangler@4.152.0 -- wrangler pages deploy dist/site --project-name youtfast --branch main
+      - name: Verify the live pages serve this version
+        run: |
+          for page in install pt/install; do
+            for attempt in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -fsSL "https://youtfast.pages.dev/$page" | grep -qF "releases/download/v$SITE_VERSION/"; then
+                continue 2
+              fi
+              sleep 15
+            done
+            echo "::error::https://youtfast.pages.dev/$page does not serve $SITE_VERSION"
+            exit 1
+          done

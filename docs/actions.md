@@ -32,6 +32,14 @@ assembly and the final draft-creation job.
 Final publication is a separate maintainer action on the reviewed draft. A
 successful CI or draft is not a published release.
 
+The Publish workflow runs when the maintainer publishes a release (not a
+pre-release) and on manual runs. It pushes the release's own channel manifests
+to the Homebrew tap and Winget and deploys the website; it rebuilds nothing.
+Its secrets live in the `publish` environment, whose deployment refs are
+limited to `main` and `v*` tags, so no pull request or contributor branch can
+reach them. Third-party tools it downloads (`wingetcreate`, like `cargo-deny`
+in CI) are pinned by version and SHA-256 rather than added as Actions.
+
 Superseded PR runs are cancelled. Release runs are not cancelled midway, and
 intermediate artifacts expire after seven days. Release assets are the durable
 downloads. Keep caches bounded; do not increase paid storage limits without
@@ -45,7 +53,9 @@ inferring them from files in Git.
 - Allowed Actions: GitHub-owned, `msys2/setup-msys2` and `Swatinem/rust-cache`,
   with SHA pinning required. Adding an Action means updating that list.
 - Keep the default token read-only. Only draft creation gets `contents: write`.
-  Website validation stays read-only and receives no deployment credentials.
+  Website validation stays read-only and receives no deployment credentials;
+  the tap, Winget and Cloudflare credentials are `publish` environment
+  secrets used only by the Publish workflow.
 - Require approval for workflows from outside contributors as appropriate;
   never run their code through `pull_request_target` with secrets.
 - Use GitHub-hosted ephemeral runners for untrusted contributions.
@@ -67,7 +77,9 @@ or Cloudflare. Its only Action is GitHub-owned and SHA-pinned.
 
 Production is https://youtfast.pages.dev/, with Portuguese at `/pt/`.
 Cloudflare Pages uses Direct Upload of the explicit `dist/site` allowlist.
-Publishing requires an authenticated maintainer running the documented command;
-merging a PR does not automatically deploy. No Cloudflare credentials are
-stored in the repository or passed to contributor jobs. See
+Publication is the Publish workflow's `website` job: on a published release it
+deploys the tag, and a manual run deploys its branch once that branch's
+`Cargo.toml` version is a published release. Merging a PR does not deploy.
+The Cloudflare credentials are `publish` environment secrets, never stored in
+the repository or passed to contributor jobs. See
 [website maintenance](../website/README.md).

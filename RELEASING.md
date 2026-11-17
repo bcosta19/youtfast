@@ -1,16 +1,11 @@
 # Releasing YouTFast
 
-## Current state and release policy
+## Release policy
 
-0.1.0 was published on 2026-10-17 as a pre-release, and 0.2.0 was published on
-2026-10-22. Their remaining gates, and those of later releases, are tracked in
-[ROADMAP.md](ROADMAP.md).
-
-0.3.0 was published on 2026-10-24, 0.4.0 and 0.5.0 on 2026-10-30, 0.5.1 on
-2026-11-05, 0.5.2 and 0.6.0 on 2026-11-09, 0.6.2 on 2026-11-11, 0.7.0 on
-2026-11-12, 0.8.0 on 2026-11-13, and 0.8.1 on 2026-11-15. The existing 0.6.1
-tag and draft are preserved; 0.9.0 is the next candidate. Publication still
-requires the candidate and tag-build gates below.
+Published versions and their dates are the
+[GitHub releases](https://github.com/bcosta19/youtfast/releases) and
+[CHANGELOG.md](CHANGELOG.md); remaining gates are tracked in
+[ROADMAP.md](ROADMAP.md). The existing 0.6.1 tag and draft are preserved.
 
 Use stable SemVer tags `vMAJOR.MINOR.PATCH`. During 0.x, use patches for
 compatible fixes and minor versions for features or incompatible changes;
@@ -30,13 +25,22 @@ a patch release instead of replacing downloads.
 
 1. Never commit raw API reports, logs, cookies or personal data; the public
    history was cleaned once and must stay clean.
-2. Prepare a reviewed candidate branch; the final tag must be reachable from `main`. Align `Cargo.toml`,
-   the YouTFast entry in `Cargo.lock`, AppStream version/date, changelog
-   version/date and `packaging/release-notes/vX.Y.Z.md`. A manual dry run may keep
-   the pending changelog date; before tagging, freeze its ISO publication date and align
-   AppStream. The current metadata date is provisional until freeze. Notes need
-   **Included**,
-   **Not included** and **Known limitations**. The first release links to its
+2. Prepare a reviewed candidate branch; the final tag must be reachable from `main`.
+   One command moves `Unreleased` into the new version and aligns every versioned file:
+
+   ```sh
+   python3 packaging/release.py prepare X.Y.Z --summary 'One sentence on what changed.'
+   ```
+
+   It sets `Cargo.toml` and the workspace's `Cargo.lock` entries, adds the
+   AppStream release (the summary is its description), dates the changelog
+   section, updates its comparison links and drafts
+   `packaging/release-notes/vX.Y.Z.md`: **Included** from the changelog entries,
+   and **Packages**, **Not included** and **Known limitations** carried over
+   from the previous notes. Edit the notes until they are true for this
+   version. The date defaults to today; if the tag is pushed on another day,
+   `python3 packaging/release.py freeze --date YYYY-MM-DD` moves the
+   changelog and AppStream dates together. The first release links to its
    tag; later versions link to their previous-tag comparisons.
 3. Run CONTRIBUTING.md's packaging/Rust/documentation checks and actionlint
    when available. Do not use real accounts to debug releases. Preserve
@@ -84,17 +88,50 @@ Once approved, publish the reviewed draft in GitHub's release UI, or explicitly:
 gh release edit v0.9.0 --draft=false --latest
 ```
 
-Verify notes, release date and downloads as an anonymous reader after
-publication. `gh release download v0.9.0` retrieves a draft's assets for
-review. Run `sha256sum --check checksums.txt` in the download directory.
-Checksums detect corruption; they are not publisher signatures. Never claim
-code signing/notarization or interactive coverage that has not been performed.
+The draft's notes are the committed notes followed by install commands and the
+contents of `checksums.txt` (`release.py notes`). Verify notes, release date and
+downloads as an anonymous reader after publication. `gh release download v0.9.0`
+retrieves a draft's assets for review. Run `sha256sum --check checksums.txt` in
+the download directory. Checksums detect corruption; they are not publisher
+signatures. Never claim code signing/notarization or interactive coverage that
+has not been performed.
 
 If any required job fails, no draft should be created. Re-run failed jobs for
 transient failures. If code changes are needed before the first tag, validate a
 new commit. After a tag is distributed, fix code through a new version. If a
 draft already exists, inspect/reconcile it manually; do not delete or overwrite
 released assets as a retry strategy.
+
+## After publication
+
+Publishing (not a pre-release) starts the **Publish** workflow. It refuses a
+draft, verifies `channels.tar.gz` against the release's `checksums.txt`, and then:
+
+- commits `Casks/youtfast.rb` to `bcosta19/homebrew-tap` (never to an older
+  version than the tap already offers);
+- submits the Winget manifests to `microsoft/winget-pkgs` with `wingetcreate`
+  (pinned by digest). Microsoft's review accepts or rejects the pull request;
+- deploys the website from the tag and waits until `/install` and
+  `/pt/install` link to the new version.
+
+A failed job does not affect the release; fix the cause and run **Publish**
+manually with the tag and the failed channel. A manual `website` run deploys
+the branch it is started from, after checking that its `Cargo.toml` version is
+a published release.
+
+### One-time setup
+
+Create a `publish` environment (Settings → Environments), limit its deployment
+branches and tags to `main` and `v*`, and add these environment secrets:
+
+| Secret | Scope |
+|---|---|
+| `HOMEBREW_TAP_TOKEN` | Fine-grained token for `bcosta19/homebrew-tap` only, Contents read/write |
+| `WINGET_TOKEN` | Classic token with `public_repo`, used by `wingetcreate` to fork `winget-pkgs` and open the pull request |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API token with Pages edit permission for the account |
+| `CLOUDFLARE_ACCOUNT_ID` | The Cloudflare account that owns the `youtfast` Pages project |
+
+A missing secret fails only its job, with a message naming it.
 
 ## Expected asset inventory
 

@@ -72,8 +72,10 @@ cargo test --locked --all-targets --all-features
 RUSTDOCFLAGS='-D warnings' cargo doc --locked --no-deps --all-features
 ```
 
-CI runs automatically on pull requests and pushes to `main`; Release runs on
-`v*` tags and manual dry runs. See [Actions policy](docs/actions.md).
+CI runs automatically on pull requests and pushes to `main`, including
+`cargo deny check advisories licenses` against `deny.toml`; Release runs on
+`v*` tags and manual dry runs, and Publish when the maintainer publishes a
+release. See [Actions policy](docs/actions.md).
 0.x releases target Linux x86_64, Windows x86_64 and macOS Apple Silicon; hosted
 packaging/headless tests do not certify interactive playback, optional accounts
 or clean-machine installation. Complete [platform QA](docs/distribution.md).

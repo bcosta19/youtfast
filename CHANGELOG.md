@@ -8,10 +8,18 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Changed
+
+- The Homebrew tap (`brew install --cask bcosta19/tap/youtfast`), the Winget manifests and the website now follow each release as soon as it is published, instead of being updated by hand; release notes on GitHub list the install commands and every asset's SHA-256.
+
 ### Fixed
 
 - Playback now says when yt-dlp could not be started or could not get a video's streams, instead of "mpv could not recognize the stream format.", which mpv reported after opening the watch page itself.
 - On Windows, the setup installer launches YouTFast with the `PATH` that includes the yt-dlp and Deno it just installed through winget, and tells the desktop to reload `PATH` for programs started afterwards.
+
+### Security
+
+- Updated `rustls-webpki` to 0.103.17, which rejects certificate paths through the distrusted emSign intermediates (RUSTSEC-2026-0382), and `ctutils` to 0.4.8 (RUSTSEC-2026-0385). CI now fails on known advisories and on licences incompatible with GPL-3.0-only (`cargo deny`).
 
 ## [0.9.0] - 2026-11-16
 

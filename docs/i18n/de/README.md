@@ -29,11 +29,13 @@
 
 *Dies ist eine Übersetzung des [englischen Originals](../../../README.md). Bei Abweichungen gilt die englische Fassung.*
 
-Ein kleiner nativer YouTube-Desktop-Client, entwickelt mit **Rust, egui und libmpv**.
-Suchen, ansehen und die eigene Mediathek pflegen – in einer Desktop-Oberfläche, mit
+Sehen, suchen und die eigene YouTube-Mediathek pflegen – in einer nativen
+Desktop-App statt in einem Browser-Tab. Sie braucht einen Bruchteil des
+Speichers und der CPU der Website in einem Electron-Fenster
+([unten gemessen](#leichter-als-eine-website-im-fenster)), mit
 Hardware-Videodekodierung, wo sie unterstützt wird. Keine Browser-Engine, keine
 Telemetrie und kein von YouTFast betriebenes Backend. Sie starten abgemeldet;
-Konten sind optional.
+Konten sind optional. Entwickelt mit **Rust, egui und libmpv**.
 
 <img src="../../../assets/screenshots/watch.webp" alt="YouTFast spielt Sprite Fright vom Blender Studio, pausiert, mit Kapiteln in der Zeitleiste und „Nächstes Video“ daneben">
 
@@ -49,6 +51,29 @@ Konten sind optional.
 [Spring](https://studio.blender.org/films/spring/) und
 [Sprite Fright](https://studio.blender.org/films/sprite-fright/) vom Blender
 Studio ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).*
+
+## Schnellinstallation
+
+Linux (x86_64): das Flatpak-Bundle oder auf Arch-basierten Systemen das pacman-Paket:
+
+```sh
+curl -fsSL https://youtfast.pages.dev/install.sh | sh
+```
+
+Windows 10/11, in der PowerShell:
+
+```powershell
+irm https://youtfast.pages.dev/install.ps1 | iex
+```
+
+macOS 15+ mit Apple Silicon, über Homebrew:
+
+```sh
+brew install --cask bcosta19/tap/youtfast
+```
+
+Jeder Befehl prüft die SHA-256-Prüfsumme des Downloads. Das Setup-`.exe`, die
+ZIP-Archive und alle anderen Wege stehen unter [Installation](#installation).
 
 > [!NOTE]
 > **YouTFast ist jung und braucht noch Arbeit.** Es hat einen einzigen Maintainer

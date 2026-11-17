@@ -27,10 +27,12 @@
   <a href="docs/i18n/it/README.md">Italiano</a>
 </p>
 
-A small native YouTube desktop client built with **Rust, egui and libmpv**.
-Search, watch and keep your library in a desktop interface, with hardware video
-decoding where supported. No browser engine, telemetry or YouTFast-operated
-backend. Start signed out; accounts are optional.
+Watch, search and keep your YouTube library in a native desktop app instead of
+a browser tab. It uses a fraction of the memory and CPU of the website in an
+Electron window ([measured below](#lighter-than-a-website-in-a-window)), with
+hardware video decoding where supported. No browser engine, telemetry or
+YouTFast-operated backend. Start signed out; accounts are optional. Built with
+**Rust, egui and libmpv**.
 
 <img src="assets/screenshots/watch.webp" alt="YouTFast playing Sprite Fright by Blender Studio, paused with chapters on the seek bar and Up next beside it">
 
@@ -46,6 +48,29 @@ backend. Start signed out; accounts are optional.
 [Spring](https://studio.blender.org/films/spring/) and
 [Sprite Fright](https://studio.blender.org/films/sprite-fright/) by Blender
 Studio ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).*
+
+## Quick install
+
+Linux (x86_64): the Flatpak bundle, or the pacman package on Arch-based systems:
+
+```sh
+curl -fsSL https://youtfast.pages.dev/install.sh | sh
+```
+
+Windows 10/11, in PowerShell:
+
+```powershell
+irm https://youtfast.pages.dev/install.ps1 | iex
+```
+
+macOS 15+ on Apple Silicon, with Homebrew:
+
+```sh
+brew install --cask bcosta19/tap/youtfast
+```
+
+Each one checks the download's SHA-256. The setup `.exe`, ZIP archives and
+every other route are under [Installation](#installation).
 
 > [!NOTE]
 > **YouTFast is young and still needs work.** It has a single maintainer and

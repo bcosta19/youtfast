@@ -2,8 +2,10 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tomllib
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -103,6 +105,109 @@ class ReleaseTests(unittest.TestCase):
                     self.assertEqual(len(source["sha256"]), 64)
                 if source["type"] == "git":
                     self.assertEqual(len(source["commit"]), 40)
+
+
+CHANGELOG = """# Changelog
+
+## [Unreleased]
+
+### Fixed
+
+- Fixed playback.
+
+## [0.1.0] - 2026-10-17
+
+### Added
+
+- First.
+
+[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/bcosta19/youtfast/releases/tag/v0.1.0
+"""
+
+NOTES = """# YouTFast 0.1.0
+
+First.
+
+## Included
+
+- First.
+
+## Not included
+
+- Signing.
+
+## Known limitations
+
+- Young.
+
+[Changes since 0.0.9](https://github.com/bcosta19/youtfast/compare/v0.0.9...v0.1.0)
+"""
+
+
+class PrepareTests(unittest.TestCase):
+    def fixture(self):
+        root = release.ROOT / "target" / f"test-release-prepare-{os.getpid()}-{self._testMethodName}"
+        shutil.rmtree(root, ignore_errors=True)
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "packaging/flatpak").mkdir(parents=True)
+        (root / "packaging/release-notes").mkdir(parents=True)
+        (root / "Cargo.toml").write_text('[workspace.package]\nversion = "0.1.0"\n\n[workspace.dependencies]\nfoo = { version = "0.1.0" }\n')
+        (root / "Cargo.lock").write_text(
+            'version = 4\n\n[[package]]\nname = "other"\nversion = "0.1.0"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n\n'
+            '[[package]]\nname = "youtfast"\nversion = "0.1.0"\n\n[[package]]\nname = "youtfast-core"\nversion = "0.1.0"\n')
+        (root / "CHANGELOG.md").write_text(CHANGELOG)
+        (root / f"packaging/flatpak/{release.APP_ID}.metainfo.xml").write_text(
+            '<component>\n  <releases>\n    <release version="0.1.0" date="2026-10-17"/>\n  </releases>\n</component>\n')
+        (root / "packaging/release-notes/v0.1.0.md").write_text(NOTES)
+        return root
+
+    def test_prepare_bumps_every_versioned_file_and_drafts_notes_from_the_changelog(self):
+        root = self.fixture()
+        release.prepare("0.2.0", "Fixes playback.", "2026-11-01", root=root)
+        self.assertIn('version = "0.2.0"', (root / "Cargo.toml").read_text())
+        self.assertIn('foo = { version = "0.1.0" }', (root / "Cargo.toml").read_text())
+        lock = tomllib.loads((root / "Cargo.lock").read_text())
+        self.assertEqual({item["name"]: item["version"] for item in lock["package"]},
+                         {"other": "0.1.0", "youtfast": "0.2.0", "youtfast-core": "0.2.0"})
+        metadata = ET.parse(root / f"packaging/flatpak/{release.APP_ID}.metainfo.xml").getroot()
+        self.assertEqual(metadata.find("releases/release").attrib, {"version": "0.2.0", "date": "2026-11-01"})
+        changelog = (root / "CHANGELOG.md").read_text()
+        release.validate_changelog(changelog, "0.2.0", "2026-11-01", require_date=True)
+        self.assertIn("## [Unreleased]\n\n## [0.2.0] - 2026-11-01\n\n### Fixed\n\n- Fixed playback.\n\n## [0.1.0]", changelog)
+        self.assertIn("[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.2.0...HEAD\n"
+                      "[0.2.0]: https://github.com/bcosta19/youtfast/compare/v0.1.0...v0.2.0\n", changelog)
+        notes = (root / "packaging/release-notes/v0.2.0.md").read_text()
+        self.assertIn("## Included\n\n- Fixed playback.\n\n## Not included\n\n- Signing.", notes)
+        self.assertIn("compare/v0.1.0...v0.2.0", notes)
+        self.assertNotIn("v0.0.9", notes)
+
+    def test_prepare_refuses_without_writing_anything(self):
+        root = self.fixture()
+        (root / "CHANGELOG.md").write_text(CHANGELOG.replace("### Fixed\n\n- Fixed playback.\n\n", ""))
+        before = {path: path.read_bytes() for path in root.rglob("*") if path.is_file()}
+        for new in ["0.2.0", "0.1.0", "0.0.9", "v0.2.0"]:
+            with self.assertRaises(ValueError):
+                release.prepare(new, "Summary.", "2026-11-01", root=root)
+        self.assertEqual({path: path.read_bytes() for path in root.rglob("*") if path.is_file()}, before)
+
+    def test_freeze_moves_the_changelog_and_appstream_dates_together(self):
+        root = self.fixture()
+        release.freeze("2026-11-02", root=root)
+        metadata = ET.parse(root / f"packaging/flatpak/{release.APP_ID}.metainfo.xml").getroot()
+        release.validate_changelog((root / "CHANGELOG.md").read_text(), "0.1.0",
+                                   metadata.find("releases/release").get("date"), require_date=True)
+
+    def test_publication_notes_add_install_steps_and_digests_before_the_links(self):
+        root = self.fixture()
+        (root / "checksums.txt").write_text(f"{'a' * 64}  youtfast-v0.1.0-x86_64.flatpak\n")
+        notes = release.publication_notes(root / "checksums.txt", root=root)
+        self.assertIn("## Install\n", notes)
+        self.assertIn(f"{'a' * 64}  youtfast-v0.1.0-x86_64.flatpak", notes)
+        self.assertLess(notes.index("## SHA-256 checksums"), notes.index("[Changes since 0.0.9]"))
+        (root / "checksums.txt").write_text("\n")
+        with self.assertRaises(ValueError):
+            release.publication_notes(root / "checksums.txt", root=root)
 
 
 if __name__ == "__main__":

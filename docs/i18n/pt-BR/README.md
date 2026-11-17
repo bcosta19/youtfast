@@ -29,11 +29,12 @@
 
 *Esta é uma tradução do [documento original em inglês](../../../README.md); se houver diferenças entre os dois, vale a versão em inglês.*
 
-Um cliente desktop nativo e leve para o YouTube, feito com **Rust, egui e libmpv**.
-Pesquise, assista e mantenha sua biblioteca em uma interface de desktop, com
-decodificação de vídeo por hardware onde houver suporte. Sem motor de navegador,
-sem telemetria e sem servidor operado pelo YouTFast. Comece sem entrar em uma
-conta; contas são opcionais.
+Assista, pesquise e mantenha sua biblioteca do YouTube em um app desktop nativo,
+em vez de uma aba do navegador. Ele usa uma fração da memória e da CPU do site
+dentro de uma janela Electron ([medido abaixo](#mais-leve-que-um-site-dentro-de-uma-janela)),
+com decodificação de vídeo por hardware onde houver suporte. Sem motor de
+navegador, sem telemetria e sem servidor operado pelo YouTFast. Comece sem
+entrar em uma conta; contas são opcionais. Feito com **Rust, egui e libmpv**.
 
 <img src="../../../assets/screenshots/watch.webp" alt="YouTFast reproduzindo Sprite Fright, do Blender Studio, pausado com capítulos na barra de progresso e A seguir ao lado">
 
@@ -49,6 +50,29 @@ conta; contas são opcionais.
 [Spring](https://studio.blender.org/films/spring/) e
 [Sprite Fright](https://studio.blender.org/films/sprite-fright/), do Blender
 Studio ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).*
+
+## Instalação rápida
+
+Linux (x86_64): o pacote Flatpak, ou o pacote do pacman em sistemas baseados no Arch:
+
+```sh
+curl -fsSL https://youtfast.pages.dev/install.sh | sh
+```
+
+Windows 10/11, no PowerShell:
+
+```powershell
+irm https://youtfast.pages.dev/install.ps1 | iex
+```
+
+macOS 15+ com Apple Silicon, pelo Homebrew:
+
+```sh
+brew install --cask bcosta19/tap/youtfast
+```
+
+Cada um confere o SHA-256 do download. O instalador `.exe`, os arquivos ZIP e
+todos os outros caminhos estão em [Instalação](#instalação).
 
 > [!NOTE]
 > **O YouTFast é novo e ainda precisa de trabalho.** Ele tem um único mantenedor

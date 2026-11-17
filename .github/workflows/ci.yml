@@ -72,6 +72,16 @@ jobs:
           python3 packaging/release.py check
           desktop-file-validate packaging/applications/youtfast.desktop
           appstreamcli validate --no-net packaging/flatpak/io.github.bcosta19.YouTFast.metainfo.xml
+      # A released binary pinned by digest; no third-party action.
+      - name: Dependency advisories and licences
+        env:
+          CARGO_DENY: cargo-deny-0.21.0-x86_64-unknown-linux-musl
+          CARGO_DENY_SHA256: a2170b854ff697e79e39c4c538981c9c1bdd803addbae6719a4cb66b4585a903
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$CARGO_DENY.tar.gz" "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.21.0/$CARGO_DENY.tar.gz"
+          echo "$CARGO_DENY_SHA256  $RUNNER_TEMP/$CARGO_DENY.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$CARGO_DENY.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/$CARGO_DENY/cargo-deny" --locked check advisories licenses
       - name: Formatting
         run: cargo fmt --all --check
       - name: Documentation

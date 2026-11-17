@@ -48,16 +48,23 @@ The download links point at the release named by `Cargo.toml`'s version. Deploy
 only after that release is published, so the links never point at a release
 that does not exist yet.
 
-After authenticating with Wrangler, build and deploy:
+Publishing a GitHub release deploys the site: the Publish workflow's `website`
+job (`.github/workflows/publish.yml`) checks that the release is not a draft,
+builds `dist/site` from the tag, uploads it and waits until `/install` and
+`/pt/install` link to the new version. To redeploy site changes merged after a
+release, run **Publish** manually from `main` with target `website`; it refuses
+while `main`'s version is not a published release.
+
+The same deployment by hand, after authenticating with Wrangler:
 
 ```sh
 python3 tools/build_site.py
 npm exec --yes --package=wrangler@4.152.0 -- wrangler pages deploy dist/site --project-name youtfast --branch main
 ```
 
-The Cloudflare project uses Direct Upload. These commands deploy an already
-built site; they do not enable automatic Git-based deployment. The Website workflow validates PRs, merge queues and site changes on `main`;
-it never deploys. The former GitHub Pages deployment has been removed.
+The Cloudflare project uses Direct Upload; there is no Git-based deployment.
+The Website workflow (`pages.yml`) validates PRs, merge queues and site changes
+on `main`; it never deploys. The former GitHub Pages deployment has been removed.
 
 ## Search visibility
 

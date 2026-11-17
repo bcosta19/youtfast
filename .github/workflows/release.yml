@@ -6,9 +6,8 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Version to validate and package without publishing
+        description: Version to validate and package without publishing (vX.Y.Z)
         required: true
-        default: v0.8.0
         type: string
 
 permissions:
@@ -387,4 +386,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           (cd dist && sha256sum --check checksums.txt)
-          gh release create "$RELEASE_TAG" dist/* --verify-tag --draft --title "YouTFast ${RELEASE_TAG#v}" --notes-file "packaging/release-notes/$RELEASE_TAG.md"
+          # Committed notes plus install commands and the digests just verified.
+          python3 packaging/release.py notes --checksums dist/checksums.txt > "$RUNNER_TEMP/notes.md"
+          gh release create "$RELEASE_TAG" dist/* --verify-tag --draft --title "YouTFast ${RELEASE_TAG#v}" --notes-file "$RUNNER_TEMP/notes.md"
