@@ -195,6 +195,38 @@ public endpoints.
   retry lines should disappear. Repeat for Watch later; do not extract or
   log the account's credential-store session to investigate.
 
+### YT-9: streams refused until `available_at` (2026-11-17)
+
+- **Symptom:** a video does not play and the player shows "Could not play this
+  video. The player did not identify the cause." Every time for a video
+  uploaded the same day, now and then for older ones. It happens with libmpv
+  older than 0.42 only (Omarchy's stable mirror, Ubuntu, Debian, Fedora); the
+  Flatpak and the Windows and macOS packages bundle 0.42.
+- **Old format:** a stream URL from the player response could be opened as
+  soon as yt-dlp handed it over.
+- **New format:** YouTube answers `HTTP 403 Forbidden` for a stream until a
+  time it announces in the player response, which yt-dlp reports as the
+  format's `available_at`
+  ([yt-dlp#14646](https://github.com/yt-dlp/yt-dlp/pull/14646)). Measured on
+  `ILOuIi1gzzs`: 3.3 seconds after extraction ended, `curl` got `403` at once
+  and `206` after waiting. The ytdl hook of mpv 0.42 waits for that time
+  ([mpv#18193](https://github.com/mpv-player/mpv/pull/18193)); older hooks
+  open the stream at once, ffmpeg gets the 403 and mpv selects no stream.
+- **Fix:** `STREAM_OPTIONS` in `crates/youtfast-mpv/src/lib.rs` sets mpv's
+  `stream-lavf-o` so ffmpeg retries a 403 after 0, 1, 3 and 7 seconds
+  (`reconnect_on_http_error=403`, `reconnect_delay_max=7`). The stream opens
+  once it is available; with mpv 0.42 nothing changes, because the hook has
+  already waited. A 403 that never clears surfaces about 11 seconds later.
+- **Tests:** `yt9_a_stream_refused_until_it_is_available_still_loads` in
+  `crates/youtfast-mpv/src/lib.rs`: a local server answers 403 to the first
+  two requests for a stream, and it must load at ffmpeg's next attempt. The
+  `lavf://` prefix forces the ffmpeg path on every libmpv version (0.42 opens
+  `http` with libcurl). The test is there and not in `tests/youtube_api.rs`
+  because the fix is in the player, not in an InnerTube reader. It fails
+  without `STREAM_OPTIONS`.
+- **Live comparison:** with libmpv older than 0.42, play a video uploaded the
+  same day: it starts a few seconds late instead of failing.
+
 ## Adding an entry
 
 Copy this outline. Number entries in order, and never reuse a number.

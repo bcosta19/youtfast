@@ -16,6 +16,7 @@ are the distribution record.
 
 - Playback now says when yt-dlp could not be started or could not get a video's streams, instead of "mpv could not recognize the stream format.", which mpv reported after opening the watch page itself.
 - On Windows, the setup installer launches YouTFast with the `PATH` that includes the yt-dlp and Deno it just installed through winget, and tells the desktop to reload `PATH` for programs started afterwards.
+- Videos play with libmpv older than 0.42 (Omarchy's stable mirror, Ubuntu, Debian, Fedora) instead of failing with "Could not play this video. The player did not identify the cause.": YouTube refuses a stream for a few seconds after handing it out, and YouTFast now retries it until it is available, so a video may start a few seconds late. libmpv 0.42+ still waits without retrying.
 
 ### Security
 

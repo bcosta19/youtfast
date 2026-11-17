@@ -500,14 +500,16 @@ nuevas al iniciar y cada 12 horas mientras esté abierto:
 
 ## Ayuda
 
-Si la reproducción muestra de forma intermitente **"No se pudo reproducir este vídeo.
-El reproductor no identificó la causa. Intenta volver a abrir el vídeo."**, comprueba
-primero libmpv.
-En versiones anteriores a la 0.42, las URL de los streams pueden abrirse antes de su
-hora `available_at`. Actualiza libmpv a 0.42+ (con Lua), o usa la siguiente
-versión Flatpak que incluya esa versión; volver a abrirlo tras unos segundos es solo
-una solución temporal. Este mensaje genérico también puede tener otras causas:
-si persiste con una libmpv compatible, sigue los
+YouTube rechaza los streams de un vídeo durante unos segundos después de
+entregarlos (hasta su hora `available_at`). libmpv 0.42+ (con Lua) espera esa
+hora; con una libmpv anterior, YouTFast vuelve a intentar abrir el stream
+rechazado tras 0, 1, 3 y 7 segundos, así que un vídeo puede empezar unos
+segundos más tarde que con la 0.42. Actualizar libmpv a 0.42+, o usar el
+Flatpak, espera el stream directamente en lugar de reintentar.
+
+Si la reproducción muestra **"No se pudo reproducir este vídeo. El reproductor
+no identificó la causa. Intenta volver a abrir el vídeo."**, el stream siguió
+rechazado tras unos 11 segundos de intentos, o falló otra cosa: sigue los
 [pasos de solución de problemas de la instalación](install.md#si-algo-sale-mal).
 
 Lee [CONTRIBUTING.md](../../../CONTRIBUTING.md) para informar de errores y

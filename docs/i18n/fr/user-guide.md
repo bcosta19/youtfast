@@ -535,16 +535,17 @@ l'application est ouverte :
 
 ## Aide
 
-Si la lecture affiche par intermittence **« Impossible de lire cette vidéo. Le
-lecteur n'a pas pu identifier la cause. Essayez de rouvrir la vidéo. »**,
-vérifiez d'abord libmpv.
-Sur les versions antérieures à 0.42, les URL de flux peuvent être ouvertes avant
-leur heure `available_at`. Mettez à jour libmpv vers 0.42+ (avec Lua), ou
-utilisez la prochaine version Flatpak contenant cette version ; rouvrir après
-quelques secondes n'est qu'une solution de contournement temporaire. Ce message
-générique peut aussi avoir d'autres causes :
-s'il persiste avec une libmpv prise en charge, suivez les
-[étapes de dépannage de l'installation](install.md#en-cas-de-problème).
+YouTube refuse les flux d'une vidéo pendant quelques secondes après les avoir
+fournis (jusqu'à leur heure `available_at`). libmpv 0.42+ (avec Lua) attend
+cette heure ; avec une libmpv plus ancienne, YouTFast réessaie d'ouvrir le flux
+refusé après 0, 1, 3 et 7 secondes, si bien qu'une vidéo peut démarrer quelques
+secondes plus tard qu'avec la 0.42. Mettre à jour libmpv vers 0.42+, ou utiliser
+le Flatpak, attend le flux directement au lieu de réessayer.
+
+Si la lecture affiche **« Impossible de lire cette vidéo. Le lecteur n'a pas pu
+identifier la cause. Essayez de rouvrir la vidéo. »**, le flux était encore
+refusé après environ 11 secondes de tentatives, ou autre chose a échoué :
+suivez les [étapes de dépannage de l'installation](install.md#en-cas-de-problème).
 
 Lisez [CONTRIBUTING.md](../../../CONTRIBUTING.md) pour les rapports de bug et
 [SECURITY.md](../../../SECURITY.md) pour les problèmes privés de compte ou de

@@ -107,7 +107,7 @@ flowchart TB
     Open[Open a watch URL] --> Hook[mpv ytdl hook]
     Hook --> Extract[yt-dlp extracts signed out]
     Extract --> Result{Extraction accepted?}
-    Result -->|Yes| Wait[Wait for format available_at]
+    Result -->|Yes| Wait[Wait for format available_at:<br/>mpv 0.42 hook, or ffmpeg retrying 403]
     Result -->|Refused| Account{Browser account available?}
     Account -->|Yes, once| Retry[Retry via cookies-from-browser]
     Retry --> Wait
@@ -124,6 +124,10 @@ A failed retry also ends in the playback error. `account::ytdl_browser` supplies
 the browser/profile and Linux keyring selection; account cookies are not
 attached to normal extraction. Updating yt-dlp can fix extraction without an
 application release. `ytdlp::ytdl_loaded` reads the hook's extraction JSON.
+YouTube refuses a stream with HTTP 403 until its `available_at`; the ytdl hook
+of libmpv 0.42+ waits for it, and `STREAM_OPTIONS` (mpv's `stream-lavf-o`) has
+ffmpeg retry the 403 for up to about 11 seconds on older libmpv
+([YT-9](youtube-api-format.md#yt-9-streams-refused-until-available_at-2026-11-17)).
 
 ```mermaid
 stateDiagram-v2

@@ -490,14 +490,17 @@ più recenti all'avvio e ogni 12 ore mentre è aperto:
 
 ## Aiuto
 
-Se la riproduzione mostra in modo intermittente **"Impossibile riprodurre questo
-video. Il player non ha identificato la causa. Prova a riaprire il video."**,
-controlla prima libmpv.
-Nelle versioni precedenti alla 0.42, gli URL dei flussi possono essere aperti prima
-del loro orario `available_at`. Aggiorna libmpv alla 0.42+ (con Lua), oppure usa la
-prossima release Flatpak con quella versione; riaprire dopo qualche secondo è solo
-una soluzione temporanea. Questo messaggio generico può avere anche altre cause:
-se persiste con una libmpv supportata, segui i
+YouTube rifiuta i flussi di un video per qualche secondo dopo averli forniti
+(fino al loro orario `available_at`). libmpv 0.42+ (con Lua) attende
+quell'orario; con una libmpv precedente, YouTFast riprova ad aprire il flusso
+rifiutato dopo 0, 1, 3 e 7 secondi, quindi un video può partire qualche secondo
+più tardi che con la 0.42. Aggiornare libmpv alla 0.42+, oppure usare il
+Flatpak, attende il flusso direttamente invece di riprovare.
+
+Se la riproduzione mostra **"Impossibile riprodurre questo video. Il player non
+ha identificato la causa. Prova a riaprire il video."**, il flusso era ancora
+rifiutato dopo circa 11 secondi di tentativi, oppure qualcos'altro non ha
+funzionato: segui i
 [passaggi di risoluzione dei problemi dell'installazione](install.md#se-qualcosa-va-storto).
 
 Leggi [CONTRIBUTING.md](../../../CONTRIBUTING.md) per le segnalazioni di bug e

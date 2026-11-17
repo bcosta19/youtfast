@@ -441,13 +441,16 @@ every 12 hours while open:
 
 ## Help
 
-If playback intermittently shows **"Could not play this video. The player did
-not identify the cause. Try reopening the video."**, check libmpv first.
-On versions older than 0.42, stream URLs may be opened before their
-`available_at` time. Upgrade libmpv to 0.42+ (with Lua), or use the next
-Flatpak release with that version; reopening after a few seconds is only a
-temporary workaround. This generic message can also have other causes:
-if it persists on supported libmpv, follow the
+YouTube refuses a video's streams for a few seconds after handing them out
+(until their `available_at` time). libmpv 0.42+ (with Lua) waits for that time;
+with older libmpv, YouTFast retries a refused stream after 0, 1, 3 and 7
+seconds instead, so a video can start a few seconds later than on 0.42.
+Upgrading libmpv to 0.42+, or using the Flatpak, waits for the stream directly
+instead of retrying.
+
+If playback shows **"Could not play this video. The player did not identify the
+cause. Try reopening the video."**, the stream was still refused after about 11
+seconds of retries, or something else failed: follow the
 [installation troubleshooting steps](install.md#if-something-goes-wrong).
 
 Read [CONTRIBUTING.md](../CONTRIBUTING.md) for bug reports and

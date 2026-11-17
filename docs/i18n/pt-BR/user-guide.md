@@ -487,14 +487,16 @@ mais novas ao iniciar e a cada 12 horas enquanto estiver aberto:
 
 ## Ajuda
 
-Se a reprodução mostrar de vez em quando **"Não foi possível reproduzir este
-vídeo. O player não identificou a causa. Tente reabrir o vídeo."**, confira
-primeiro a libmpv.
-Em versões anteriores à 0.42, as URLs de stream podem ser abertas antes do
-horário `available_at` delas. Atualize a libmpv para 0.42+ (com Lua), ou use a
-próxima versão Flatpak com essa versão; reabrir depois de alguns segundos é só
-um contorno temporário. Essa mensagem genérica também pode ter outras causas:
-se ela persistir com uma libmpv suportada, siga os
+O YouTube recusa os streams de um vídeo por alguns segundos depois de
+entregá-los (até o horário `available_at` deles). A libmpv 0.42+ (com Lua)
+espera esse horário; com uma libmpv mais antiga, o YouTFast tenta abrir de novo
+o stream recusado depois de 0, 1, 3 e 7 segundos, então um vídeo pode começar
+alguns segundos depois do que começaria na 0.42. Atualizar a libmpv para 0.42+,
+ou usar o Flatpak, espera o stream diretamente em vez de tentar de novo.
+
+Se a reprodução mostrar **"Não foi possível reproduzir este vídeo. O player não
+identificou a causa. Tente reabrir o vídeo."**, o stream continuou recusado
+depois de cerca de 11 segundos de tentativas, ou outra coisa falhou: siga os
 [passos de solução de problemas da instalação](install.md#se-algo-der-errado).
 
 Leia o [CONTRIBUTING.md](../../../CONTRIBUTING.md) para relatar bugs e o
