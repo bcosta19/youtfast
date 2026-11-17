@@ -61,8 +61,8 @@ a patch release instead of replacing downloads.
 For a future authorized tag operation, with the validated commit selected:
 
 ```sh
-git tag -a v0.9.0 -m 'YouTFast 0.9.0'
-git push origin v0.9.0
+git tag -a vX.Y.Z -m 'YouTFast X.Y.Z'
+git push origin vX.Y.Z
 ```
 
 ## Draft, review and publication
@@ -85,12 +85,12 @@ completeness certification.
 Once approved, publish the reviewed draft in GitHub's release UI, or explicitly:
 
 ```sh
-gh release edit v0.9.0 --draft=false --latest
+gh release edit vX.Y.Z --draft=false --latest
 ```
 
 The draft's notes are the committed notes followed by install commands and the
 contents of `checksums.txt` (`release.py notes`). Verify notes, release date and
-downloads as an anonymous reader after publication. `gh release download v0.9.0`
+downloads as an anonymous reader after publication. `gh release download vX.Y.Z`
 retrieves a draft's assets for review. Run `sha256sum --check checksums.txt` in
 the download directory. Checksums detect corruption; they are not publisher
 signatures. Never claim code signing/notarization or interactive coverage that

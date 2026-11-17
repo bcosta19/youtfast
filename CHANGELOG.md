@@ -8,6 +8,8 @@ are the distribution record.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-17
+
 ### Changed
 
 - The Homebrew tap (`brew install --cask bcosta19/tap/youtfast`), the Winget manifests and the website now follow each release as soon as it is published, instead of being updated by hand; release notes on GitHub list the install commands and every asset's SHA-256.
@@ -477,7 +479,8 @@ macOS Apple Silicon. Interactive Windows/macOS qualification is still pending.
 These exclusions are scope decisions, not completed features promised for a
 specific next version. See [ROADMAP.md](ROADMAP.md) for follow-up gates.
 
-[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/bcosta19/youtfast/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/bcosta19/youtfast/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/bcosta19/youtfast/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/bcosta19/youtfast/compare/v0.7.0...v0.8.0
