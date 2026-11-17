@@ -34,11 +34,13 @@ and Linux ARM64 are not built.
 The supported YouTube playback baseline is **libmpv 0.42+ with Lua**, distinct
 from the older client ABI needed to link the executable. Its yt-dlp hook waits
 for formats' `available_at` time instead of opening streams early and getting
-HTTP 403. Flatpak pins mpv 0.42.0 and compatible libplacebo; Windows/macOS
-bundlers reject older mpv packages, and the Arch recipe requires `mpv>=0.42.0`.
-Older published artifacts are unchanged: use a release containing this fix.
-Native Linux users must check their libmpv package version and upgrade it
-separately; glibc 2.39+ and the `libmpv.so.2` soname alone are not enough.
+HTTP 403. With older libmpv, YouTFast has ffmpeg retry a refused stream for up
+to about 11 seconds instead ([YT-9](youtube-api-format.md#yt-9-streams-refused-until-available_at-2026-11-17)),
+so playback starts a few seconds late rather than failing. Flatpak pins mpv
+0.42.0 and compatible libplacebo; Windows/macOS bundlers reject older mpv
+packages, and the Arch recipe requires `mpv>=0.42.0`. Native Linux users
+should still check their libmpv package version and upgrade it separately;
+glibc 2.39+ and the `libmpv.so.2` soname alone are not enough.
 
 Native packages keep extraction tools external so users can update them as
 YouTube changes. Install current yt-dlp with its matching EJS component and a

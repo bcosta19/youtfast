@@ -27,6 +27,14 @@ const FORMAT: &str = "bv*+ba/b";
 /// What yt-dlp is asked for in audio-only mode: best audio, falling back to
 /// best combined stream.
 const AUDIO_FORMAT: &str = "ba/b";
+/// ffmpeg's options for the streams mpv opens. YouTube answers 403 for a
+/// stream until the `available_at` time yt-dlp reports, a few seconds after
+/// extraction (docs/youtube-api-format.md, YT-9). The ytdl hook of mpv 0.42
+/// waits for that time; older libmpv, which distributions still ship, opens
+/// the stream at once and gets the 403. Retrying a 403 after 0, 1, 3 and 7
+/// seconds opens it once it is available; a 403 that never clears (an
+/// expired link, a restricted video) surfaces about 11 seconds later.
+const STREAM_OPTIONS: &str = "reconnect=1,reconnect_on_http_error=403,reconnect_delay_max=7";
 
 /// Observed properties, by the id mpv hands back with each change.
 const TIME_POS: u64 = 1;
@@ -394,12 +402,13 @@ impl Mpv {
         let raw_options = raw_options(max_resolution, &captions);
         let volume = volume.clamp(0.0, 100.0);
         let initial_volume = volume_text(volume);
-        let options: [(&CStr, &str); 14] = [
+        let options: [(&CStr, &str); 15] = [
             (c"vo", "libmpv"),
             (c"hwdec", "auto-safe"),
             (c"ytdl", "yes"),
             (c"ytdl-format", FORMAT),
             (c"ytdl-raw-options", &raw_options),
+            (c"stream-lavf-o", STREAM_OPTIONS),
             // Stay on the last frame at the end instead of unloading.
             (c"keep-open", "yes"),
             (c"idle", "yes"),
@@ -1367,5 +1376,138 @@ mod tests {
                 .and_then(|v| v.parse::<u64>().ok()),
             Some(20 * 1024 * 1024),
         );
+    }
+
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::{Duration, Instant};
+
+    /// Bytes of silence in [`silent_wav`]: half a second of 8 kHz, 16-bit
+    /// mono samples.
+    const SILENCE_BYTES: u32 = 8000;
+    const WAV_HEADER_BYTES: usize = 44;
+
+    /// A WAV file of silence: a stream ffmpeg opens without a network or a
+    /// video output.
+    fn silent_wav() -> Vec<u8> {
+        let mut wav = Vec::with_capacity(WAV_HEADER_BYTES + SILENCE_BYTES as usize);
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&(36 + SILENCE_BYTES).to_le_bytes());
+        wav.extend_from_slice(b"WAVEfmt ");
+        wav.extend_from_slice(&16u32.to_le_bytes()); // fmt chunk size
+        wav.extend_from_slice(&1u16.to_le_bytes()); // PCM
+        wav.extend_from_slice(&1u16.to_le_bytes()); // mono
+        wav.extend_from_slice(&8000u32.to_le_bytes()); // samples per second
+        wav.extend_from_slice(&16000u32.to_le_bytes()); // bytes per second
+        wav.extend_from_slice(&2u16.to_le_bytes()); // bytes per sample
+        wav.extend_from_slice(&16u16.to_le_bytes()); // bits per sample
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&SILENCE_BYTES.to_le_bytes());
+        wav.resize(WAV_HEADER_BYTES + SILENCE_BYTES as usize, 0);
+        wav
+    }
+
+    /// Ends the test server's accept loop when the test ends, also when an
+    /// assertion or `unwrap` unwinds first.
+    struct StopOnDrop(Arc<AtomicBool>);
+
+    impl Drop for StopOnDrop {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::Relaxed);
+        }
+    }
+
+    /// Reads a request up to the blank line that ends its headers.
+    fn read_request_head(client: &mut TcpStream) {
+        let mut head = Vec::new();
+        let mut buffer = [0u8; 1024];
+        while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+            match client.read(&mut buffer) {
+                Ok(0) | Err(_) => return,
+                Ok(n) => head.extend_from_slice(&buffer[..n]),
+            }
+        }
+    }
+
+    /// Answers 403 to the first `refusals` requests and the WAV to every
+    /// later one, until `stop` is set.
+    fn serve_after_refusals(listener: TcpListener, refusals: usize, stop: Arc<AtomicBool>) {
+        let wav = silent_wav();
+        let mut answered = 0;
+        while !stop.load(Ordering::Relaxed) {
+            let Ok((mut client, _)) = listener.accept() else {
+                std::thread::sleep(Duration::from_millis(10));
+                continue;
+            };
+            // Bounded, so a client that stalls cannot keep the test running.
+            let timeout = Some(Duration::from_secs(5));
+            client.set_nonblocking(false).unwrap();
+            client.set_read_timeout(timeout).unwrap();
+            client.set_write_timeout(timeout).unwrap();
+            read_request_head(&mut client);
+            // A client that hung up is ffmpeg's to report, not the server's.
+            let _ = if answered < refusals {
+                client.write_all(
+                    b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+            } else {
+                let head = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    wav.len()
+                );
+                client
+                    .write_all(head.as_bytes())
+                    .and_then(|()| client.write_all(&wav))
+            };
+            answered += 1;
+        }
+    }
+
+    /// YT-9: YouTube answers 403 for a stream until its `available_at`,
+    /// and libmpv before 0.42 opens it at once, through ffmpeg. A stream
+    /// refused twice (ffmpeg's first attempt and its immediate retry) must
+    /// load at the attempt that follows a second later. libmpv 0.42 opens
+    /// `http` with libcurl instead (its ytdl hook waits), so `lavf://` makes
+    /// every version take the ffmpeg path, which also keeps the hook's
+    /// yt-dlp fallback for `http` links out of the test.
+    #[test]
+    fn yt9_a_stream_refused_until_it_is_available_still_loads() {
+        let _turn = instance_turn();
+        let mut player = Mpv::new(&egui::Context::default(), 1080, 0.0, Vec::new()).unwrap();
+        // Test machines may have no sound device.
+        player.set_property("ao", "null").unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+        let stop = StopOnDrop(Arc::new(AtomicBool::new(false)));
+        let server = {
+            let stop = Arc::clone(&stop.0);
+            std::thread::spawn(move || serve_after_refusals(listener, 2, stop))
+        };
+
+        player
+            .load(&format!("lavf://http://{address}/stream.wav"), None)
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let outcome = 'wait: loop {
+            for event in player.poll() {
+                match event {
+                    Event::Loaded => break 'wait Ok(()),
+                    Event::Failed(failure) => break 'wait Err(format!("{failure:?}")),
+                    _ => {}
+                }
+            }
+            if Instant::now() > deadline {
+                break Err("no outcome within 20 seconds".to_owned());
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        drop(player);
+        drop(stop);
+        server.join().unwrap();
+
+        assert_eq!(outcome, Ok(()));
     }
 }

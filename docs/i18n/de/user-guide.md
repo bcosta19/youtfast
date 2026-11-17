@@ -519,15 +519,18 @@ alle 12 Stunden im laufenden Betrieb auf neuere stabile Versionen:
 
 ## Hilfe
 
-Zeigt die Wiedergabe sporadisch **„Dieses Video konnte nicht abgespielt werden.
-Die Ursache ist unbekannt. Versuchen Sie, das Video erneut zu öffnen.“**, prüfen
-Sie zuerst libmpv.
-In Versionen vor 0.42 können Stream-URLs vor ihrem Zeitpunkt `available_at`
-geöffnet werden. Aktualisieren Sie libmpv auf 0.42+ (mit Lua) oder verwenden Sie
-die nächste Flatpak-Version mit dieser Version; das erneute Öffnen nach einigen
-Sekunden ist nur eine vorübergehende Umgehung. Diese allgemeine Meldung kann auch
-andere Ursachen haben: Bleibt sie mit unterstütztem libmpv bestehen, folgen Sie
-den [Schritten zur Fehlerbehebung bei der Installation](install.md#wenn-etwas-schiefgeht).
+YouTube verweigert die Streams eines Videos einige Sekunden lang, nachdem es sie
+ausgegeben hat (bis zu ihrem Zeitpunkt `available_at`). libmpv 0.42+ (mit Lua)
+wartet diesen Zeitpunkt ab; mit älterem libmpv versucht YouTFast den
+abgewiesenen Stream stattdessen nach 0, 1, 3 und 7 Sekunden erneut zu öffnen,
+sodass ein Video einige Sekunden später als mit 0.42 starten kann. Mit libmpv
+0.42+ oder dem Flatpak wird direkt auf den Stream gewartet statt wiederholt.
+
+Zeigt die Wiedergabe **„Dieses Video konnte nicht abgespielt werden. Die
+Ursache ist unbekannt. Versuchen Sie, das Video erneut zu öffnen.“**, wurde der
+Stream auch nach etwa 11 Sekunden Wiederholungen abgewiesen, oder etwas anderes
+ist fehlgeschlagen: Folgen Sie den
+[Schritten zur Fehlerbehebung bei der Installation](install.md#wenn-etwas-schiefgeht).
 
 Lesen Sie [CONTRIBUTING.md](../../../CONTRIBUTING.md) für Fehlerberichte und
 [SECURITY.md](../../../SECURITY.md) für vertrauliche Konto-/Sicherheitsprobleme.
