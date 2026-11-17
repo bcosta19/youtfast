@@ -8,6 +8,10 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Changed
+
+- Stop submitting releases to the official Winget catalog; the maintainer has not accepted Microsoft's Contributor License Agreement. Windows setup and portable downloads, Homebrew updates and website deployment remain available.
+
 ## [0.9.1] - 2026-11-17
 
 ### Changed

@@ -34,11 +34,11 @@ successful CI or draft is not a published release.
 
 The Publish workflow runs when the maintainer publishes a release (not a
 pre-release) and on manual runs. It pushes the release's own channel manifests
-to the Homebrew tap and Winget and deploys the website; it rebuilds nothing.
+to the Homebrew tap and deploys the website; it rebuilds nothing.
 Its secrets live in the `publish` environment, whose deployment refs are
 limited to `main` and `v*` tags, so no pull request or contributor branch can
-reach them. Third-party tools it downloads (`wingetcreate`, like `cargo-deny`
-in CI) are pinned by version and SHA-256 rather than added as Actions.
+reach them. Winget catalog submission is not pursued and no Winget token is
+required. CI's `cargo-deny` download is pinned by version and SHA-256.
 
 Superseded PR runs are cancelled. Release runs are not cancelled midway, and
 intermediate artifacts expire after seven days. Release assets are the durable
@@ -54,7 +54,7 @@ inferring them from files in Git.
   with SHA pinning required. Adding an Action means updating that list.
 - Keep the default token read-only. Only draft creation gets `contents: write`.
   Website validation stays read-only and receives no deployment credentials;
-  the tap, Winget and Cloudflare credentials are `publish` environment
+  the tap and Cloudflare credentials are `publish` environment
   secrets used only by the Publish workflow.
 - Require approval for workflows from outside contributors as appropriate;
   never run their code through `pull_request_target` with secrets.
