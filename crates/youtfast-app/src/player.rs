@@ -692,10 +692,7 @@ impl State {
         if !self.autoplay_allowed() {
             return;
         }
-        self.autoplay = self
-            .next_video()
-            .cloned()
-            .map(|video| (video, deadline));
+        self.autoplay = self.next_video().cloned().map(|video| (video, deadline));
     }
 
     /// Returns whether a mute toggle or volume change should explicitly unmute mpv.

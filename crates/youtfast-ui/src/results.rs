@@ -266,7 +266,7 @@ pub fn video_menu(
             ui.close();
         }
         video_filter_menu_items(ui, state, video, actions);
-                widgets::save_to_playlist_menu(ui, state, video, actions);
+        widgets::save_to_playlist_menu(ui, state, video, actions);
     });
 }
 

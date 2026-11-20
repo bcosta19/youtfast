@@ -412,7 +412,7 @@ pub fn video_interactions(
             }
         }
         crate::results::video_filter_menu_items(ui, state, video, actions);
-                save_to_playlist_menu(ui, state, video, actions);
+        save_to_playlist_menu(ui, state, video, actions);
     });
     if response.hovered() || response.has_focus() || ui.rect_contains_pointer(response.rect) {
         let clock = Rect::from_min_size(

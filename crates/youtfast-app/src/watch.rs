@@ -879,10 +879,9 @@ mod tests {
         state.settings.hide_watched = true;
 
         let up_next = visible_videos(&state, &first);
-        assert_eq!(
-            super::super::player::next_video(Some(&first), &[], &up_next, &[]),
-            Some(&next)
-        );
+        state.up_next = up_next;
+        state.watching = Some(first.clone());
+        assert_eq!(state.next_video(), Some(&next));
     }
 
     #[test]

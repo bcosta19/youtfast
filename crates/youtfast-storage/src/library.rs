@@ -118,6 +118,8 @@ struct RawLibrary {
     hidden_videos: Vec<String>,
     blocked_channels: Vec<Channel>,
     account: Option<AccountSource>,
+    playlists: Vec<DevicePlaylist>,
+    playlist_high_water: u64,
 }
 
 impl From<RawLibrary> for Library {
@@ -126,6 +128,8 @@ impl From<RawLibrary> for Library {
             subscriptions: raw.subscriptions,
             history: raw.history,
             watch_later: raw.watch_later,
+            playlists: Arc::new(raw.playlists.into_iter().map(Arc::new).collect()),
+            playlist_high_water: raw.playlist_high_water,
             accounts: raw.accounts,
             active_account: raw.active_account,
             alerts_seen_at: raw.alerts_seen_at,
@@ -1504,6 +1508,7 @@ mod tests {
         library.merge(Import {
             subscriptions: Vec::new(),
             history: Vec::new(),
+            watch_later: Vec::new(),
             playlists: vec![
                 DevicePlaylist {
                     id: id.clone(),
