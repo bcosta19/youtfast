@@ -1,7 +1,10 @@
 //! Pop-out picture-in-picture OS window, rendered via a deferred egui viewport.
 
+#[cfg(not(target_os = "macos"))]
 use egui::viewport::ResizeDirection;
-use egui::{Color32, CornerRadius, CursorIcon, Frame, Key, Rect, Sense, Stroke, UiBuilder, vec2};
+#[cfg(not(target_os = "macos"))]
+use egui::CursorIcon;
+use egui::{Color32, CornerRadius, Frame, Key, Rect, Sense, Stroke, UiBuilder, vec2};
 use youtfast_i18n::gettext as tr;
 
 use super::surface::{PictureContent, on_video_style, picture_content, progress_strip};
@@ -11,6 +14,7 @@ use youtfast_app::{Action, State};
 use youtfast_appearance::icons::Icon;
 use youtfast_mpv::VideoSurface;
 
+#[cfg(not(target_os = "macos"))]
 const EDGE_RESIZE: f32 = 6.0;
 
 fn pip_control(response: egui::Response, id: egui::Id) -> bool {
@@ -221,6 +225,9 @@ pub(crate) fn show_pip_contents(
     }
 
     if !control_clicked {
+        // AppKit gives resizable borderless windows native edges. Winit's
+        // explicit drag_resize_window is unsupported there.
+        #[cfg(not(target_os = "macos"))]
         if let Some(dir) = edge_resize_direction(ui, rect) {
             ui.ctx().set_cursor_icon(resize_cursor(dir));
             if ui
@@ -230,7 +237,9 @@ pub(crate) fn show_pip_contents(
                 ui.ctx()
                     .send_viewport_cmd(egui::ViewportCommand::BeginResize(dir));
             }
-        } else if response.drag_started_by(egui::PointerButton::Primary) {
+            return;
+        }
+        if response.drag_started_by(egui::PointerButton::Primary) {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
         }
     }
@@ -249,6 +258,7 @@ fn fit_aspect(bounds: Rect, aspect: f32) -> Rect {
     Rect::from_center_size(bounds.center(), size)
 }
 
+#[cfg(not(target_os = "macos"))]
 fn edge_resize_direction(ui: &egui::Ui, rect: Rect) -> Option<ResizeDirection> {
     let pos = ui.ctx().pointer_hover_pos()?;
     if !rect.contains(pos) {
@@ -271,6 +281,7 @@ fn edge_resize_direction(ui: &egui::Ui, rect: Rect) -> Option<ResizeDirection> {
     }
 }
 
+#[cfg(not(target_os = "macos"))]
 fn resize_cursor(direction: ResizeDirection) -> CursorIcon {
     match direction {
         ResizeDirection::North => CursorIcon::ResizeNorth,
