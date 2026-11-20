@@ -983,28 +983,6 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
                 actions.push(Action::ToggleWatchLater(watching.clone()));
             }
             ui.separator();
-            for playlist in &state.library.playlists {
-                let mut saved = state.library.in_playlist(&playlist.id, &watching.id);
-                ui.horizontal(|ui| {
-                    if ui
-                        .checkbox(
-                            &mut saved,
-                            RichText::new(&playlist.name).font(theme::regular(14.0)),
-                        )
-                        .changed()
-                    {
-                        actions.push(Action::SetSaved {
-                            playlist: playlist.id.clone(),
-                            saved,
-                        });
-                    }
-                    ui.label(
-                        RichText::new(tr(locale, "On this device"))
-                            .font(theme::regular(12.0))
-                            .color(palette.secondary),
-                    );
-                });
-            }
             let mut draft = ui
                 .ctx()
                 .data(|d| d.get_temp::<String>(draft_id))
@@ -1040,47 +1018,76 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
             });
             ui.ctx().data_mut(|d| d.insert_temp(draft_id, draft));
             ui.separator();
-            if !state.signed_in() {
-                ui.label(
-                    RichText::new(tr(locale, "Sign in to save to the account's playlists"))
-                        .font(theme::regular(13.0))
-                        .color(palette.secondary),
-                );
-                return;
-            }
-            match &state.save_targets {
-                Fetch::Idle => actions.push(Action::LoadSaveTargets),
-                Fetch::Loading => widgets::loading(ui, palette, "playlists", locale),
-                Fetch::Failed(error) => {
-                    ui.label(
-                        RichText::new(youtfast_i18n::message(locale, error))
-                            .font(theme::regular(14.0))
-                            .color(palette.red),
-                    );
-                }
-                Fetch::Ready(targets) => {
-                    for target in targets {
-                        let mut saved = target.saved;
-                        if ui
-                            .add_enabled(
-                                !state
-                                    .save_pending
-                                    .contains(&(watching.id.clone(), target.id.clone())),
-                                egui::Checkbox::new(
+            egui::ScrollArea::vertical()
+                .max_height((ui.ctx().content_rect().height() * 0.4).min(320.0))
+                .show(ui, |ui| {
+                    for playlist in &state.library.playlists {
+                        let mut saved = playlist.videos.iter().any(|v| v.id == watching.id);
+                        ui.horizontal(|ui| {
+                            if ui
+                                .checkbox(
                                     &mut saved,
-                                    RichText::new(&target.name).font(theme::regular(14.0)),
-                                ),
-                            )
-                            .changed()
-                        {
-                            actions.push(Action::SetSaved {
-                                playlist: target.id.clone(),
-                                saved,
-                            });
+                                    RichText::new(&playlist.name).font(theme::regular(14.0)),
+                                )
+                                .changed()
+                            {
+                                actions.push(Action::SetSaved {
+                                    playlist: playlist.id.clone(),
+                                    saved,
+                                });
+                            }
+                            ui.label(
+                                RichText::new(tr(locale, "On this device"))
+                                    .font(theme::regular(12.0))
+                                    .color(palette.secondary),
+                            );
+                        });
+                    }
+                    if !state.library.playlists.is_empty() {
+                        ui.separator();
+                    }
+                    if !state.signed_in() {
+                        ui.label(
+                            RichText::new(tr(locale, "Sign in to save to the account's playlists"))
+                                .font(theme::regular(13.0))
+                                .color(palette.secondary),
+                        );
+                        return;
+                    }
+                    match &state.save_targets {
+                        Fetch::Idle => actions.push(Action::LoadSaveTargets),
+                        Fetch::Loading => widgets::loading(ui, palette, "playlists", locale),
+                        Fetch::Failed(error) => {
+                            ui.label(
+                                RichText::new(youtfast_i18n::message(locale, error))
+                                    .font(theme::regular(14.0))
+                                    .color(palette.red),
+                            );
+                        }
+                        Fetch::Ready(targets) => {
+                            for target in targets {
+                                let mut saved = target.saved;
+                                if ui
+                                    .add_enabled(
+                                        !state
+                                            .save_pending
+                                            .contains(&(watching.id.clone(), target.id.clone())),
+                                        egui::Checkbox::new(
+                                            &mut saved,
+                                            RichText::new(&target.name).font(theme::regular(14.0)),
+                                        ),
+                                    )
+                                    .changed()
+                                {
+                                    actions.push(Action::SetSaved {
+                                        playlist: target.id.clone(),
+                                        saved,
+                                    });
+                                }
+                            }
                         }
                     }
-                }
-            }
+                });
         });
 }
 

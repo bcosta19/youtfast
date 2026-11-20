@@ -487,15 +487,19 @@ pub(crate) fn save_to_playlist_menu(
             );
             return;
         }
-        for playlist in &state.library.playlists {
-            let mut saved = state.library.in_playlist(&playlist.id, &video.id);
-            if ui.checkbox(&mut saved, &playlist.name).changed() {
-                actions.push(Action::TogglePlaylistVideo {
-                    playlist: playlist.id.clone(),
-                    video: video.clone(),
-                });
-            }
-        }
+        egui::ScrollArea::vertical()
+            .max_height((ui.ctx().content_rect().height() * 0.4).min(320.0))
+            .show(ui, |ui| {
+                for playlist in &state.library.playlists {
+                    let mut saved = playlist.videos.iter().any(|v| v.id == video.id);
+                    if ui.checkbox(&mut saved, &playlist.name).changed() {
+                        actions.push(Action::TogglePlaylistVideo {
+                            playlist: playlist.id.clone(),
+                            video: video.clone(),
+                        });
+                    }
+                }
+            });
     });
 }
 
