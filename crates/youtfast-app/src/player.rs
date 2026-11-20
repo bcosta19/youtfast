@@ -243,7 +243,9 @@ impl App {
         let Some(status) = self.player.as_ref().map(|player| player.status()) else {
             return;
         };
-        let unmute = self.state.prepare_manual_unmute(status.position, status.muted);
+        let unmute = self
+            .state
+            .prepare_manual_unmute(status.position, status.muted);
         self.with_player(|player| player.set_muted(!unmute));
         self.show_osd(if unmute { "Unmuted" } else { "Muted" }.to_owned());
     }
@@ -424,10 +426,7 @@ impl App {
 
     pub(super) fn set_sponsorblock(&mut self, on: bool) {
         self.state.settings.sponsorblock = on;
-        self.state
-            .cast
-            .sponsor_enabled
-            .store(on, std::sync::atomic::Ordering::Relaxed);
+        self.state.cast.sponsor_policy_changed();
         self.save_settings();
         if on
             && let Some(session) = &self.state.cast.session
@@ -452,6 +451,15 @@ impl App {
         category: SponsorCategory,
         behavior: SponsorBehavior,
     ) {
+        if self
+            .state
+            .settings
+            .sponsorblock_categories
+            .behavior_for(category.as_str())
+            != behavior
+        {
+            self.state.cast.sponsor_policy_changed();
+        }
         self.state
             .settings
             .sponsorblock_categories

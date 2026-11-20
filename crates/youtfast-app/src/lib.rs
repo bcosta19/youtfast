@@ -1665,7 +1665,9 @@ impl App {
             Action::SetVolume(volume) => {
                 self.state.settings.volume = volume;
                 if let Some(status) = self.player.as_ref().map(|player| player.status())
-                    && self.state.prepare_manual_unmute(status.position, status.muted)
+                    && self
+                        .state
+                        .prepare_manual_unmute(status.position, status.muted)
                 {
                     self.with_player(|player| player.set_muted(false));
                 }

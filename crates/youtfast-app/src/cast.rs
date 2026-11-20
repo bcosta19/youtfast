@@ -21,12 +21,15 @@ pub struct State {
     pub command_sent: bool,
     pending: Option<Pending>,
     local_handoff: Option<u64>,
-    pub(super) sponsor_enabled: Arc<AtomicBool>,
-    sponsor_pending: bool,
+    sponsor_pending: Option<PendingSponsorCheck>,
     sponsor_check_at: Option<Instant>,
-    sponsor_requested_at: Option<Instant>,
     sponsor_segments: Vec<Segment>,
     sponsor_skipped: Vec<f64>,
+}
+
+struct PendingSponsorCheck {
+    enabled: Arc<AtomicBool>,
+    requested_at: Instant,
 }
 
 pub struct Session {
@@ -54,6 +57,18 @@ impl State {
         }
     }
 
+    fn cancel_pending_sponsor_check(&self) {
+        if let Some(check) = &self.sponsor_pending {
+            check.enabled.store(false, Ordering::Relaxed);
+        }
+    }
+
+    /// Disarms the current request without freeing its slot before the reply arrives.
+    pub(super) fn sponsor_policy_changed(&mut self) {
+        self.cancel_pending_sponsor_check();
+        self.sponsor_check_at = None;
+    }
+
     fn sponsor_request(
         &mut self,
         enabled: bool,
@@ -62,7 +77,7 @@ impl State {
     ) -> Option<Request> {
         if !enabled
             || self.busy()
-            || self.sponsor_pending
+            || self.sponsor_pending.is_some()
             || self.sponsor_check_at.is_some_and(|at| now < at)
         {
             return None;
@@ -84,11 +99,14 @@ impl State {
         if segments.is_empty() {
             return None;
         }
-        self.sponsor_pending = true;
+        let enabled = Arc::new(AtomicBool::new(true));
+        self.sponsor_pending = Some(PendingSponsorCheck {
+            enabled: Arc::clone(&enabled),
+            requested_at: now,
+        });
         self.sponsor_check_at = Some(now + Duration::from_secs(2));
-        self.sponsor_requested_at = Some(now);
         Some(Request::CheckSponsor {
-            enabled: self.sponsor_enabled.clone(),
+            enabled,
             device: session.device.clone(),
             video: session.video.id.clone(),
             segments,
@@ -128,7 +146,7 @@ impl State {
             action,
             Action::Disconnect | Action::Control(_) | Action::Start(_)
         ) {
-            self.sponsor_enabled.store(false, Ordering::Relaxed);
+            self.cancel_pending_sponsor_check();
         }
         if action == Action::Open {
             self.open = true;
@@ -202,7 +220,11 @@ impl State {
     /// Returns the local playback to pause only after the TV confirms it.
     pub fn finish(&mut self, reply: Reply) -> Option<(String, u64)> {
         if let Reply::SponsorChecked(result) = reply {
-            self.sponsor_pending = false;
+            // Ignore an invalidated check's result and polling advice.
+            let check = self.sponsor_pending.take()?;
+            if !check.enabled.load(Ordering::Relaxed) {
+                return None;
+            }
             match result {
                 Ok(sponsor) => {
                     if let Some(end) = sponsor.skipped {
@@ -210,10 +232,11 @@ impl State {
                     }
                     // Far from the next segment, check less often (at most
                     // every ten seconds, so a seek on the TV is still caught).
-                    if let (Some(next_in), Some(at)) = (sponsor.next_in, self.sponsor_requested_at)
-                    {
-                        self.sponsor_check_at =
-                            Some(at + Duration::from_secs_f64((next_in - 1.0).clamp(2.0, 10.0)));
+                    if let Some(next_in) = sponsor.next_in {
+                        self.sponsor_check_at = Some(
+                            check.requested_at
+                                + Duration::from_secs_f64((next_in - 1.0).clamp(2.0, 10.0)),
+                        );
                     }
                 }
                 Err(error) => self.error = Some(error),
@@ -372,10 +395,6 @@ impl super::App {
                 .session
                 .as_ref()
                 .is_some_and(|session| session.confirmed && !session.video.live);
-        self.state
-            .cast
-            .sponsor_enabled
-            .store(enabled, Ordering::Relaxed);
         if enabled {
             ctx.request_repaint_after(Duration::from_secs(1));
         }
@@ -386,7 +405,7 @@ impl super::App {
         ) && let Some(worker) = &self.cast_worker
             && let Err(error) = worker.send(request)
         {
-            self.state.cast.sponsor_pending = false;
+            self.state.cast.sponsor_pending = None;
             self.state.cast.error = Some(error);
         }
     }
@@ -499,6 +518,40 @@ mod tests {
         assert!(state.sponsor_request(true, categories, now).is_none());
         state.finish(Reply::Disconnected);
         assert!(state.sponsor_request(true, categories, now).is_none());
+    }
+
+    #[test]
+    fn cast_policy_change_cancels_pending_check_and_resets_schedule() {
+        use youtfast_core::model::SponsorCategory;
+        let mut state = monitoring();
+        let mut categories = SponsorCategories::default();
+        let now = Instant::now();
+        let request = state.sponsor_request(true, categories, now);
+        let Some(Request::CheckSponsor { enabled, .. }) = request else {
+            panic!("missing initial SponsorBlock check");
+        };
+        categories.set(SponsorCategory::Sponsor, SponsorBehavior::Ignore);
+        state.sponsor_policy_changed();
+        assert!(!enabled.load(Ordering::Relaxed));
+        assert!(state.sponsor_request(true, categories, now).is_none());
+        state.finish(Reply::SponsorChecked(Ok(Sponsor {
+            skipped: None,
+            next_in: Some(60.0),
+        })));
+        assert!(state.sponsor_check_at.is_none());
+        assert!(state.sponsor_request(true, categories, now).is_none());
+
+        categories.set(SponsorCategory::Sponsor, SponsorBehavior::AutoSkip);
+        state.sponsor_policy_changed();
+        let Some(Request::CheckSponsor {
+            enabled: new_enabled,
+            ..
+        }) = state.sponsor_request(true, categories, now)
+        else {
+            panic!("policy change should allow an immediate fresh check");
+        };
+        assert!(new_enabled.load(Ordering::Relaxed));
+        assert!(!enabled.load(Ordering::Relaxed));
     }
 
     #[test]

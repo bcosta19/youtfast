@@ -1091,38 +1091,67 @@ else:
         }
 
         #[tokio::test]
-        async fn sponsor_monitor_reads_tv_position_and_uses_an_absolute_seek() {
+        async fn sponsor_monitor_checks_cancellation_after_reading_tv_position() {
             let fixture = Fixture::new(
                 r#"
-import sys, json
+import sys, json, time
+from pathlib import Path
+root = Path(__file__).parent
 args = sys.argv[1:]
 assert args[:2] == ['--device', '192.168.1.20']
 if args[2:] == ['info', '--json-output']:
+    (root / 'checking').touch()
+    deadline = time.monotonic() + 5
+    while not (root / 'release').exists():
+        assert time.monotonic() < deadline, 'telemetry was not released'
+        time.sleep(0.01)
     print(json.dumps({'content_id':'abcdefghijk', 'player_state':'PLAYING', 'current_time':12,
         'stream_type':'BUFFERED', 'supported_media_commands':2}))
 else:
     assert args[2:] == ['seek', '31']
-    from pathlib import Path
-    Path(__file__).with_name('sought').touch()
+    (root / 'sought').touch()
 "#,
             );
-            for enabled in [false, true] {
-                let reply = execute(
-                    &fixture.helper(),
+            use std::sync::{
+                Arc,
+                atomic::{AtomicBool, Ordering},
+            };
+
+            for allow_seek in [false, true] {
+                let enabled = Arc::new(AtomicBool::new(true));
+                let helper = fixture.helper();
+                let check = execute(
+                    &helper,
                     Request::CheckSponsor {
                         device: device(),
                         video: "abcdefghijk".into(),
                         segments: vec![sponsor()],
                         categories: youtfast_core::model::SponsorCategories::default(),
-                        enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(enabled)),
+                        enabled: Arc::clone(&enabled),
                     },
-                )
-                .await;
+                );
+                let release_telemetry = async {
+                    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+                    while !fixture.0.join("checking").exists() {
+                        assert!(
+                            tokio::time::Instant::now() < deadline,
+                            "helper did not start"
+                        );
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                    if !allow_seek {
+                        enabled.store(false, Ordering::Relaxed);
+                    }
+                    std::fs::write(fixture.0.join("release"), "").unwrap();
+                };
+                let (reply, ()) = tokio::join!(check, release_telemetry);
                 let Reply::SponsorChecked(result) = reply else {
                     panic!("wrong reply")
                 };
-                assert_eq!(result.unwrap().skipped, enabled.then_some(30.25));
-                assert_eq!(fixture.0.join("sought").exists(), enabled);
+                assert_eq!(result.unwrap().skipped, allow_seek.then_some(30.25));
+                assert_eq!(fixture.0.join("sought").exists(), allow_seek);
+                std::fs::remove_file(fixture.0.join("checking")).unwrap();
+                std::fs::remove_file(fixture.0.join("release")).unwrap();
             }
         }
 
