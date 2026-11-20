@@ -483,7 +483,7 @@ impl App {
                         .state
                         .segments
                         .get(muted_index)
-                        .is_none_or(|segment| end < segment.start || end >= segment.end - 0.3))
+                        .is_none_or(|segment| !within_mute_segment(segment, end)))
             {
                 self.clear_sponsor_mute();
             }
@@ -723,8 +723,7 @@ impl State {
                         segment.action == SegmentAction::Mute
                             && categories.behavior_for(&segment.category)
                                 == SponsorBehavior::AutoSkip
-                            && position >= segment.start
-                            && position < segment.end - 0.3
+                            && within_mute_segment(segment, position)
                     })
                     .map(|(index, _)| index),
             );
@@ -780,8 +779,7 @@ impl State {
                         .behavior_for(&segment.category)
                         == SponsorBehavior::AutoSkip
                         && segment.action == SegmentAction::Mute
-                        && position >= segment.start
-                        && position < segment.end - 0.3
+                        && within_mute_segment(segment, position)
                 });
             if !still_active {
                 self.sponsor_muted = None;
@@ -803,7 +801,11 @@ impl State {
                 && position < segment.end - 0.3
         }) {
             self.skipped.insert(index);
-            if self.sponsor_muted.take().is_some() {
+            if self
+                .sponsor_muted
+                .is_some_and(|index| !within_mute_segment(&self.segments[index], segment.end))
+            {
+                self.sponsor_muted = None;
                 tick.set_muted = Some(false);
             }
             tick.seek_to = Some(segment.end);
@@ -820,8 +822,7 @@ impl State {
                             .behavior_for(&segment.category)
                             == SponsorBehavior::AutoSkip
                         && segment.action == SegmentAction::Mute
-                        && position >= segment.start
-                        && position < segment.end - 0.3
+                        && within_mute_segment(segment, position)
                 })
         {
             let already_user_muted = muted && tick.set_muted != Some(false);
@@ -835,6 +836,10 @@ impl State {
         }
         tick
     }
+}
+
+fn within_mute_segment(segment: &Segment, position: f64) -> bool {
+    position >= segment.start && position < segment.end
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -1103,6 +1108,36 @@ mod tests {
     }
 
     #[test]
+    fn sponsorblock_mutes_short_intervals_from_start_to_end() {
+        let mut state = State {
+            segments: vec![Segment {
+                category: "sponsor".into(),
+                start: 10.0,
+                end: 10.2,
+                action: SegmentAction::Mute,
+            }],
+            ..Default::default()
+        };
+        state.settings.sponsorblock = true;
+        assert_eq!(
+            state.tick_sponsorblock(false, true, false, 9.99).set_muted,
+            None
+        );
+        assert_eq!(
+            state.tick_sponsorblock(false, true, false, 10.0).set_muted,
+            Some(true)
+        );
+        assert_eq!(
+            state.tick_sponsorblock(false, true, true, 10.19).set_muted,
+            None
+        );
+        assert_eq!(
+            state.tick_sponsorblock(false, true, true, 10.2).set_muted,
+            Some(false)
+        );
+    }
+
+    #[test]
     fn sponsorblock_auto_mute_lifecycle_handles_entry_exit_and_user_mute() {
         let mut state = State::default();
         state.settings.sponsorblock = true;
@@ -1135,7 +1170,7 @@ mod tests {
 
         // While staying inside, no repeated mute/OSD.
         assert_eq!(
-            state.tick_sponsorblock(false, true, true, 15.0),
+            state.tick_sponsorblock(false, true, true, 19.95),
             SponsorTick::default()
         );
 
