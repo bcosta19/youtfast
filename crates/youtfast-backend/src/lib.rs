@@ -576,7 +576,7 @@ async fn handle(command: Command, context: Context) {
                 }
             }
         }
-        Command::ImportTakeout(picked) => {
+        Command::ImportTakeout { picked, revision } => {
             let Some(file) = picked.await else {
                 return;
             };
@@ -590,7 +590,10 @@ async fn handle(command: Command, context: Context) {
             })
             .await
             .unwrap_or_else(|_| Err("Could not import this Takeout file.".into()));
-            context.send(Event::Imported(import));
+            context.send(Event::Imported {
+                result: import,
+                revision,
+            });
         }
         Command::ExportLibrary(picked, library) => {
             let Some(file) = picked.await else {
@@ -626,7 +629,7 @@ async fn handle(command: Command, context: Context) {
                 Err(error) => error,
             }));
         }
-        Command::ImportBackup(picked) => {
+        Command::ImportBackup { picked, revision } => {
             let Some(file) = picked.await else {
                 return;
             };
@@ -637,7 +640,10 @@ async fn handle(command: Command, context: Context) {
             })
             .await
             .unwrap_or_else(|_| Err("Could not import this backup file.".into()));
-            context.send(Event::Imported(import));
+            context.send(Event::Imported {
+                result: import,
+                revision,
+            });
         }
         Command::MergeImport {
             mut library,

@@ -162,6 +162,37 @@ impl State {
         self.channel_header = Some(header);
     }
 
+    fn import_is_current(&mut self, revision: u64, current: u64) -> bool {
+        if revision == current {
+            return true;
+        }
+        self.notice = Some("The library changed while importing. Retry the import to keep your latest changes.".into());
+        false
+    }
+
+    fn prepare_import(
+        &mut self,
+        result: Result<Import, String>,
+        revision: u64,
+        current: u64,
+    ) -> Option<Command> {
+        if !self.import_is_current(revision, current) {
+            return None;
+        }
+
+        match result {
+            Ok(import) => Some(Command::MergeImport {
+                library: Box::new(self.library.clone()),
+                import,
+                revision,
+            }),
+            Err(error) => {
+                self.notice = Some(error);
+                None
+            }
+        }
+    }
+
     fn accept_import(
         &mut self,
         library: Library,
@@ -169,8 +200,7 @@ impl State {
         revision: u64,
         current: u64,
     ) -> bool {
-        if revision != current {
-            self.notice = Some("The library changed while importing. Retry the import to keep your latest changes.".into());
+        if !self.import_is_current(revision, current) {
             return false;
         }
         self.library = library;
@@ -529,13 +559,14 @@ impl App {
         }
     }
 
-    /// Takes in a Takeout import and reloads the view with it.
-    pub(super) fn on_imported(&mut self, import: Import) {
-        self.backend.send(Command::MergeImport {
-            library: Box::new(self.state.library.clone()),
-            import,
-            revision: self.library_revision.get(),
-        });
+    /// Queues a parsed import only if the library has not changed since it was requested.
+    pub(super) fn on_imported(&mut self, result: Result<Import, String>, revision: u64) {
+        if let Some(command) = self
+            .state
+            .prepare_import(result, revision, self.library_revision.get())
+        {
+            self.backend.send(command);
+        }
     }
 
     pub(super) fn on_import_merged(
@@ -1325,6 +1356,25 @@ mod tests {
         assert_eq!(state.page_videos.items()[0].id, "aaaaaaaaaaa");
         assert_eq!(state.page_more.as_ref().unwrap().ctoken, "next");
         assert!(matches!(state.channel_about, Fetch::Ready(_)));
+    }
+
+    #[test]
+    fn an_import_cannot_restore_history_cleared_while_it_was_parsing() {
+        let mut state = State::default();
+        let json = br#"{"version":1,"history":[{"video":{"id":"aaaaaaaaaaa","title":"Old"},"at":1}]}"#;
+        let started = 1;
+        state.library.record_watch(Video::from_id("aaaaaaaaaaa".into()), 1);
+        state.library.clear_history();
+        let current = 2;
+
+        let parsed = youtfast_storage::backup::parse_reader(json.as_slice());
+        assert!(state.prepare_import(parsed, started, current).is_none());
+        assert!(state.library.history.is_empty());
+        assert!(state.notice.as_deref().unwrap().contains("Retry"));
+        assert!(matches!(
+            state.prepare_import(Ok(Import::default()), current, current),
+            Some(Command::MergeImport { revision: 2, .. })
+        ));
     }
 
     #[test]

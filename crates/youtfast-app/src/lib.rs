@@ -1335,8 +1335,7 @@ impl App {
                 token,
                 result,
             } => self.on_comments(generation, key, token, result),
-            Event::Imported(Ok(import)) => self.on_imported(import),
-            Event::Imported(Err(error)) => self.state.notice = Some(error),
+            Event::Imported { result, revision } => self.on_imported(result, revision),
             Event::ImportMerged {
                 library,
                 counts,
@@ -1732,6 +1731,7 @@ impl App {
                 self.save_library();
             }
             Action::ImportTakeout => {
+                let revision = self.library_revision.get();
                 let picked = rfd::AsyncFileDialog::new()
                     .set_title(youtfast_i18n::gettext(
                         self.state.settings.language,
@@ -1745,7 +1745,10 @@ impl App {
                         &["csv", "json"],
                     )
                     .pick_file();
-                self.backend.send(Command::ImportTakeout(Box::pin(picked)));
+                self.backend.send(Command::ImportTakeout {
+                    picked: Box::pin(picked),
+                    revision,
+                });
             }
             Action::ExportLibrary => {
                 let picked = rfd::AsyncFileDialog::new()
@@ -1785,6 +1788,7 @@ impl App {
                 ));
             }
             Action::ImportBackup => {
+                let revision = self.library_revision.get();
                 let picked = rfd::AsyncFileDialog::new()
                     .set_title(youtfast_i18n::gettext(
                         self.state.settings.language,
@@ -1798,7 +1802,10 @@ impl App {
                         &["json"],
                     )
                     .pick_file();
-                self.backend.send(Command::ImportBackup(Box::pin(picked)));
+                self.backend.send(Command::ImportBackup {
+                    picked: Box::pin(picked),
+                    revision,
+                });
             }
             Action::AddAccountFile => self.add_account_file(),
             Action::AddAccountBrowser => self.add_account_browser(),
