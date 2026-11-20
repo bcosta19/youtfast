@@ -20,6 +20,7 @@ are the distribution record.
 ### Changed
 
 - Stop submitting releases to the official Winget catalog; the maintainer has not accepted Microsoft's Contributor License Agreement. Windows setup and portable downloads, Homebrew updates and website deployment remain available.
+- Playback progress saves no longer copy unchanged device playlists.
 
 ### Fixed
 

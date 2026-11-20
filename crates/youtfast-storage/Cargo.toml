@@ -18,7 +18,7 @@ fastframe-theme.workspace = true
 jiff.workspace = true
 keyring-core.workspace = true
 log.workspace = true
-serde.workspace = true
+serde = { workspace = true, features = ["rc"] }
 serde_json.workspace = true
 tokio.workspace = true
 

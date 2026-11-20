@@ -121,7 +121,7 @@ pub fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let palette = &state.palette;
 
     results::panel(ui, |ui| {
-        let total = state.library.playlists.len() + state.playlists.items().len();
+        let total = state.library.playlists().len() + state.playlists.items().len();
         let visible = state.visible_playlists();
         results::title(ui, state, tr(locale, "Playlists").as_ref(), Some(total));
         playlists_toolbar(ui, state, total, &visible, actions);

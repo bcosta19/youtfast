@@ -807,17 +807,13 @@ impl State {
                     .to_lowercase()
                     .contains(&query)
         };
-        let local = self
-            .library
-            .playlists
-            .iter()
-            .map(|playlist| PlaylistSummary {
-                id: playlist.id.clone(),
-                name: playlist.name.clone(),
-                thumbnail: playlist.videos.first().map(Video::thumbnail),
-                channel: Some(on_device.clone().into_owned()),
-                videos: Some(playlist.videos.len() as u64),
-            });
+        let local = self.library.playlists().map(|playlist| PlaylistSummary {
+            id: playlist.id.clone(),
+            name: playlist.name.clone(),
+            thumbnail: playlist.videos.first().map(Video::thumbnail),
+            channel: Some(on_device.clone().into_owned()),
+            videos: Some(playlist.videos.len() as u64),
+        });
         local
             .chain(self.playlists.items().iter().cloned())
             .filter(matches)

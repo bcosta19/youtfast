@@ -947,8 +947,7 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
     let local_watch_later = state.library.in_watch_later(&watching.id);
     let local_playlist = state
         .library
-        .playlists
-        .iter()
+        .playlists()
         .any(|playlist| playlist.videos.iter().any(|v| v.id == watching.id));
     let account = state
         .save_targets
@@ -1026,11 +1025,14 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
             egui::ScrollArea::vertical()
                 .max_height((ui.ctx().content_rect().height() * 0.4).min(320.0))
                 .show(ui, |ui| {
-                    for playlist in &state.library.playlists {
+                    for playlist in state.library.playlists() {
                         ui.horizontal(|ui| {
-                            if let Some(saved) =
-                                widgets::device_playlist_checkbox(ui, playlist, &watching.id, locale)
-                            {
+                            if let Some(saved) = widgets::device_playlist_checkbox(
+                                ui,
+                                playlist,
+                                &watching.id,
+                                locale,
+                            ) {
                                 actions.push(Action::SetSaved {
                                     playlist: playlist.id.clone(),
                                     saved,
@@ -1043,7 +1045,7 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
                             );
                         });
                     }
-                    if !state.library.playlists.is_empty() {
+                    if state.library.playlists().next().is_some() {
                         ui.separator();
                     }
                     if !state.signed_in() {

@@ -479,7 +479,7 @@ pub(crate) fn save_to_playlist_menu(
 ) {
     let locale = state.settings.language;
     ui.menu_button(tr(locale, "Save to playlist").as_ref(), |ui| {
-        if state.library.playlists.is_empty() {
+        if state.library.playlists().next().is_none() {
             ui.label(
                 egui::RichText::new(tr(locale, "No playlists on this device"))
                     .font(theme::regular(13.0))
@@ -490,7 +490,7 @@ pub(crate) fn save_to_playlist_menu(
         egui::ScrollArea::vertical()
             .max_height((ui.ctx().content_rect().height() * 0.4).min(320.0))
             .show(ui, |ui| {
-                for playlist in &state.library.playlists {
+                for playlist in state.library.playlists() {
                     ui.horizontal(|ui| {
                         if device_playlist_checkbox(ui, playlist, &video.id, locale).is_some() {
                             actions.push(Action::TogglePlaylistVideo {

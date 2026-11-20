@@ -5,6 +5,7 @@
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
@@ -58,9 +59,9 @@ pub struct Library {
     pub history: Vec<Watched>,
     /// Most recently added first.
     pub watch_later: Vec<Video>,
-    /// Device-only playlists kept on this computer.
+    /// Copy-on-write so snapshots share the collection and its unchanged playlists.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub playlists: Vec<DevicePlaylist>,
+    playlists: Arc<Vec<Arc<DevicePlaylist>>>,
     /// Greatest numeric playlist ID allocated, including deleted playlists.
     playlist_high_water: u64,
     /// The YouTube accounts signed in here, named. The sessions
@@ -396,29 +397,31 @@ impl Library {
     /// Drops malformed or duplicate playlist entries and clamps to storage bounds.
     fn sanitize_playlists(&mut self) {
         let mut seen_ids = HashSet::new();
-        let mut clean = Vec::with_capacity(self.playlists.len().min(PLAYLISTS_LIMIT));
-        for mut playlist in std::mem::take(&mut self.playlists) {
-            if !DevicePlaylist::is_local_id(&playlist.id)
+        let mut kept = 0;
+        Arc::make_mut(&mut self.playlists).retain_mut(|playlist| {
+            if kept >= PLAYLISTS_LIMIT
+                || !DevicePlaylist::is_local_id(&playlist.id)
                 || playlist.id.len() <= LOCAL_PLAYLIST_PREFIX.len()
             {
-                continue;
+                return false;
             }
             let name = playlist.name.trim();
             if name.is_empty() || !seen_ids.insert(playlist.id.clone()) {
-                continue;
+                return false;
             }
-            playlist.name = name.to_owned();
+            let trimmed_name = (name.len() != playlist.name.len()).then(|| name.to_owned());
+            let playlist = Arc::make_mut(playlist);
+            if let Some(name) = trimmed_name {
+                playlist.name = name;
+            }
             let mut seen_videos = HashSet::new();
             playlist
                 .videos
                 .retain(|video| !video.id.is_empty() && seen_videos.insert(video.id.clone()));
             playlist.videos.truncate(PLAYLIST_VIDEOS_LIMIT);
-            clean.push(playlist);
-            if clean.len() >= PLAYLISTS_LIMIT {
-                break;
-            }
-        }
-        self.playlists = clean;
+            kept += 1;
+            true
+        });
     }
 
     /// Whether another device playlist can be allocated.
@@ -435,11 +438,11 @@ impl Library {
         let next = self.next_playlist_number()?;
         let id = format!("{LOCAL_PLAYLIST_PREFIX}{next}");
         self.playlist_high_water = next;
-        self.playlists.push(DevicePlaylist {
+        Arc::make_mut(&mut self.playlists).push(Arc::new(DevicePlaylist {
             id: id.clone(),
             name: name.to_owned(),
             videos: Vec::new(),
-        });
+        }));
         Some(id)
     }
 
@@ -457,20 +460,19 @@ impl Library {
         if name.is_empty() {
             return false;
         }
-        let Some(playlist) = self.playlists.iter_mut().find(|playlist| playlist.id == id) else {
+        let Some(index) = self.playlist_index(id) else {
             return false;
         };
-        playlist.name = name.to_owned();
+        self.playlist_mut(index).name = name.to_owned();
         true
     }
 
     /// Removes a device-local playlist by ID.
     pub fn delete_playlist(&mut self, id: &str) -> bool {
-        let before = self.playlists.len();
-        self.playlists.retain(|playlist| playlist.id != id);
-        if self.playlists.len() == before {
+        let Some(index) = self.playlist_index(id) else {
             return false;
-        }
+        };
+        Arc::make_mut(&mut self.playlists).remove(index);
         // Legacy libraries may not yet have a high-water mark.
         if let Some(number) = DevicePlaylist::number(id) {
             self.playlist_high_water = self.playlist_high_water.max(number);
@@ -478,9 +480,22 @@ impl Library {
         true
     }
 
+    /// Iterates over device-only playlists in creation order.
+    pub fn playlists(&self) -> impl ExactSizeIterator<Item = &DevicePlaylist> {
+        self.playlists.iter().map(Arc::as_ref)
+    }
+
     /// Returns a device-local playlist by ID.
     pub fn playlist(&self, id: &str) -> Option<&DevicePlaylist> {
-        self.playlists.iter().find(|playlist| playlist.id == id)
+        self.playlists().find(|playlist| playlist.id == id)
+    }
+
+    fn playlist_index(&self, id: &str) -> Option<usize> {
+        self.playlists().position(|playlist| playlist.id == id)
+    }
+
+    fn playlist_mut(&mut self, index: usize) -> &mut DevicePlaylist {
+        Arc::make_mut(&mut Arc::make_mut(&mut self.playlists)[index])
     }
 
     /// Whether `video_id` is in the device-local playlist `playlist_id`.
@@ -494,32 +509,31 @@ impl Library {
         if video.id.is_empty() {
             return false;
         }
-        let Some(playlist) = self
-            .playlists
-            .iter_mut()
-            .find(|playlist| playlist.id == playlist_id)
-        else {
+        let Some(index) = self.playlist_index(playlist_id) else {
             return false;
         };
+        let playlist = &self.playlists[index];
         if playlist.is_full() || playlist.videos.iter().any(|known| known.id == video.id) {
             return false;
         }
-        playlist.videos.push(video);
+        self.playlist_mut(index).videos.push(video);
         true
     }
 
     /// Removes `video_id` from `playlist_id`.
     pub fn remove_from_playlist(&mut self, playlist_id: &str, video_id: &str) -> bool {
-        let Some(playlist) = self
-            .playlists
-            .iter_mut()
-            .find(|playlist| playlist.id == playlist_id)
+        let Some(index) = self.playlist_index(playlist_id) else {
+            return false;
+        };
+        let Some(row) = self.playlists[index]
+            .videos
+            .iter()
+            .position(|video| video.id == video_id)
         else {
             return false;
         };
-        let before = playlist.videos.len();
-        playlist.videos.retain(|video| video.id != video_id);
-        playlist.videos.len() != before
+        self.playlist_mut(index).videos.remove(row);
+        true
     }
 
     /// Ensures `video` is present (`saved = true`) or absent (`saved = false`) in `playlist_id`.
@@ -533,16 +547,14 @@ impl Library {
 
     /// Reorders a video within `playlist_id` from index `from` to `to`.
     pub fn move_playlist_video(&mut self, playlist_id: &str, from: usize, to: usize) -> bool {
-        let Some(playlist) = self
-            .playlists
-            .iter_mut()
-            .find(|playlist| playlist.id == playlist_id)
-        else {
+        let Some(index) = self.playlist_index(playlist_id) else {
             return false;
         };
-        if from < playlist.videos.len() && to < playlist.videos.len() && from != to {
-            let video = playlist.videos.remove(from);
-            playlist.videos.insert(to, video);
+        let len = self.playlists[index].videos.len();
+        if from < len && to < len && from != to {
+            let videos = &mut self.playlist_mut(index).videos;
+            let video = videos.remove(from);
+            videos.insert(to, video);
             true
         } else {
             false
@@ -631,11 +643,13 @@ impl Library {
                 *later = video.clone();
             }
         }
-        for playlist in &mut self.playlists {
-            for entry in &mut playlist.videos {
-                if entry.id == video.id {
-                    *entry = video.clone();
-                }
+        for index in 0..self.playlists.len() {
+            if let Some(row) = self.playlists[index]
+                .videos
+                .iter()
+                .position(|entry| entry.id == video.id && entry != video)
+            {
+                self.playlist_mut(index).videos[row] = video.clone();
             }
         }
     }
@@ -763,22 +777,18 @@ impl Library {
             if name.is_empty() {
                 continue;
             }
-            if let Some(existing) = self
-                .playlists
-                .iter_mut()
-                .find(|known| known.id == playlist.id)
-            {
-                let mut known_ids: HashSet<String> = existing
+            if let Some(index) = self.playlist_index(&playlist.id) {
+                let mut known_ids: HashSet<String> = self.playlists[index]
                     .videos
                     .iter()
                     .map(|video| video.id.clone())
                     .collect();
                 for video in playlist.videos {
-                    if existing.videos.len() >= PLAYLIST_VIDEOS_LIMIT {
+                    if self.playlists[index].is_full() {
                         break;
                     }
                     if !video.id.is_empty() && known_ids.insert(video.id.clone()) {
-                        existing.videos.push(video);
+                        self.playlist_mut(index).videos.push(video);
                     }
                 }
             } else if self.playlists.len() < PLAYLISTS_LIMIT {
@@ -792,11 +802,11 @@ impl Library {
                         videos.push(video);
                     }
                 }
-                self.playlists.push(DevicePlaylist {
+                Arc::make_mut(&mut self.playlists).push(Arc::new(DevicePlaylist {
                     id: playlist.id,
                     name: name.to_owned(),
                     videos,
-                });
+                }));
             }
         }
 
@@ -1444,7 +1454,7 @@ mod tests {
             });
         }
         let disk_lib = Library {
-            playlists: raw_playlists,
+            playlists: Arc::new(raw_playlists.into_iter().map(Arc::new).collect()),
             ..Library::default()
         };
         disk_lib.save(&path).unwrap();
@@ -1454,6 +1464,36 @@ mod tests {
         assert_eq!(loaded.playlists[0].name, "Valid Kept");
         assert_eq!(loaded.playlists[0].videos.len(), PLAYLIST_VIDEOS_LIMIT);
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn playback_snapshots_share_unchanged_device_playlists() {
+        let mut library = Library::default();
+        let first = library.create_playlist("First").unwrap();
+        let second = library.create_playlist("Second").unwrap();
+        let mut saved = video("aaaaaaaaaaa");
+        library.add_to_playlist(&first, saved.clone());
+        library.add_to_playlist(&second, video("bbbbbbbbbbb"));
+        library.record_watch(saved.clone(), 1);
+
+        let snapshot = library.clone();
+        library.set_position(&saved.id, 10.0, 100.0);
+        library.update_video(&saved);
+        assert!(Arc::ptr_eq(&snapshot.playlists, &library.playlists));
+
+        saved.title = "Updated title".into();
+        library.update_video(&saved);
+        assert!(!Arc::ptr_eq(&snapshot.playlists, &library.playlists));
+        assert!(!std::ptr::eq(
+            snapshot.playlist(&first).unwrap(),
+            library.playlist(&first).unwrap(),
+        ));
+        assert!(std::ptr::eq(
+            snapshot.playlist(&second).unwrap(),
+            library.playlist(&second).unwrap(),
+        ));
+        assert_ne!(snapshot.playlist(&first).unwrap().videos[0], saved);
+        assert_eq!(library.playlist(&first).unwrap().videos[0], saved);
     }
 
     #[test]
