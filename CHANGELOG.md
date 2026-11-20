@@ -39,6 +39,10 @@ are the distribution record.
 - SponsorBlock mutes the full duration of a mute segment, including segments shorter than 300 ms.
 - Changing a SponsorBlock category invalidates pending TV skip checks so they cannot seek using the old settings.
 
+### Fixed
+
+- The command palette blocks the mouse Back and Forward buttons while it is open.
+
 ## [0.9.1] - 2026-11-17
 
 ### Changed

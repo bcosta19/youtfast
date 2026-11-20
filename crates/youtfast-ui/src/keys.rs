@@ -13,12 +13,6 @@ pub(super) fn handle(
     if ctx.current_pass_index() == 0 {
         state.cursor_moved = false;
     }
-    if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Extra1)) {
-        actions.push(Action::Back);
-    }
-    if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Extra2)) {
-        actions.push(Action::Forward);
-    }
     if let Some(first) =
         ctx.input_mut(|input| consume_once(input, egui::Modifiers::COMMAND, Key::K))
     {
@@ -30,6 +24,12 @@ pub(super) fn handle(
     if state.palette_open {
         palette::handle_keys(ctx, state, status, actions, true);
         return;
+    }
+    if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Extra1)) {
+        actions.push(Action::Back);
+    }
+    if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Extra2)) {
+        actions.push(Action::Forward);
     }
     if ctx.text_edit_focused() || state.notifications_popup_open || egui::Popup::is_any_open(ctx) {
         return;
@@ -402,6 +402,44 @@ fn consume_once(
 mod tests {
     use super::*;
     use youtfast_core::model::Listing;
+
+    #[test]
+    fn mouse_history_buttons_do_not_navigate_under_the_palette() {
+        for (button, expected) in [
+            (egui::PointerButton::Extra1, Action::Back),
+            (egui::PointerButton::Extra2, Action::Forward),
+        ] {
+            for palette_open in [false, true] {
+                let ctx = egui::Context::default();
+                let mut state = State {
+                    palette_open,
+                    ..State::default()
+                };
+                let mut actions = Vec::new();
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        events: [true, false]
+                            .map(|pressed| egui::Event::PointerButton {
+                                pos: egui::pos2(20.0, 20.0),
+                                button,
+                                pressed,
+                                modifiers: egui::Modifiers::NONE,
+                            })
+                            .into(),
+                        ..Default::default()
+                    },
+                    |ui| handle(ui.ctx(), &mut state, None, &mut actions),
+                );
+                output.textures_delta.clear();
+                if palette_open {
+                    assert!(actions.is_empty());
+                } else {
+                    assert_eq!(actions, [expected.clone()]);
+                }
+            }
+        }
+    }
+
     #[test]
     fn held_tab_shortcuts_act_once_and_close_needs_a_tab() {
         // egui tells a repeat by the key still being down from an earlier frame.
