@@ -18,6 +18,8 @@ pub const SEEDS: usize = 12;
 /// At most this many of one channel in a row of the ranking before the
 /// others get their turn.
 const PER_CHANNEL: usize = 2;
+/// Number of eligible watches considered for channel affinity.
+const AFFINITY_WATCHES: usize = 200;
 /// How long the list is.
 const KEPT: usize = 80;
 
@@ -82,26 +84,40 @@ fn seeds_filtered(history: &[Watched], is_hidden: impl Fn(&Video) -> bool) -> Ve
 /// The channels the user cares for: subscribed ones fully, the others by
 /// how often the history has them.
 pub fn taste(history: &[Watched], subscriptions: &[Channel]) -> Taste {
+    taste_filtered(history, subscriptions, |_| false, |_| false)
+}
+
+fn taste_filtered(
+    history: &[Watched],
+    subscriptions: &[Channel],
+    excluded_watch: impl Fn(&Video) -> bool,
+    blocked_channel: impl Fn(&str) -> bool,
+) -> Taste {
     let mut counts: HashMap<String, f64> = HashMap::new();
-    for watched in history.iter().take(200) {
+    let recent = history
+        .iter()
+        .filter(|watched| !excluded_watch(&watched.video))
+        .take(AFFINITY_WATCHES);
+    for watched in recent {
         if let Some(channel) = &watched.video.channel_id {
             *counts.entry(channel.clone()).or_default() += 1.0;
         }
     }
     let most = counts.values().copied().fold(1.0, f64::max);
-    let mut channels: HashMap<String, f64> = counts
-        .into_iter()
-        .map(|(channel, count)| (channel, count / most))
-        .collect();
+    for count in counts.values_mut() {
+        *count /= most;
+    }
     for channel in subscriptions {
-        channels.insert(channel.id.clone(), 1.0);
+        if !blocked_channel(&channel.id) {
+            counts.insert(channel.id.clone(), 1.0);
+        }
     }
     Taste {
         watched: history
             .iter()
             .map(|watched| watched.video.id.clone())
             .collect(),
-        channels,
+        channels: counts,
         hidden_videos: HashSet::new(),
         blocked_channels: HashSet::new(),
     }
@@ -109,15 +125,18 @@ pub fn taste(history: &[Watched], subscriptions: &[Channel]) -> Taste {
 
 /// Like [`taste`], populated with `library`'s hidden videos and blocked channels.
 pub fn taste_for_library(library: &Library) -> Taste {
-    let mut t = taste(&library.history, &library.subscriptions);
+    let mut t = taste_filtered(
+        &library.history,
+        &library.subscriptions,
+        |video| library.is_hidden(video),
+        |id| library.is_channel_blocked(id),
+    );
     t.hidden_videos = library.hidden_videos.iter().cloned().collect();
     t.blocked_channels = library
         .blocked_channels
         .iter()
         .map(|channel| channel.id.clone())
         .collect();
-    t.channels
-        .retain(|channel_id, _| !t.blocked_channels.contains(channel_id));
     t
 }
 
@@ -305,6 +324,7 @@ mod tests {
         library.record_watch(v_blocked.clone(), 2);
         library.record_watch(v_hidden.clone(), 3);
         library.hide_video("hidden00001".into());
+        library.hide_video("unwatched01".into());
         library.block_channel(Channel {
             id: "UCbad".into(),
             name: "Bad Channel".into(),
@@ -321,6 +341,7 @@ mod tests {
             1.0,
             vec![
                 video("hidden00001", "UCok"),
+                video("unwatched01", "UCok"),
                 video("from_block1", "UCbad"),
                 video("other_bad01", "UCbad"),
                 video("fresh_good1", "UCgood"),
@@ -331,5 +352,34 @@ mod tests {
             .map(|video| video.id)
             .collect();
         assert_eq!(ranked, ["fresh_good1"]);
+    }
+
+    #[test]
+    fn excluded_watches_do_not_take_affinity_slots_or_change_weights() {
+        let mut library = Library::default();
+        let blocked = Channel {
+            id: "UCblocked".into(),
+            name: "Blocked".into(),
+            avatar: None,
+        };
+        library.subscriptions.push(blocked.clone());
+        assert!(library.block_channel(blocked));
+        assert!(library.hide_video("hidden-watch".into()));
+        library.history.push(watched("hidden-watch", "UCside", 0.0));
+        library.history.extend(
+            (0..AFFINITY_WATCHES).map(|i| watched(&format!("blocked-{i}"), "UCblocked", 0.0)),
+        );
+        library.history.extend([
+            watched("first", "UCgood", 0.0),
+            watched("second", "UCgood", 0.0),
+            watched("third", "UCside", 0.0),
+        ]);
+
+        let taste = taste_for_library(&library);
+        assert_eq!(taste.channels.len(), 2);
+        assert_eq!(taste.channels["UCgood"], 1.0);
+        assert_eq!(taste.channels["UCside"], 0.5);
+        assert!(taste.watched.contains("hidden-watch"));
+        assert!(taste.watched.contains("blocked-0"));
     }
 }
