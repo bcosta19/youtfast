@@ -231,4 +231,14 @@ pub enum Action {
     SetAutoUpdate(bool),
     /// Show or hide the full bundled changelog in the About section.
     ToggleFullChangelog,
+    /// Hides a video from Home, Subscriptions, and local recommendations.
+    HideVideo(String),
+    /// Clears all hidden videos from this device's library.
+    ClearHiddenVideos,
+    /// Blocks a channel from Home, Subscriptions, and local recommendations.
+    BlockChannel(Channel),
+    /// Unblocks a previously blocked channel by id.
+    UnblockChannel(String),
+    /// Toggles hiding watched videos on Home and Subscriptions.
+    SetHideWatched(bool),
 }

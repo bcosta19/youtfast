@@ -295,6 +295,17 @@ mais vídeos chegam. Os Shorts ficam em uma prateleira acima da lista: os da con
 são marcados pelo YouTube, e os dos canais do dispositivo vêm das abas Shorts
 deles.
 
+A **filtragem do feed** em **Início** e **Inscrições** acontece localmente
+neste dispositivo: o botão persistente **Ocultar assistidos** oculta vídeos
+assistidos no Início (incluindo a prateleira de Shorts) e da atividade e das
+prévias de cartões em Inscrições; os menus dos cartões também oferecem **Não
+tenho interesse** (oculta até 5.000 vídeos, removendo os mais antigos) e **Não
+recomendar este canal** (bloqueia até 1.000 canais, removendo os mais antigos),
+excluindo-os de Início, Inscrições e recomendações locais. Os resultados da
+pesquisa e a página própria de um canal nunca são filtrados. Revise ou desfaça
+vídeos ocultos (**Limpar**) e canais bloqueados (**Desbloquear**) em
+**Configurações → Histórico**.
+
 **Sem uma conta**, o YouTFast guarda as inscrições, o histórico de exibição (com
 o ponto onde cada vídeo parou, para retomá-lo) e o Assistir mais tarde neste
 computador, em `~/.local/share/youtfast/library.json`, e as configurações

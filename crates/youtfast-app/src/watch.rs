@@ -288,12 +288,7 @@ impl App {
         }
         self.state.playing_waiting = None;
         if self.state.view != View::Watch {
-            // A Short from Home's shelf goes on to the shelf's next ones.
-            self.state.up_next = if video.short && self.state.view == View::Home {
-                self.state.shorts.items().to_vec()
-            } else {
-                self.visible_videos()
-            };
+            self.state.up_next = visible_videos(&self.state, &video);
             self.push_location();
         }
         // What plays now leaves the queue.
@@ -593,27 +588,6 @@ impl App {
         self.state.details = Fetch::Ready(details);
     }
 
-    /// The videos on screen, to offer as Up next beside one of them.
-    fn visible_videos(&self) -> Vec<Video> {
-        let state = &self.state;
-        match state.view {
-            View::Home if state.feed_filter == youtfast_core::model::FeedFilter::ForYou => {
-                state.for_you.items().to_vec()
-            }
-            View::Home => state.feed.items().to_vec(),
-            View::Results => state.results.items().to_vec(),
-            View::Liked => state.visible_liked().into_iter().cloned().collect(),
-            View::Channel | View::Playlist => state.page_videos.items().to_vec(),
-            View::WatchLater => state.visible_watch_later().into_iter().cloned().collect(),
-            View::History => state
-                .history_rows()
-                .iter()
-                .map(|row| row.video.clone())
-                .collect(),
-            _ => Vec::new(),
-        }
-    }
-
     /// Remembers where the video being watched was left; a live stream has
     /// no such place.
     pub(super) fn remember_position(&mut self) {
@@ -834,9 +808,82 @@ pub fn failure_message(failure: mpv::Failure) -> &'static str {
     }
 }
 
+/// The videos on screen, to offer as Up next beside one of them.
+fn visible_videos(state: &State, opening: &Video) -> Vec<Video> {
+    match state.view {
+        View::Home => {
+            let listing = if opening.short {
+                &state.shorts
+            } else if state.feed_filter == youtfast_core::model::FeedFilter::ForYou {
+                &state.for_you
+            } else {
+                &state.feed
+            };
+            listing
+                .items()
+                .iter()
+                .filter(|video| state.shows_feed_video(video))
+                .cloned()
+                .collect()
+        }
+        View::Results => state.results.items().to_vec(),
+        View::Liked => state.visible_liked().into_iter().cloned().collect(),
+        View::Channel | View::Playlist => state.page_videos.items().to_vec(),
+        View::WatchLater => state.visible_watch_later().into_iter().cloned().collect(),
+        View::History => state
+            .history_rows()
+            .iter()
+            .map(|row| row.video.clone())
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn advancing_from_the_home_shorts_shelf_skips_filtered_shorts() {
+        let short = |id: &str| Video {
+            short: true,
+            ..Video::from_id(id.into())
+        };
+        let first = short("first000001");
+        let hidden = short("hidden00001");
+        let watched = short("watched0001");
+        let channel = Channel {
+            id: "UC_blocked".into(),
+            name: "Blocked".into(),
+            avatar: None,
+        };
+        let blocked = Video {
+            channel_id: Some(channel.id.clone()),
+            ..short("blocked0001")
+        };
+        let next = short("next0000001");
+        let mut state = State {
+            view: View::Home,
+            shorts: Listing::Ready(vec![
+                first.clone(),
+                hidden.clone(),
+                blocked,
+                watched.clone(),
+                next.clone(),
+            ]),
+            ..State::default()
+        };
+        assert!(state.library.hide_video(hidden.id));
+        assert!(state.library.block_channel(channel));
+        state.library.record_watch(watched, 1);
+        state.settings.hide_watched = true;
+
+        let up_next = visible_videos(&state, &first);
+        assert_eq!(
+            super::super::player::next_video(Some(&first), &[], &up_next, &[]),
+            Some(&next)
+        );
+    }
 
     #[test]
     fn a_tab_keeps_its_list_and_stopping_forgets_the_last_one() {

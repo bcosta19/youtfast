@@ -1980,3 +1980,36 @@ msgstr "Digression mise en sourdine"
 
 msgid "Segment muted"
 msgstr "Segment mis en sourdine"
+msgid "Hide watched"
+msgstr "Masquer les vidéos vues"
+
+msgid "Not interested"
+msgstr "Pas intéressé"
+
+msgid "Don't recommend channel"
+msgstr "Ne pas recommander cette chaîne"
+
+msgid "Hidden videos"
+msgstr "Vidéos masquées"
+
+msgid "No hidden videos."
+msgstr "Aucune vidéo masquée."
+
+msgid "{count} video hidden."
+msgid_plural "{count} videos hidden."
+msgstr[0] "{count} vidéo masquée."
+msgstr[1] "{count} vidéos masquées."
+
+msgid "Blocked channels"
+msgstr "Chaînes bloquées"
+
+msgid "No blocked channels."
+msgstr "Aucune chaîne bloquée."
+
+msgid "{count} channel blocked."
+msgid_plural "{count} channels blocked."
+msgstr[0] "{count} chaîne bloquée."
+msgstr[1] "{count} chaînes bloquées."
+
+msgid "Unblock"
+msgstr "Débloquer"

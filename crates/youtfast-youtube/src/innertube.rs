@@ -3,7 +3,7 @@
 //! the backend runtime and returns the app's types.
 
 use std::cmp::Reverse;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use serde_json::{Value, json};
@@ -209,8 +209,21 @@ pub async fn feed(
         return Err(problems.join("; "));
     }
 
-    let mut seen = HashSet::new();
-    videos.retain(|video| seen.insert(video.id.clone()));
+    let mut positions = HashMap::<String, usize>::new();
+    let mut unique = 0;
+    for index in 0..videos.len() {
+        if let Some(&position) = positions.get(&videos[index].id) {
+            let (kept, rest) = videos.split_at_mut(unique);
+            let video = &rest[index - unique];
+            kept[position].complete_from(video);
+            kept[position].short |= video.short;
+        } else {
+            positions.insert(videos[index].id.clone(), unique);
+            videos.swap(unique, index);
+            unique += 1;
+        }
+    }
+    videos.truncate(unique);
     // Undated videos go last; the sort is stable, so they keep the order
     // their source gave them.
     videos.sort_by_key(|video| Reverse(video.published_at));

@@ -265,7 +265,47 @@ pub fn video_menu(
             actions.push(Action::ToggleWatchLater(video.clone()));
             ui.close();
         }
+        video_filter_menu_items(ui, state, video, actions);
     });
+}
+
+/// Feed-filtering items ("Not interested" and "Don't recommend channel") shared
+/// by the card overflow menu and right-click menu; omitted on Channel pages.
+pub(crate) fn video_filter_menu_items(
+    ui: &mut Ui,
+    state: &State,
+    video: &Video,
+    actions: &mut Vec<Action>,
+) {
+    if state.view == youtfast_core::model::View::Channel {
+        return;
+    }
+    let locale = state.settings.language;
+    let can_hide = !state.library.is_video_hidden(&video.id);
+    let block_channel = video
+        .channel_id
+        .as_deref()
+        .filter(|id| !id.is_empty() && !state.library.is_channel_blocked(id));
+    if !can_hide && block_channel.is_none() {
+        return;
+    }
+    ui.separator();
+    if can_hide && ui.button(tr(locale, "Not interested").as_ref()).clicked() {
+        actions.push(Action::HideVideo(video.id.clone()));
+        ui.close();
+    }
+    if let Some(channel_id) = block_channel
+        && ui
+            .button(tr(locale, "Don't recommend channel").as_ref())
+            .clicked()
+    {
+        actions.push(Action::BlockChannel(youtfast_core::model::Channel {
+            id: channel_id.to_owned(),
+            name: video.channel.clone().unwrap_or_default(),
+            avatar: video.channel_avatar.clone(),
+        }));
+        ui.close();
+    }
 }
 
 /// Keep the list's proportions in place while its first page is loading.

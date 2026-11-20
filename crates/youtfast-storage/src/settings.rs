@@ -206,6 +206,9 @@ pub struct Settings {
     /// The changelog notes of `last_updated_version`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_updated_changelog: Option<String>,
+    /// Hide watched videos on Home and Subscriptions.
+    #[serde(default)]
+    pub hide_watched: bool,
 }
 
 /// A button of the sidebar. `Unknown` stands for a name a newer version
@@ -380,6 +383,7 @@ impl Default for Settings {
             last_notified_version: None,
             last_updated_version: None,
             last_updated_changelog: None,
+            hide_watched: false,
         }
     }
 }
@@ -925,5 +929,22 @@ mod tests {
         settings.save(&rt_path).unwrap();
         assert_eq!(Settings::load(&rt_path).unwrap(), settings);
         std::fs::remove_file(&rt_path).unwrap();
+    }
+
+    #[test]
+    fn hide_watched_defaults_false_for_old_files_and_round_trips() {
+        let old: Settings = serde_json::from_str(r#"{"volume": 40.0}"#).unwrap();
+        assert!(!old.hide_watched);
+
+        let settings = Settings {
+            hide_watched: true,
+            ..Settings::default()
+        };
+        let path = path("hide-watched-roundtrip");
+        settings.save(&path).unwrap();
+        let loaded = Settings::load(&path).unwrap();
+        assert!(loaded.hide_watched);
+        assert_eq!(loaded, settings);
+        std::fs::remove_file(&path).unwrap();
     }
 }

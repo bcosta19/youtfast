@@ -13,11 +13,15 @@ use youtfast_core::model::{AccountSource, Channel, Video};
 
 /// History keeps the most recent this many videos.
 pub(crate) const HISTORY_LIMIT: usize = 1000;
+/// Maximum number of hidden video ids kept in the local library.
+pub const HIDDEN_VIDEOS_LIMIT: usize = 5_000;
+/// Maximum number of blocked channels kept in the local library.
+pub const BLOCKED_CHANNELS_LIMIT: usize = 1_000;
 /// A video left within this many seconds of its start or end starts over.
 const RESUME_MARGIN: f64 = 15.0;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(from = "RawLibrary")]
 pub struct Library {
     pub subscriptions: Vec<Channel>,
     /// Most recent first.
@@ -35,6 +39,14 @@ pub struct Library {
     /// Unix seconds of the newest upload already shown as a desktop
     /// notification.
     pub alerts_notified_at: Option<i64>,
+    /// Video ids hidden via "Not interested", oldest first, bounded to
+    /// [`HIDDEN_VIDEOS_LIMIT`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    hidden_videos: Vec<String>,
+    /// Channels blocked via "Don't recommend channel", oldest first, bounded
+    /// to [`BLOCKED_CHANNELS_LIMIT`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    blocked_channels: Vec<Channel>,
     /// The single account older files carried; folded into `accounts` on
     /// load, then never written again.
     #[serde(skip_serializing)]
@@ -49,6 +61,51 @@ pub struct Library {
     /// Unique across libraries; 0 until the first change.
     #[serde(skip)]
     history_stamp: u64,
+    /// In-memory index of `hidden_videos` for O(1) lookups.
+    #[serde(skip)]
+    hidden_ids: HashSet<String>,
+    /// In-memory index of `blocked_channels` for O(1) lookups.
+    #[serde(skip)]
+    blocked_ids: HashSet<String>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct RawLibrary {
+    subscriptions: Vec<Channel>,
+    history: Vec<Watched>,
+    watch_later: Vec<Video>,
+    accounts: Vec<Account>,
+    active_account: Option<u32>,
+    alerts_seen_at: Option<i64>,
+    alerts_notified_at: Option<i64>,
+    hidden_videos: Vec<String>,
+    blocked_channels: Vec<Channel>,
+    account: Option<AccountSource>,
+}
+
+impl From<RawLibrary> for Library {
+    fn from(raw: RawLibrary) -> Self {
+        let mut library = Self {
+            subscriptions: raw.subscriptions,
+            history: raw.history,
+            watch_later: raw.watch_later,
+            accounts: raw.accounts,
+            active_account: raw.active_account,
+            alerts_seen_at: raw.alerts_seen_at,
+            alerts_notified_at: raw.alerts_notified_at,
+            hidden_videos: raw.hidden_videos,
+            blocked_channels: raw.blocked_channels,
+            account: raw.account,
+            watched_ids: HashMap::new(),
+            history_stamp: 0,
+            hidden_ids: HashSet::new(),
+            blocked_ids: HashSet::new(),
+        };
+        library.reindex_watched();
+        library.reindex_filters();
+        library
+    }
 }
 
 /// Hands out `Library::history_stamp`s.
@@ -107,8 +164,41 @@ impl Library {
             });
             library.active_account = Some(1);
         }
-        library.reindex_watched();
         Ok(library)
+    }
+
+    /// Rebuilds the in-memory `hidden_ids` and `blocked_ids` indexes and
+    /// enforces deduplication and size bounds after deserialization.
+    fn reindex_filters(&mut self) {
+        let capacity = self.hidden_videos.len().min(HIDDEN_VIDEOS_LIMIT);
+        let mut hidden_ids = HashSet::with_capacity(capacity);
+        let mut clean_hidden = Vec::with_capacity(capacity);
+        for id in self.hidden_videos.drain(..).rev() {
+            if !id.is_empty() && hidden_ids.insert(id.clone()) {
+                clean_hidden.push(id);
+                if clean_hidden.len() == HIDDEN_VIDEOS_LIMIT {
+                    break;
+                }
+            }
+        }
+        clean_hidden.reverse();
+        self.hidden_videos = clean_hidden;
+        self.hidden_ids = hidden_ids;
+
+        let capacity = self.blocked_channels.len().min(BLOCKED_CHANNELS_LIMIT);
+        let mut blocked_ids = HashSet::with_capacity(capacity);
+        let mut clean_blocked = Vec::with_capacity(capacity);
+        for channel in self.blocked_channels.drain(..).rev() {
+            if !channel.id.is_empty() && blocked_ids.insert(channel.id.clone()) {
+                clean_blocked.push(channel);
+                if clean_blocked.len() == BLOCKED_CHANNELS_LIMIT {
+                    break;
+                }
+            }
+        }
+        clean_blocked.reverse();
+        self.blocked_channels = clean_blocked;
+        self.blocked_ids = blocked_ids;
     }
 
     /// Rebuilds the video-id index `watched` reads after the history
@@ -184,6 +274,85 @@ impl Library {
             self.watch_later.insert(0, video);
             true
         }
+    }
+
+    /// Individually hidden video IDs, in order from oldest to newest.
+    pub fn hidden_videos(&self) -> &[String] {
+        &self.hidden_videos
+    }
+
+    /// Blocked channels, in order from oldest to newest.
+    pub fn blocked_channels(&self) -> &[Channel] {
+        &self.blocked_channels
+    }
+
+    /// Marks a video as "Not interested" on this device, keeping at most
+    /// [`HIDDEN_VIDEOS_LIMIT`] entries (dropping the oldest).
+    pub fn hide_video(&mut self, id: String) -> bool {
+        if id.is_empty() || !self.hidden_ids.insert(id.clone()) {
+            return false;
+        }
+        self.hidden_videos.push(id);
+        if self.hidden_videos.len() > HIDDEN_VIDEOS_LIMIT {
+            let excess = self.hidden_videos.len() - HIDDEN_VIDEOS_LIMIT;
+            for dropped in self.hidden_videos.drain(..excess) {
+                self.hidden_ids.remove(&dropped);
+            }
+        }
+        true
+    }
+
+    pub fn is_video_hidden(&self, id: &str) -> bool {
+        self.hidden_ids.contains(id)
+    }
+
+    /// Clears all hidden videos. Returns whether any were present.
+    pub fn clear_hidden_videos(&mut self) -> bool {
+        if self.hidden_videos.is_empty() && self.hidden_ids.is_empty() {
+            return false;
+        }
+        self.hidden_videos.clear();
+        self.hidden_ids.clear();
+        true
+    }
+
+    /// Blocks a channel from Home, Subscriptions, and local recommendations,
+    /// keeping at most [`BLOCKED_CHANNELS_LIMIT`] entries (dropping the oldest).
+    pub fn block_channel(&mut self, channel: Channel) -> bool {
+        if channel.id.is_empty() || !self.blocked_ids.insert(channel.id.clone()) {
+            return false;
+        }
+        self.blocked_channels.push(channel);
+        if self.blocked_channels.len() > BLOCKED_CHANNELS_LIMIT {
+            let excess = self.blocked_channels.len() - BLOCKED_CHANNELS_LIMIT;
+            for dropped in self.blocked_channels.drain(..excess) {
+                self.blocked_ids.remove(&dropped.id);
+            }
+        }
+        true
+    }
+
+    /// Unblocks a channel by id. Returns whether the channel was blocked.
+    pub fn unblock_channel(&mut self, channel_id: &str) -> bool {
+        if !self.blocked_ids.remove(channel_id) {
+            return false;
+        }
+        self.blocked_channels
+            .retain(|channel| channel.id != channel_id);
+        true
+    }
+
+    pub fn is_channel_blocked(&self, channel_id: &str) -> bool {
+        self.blocked_ids.contains(channel_id)
+    }
+
+    /// Whether a video is hidden either individually or via its blocked channel.
+    pub fn is_hidden(&self, video: &Video) -> bool {
+        self.is_video_hidden(&video.id)
+            || video
+                .channel_id
+                .as_deref()
+                .is_some_and(|id| self.is_channel_blocked(id))
     }
 
     /// Puts the video at the top of the history, keeping where it was left.
@@ -761,5 +930,106 @@ mod tests {
         assert_eq!(library.watch_later.len(), crate::backup::WATCH_LATER_LIMIT);
         assert_eq!(library.watch_later[0].id, "existing001");
         assert_eq!(library.watch_later[1].id, "wl000000001");
+    }
+
+    #[test]
+    fn hidden_videos_and_blocked_channels_deduplicate_stay_bounded_and_round_trip() {
+        let mut library = Library::default();
+        assert!(!library.hide_video(String::new()));
+        assert!(!library.clear_hidden_videos());
+        assert!(!library.block_channel(channel("", "Empty")));
+        assert!(!library.unblock_channel("UCmissing"));
+
+        for i in 0..(HIDDEN_VIDEOS_LIMIT + 5) {
+            assert!(library.hide_video(format!("vid{i:08}")));
+        }
+        assert!(!library.hide_video("vid00000010".into()));
+        assert_eq!(library.hidden_videos.len(), HIDDEN_VIDEOS_LIMIT);
+        // Oldest 5 (0..5) were dropped.
+        for i in 0..5 {
+            assert!(!library.is_video_hidden(&format!("vid{i:08}")));
+        }
+        assert!(library.is_video_hidden("vid00000005"));
+
+        for i in 0..(BLOCKED_CHANNELS_LIMIT + 3) {
+            assert!(library.block_channel(channel(&format!("UC_{i}"), &format!("Channel {i}"))));
+        }
+        assert!(!library.block_channel(channel("UC_10", "Channel 10")));
+        assert_eq!(library.blocked_channels.len(), BLOCKED_CHANNELS_LIMIT);
+        for i in 0..3 {
+            assert!(!library.is_channel_blocked(&format!("UC_{i}")));
+        }
+        assert!(library.is_channel_blocked("UC_3"));
+
+        let mut v_from_blocked = video("fresh000001");
+        v_from_blocked.channel_id = Some("UC_3".into());
+        assert!(library.is_hidden(&v_from_blocked));
+        let v_hidden = video("vid00000005");
+        assert!(library.is_hidden(&v_hidden));
+        let mut v_clean = video("clean000001");
+        v_clean.channel_id = Some("UC_clean".into());
+        assert!(!library.is_hidden(&v_clean));
+
+        // Round-trip through JSON keeps indexes synced.
+        let json = serde_json::to_string(&library).unwrap();
+        let mut reloaded: Library = serde_json::from_str(&json).unwrap();
+        assert!(reloaded.is_video_hidden("vid00000005"));
+        assert!(reloaded.is_channel_blocked("UC_3"));
+        assert!(reloaded.is_hidden(&v_from_blocked));
+        assert!(reloaded.unblock_channel("UC_3"));
+        assert!(!reloaded.is_channel_blocked("UC_3"));
+        assert!(!reloaded.is_hidden(&v_from_blocked));
+        assert!(reloaded.clear_hidden_videos());
+        assert!(!reloaded.is_video_hidden("vid00000005"));
+
+        // Older library.json without hidden_videos / blocked_channels loads cleanly.
+        let old: Library = serde_json::from_str(r#"{"subscriptions":[]}"#).unwrap();
+        assert!(old.hidden_videos.is_empty());
+        assert!(old.blocked_channels.is_empty());
+    }
+
+    #[test]
+    fn load_normalizes_oversized_duplicate_filters_and_save_keeps_them_normalized() {
+        let dir = std::env::var("CARGO_TARGET_TMPDIR")
+            .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../target").to_owned());
+        std::fs::create_dir_all(&dir).unwrap();
+        let path =
+            Path::new(&dir).join(format!("library-feed-filters-{}.json", std::process::id()));
+        let hidden_videos: Vec<_> = (0..HIDDEN_VIDEOS_LIMIT + 3)
+            .flat_map(|i| [format!("vid{i}"), format!("vid{i}")])
+            .chain([String::new()])
+            .collect();
+        let blocked_channels: Vec<_> = (0..BLOCKED_CHANNELS_LIMIT + 3)
+            .flat_map(|i| {
+                let id = format!("UC_{i}");
+                [channel(&id, "Older"), channel(&id, "Latest")]
+            })
+            .chain([channel("", "Empty")])
+            .collect();
+        let json = serde_json::json!({
+            "hidden_videos": hidden_videos,
+            "blocked_channels": blocked_channels,
+        });
+        std::fs::write(&path, serde_json::to_vec(&json).unwrap()).unwrap();
+
+        let library = Library::load(&path).unwrap();
+        assert_eq!(library.hidden_videos().len(), HIDDEN_VIDEOS_LIMIT);
+        assert_eq!(library.hidden_videos()[0], "vid3");
+        assert_eq!(library.blocked_channels().len(), BLOCKED_CHANNELS_LIMIT);
+        assert_eq!(library.blocked_channels()[0], channel("UC_3", "Latest"));
+        assert!(library.is_video_hidden("vid3"));
+        assert!(library.is_channel_blocked("UC_3"));
+        assert!(!library.is_video_hidden("vid2"));
+        assert!(!library.is_channel_blocked("UC_2"));
+        assert!(!library.is_video_hidden(""));
+        assert!(!library.is_channel_blocked(""));
+
+        library.save(&path).unwrap();
+        let reloaded = Library::load(&path).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(reloaded.hidden_videos(), library.hidden_videos());
+        assert_eq!(reloaded.blocked_channels(), library.blocked_channels());
+        assert!(reloaded.is_video_hidden("vid3"));
+        assert!(reloaded.is_channel_blocked("UC_3"));
     }
 }

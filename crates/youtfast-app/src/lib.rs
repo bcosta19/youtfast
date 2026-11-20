@@ -572,19 +572,33 @@ impl State {
             .collect()
     }
 
+    /// Whether `video` passes local hidden/blocked and `hide_watched` filters
+    /// for Home and Subscriptions.
+    pub fn shows_feed_video(&self, video: &Video) -> bool {
+        !self.library.is_hidden(video)
+            && (!self.settings.hide_watched || !self.library.watched(&video.id))
+    }
+
     /// The feed's videos home shows: For you's, or the first
     /// `feed_shown` of the feed through the chip.
     pub fn visible_feed(&self) -> Vec<&Video> {
         if self.feed_filter == FeedFilter::ForYou {
-            return self.for_you.items().iter().collect();
+            return self
+                .for_you
+                .items()
+                .iter()
+                .filter(|video| self.shows_feed_video(video))
+                .collect();
         }
         let today = util::Today::at(util::now());
         let videos = self.feed.items();
         videos[..videos.len().min(self.feed_shown)]
             .iter()
             .filter(|video| {
-                self.feed_filter
-                    .keeps(video, self.library.watched(&video.id), &today)
+                self.shows_feed_video(video)
+                    && self
+                        .feed_filter
+                        .keeps(video, self.library.watched(&video.id), &today)
             })
             .collect()
     }
@@ -636,6 +650,9 @@ impl State {
     pub fn subscription_activity(&self) -> HashMap<&str, ChannelActivity<'_>> {
         let mut map: HashMap<&str, ChannelActivity<'_>> = HashMap::new();
         for (rank, video) in self.feed.items().iter().enumerate() {
+            if !self.shows_feed_video(video) {
+                continue;
+            }
             let Some(channel_id) = video.channel_id.as_deref() else {
                 continue;
             };
@@ -668,7 +685,7 @@ impl State {
             };
             let entry = map.entry(channel_id).or_default();
             entry.watched_count += 1;
-            if entry.last_watched.is_none() {
+            if !self.library.is_hidden(video) && entry.last_watched.is_none() {
                 entry.last_watched = Some(video);
                 entry.watch_rank = Some(rank);
             }
@@ -687,6 +704,9 @@ impl State {
             .subscription_list()
             .iter()
             .filter(|channel| {
+                if self.library.is_channel_blocked(&channel.id) {
+                    return false;
+                }
                 if query.is_empty() {
                     return true;
                 }
@@ -994,6 +1014,108 @@ mod subscription_state_tests {
                 .collect::<Vec<_>>(),
             ["hs000000002"]
         );
+    }
+
+    #[test]
+    fn hidden_videos_blocked_channels_and_hide_watched_filter_home_and_subscriptions() {
+        let mut state = State::default();
+        let make_video = |id: &str, channel_id: &str| Video {
+            title: format!("Video {id}"),
+            channel: Some(format!("Channel {channel_id}")),
+            channel_id: Some(channel_id.to_owned()),
+            ..Video::from_id(id.to_owned())
+        };
+        let v_ok = make_video("ok000000001", "UC_ok");
+        let v_watched = make_video("wt000000001", "UC_ok");
+        let v_hidden = make_video("hd000000001", "UC_ok");
+        let v_blocked = make_video("bl000000001", "UC_bad");
+
+        state.library.subscriptions = vec![
+            Channel {
+                id: "UC_ok".into(),
+                name: "OK Channel".into(),
+                avatar: None,
+            },
+            Channel {
+                id: "UC_bad".into(),
+                name: "Bad Channel".into(),
+                avatar: None,
+            },
+        ];
+        state.feed = Listing::Ready(vec![
+            v_ok.clone(),
+            v_watched.clone(),
+            v_hidden.clone(),
+            v_blocked.clone(),
+        ]);
+        state.feed_shown = 10;
+        state.for_you = Listing::Ready(vec![
+            v_ok.clone(),
+            v_watched.clone(),
+            v_hidden.clone(),
+            v_blocked.clone(),
+        ]);
+        state.results = Listing::Ready(vec![v_hidden.clone(), v_blocked.clone()]);
+        state.page_videos = Listing::Ready(vec![v_hidden.clone(), v_blocked.clone()]);
+
+        state.library.record_watch(v_watched.clone(), 10);
+        state.library.hide_video("hd000000001".into());
+        state.library.block_channel(Channel {
+            id: "UC_bad".into(),
+            name: "Bad Channel".into(),
+            avatar: None,
+        });
+
+        // ForYou filters hidden videos and blocked channels.
+        state.feed_filter = FeedFilter::ForYou;
+        assert_eq!(
+            state
+                .visible_feed()
+                .iter()
+                .map(|v| v.id.as_str())
+                .collect::<Vec<_>>(),
+            ["ok000000001", "wt000000001"]
+        );
+
+        // Feed All + hide_watched filters watched too.
+        state.feed_filter = FeedFilter::All;
+        state.settings.hide_watched = true;
+        assert_eq!(
+            state
+                .visible_feed()
+                .iter()
+                .map(|v| v.id.as_str())
+                .collect::<Vec<_>>(),
+            ["ok000000001"]
+        );
+        state.feed_filter = FeedFilter::ForYou;
+        assert_eq!(
+            state
+                .visible_feed()
+                .iter()
+                .map(|v| v.id.as_str())
+                .collect::<Vec<_>>(),
+            ["ok000000001"]
+        );
+
+        // Subscriptions filters blocked channels and hides watched feed activity.
+        let activity = state.subscription_activity();
+        assert_eq!(activity["UC_ok"].recent_count, 1);
+        assert_eq!(
+            activity["UC_ok"].latest_video.map(|v| v.id.as_str()),
+            Some("ok000000001")
+        );
+        assert!(!activity.contains_key("UC_bad"));
+        let subs: Vec<&str> = state
+            .visible_subscriptions_with_activity(&activity)
+            .into_iter()
+            .map(|c| c.id.as_str())
+            .collect();
+        assert_eq!(subs, ["UC_ok"]);
+
+        // Search and Channel listings remain unfiltered.
+        assert_eq!(state.results.items().len(), 2);
+        assert_eq!(state.page_videos.items().len(), 2);
     }
 }
 
@@ -1853,7 +1975,10 @@ impl App {
             Action::LoadSaveTargets => self.load_save_targets(),
             Action::SetSaved { playlist, saved } => self.set_saved(playlist, saved),
             Action::SetShareAtTime(on) => self.state.share_at_time = on,
-            Action::SetFeedFilter(filter) => self.state.feed_filter = filter,
+            Action::SetFeedFilter(filter) => {
+                self.state.feed_filter = filter;
+                self.load_visible_for_you();
+            }
             Action::CopyLink(url) => {
                 ctx.copy_text(url);
                 self.state.notice = Some("Link copied".to_owned());
@@ -2009,6 +2134,32 @@ impl App {
             }
             Action::ToggleFullChangelog => {
                 self.state.full_changelog_open = !self.state.full_changelog_open;
+            }
+            Action::HideVideo(id) => {
+                if self.state.library.hide_video(id) {
+                    self.save_feed_filters();
+                }
+            }
+            Action::ClearHiddenVideos => {
+                if self.state.library.clear_hidden_videos() {
+                    self.save_feed_filters();
+                }
+            }
+            Action::BlockChannel(channel) => {
+                if self.state.library.block_channel(channel) {
+                    self.save_feed_filters();
+                }
+            }
+            Action::UnblockChannel(id) => {
+                if self.state.library.unblock_channel(&id) {
+                    self.save_feed_filters();
+                }
+            }
+            Action::SetHideWatched(hide) => {
+                if self.state.settings.hide_watched != hide {
+                    self.state.settings.hide_watched = hide;
+                    self.save_settings();
+                }
             }
         }
     }

@@ -314,6 +314,17 @@ Ende, und es kommt mehr. Shorts liegen in einer Leiste über der Liste: Die des
 Kontos werden von YouTube markiert, die der Gerätekanäle stammen aus deren
 Shorts-Tabs.
 
+Die **Feed-Filterung** auf **Startseite** und **Abos** läuft lokal auf diesem
+Gerät: Ein dauerhaft gespeicherter Chip **Angesehene ausblenden** blendet
+angesehene Videos auf der Startseite (einschließlich der Shorts-Leiste) sowie in
+der Feed-Aktivität und den Kartenvorschauen unter Abos aus; Kartenmenüs bieten
+außerdem **Kein Interesse** (blendet bis zu 5.000 Videos aus und verwirft die
+ältesten) sowie **Kanal nicht empfehlen** (blockiert bis zu 1.000 Kanäle und
+verwirft die ältesten) und schließt sie von Startseite, Abos und lokalen
+Empfehlungen aus. Suchergebnisse und die eigene Seite eines Kanals werden nie
+gefiltert. Überprüfen oder entfernen Sie ausgeblendete Videos (**Löschen**) und
+blockierte Kanäle (**Freigeben**) unter **Einstellungen → Verlauf**.
+
 **Ohne Konto** speichert YouTFast Abos, Wiedergabeverlauf (mit der Stelle, an der
 jedes Video verlassen wurde, um es fortzusetzen) und „Später ansehen“ auf diesem
 Computer, in `~/.local/share/youtfast/library.json`, und seine Einstellungen

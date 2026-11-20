@@ -1980,3 +1980,36 @@ msgstr "Füllmaterial stummgeschaltet"
 
 msgid "Segment muted"
 msgstr "Segment stummgeschaltet"
+msgid "Hide watched"
+msgstr "Angesehene ausblenden"
+
+msgid "Not interested"
+msgstr "Kein Interesse"
+
+msgid "Don't recommend channel"
+msgstr "Kanal nicht empfehlen"
+
+msgid "Hidden videos"
+msgstr "Ausgeblendete Videos"
+
+msgid "No hidden videos."
+msgstr "Keine ausgeblendeten Videos."
+
+msgid "{count} video hidden."
+msgid_plural "{count} videos hidden."
+msgstr[0] "{count} Video ausgeblendet."
+msgstr[1] "{count} Videos ausgeblendet."
+
+msgid "Blocked channels"
+msgstr "Blockierte Kanäle"
+
+msgid "No blocked channels."
+msgstr "Keine blockierten Kanäle."
+
+msgid "{count} channel blocked."
+msgid_plural "{count} channels blocked."
+msgstr[0] "{count} Kanal blockiert."
+msgstr[1] "{count} Kanäle blockiert."
+
+msgid "Unblock"
+msgstr "Freigeben"

@@ -519,6 +519,21 @@ impl eframe::App for Demo {
                     self.state.notice =
                         Some(tr(self.state.settings.language, "Link copied (demo)").into_owned())
                 }
+                Action::HideVideo(id) => {
+                    self.state.library.hide_video(id);
+                }
+                Action::ClearHiddenVideos => {
+                    self.state.library.clear_hidden_videos();
+                }
+                Action::BlockChannel(channel) => {
+                    self.state.library.block_channel(channel);
+                }
+                Action::UnblockChannel(id) => {
+                    self.state.library.unblock_channel(&id);
+                }
+                Action::SetHideWatched(hide) => {
+                    self.state.settings.hide_watched = hide;
+                }
                 _ => {}
             }
         }

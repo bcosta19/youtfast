@@ -411,6 +411,7 @@ pub fn video_interactions(
                 ui.close();
             }
         }
+        crate::results::video_filter_menu_items(ui, state, video, actions);
     });
     if response.hovered() || response.has_focus() || ui.rect_contains_pointer(response.rect) {
         let clock = Rect::from_min_size(
@@ -865,5 +866,104 @@ mod tests {
         assert!((uv.left() - (1.0 - 81.0 / 256.0) / 2.0).abs() < 1e-6);
         assert_eq!(uv.top(), 0.0);
         assert_eq!(uv.bottom(), 1.0);
+    }
+
+    #[test]
+    fn card_more_menu_offers_not_interested_and_block_channel_except_on_channel_view() {
+        for view in [
+            youtfast_core::model::View::Home,
+            youtfast_core::model::View::Channel,
+        ] {
+            let ctx = egui::Context::default();
+            youtfast_appearance::theme::install_fonts(&ctx);
+            let state = State {
+                view,
+                ..State::default()
+            };
+            let videos = action_videos(1);
+            let run_frame = |events: Vec<egui::Event>| {
+                let mut actions = Vec::new();
+                let mut rect = Rect::NOTHING;
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(480.0, 1000.0))),
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| {
+                        let response = video_card(
+                            ui,
+                            &state.palette,
+                            &videos[0],
+                            None,
+                            false,
+                            468.0,
+                            state.settings.language,
+                        );
+                        rect = response.rect;
+                        video_interactions(ui, &response, &state, &videos[0], &mut actions);
+                    },
+                );
+                let texts: Vec<(String, Pos2)> = output
+                    .shapes
+                    .iter()
+                    .filter_map(|shape| match &shape.shape {
+                        egui::Shape::Text(text) => Some((
+                            text.galley.text().to_owned(),
+                            Rect::from_min_size(text.pos, text.galley.size()).center(),
+                        )),
+                        _ => None,
+                    })
+                    .collect();
+                output.textures_delta.clear();
+                (rect, texts, actions)
+            };
+
+            let (card_rect, _, _) = run_frame(Vec::new());
+            let menu_pos = card_rect.right_bottom() - vec2(16.0, 48.0);
+            run_frame(vec![egui::Event::PointerMoved(menu_pos)]);
+            for pressed in [true, false] {
+                run_frame(vec![
+                    egui::Event::PointerMoved(menu_pos),
+                    egui::Event::PointerButton {
+                        pos: menu_pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ]);
+            }
+            let (_, texts, _) = run_frame(Vec::new());
+            let not_interested_pos = texts
+                .iter()
+                .find(|(label, _)| label == "Not interested")
+                .map(|(_, pos)| *pos);
+            let block_channel_pos = texts
+                .iter()
+                .find(|(label, _)| label == "Don't recommend channel")
+                .map(|(_, pos)| *pos);
+
+            if view == youtfast_core::model::View::Channel {
+                assert!(not_interested_pos.is_none());
+                assert!(block_channel_pos.is_none());
+            } else {
+                let pos = not_interested_pos.expect("Not interested menu item");
+                assert!(block_channel_pos.is_some());
+                let mut actions = Vec::new();
+                for pressed in [true, false] {
+                    let (_, _, emitted) = run_frame(vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ]);
+                    actions.extend(emitted);
+                }
+                assert_eq!(actions, [Action::HideVideo(videos[0].id.clone())]);
+            }
+        }
     }
 }

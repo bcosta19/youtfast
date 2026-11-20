@@ -95,6 +95,16 @@ fn feed_chips(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 actions.push(Action::SetFeedFilter(filter));
             }
         }
+        if widgets::chip(
+            ui,
+            &state.palette,
+            tr(locale, "Hide watched").as_ref(),
+            state.settings.hide_watched,
+        )
+        .clicked()
+        {
+            actions.push(Action::SetHideWatched(!state.settings.hide_watched));
+        }
     });
     ui.add_space(16.0);
 }
@@ -223,6 +233,13 @@ fn for_you(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .show(ui, |ui| {
+                    if videos.is_empty() {
+                        results::nothing(
+                            ui,
+                            state,
+                            tr(locale, "No video matches this filter").as_ref(),
+                        );
+                    }
                     let gap = 16.0;
                     let (columns, width) =
                         widgets::grid_columns(ui.available_width(), CARD_WIDTH, gap, 5);
@@ -301,6 +318,10 @@ fn shorts_shelf(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let Listing::Ready(shorts) = &state.shorts else {
         return;
     };
+    let shorts: Vec<&Video> = shorts
+        .iter()
+        .filter(|video| state.shows_feed_video(video))
+        .collect();
     if shorts.is_empty() {
         return;
     }
@@ -561,5 +582,91 @@ mod tests {
         assert!(texts.iter().any(|t| t == "Shorts"));
         assert!(texts.iter().any(|t| t == "Demo channel"));
         assert!(texts.iter().any(|t| t == "411K views"));
+    }
+
+    #[test]
+    fn shorts_shelf_and_hide_watched_chip_respect_filters() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let mut state = State {
+            feed_filter: FeedFilter::All,
+            feed: Listing::Ready(vec![Video::from_id("feed0000001".into())]),
+            feed_shown: 10,
+            ..State::default()
+        };
+        let mut hidden_short = Video::from_id("short_hid01".into());
+        hidden_short.title = "Hidden Short".into();
+        hidden_short.short = true;
+        let mut watched_short = Video::from_id("short_wat01".into());
+        watched_short.title = "Watched Short".into();
+        watched_short.short = true;
+        let mut visible_short = Video::from_id("short_vis01".into());
+        visible_short.title = "Visible Short".into();
+        visible_short.short = true;
+
+        state.library.hide_video("short_hid01".into());
+        state.library.record_watch(watched_short.clone(), 10);
+        state.settings.hide_watched = true;
+        state.shorts = Listing::Ready(vec![hidden_short, watched_short, visible_short]);
+
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                ..Default::default()
+            },
+            |ui| shorts_shelf(ui, &state, &mut Vec::new()),
+        );
+        let texts: Vec<String> = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                _ => None,
+            })
+            .collect();
+        output.textures_delta.clear();
+        assert!(texts.iter().any(|t| t == "Visible Short"));
+        assert!(!texts.iter().any(|t| t == "Hidden Short"));
+        assert!(!texts.iter().any(|t| t == "Watched Short"));
+
+        // Clicking the "Hide watched" chip toggles settings.hide_watched.
+        let mut chip_pos = None;
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                ..Default::default()
+            },
+            |ui| feed_chips(ui, &state, &mut Vec::new()),
+        );
+        for shape in &output.shapes {
+            if let egui::Shape::Text(text) = &shape.shape
+                && text.galley.text() == "Hide watched"
+            {
+                chip_pos = Some(Rect::from_min_size(text.pos, text.galley.size()).center());
+            }
+        }
+        output.textures_delta.clear();
+        let pos = chip_pos.expect("Hide watched chip");
+        let mut actions = Vec::new();
+        for pressed in [true, false] {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                    events: vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| feed_chips(ui, &state, &mut actions),
+            );
+            out.textures_delta.clear();
+        }
+        assert_eq!(actions, [Action::SetHideWatched(false)]);
     }
 }

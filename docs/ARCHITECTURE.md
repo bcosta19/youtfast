@@ -208,6 +208,7 @@ order when merging device resume metadata.
 |---|---|
 | Changing response layouts | `items::UnrecognisedItems` reports unknown list renderers; an empty parsed page warns instead of hiding a layout change |
 | Channel pagination | `More::owner` fills missing channel identity/avatar, preserving collaborators' own identity |
+| Shorts owner metadata | Account-feed Shorts participate in channel blocking when an owner ID is present on the card or another copy of the same video; an ownerless Short can still be hidden individually. |
 | Comments | `commentSurfaceKey` resolves attachments and voice transcripts; written content wins over a transcript; thread priority marks pinned comments |
 | Continuations | Both endpoint and button forms can load comment replies/pages; authenticated continuations keep their session context |
 | Links in rich text | `Span` maps same-video timestamps, including `0:00`, to seeks; other video/channel/web links retain their target |
@@ -243,7 +244,8 @@ sequenceDiagram
 
 | Stored data | Location and guarantees |
 |---|---|
-| Library | `paths::Dirs::library`: device subscriptions, history/resume positions, Watch later |
+| Library | `paths::Dirs::library`: device subscriptions, history/resume positions, Watch later, hidden videos and blocked channels |
+| Feed filter persistence | Rebuild indexes on deserialization, keeping the newest 5,000 unique hidden video IDs and 1,000 unique blocked channels. |
 | Settings | `paths::Dirs::settings`: playback, appearance and other preferences; new persisted fields need `#[serde(default)]` |
 | Invalid input | Preserve invalid JSON/UTF-8 before defaults become writable; read failures or failed backups stop startup |
 | Atomic writes | Reject non-regular targets; synchronize the parent directory on Unix |
