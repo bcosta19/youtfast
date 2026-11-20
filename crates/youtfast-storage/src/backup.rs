@@ -8,8 +8,10 @@ use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::io::{self, Read, Write};
+use std::marker::PhantomData;
 
-use serde::{Deserialize, Serialize, Serializer};
+use serde::de::{self, SeqAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::library::{HISTORY_LIMIT, Import, Library, Watched};
 use crate::takeout::{Limited, read_bom_prefix};
@@ -19,15 +21,16 @@ pub const BACKUP_VERSION: u32 = 1;
 pub const WATCH_LATER_LIMIT: usize = 5_000;
 pub const SUBSCRIPTIONS_LIMIT: usize = 20_000;
 const MAX_BACKUP_BYTES: u64 = 64 * 1024 * 1024;
+const TOO_MANY_SUBSCRIPTIONS: &str = "This backup file exceeds 20,000 subscriptions.";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Backup {
     pub version: u32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "decode_subscriptions")]
     pub subscriptions: Vec<Channel>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "decode_history")]
     pub history: Vec<Watched>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "decode_watch_later")]
     pub watch_later: Vec<Video>,
 }
 
@@ -242,9 +245,11 @@ fn parse_limited<R: Read>(reader: R, limit: u64) -> Result<Import, String> {
                 }
                 backup
             }
-            Err(_) => {
+            Err(error) => {
                 return Err(if limited.exceeded {
                     "This backup file exceeds the 64 MiB size limit.".to_owned()
+                } else if error.to_string().starts_with(TOO_MANY_SUBSCRIPTIONS) {
+                    TOO_MANY_SUBSCRIPTIONS.to_owned()
                 } else {
                     "Could not read this backup file. Check its JSON format and the 64 MiB size limit."
                         .to_owned()
@@ -259,63 +264,111 @@ fn parse_limited<R: Read>(reader: R, limit: u64) -> Result<Import, String> {
         );
     }
 
-    let mut subscriptions = Vec::new();
-    let mut seen_channels = HashSet::new();
-    for mut channel in backup.subscriptions {
-        if channel.id.trim().is_empty() {
-            continue;
+    Ok(Import {
+        subscriptions: backup.subscriptions,
+        history: backup.history,
+        watch_later: backup.watch_later,
+    })
+}
+
+fn visit_rows<'de, D, T, F>(decoder: D, row: F) -> Result<(), D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+    F: FnMut(T) -> Result<(), &'static str>,
+{
+    struct Rows<T, F>(F, PhantomData<T>);
+    impl<'de, T, F> Visitor<'de> for Rows<T, F>
+    where
+        T: Deserialize<'de>,
+        F: FnMut(T) -> Result<(), &'static str>,
+    {
+        type Value = ();
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("a backup row array")
         }
-        if seen_channels.insert(channel.id.clone()) {
+
+        fn visit_seq<A: SeqAccess<'de>>(mut self, mut seq: A) -> Result<(), A::Error> {
+            while let Some(row) = seq.next_element::<T>()? {
+                (self.0)(row).map_err(de::Error::custom)?;
+            }
+            Ok(())
+        }
+    }
+
+    decoder.deserialize_seq(Rows(row, PhantomData))
+}
+
+fn decode_subscriptions<'de, D: Deserializer<'de>>(decoder: D) -> Result<Vec<Channel>, D::Error> {
+    let mut subscriptions = Vec::new();
+    let mut seen = HashSet::new();
+    visit_rows(decoder, |mut channel: Channel| {
+        if !channel.id.trim().is_empty() && seen.insert(channel.id.clone()) {
             if subscriptions.len() == SUBSCRIPTIONS_LIMIT {
-                return Err("This backup file exceeds 20,000 subscriptions.".to_owned());
+                return Err(TOO_MANY_SUBSCRIPTIONS);
             }
             channel.avatar = None;
             subscriptions.push(channel);
         }
-    }
+        Ok(())
+    })?;
+    Ok(subscriptions)
+}
 
+fn decode_history<'de, D: Deserializer<'de>>(decoder: D) -> Result<Vec<Watched>, D::Error> {
     let mut history: Vec<Watched> = Vec::new();
-    let mut seen_history: HashMap<String, usize> = HashMap::new();
-    for mut row in backup.history {
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    visit_rows(decoder, |mut row: Watched| {
         if row.video.id.trim().is_empty() {
-            continue;
+            return Ok(());
         }
         row.video.channel_avatar = None;
         if !row.position.is_finite() || row.position < 0.0 {
             row.position = 0.0;
         }
-        if let Some(&index) = seen_history.get(&row.video.id) {
+        if let Some(&index) = seen.get(&row.video.id) {
             if row.at > history[index].at {
                 history[index] = row;
             }
         } else {
-            seen_history.insert(row.video.id.clone(), history.len());
+            seen.insert(row.video.id.clone(), history.len());
             history.push(row);
         }
-    }
+        // Entries below this cutoff cannot make the final top list unless a
+        // later row gives them a newer timestamp. Bound the index as well.
+        if history.len() == HISTORY_LIMIT * 2 {
+            history.sort_by_key(|row| Reverse(row.at));
+            history.truncate(HISTORY_LIMIT);
+            seen.clear();
+            seen.extend(
+                history
+                    .iter()
+                    .enumerate()
+                    .map(|(index, row)| (row.video.id.clone(), index)),
+            );
+        }
+        Ok(())
+    })?;
     history.sort_by_key(|row| Reverse(row.at));
     history.truncate(HISTORY_LIMIT);
+    Ok(history)
+}
 
+fn decode_watch_later<'de, D: Deserializer<'de>>(decoder: D) -> Result<Vec<Video>, D::Error> {
     let mut watch_later = Vec::new();
-    let mut seen_watch_later = HashSet::new();
-    for mut video in backup.watch_later {
-        if video.id.trim().is_empty() {
-            continue;
-        }
-        if watch_later.len() == WATCH_LATER_LIMIT {
-            break;
-        }
-        if seen_watch_later.insert(video.id.clone()) {
+    let mut seen = HashSet::new();
+    visit_rows(decoder, |mut video: Video| {
+        if watch_later.len() < WATCH_LATER_LIMIT
+            && !video.id.trim().is_empty()
+            && seen.insert(video.id.clone())
+        {
             video.channel_avatar = None;
             watch_later.push(video);
         }
-    }
-
-    Ok(Import {
-        subscriptions,
-        history,
-        watch_later,
-    })
+        Ok(())
+    })?;
+    Ok(watch_later)
 }
 
 #[cfg(test)]
@@ -509,11 +562,11 @@ mod tests {
         );
 
         // History deduplicates, sanitizes positions, and keeps latest 1,000 ordered by Reverse(at).
-        let mut history: Vec<Watched> = (0..1_200)
+        let mut history: Vec<Watched> = (0..3_200)
             .map(|i| Watched {
                 video: sample_video(&format!("V{i:010}"), &format!("Video {i}")),
                 at: i,
-                position: if i == 1_199 { -5.0 } else { 42.0 },
+                position: if i == 3_199 { -5.0 } else { 42.0 },
             })
             .collect();
         history.push(Watched {
@@ -542,9 +595,15 @@ mod tests {
         assert_eq!(import.history[0].video.id, "V0000001198");
         assert_eq!(import.history[0].at, 5_000);
         assert_eq!(import.history[0].position, 77.0);
-        assert_eq!(import.history[1].video.id, "V0000001199");
+        assert_eq!(import.history[1].video.id, "V0000003199");
         assert_eq!(import.history[1].position, 0.0);
         assert_eq!(import.watch_later.len(), WATCH_LATER_LIMIT);
         assert_eq!(import.watch_later[0].id, "W0000000000");
+
+        let trailing = format!("{json} trailing");
+        assert_eq!(
+            parse_reader(trailing.as_bytes()).unwrap_err(),
+            "The backup file has invalid or oversized trailing data."
+        );
     }
 }
