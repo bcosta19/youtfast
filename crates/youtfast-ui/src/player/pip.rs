@@ -1,9 +1,9 @@
 //! Pop-out picture-in-picture OS window, rendered via a deferred egui viewport.
 
 #[cfg(not(target_os = "macos"))]
-use egui::viewport::ResizeDirection;
-#[cfg(not(target_os = "macos"))]
 use egui::CursorIcon;
+#[cfg(not(target_os = "macos"))]
+use egui::viewport::ResizeDirection;
 use egui::{Color32, CornerRadius, Frame, Key, Rect, Sense, Stroke, UiBuilder, vec2};
 use youtfast_i18n::gettext as tr;
 

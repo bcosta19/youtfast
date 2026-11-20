@@ -97,12 +97,12 @@ impl PipBridge {
             shared.thumbnail_video_id = cover_id.map(str::to_owned);
             cover_video.map(|video| Arc::from(video.thumbnail()))
         };
-        let player_error = if shared.snapshot.player_error.as_deref() == state.player_error.as_deref()
-        {
-            shared.snapshot.player_error.clone()
-        } else {
-            state.player_error.as_deref().map(Arc::from)
-        };
+        let player_error =
+            if shared.snapshot.player_error.as_deref() == state.player_error.as_deref() {
+                shared.snapshot.player_error.clone()
+            } else {
+                state.player_error.as_deref().map(Arc::from)
+            };
         let next = PipSnapshot {
             status: status.map(PictureStatus::from),
             player_error,

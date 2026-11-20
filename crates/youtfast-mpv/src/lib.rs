@@ -1078,6 +1078,15 @@ mod tests {
     fn client_events_wake_root_from_a_child_pass() {
         let ctx = egui::Context::default();
         let child = egui::ViewportId::from_hash_of("pip-window");
+        // egui's first pass (font texture, initial layout) asks for one more;
+        // settle it so the assertions below only see the wake.
+        for _ in 0..4 {
+            if !ctx.has_requested_repaint_for(&egui::ViewportId::ROOT) {
+                break;
+            }
+            let mut pass = ctx.run_ui(egui::RawInput::default(), |_| {});
+            pass.textures_delta.clear();
+        }
         let mut input = egui::RawInput {
             viewport_id: child,
             ..Default::default()
@@ -1085,10 +1094,10 @@ mod tests {
         input.viewports.insert(child, egui::ViewportInfo::default());
         let _ = ctx.run_ui(input, |ui| {
             assert_eq!(ui.ctx().viewport_id(), child);
-            assert!(!ctx.has_requested_repaint_for(egui::ViewportId::ROOT));
+            assert!(!ctx.has_requested_repaint_for(&egui::ViewportId::ROOT));
             // SAFETY: the context stays live for the synchronous callback.
             unsafe { super::wake(std::ptr::from_ref(&ctx).cast_mut().cast()) };
-            assert!(ctx.has_requested_repaint_for(egui::ViewportId::ROOT));
+            assert!(ctx.has_requested_repaint_for(&egui::ViewportId::ROOT));
         });
     }
 
