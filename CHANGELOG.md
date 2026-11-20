@@ -43,6 +43,7 @@ are the distribution record.
 
 - The command palette blocks the mouse Back and Forward buttons while it is open.
 - The command palette offers video full screen only on the watch page.
+- Dismissing the command palette returns keyboard focus to the previous control when it is still available.
 
 ## [0.9.1] - 2026-11-17
 

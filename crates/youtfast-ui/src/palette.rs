@@ -36,6 +36,10 @@ fn focus_pending_id() -> egui::Id {
     egui::Id::new("command-palette-focus-pending")
 }
 
+fn previous_focus_id() -> egui::Id {
+    egui::Id::new("command-palette-previous-focus")
+}
+
 fn mark_cursor_moved(ctx: &egui::Context) {
     ctx.data_mut(|data| data.insert_temp(moved_id(), true));
 }
@@ -57,34 +61,61 @@ pub fn open(ctx: &egui::Context, state: &mut State) {
     state.notifications_popup_open = false;
     state.player_menu = PlayerMenu::Closed;
     egui::Popup::close_all(ctx);
+    let previous_focus = ctx.memory(|memory| memory.focused());
     ctx.data_mut(|data| {
         data.insert_temp(was_open_id(), true);
         data.insert_temp(focus_pending_id(), true);
+        data.insert_temp(previous_focus_id(), previous_focus);
     });
     mark_cursor_moved(ctx);
     ctx.memory_mut(|memory| memory.request_focus(input_id()));
 }
 
-/// Closes the command palette and clears its search state.
-pub fn close(ctx: &egui::Context, state: &mut State) {
+fn close(ctx: &egui::Context, state: &mut State) -> Option<egui::Id> {
     state.palette_open = false;
     state.palette_query.clear();
     state.palette_cursor = 0;
-    ctx.data_mut(|data| {
+    let previous_focus = ctx.data_mut(|data| {
         data.insert_temp(was_open_id(), false);
         data.insert_temp(focus_pending_id(), false);
+        data.remove_temp::<Option<egui::Id>>(previous_focus_id())
+            .flatten()
     });
     ctx.memory_mut(|memory| {
         if memory.has_focus(input_id()) {
             memory.surrender_focus(input_id());
         }
     });
+    previous_focus
+}
+
+fn cancel(ctx: &egui::Context, state: &mut State) {
+    if let Some(id) = close(ctx, state) {
+        ctx.data_mut(|data| data.insert_temp(previous_focus_id(), Some(id)));
+    }
+}
+
+pub(super) fn restore_focus(ctx: &egui::Context, state: &State) {
+    if state.palette_open {
+        return;
+    }
+    // egui still blocks the background layer while drawing the dismissal frame.
+    // Restore focus only after those widgets have been registered.
+    if let Some(id) = ctx
+        .data_mut(|data| data.remove_temp::<Option<egui::Id>>(previous_focus_id()))
+        .flatten()
+        && ctx
+            .read_response(id)
+            .is_some_and(|response| response.enabled())
+    {
+        ctx.memory_mut(|memory| memory.request_focus(id));
+    }
 }
 
 /// Toggles the command palette open or closed.
 pub fn toggle(ctx: &egui::Context, state: &mut State) {
     if state.palette_open {
-        close(ctx, state);
+        cancel(ctx, state);
     } else {
         open(ctx, state);
     }
@@ -673,7 +704,7 @@ pub(super) fn handle_keys(
     }
     let escaped = ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Escape));
     if escaped {
-        close(ctx, state);
+        cancel(ctx, state);
         return;
     }
     // If there is pending text input in this frame, let the search field update
@@ -820,7 +851,7 @@ pub fn show(
     if let Some(item) = chosen {
         execute_item(ctx, state, &item, actions);
     } else if state.palette_open && response.should_close() {
-        close(ctx, state);
+        cancel(ctx, state);
     }
 }
 
@@ -946,6 +977,70 @@ mod tests {
     use super::*;
     use youtfast_core::model::Video;
     use youtfast_i18n::Locale;
+
+    fn run_frame(ctx: &egui::Context, state: &mut State, events: Vec<egui::Event>) -> Vec<Action> {
+        let mut actions = Vec::new();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1280.0, 800.0))),
+                events,
+                ..Default::default()
+            },
+            |ui| super::super::frame(ui, state, None, None, &mut actions),
+        );
+        output.textures_delta.clear();
+        actions
+    }
+
+    fn key_press(key: Key, modifiers: egui::Modifiers) -> egui::Event {
+        egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers,
+        }
+    }
+
+    #[test]
+    fn cancelling_palette_restores_search_focus_and_typing() {
+        for (dismiss, modifiers) in [
+            (Key::Escape, egui::Modifiers::NONE),
+            (Key::K, egui::Modifiers::COMMAND),
+        ] {
+            let ctx = egui::Context::default();
+            theme::install_fonts(&ctx);
+            let mut state = State::default();
+            let search = super::super::command_line_id();
+            ctx.memory_mut(|memory| memory.request_focus(search));
+            run_frame(&ctx, &mut state, vec![]);
+            run_frame(
+                &ctx,
+                &mut state,
+                vec![
+                    key_press(Key::K, egui::Modifiers::COMMAND),
+                    egui::Event::Key {
+                        key: Key::K,
+                        physical_key: None,
+                        pressed: false,
+                        repeat: false,
+                        modifiers: egui::Modifiers::COMMAND,
+                    },
+                ],
+            );
+            assert!(state.palette_open);
+
+            assert!(run_frame(&ctx, &mut state, vec![key_press(dismiss, modifiers)]).is_empty());
+            assert!(!state.palette_open);
+            assert!(ctx.memory(|memory| memory.has_focus(search)));
+            run_frame(
+                &ctx,
+                &mut state,
+                vec![egui::Event::Text("continued".into())],
+            );
+            assert_eq!(state.query, "continued");
+        }
+    }
 
     fn sample_state() -> State {
         let mut state = State {

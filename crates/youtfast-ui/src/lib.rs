@@ -56,6 +56,7 @@ pub fn frame(
     actions: &mut Vec<Action>,
 ) {
     show(ui, state, status, surface, actions);
+    palette::restore_focus(ui.ctx(), state);
     release_speed_hold(ui.ctx(), state, actions);
 }
 
