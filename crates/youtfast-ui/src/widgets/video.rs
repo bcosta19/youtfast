@@ -80,14 +80,18 @@ fn badge(ui: &Ui, thumbnail: Rect, video: &Video, palette: &Palette, locale: Loc
     painter.galley(rect.min + vec2(5.0, 2.0), galley, Color32::WHITE);
 }
 
-/// Picks the DeArrow community thumbnail image when enabled, available, and not
-/// failed; otherwise uses the standard YouTube thumbnail.
+/// Uses a community thumbnail only after egui has decoded and uploaded it.
 pub(crate) fn video_thumbnail(ui: &Ui, state: &State, video: &Video) -> egui::Image<'static> {
     if let Some(url) = state.dearrow_thumbnail_url(video)
         && !youtfast_app::images::has_failed(&url)
     {
         let dearrow = youtfast_app::images::remote(ui, &url);
-        if youtfast_app::images::is_loaded(&url) {
+        if youtfast_app::images::is_loaded(&url)
+            && matches!(
+                dearrow.load_for_size(ui.ctx(), egui::Vec2::ZERO),
+                Ok(egui::load::TexturePoll::Ready { .. })
+            )
+        {
             return dearrow;
         }
     }
