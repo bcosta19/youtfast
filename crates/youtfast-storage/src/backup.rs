@@ -7,7 +7,7 @@
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
-use std::io::Read;
+use std::io::{self, Read, Write};
 
 use serde::{Deserialize, Serialize};
 
@@ -34,14 +34,68 @@ pub struct Backup {
 /// Serializes the device library (subscriptions, history with resume positions,
 /// and Watch later) as pretty JSON. Never includes accounts or sessions.
 pub fn to_json(library: &Library) -> Result<String, String> {
-    let backup = Backup {
-        version: BACKUP_VERSION,
-        subscriptions: library.subscriptions.clone(),
-        history: library.history.clone(),
-        watch_later: library.watch_later.clone(),
+    export_json(library, MAX_BACKUP_BYTES as usize)
+}
+
+fn export_json(library: &Library, max_bytes: usize) -> Result<String, String> {
+    if library.subscriptions.len() > SUBSCRIPTIONS_LIMIT {
+        return Err("The library exceeds the backup limit of 20,000 subscriptions.".to_owned());
+    }
+    if library.history.len() > HISTORY_LIMIT {
+        return Err("The library exceeds the backup limit of 1,000 history entries.".to_owned());
+    }
+    if library.watch_later.len() > WATCH_LATER_LIMIT {
+        return Err("The library exceeds the backup limit of 5,000 Watch later videos.".to_owned());
+    }
+
+    #[derive(Serialize)]
+    struct Export<'a> {
+        version: u32,
+        subscriptions: &'a [Channel],
+        history: &'a [Watched],
+        watch_later: &'a [Video],
+    }
+
+    struct Output {
+        bytes: Vec<u8>,
+        limit: usize,
+        exceeded: bool,
+    }
+
+    impl Write for Output {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            if bytes.len() > self.limit - self.bytes.len() {
+                self.exceeded = true;
+                return Err(io::Error::other("backup size limit"));
+            }
+            self.bytes.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let mut output = Output {
+        bytes: Vec::new(),
+        limit: max_bytes,
+        exceeded: false,
     };
-    serde_json::to_string_pretty(&backup)
-        .map_err(|_| "Could not serialize the library backup.".to_owned())
+    let backup = Export {
+        version: BACKUP_VERSION,
+        subscriptions: &library.subscriptions,
+        history: &library.history,
+        watch_later: &library.watch_later,
+    };
+    serde_json::to_writer_pretty(&mut output, &backup).map_err(|_| {
+        if output.exceeded {
+            "The library backup exceeds the 64 MiB size limit.".to_owned()
+        } else {
+            "Could not serialize the library backup.".to_owned()
+        }
+    })?;
+    String::from_utf8(output.bytes).map_err(|_| "Could not serialize the library backup.".to_owned())
 }
 
 /// Renders an OPML 2.0 XML document containing each subscribed channel's
@@ -264,6 +318,34 @@ mod tests {
         let via_takeout =
             crate::takeout::parse_reader(std::io::BufReader::new(json.as_bytes())).unwrap();
         assert_eq!(via_takeout, import);
+    }
+
+    #[test]
+    fn export_at_the_item_and_byte_limits_can_be_restored() {
+        let mut library = Library::default();
+        library.subscriptions = (0..SUBSCRIPTIONS_LIMIT)
+            .map(|i| sample_channel(&format!("UC{i:022}"), "Channel"))
+            .collect();
+        library.watch_later = (0..WATCH_LATER_LIMIT)
+            .map(|i| sample_video(&format!("W{i:010}"), "Video"))
+            .collect();
+        let json = to_json(&library).unwrap();
+        let restored = parse_limited(json.as_bytes(), json.len() as u64).unwrap();
+        assert_eq!(restored.subscriptions, library.subscriptions);
+        assert_eq!(restored.watch_later, library.watch_later);
+        assert_eq!(export_json(&library, json.len()).unwrap(), json);
+        assert!(
+            export_json(&library, json.len() - 1)
+                .unwrap_err()
+                .contains("64 MiB")
+        );
+
+        library.watch_later.push(sample_video("W9999999999", "Overflow"));
+        assert!(to_json(&library).unwrap_err().contains("Watch later"));
+        library
+            .subscriptions
+            .push(sample_channel("UCoverflow", "Overflow"));
+        assert!(to_json(&library).unwrap_err().contains("subscriptions"));
     }
 
     #[test]
