@@ -1097,7 +1097,8 @@ mod tests {
         };
         let items = candidate_items(&state, Some(&status));
 
-        // Signed-out views: Liked videos and Playlists are gated on sign-in.
+        // Signed-out views: Liked videos is gated on sign-in, while Playlists
+        // stays available for device-only playlists.
         assert!(
             items
                 .iter()
@@ -1109,14 +1110,14 @@ mod tests {
                 .any(|i| i.actions == [Action::Navigate(View::Subscriptions)])
         );
         assert!(
-            !items
+            items
                 .iter()
-                .any(|i| i.actions == [Action::Navigate(View::Liked)])
+                .any(|i| i.actions == [Action::Navigate(View::Playlists)])
         );
         assert!(
             !items
                 .iter()
-                .any(|i| i.actions == [Action::Navigate(View::Playlists)])
+                .any(|i| i.actions == [Action::Navigate(View::Liked)])
         );
 
         // Signed-in views include Liked videos and Playlists.
