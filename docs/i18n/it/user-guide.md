@@ -89,7 +89,8 @@ si può cliccare in qualsiasi punto, non solo sull'interruttore.
 Impostazioni → Barra laterale sceglie quali pulsanti della barra laterale mostrare e
 in che ordine (l'interruttore per nascondere, le frecce per spostare, Ripristina
 predefiniti per annullare). Account e Impostazioni non si possono nascondere. Video
-a cui hai messo Mi piace e Playlist compaiono comunque solo dopo l'accesso.
+a cui hai messo Mi piace compare comunque solo dopo l'accesso; Playlist è disponibile
+sia da disconnesso (mostrando le playlist del dispositivo) sia dopo l'accesso.
 I tasti numerici da 1 a 9 aprono i pulsanti nell'ordine mostrato dalla barra laterale.
 
 Impostazioni → Riproduzione → Miniplayer durante lo scorrimento mantiene un video
@@ -310,9 +311,13 @@ nascosti (**Cancella**) e i canali bloccati (**Sblocca**) in **Impostazioni →
 Cronologia**.
 
 **Senza un account**, YouTFast conserva iscrizioni, cronologia delle visualizzazioni
-(con il punto in cui hai lasciato ogni video, per riprenderlo) e Guarda più tardi su
-questo computer, in `~/.local/share/youtfast/library.json`, e le sue impostazioni
-(qualità video, volume, velocità di riproduzione) in `~/.config/youtfast/settings.json`. Il feed della Home
+(con il punto in cui hai lasciato ogni video, per riprenderlo), Guarda più tardi e
+le playlist locali su questo computer, in `~/.local/share/youtfast/library.json`, e
+le sue impostazioni (qualità video, volume, velocità di riproduzione) in
+`~/.config/youtfast/settings.json`. Crea, rinomina, elimina e riordina le playlist
+del dispositivo da **Playlist** (contrassegnate come **Su questo dispositivo** anche
+quando hai effettuato l'accesso) e aggiungi o rimuovi video dal menu **Salva**
+della pagina di riproduzione o dal menu delle schede video. Il feed della Home
 proviene dall'RSS di ogni canale seguito. Porta qui una raccolta esistente da
 [Google Takeout](https://takeout.google.com): scegli YouTube e YouTube Music, con
 JSON come formato della cronologia, e importa `subscriptions.csv` e

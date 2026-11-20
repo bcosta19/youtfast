@@ -80,7 +80,8 @@ on the switch.
 
 Settings → Sidebar chooses which sidebar buttons are shown and their order
 (switch to hide, arrows to move, Restore default to undo). Account and Settings
-cannot be hidden. Liked videos and Playlists still appear only when signed in.
+cannot be hidden. Liked videos still appears only when signed in; Playlists is
+available both signed out (showing device playlists) and signed in.
 The number keys 1 to 9 open the buttons as the sidebar shows them.
 
 Settings → Playback → Miniplayer while scrolling keeps a video visible in the
@@ -276,9 +277,12 @@ hidden videos (**Clear**) and blocked channels (**Unblock**) under **Settings �
 History**.
 
 **Without an account**, YouTFast keeps subscriptions, watch history (with
-where each video was left, to resume it) and Watch later on this computer,
-in `~/.local/share/youtfast/library.json`, and its settings (video quality,
-volume, playback speed) in `~/.config/youtfast/settings.json`. The home feed comes from each
+where each video was left, to resume it), Watch later, and local playlists on
+this computer, in `~/.local/share/youtfast/library.json`, and its settings
+(video quality, volume, playback speed) in `~/.config/youtfast/settings.json`.
+Create, rename, delete, and reorder device playlists from **Playlists** (marked
+**On this device** when signed in too), and add or remove videos from the watch
+page's **Save** menu or a video card's menu. The home feed comes from each
 subscribed channel's RSS. Bring an existing library over from
 [Google Takeout](https://takeout.google.com): choose YouTube and YouTube
 Music, with JSON as the history format, and import `subscriptions.csv` and

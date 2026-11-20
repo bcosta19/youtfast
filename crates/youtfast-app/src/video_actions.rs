@@ -149,9 +149,33 @@ impl App {
         }
     }
 
-    /// Adds the video being watched to an account playlist, or takes it
+    /// Adds `video` to a device-local playlist or removes it, saving immediately.
+    pub(super) fn set_local_playlist_saved(&mut self, playlist: &str, video: Video, saved: bool) {
+        if self.state.library.set_in_playlist(playlist, video, saved) {
+            self.save_library();
+            if matches!(&self.state.page, Some(Page::Playlist { id, .. }) if id == playlist) {
+                self.sync_local_playlist_page(playlist);
+            }
+        } else if saved
+            && self
+                .state
+                .library
+                .playlist(playlist)
+                .is_some_and(DevicePlaylist::is_full)
+        {
+            self.state.notice = Some("Playlist is full".into());
+        }
+    }
+
+    /// Adds the video being watched to an account or device playlist, or takes it
     /// out, showing it at once.
     pub(super) fn set_saved(&mut self, playlist: String, saved: bool) {
+        if DevicePlaylist::is_local_id(&playlist) {
+            if let Some(video) = self.state.watching.clone() {
+                self.set_local_playlist_saved(&playlist, video, saved);
+            }
+            return;
+        }
         let Some(id) = self.watching_id().map(str::to_owned) else {
             return;
         };

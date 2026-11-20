@@ -336,20 +336,8 @@ fn shorts(
             .layout(Layout::top_down(Align::Center)),
     );
     rail.set_clip_rect(rail_rect.intersect(ui.clip_rect()));
-    let previous =
-        youtfast_app::player::previous_video(state.watching.as_ref(), &state.up_next).is_some();
-    let related = state
-        .details
-        .ready()
-        .map_or(&[][..], |details| details.related.as_slice());
-    let next = youtfast_app::player::next_video(
-        state.watching.as_ref(),
-        &state.queue,
-        &state.up_next,
-        related,
-    )
-    .is_some()
-        || state.playing_more.is_some();
+    let previous = state.previous_video().is_some();
+    let next = state.next_video().is_some() || state.playing_more.is_some();
     egui::ScrollArea::vertical()
         .id_salt("short-actions")
         .max_height(height)
@@ -950,33 +938,39 @@ fn share_menu(
         });
 }
 
-/// Save: Watch later on this computer and, signed in, the account's
-/// playlists, each a box to tick. The account's list is asked for when
-/// the menu first opens.
+/// Save: Watch later on this computer, device playlists, and, signed in, the
+/// account's playlists, each a box to tick. The account's list is asked for
+/// when the menu first opens.
 fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Action>) {
     let locale: Locale = state.settings.language;
     let palette = &state.palette;
-    let local = state.library.in_watch_later(&watching.id);
+    let local_watch_later = state.library.in_watch_later(&watching.id);
+    let local_playlist = state
+        .library
+        .playlists()
+        .any(|playlist| playlist.videos.iter().any(|v| v.id == watching.id));
     let account = state
         .save_targets
         .ready()
         .is_some_and(|targets| targets.iter().any(|target| target.saved));
-    let style = if local || account {
+    let saved_any = local_watch_later || local_playlist || account;
+    let style = if saved_any {
         widgets::ButtonStyle::On
     } else {
         widgets::ButtonStyle::Normal
     };
-    let (icon, label) = if local || account {
+    let (icon, label) = if saved_any {
         (Icon::BookmarkFilled, tr(locale, "Saved"))
     } else {
         (Icon::Bookmark, tr(locale, "Save"))
     };
     let response = widgets::icon_text_button(ui, palette, Some(icon), &label, style);
+    let draft_id = ui.id().with(("save-new-playlist", watching.id.as_str()));
     egui::Popup::menu(&response)
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .show(|ui| {
-            ui.set_min_width(240.0);
-            let mut on_device = local;
+            ui.set_min_width(260.0);
+            let mut on_device = local_watch_later;
             if ui
                 .checkbox(
                     &mut on_device,
@@ -988,47 +982,114 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
                 actions.push(Action::ToggleWatchLater(watching.clone()));
             }
             ui.separator();
-            if !state.signed_in() {
-                ui.label(
-                    RichText::new(tr(locale, "Sign in to save to the account's playlists"))
-                        .font(theme::regular(13.0))
-                        .color(palette.secondary),
+            let has_capacity = state.library.can_create_playlist();
+            let mut draft = ui
+                .ctx()
+                .data(|d| d.get_temp::<String>(draft_id))
+                .unwrap_or_default();
+            ui.horizontal(|ui| {
+                let input = ui.add_enabled(
+                    has_capacity,
+                    egui::TextEdit::singleline(&mut draft)
+                        .hint_text(tr(locale, "New playlist").as_ref())
+                        .desired_width(150.0),
                 );
-                return;
-            }
-            match &state.save_targets {
-                Fetch::Idle => actions.push(Action::LoadSaveTargets),
-                Fetch::Loading => widgets::loading(ui, palette, "playlists", locale),
-                Fetch::Failed(error) => {
-                    ui.label(
-                        RichText::new(youtfast_i18n::message(locale, error))
-                            .font(theme::regular(14.0))
-                            .color(palette.red),
-                    );
+                let can_create = has_capacity && !draft.trim().is_empty();
+                let enter = input.lost_focus()
+                    && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                    && can_create;
+                let clicked = ui
+                    .add_enabled_ui(can_create, |ui| {
+                        widgets::button(
+                            ui,
+                            palette,
+                            tr(locale, "Create").as_ref(),
+                            widgets::ButtonStyle::Normal,
+                        )
+                    })
+                    .inner
+                    .clicked();
+                if enter || clicked {
+                    actions.push(Action::CreatePlaylistWithVideo {
+                        name: draft.trim().to_owned(),
+                        video: watching.clone(),
+                    });
+                    draft.clear();
                 }
-                Fetch::Ready(targets) => {
-                    for target in targets {
-                        let mut saved = target.saved;
-                        if ui
-                            .add_enabled(
-                                !state
-                                    .save_pending
-                                    .contains(&(watching.id.clone(), target.id.clone())),
-                                egui::Checkbox::new(
-                                    &mut saved,
-                                    RichText::new(&target.name).font(theme::regular(14.0)),
-                                ),
-                            )
-                            .changed()
-                        {
-                            actions.push(Action::SetSaved {
-                                playlist: target.id.clone(),
-                                saved,
-                            });
+            });
+            ui.ctx().data_mut(|d| d.insert_temp(draft_id, draft));
+            if !has_capacity {
+                ui.label(tr(locale, "No more device playlists can be created"));
+            }
+            ui.separator();
+            egui::ScrollArea::vertical()
+                .max_height((ui.ctx().content_rect().height() * 0.4).min(320.0))
+                .show(ui, |ui| {
+                    for playlist in state.library.playlists() {
+                        ui.horizontal(|ui| {
+                            if let Some(saved) = widgets::device_playlist_checkbox(
+                                ui,
+                                playlist,
+                                &watching.id,
+                                locale,
+                            ) {
+                                actions.push(Action::SetSaved {
+                                    playlist: playlist.id.clone(),
+                                    saved,
+                                });
+                            }
+                            ui.label(
+                                RichText::new(tr(locale, "On this device"))
+                                    .font(theme::regular(12.0))
+                                    .color(palette.secondary),
+                            );
+                        });
+                    }
+                    if state.library.playlists().next().is_some() {
+                        ui.separator();
+                    }
+                    if !state.signed_in() {
+                        ui.label(
+                            RichText::new(tr(locale, "Sign in to save to the account's playlists"))
+                                .font(theme::regular(13.0))
+                                .color(palette.secondary),
+                        );
+                        return;
+                    }
+                    match &state.save_targets {
+                        Fetch::Idle => actions.push(Action::LoadSaveTargets),
+                        Fetch::Loading => widgets::loading(ui, palette, "playlists", locale),
+                        Fetch::Failed(error) => {
+                            ui.label(
+                                RichText::new(youtfast_i18n::message(locale, error))
+                                    .font(theme::regular(14.0))
+                                    .color(palette.red),
+                            );
+                        }
+                        Fetch::Ready(targets) => {
+                            for target in targets {
+                                let mut saved = target.saved;
+                                if ui
+                                    .add_enabled(
+                                        !state
+                                            .save_pending
+                                            .contains(&(watching.id.clone(), target.id.clone())),
+                                        egui::Checkbox::new(
+                                            &mut saved,
+                                            RichText::new(&target.name).font(theme::regular(14.0)),
+                                        ),
+                                    )
+                                    .changed()
+                                {
+                                    actions.push(Action::SetSaved {
+                                        playlist: target.id.clone(),
+                                        saved,
+                                    });
+                                }
+                            }
                         }
                     }
-                }
-            }
+                });
         });
 }
 
@@ -2371,5 +2432,107 @@ mod tests {
                 "the video must fit beside the Up next column"
             );
         }
+    }
+
+    #[test]
+    fn save_menu_lists_device_playlists_signed_out_and_toggles_them() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let mut state = State {
+            view: youtfast_core::model::View::Watch,
+            watching: Some(Video::from_id("aaaaaaaaaaa".to_owned())),
+            ..State::default()
+        };
+        let id = state.library.create_playlist("Favorites").unwrap();
+        let watching = state.watching.clone().unwrap();
+        let screen = Rect::from_min_size(pos2(0.0, 0.0), vec2(600.0, 400.0));
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(screen),
+                ..Default::default()
+            },
+            |ui| save_menu(ui, &state, &watching, &mut Vec::new()),
+        );
+        let save_pos = output
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.text() == "Save" => {
+                    Some(text.pos + text.galley.size() / 2.0)
+                }
+                _ => None,
+            })
+            .expect("Save button missing");
+        output.textures_delta.clear();
+        for pressed in [true, false] {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    events: vec![
+                        egui::Event::PointerMoved(save_pos),
+                        egui::Event::PointerButton {
+                            pos: save_pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| save_menu(ui, &state, &watching, &mut Vec::new()),
+            );
+            out.textures_delta.clear();
+        }
+        let popup = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(screen),
+                ..Default::default()
+            },
+            |ui| save_menu(ui, &state, &watching, &mut Vec::new()),
+        );
+        let mut fav_pos = None;
+        let mut on_device_seen = false;
+        let mut watch_later_seen = false;
+        for shape in &popup.shapes {
+            if let egui::Shape::Text(text) = &shape.shape {
+                if text.galley.text() == "Favorites" {
+                    fav_pos = Some(text.pos + text.galley.size() / 2.0);
+                } else if text.galley.text() == "On this device" {
+                    on_device_seen = true;
+                } else if text.galley.text() == "Watch later on this computer" {
+                    watch_later_seen = true;
+                }
+            }
+        }
+        assert!(watch_later_seen);
+        assert!(on_device_seen);
+        let fav_pos = fav_pos.expect("device playlist checkbox missing");
+        let mut actions = Vec::new();
+        for pressed in [true, false] {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    events: vec![
+                        egui::Event::PointerMoved(fav_pos),
+                        egui::Event::PointerButton {
+                            pos: fav_pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| save_menu(ui, &state, &watching, &mut actions),
+            );
+            out.textures_delta.clear();
+        }
+        assert_eq!(
+            actions,
+            vec![Action::SetSaved {
+                playlist: id,
+                saved: true,
+            }]
+        );
     }
 }

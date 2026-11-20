@@ -565,9 +565,9 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
 }
 
 /// The buttons the sidebar draws, in the order the user chose (the number
-/// keys' order too): hidden ones are left out, and Liked videos and
-/// Playlists need a signed-in account whatever the setting says. The stored
-/// list is already sanitized (on load, by default and by `SetSidebar`).
+/// keys' order too): hidden ones are left out, and Liked videos needs a
+/// signed-in account whatever the setting says. The stored list is already
+/// sanitized (on load, by default and by `SetSidebar`).
 fn sidebar_buttons(state: &State) -> impl Iterator<Item = SidebarButton> + '_ {
     state
         .settings
@@ -576,7 +576,7 @@ fn sidebar_buttons(state: &State) -> impl Iterator<Item = SidebarButton> + '_ {
         .filter(|entry| entry.visible)
         .map(|entry| entry.button)
         .filter(|button| match button {
-            SidebarButton::Liked | SidebarButton::Playlists => state.signed_in(),
+            SidebarButton::Liked => state.signed_in(),
             _ => true,
         })
 }
@@ -1140,6 +1140,7 @@ mod tests {
                 View::Subscriptions,
                 View::History,
                 View::WatchLater,
+                View::Playlists,
                 View::Notifications,
                 View::Account,
                 View::Settings,
@@ -1164,6 +1165,7 @@ mod tests {
                 View::History,
                 View::Home,
                 View::WatchLater,
+                View::Playlists,
                 View::Notifications,
                 View::Account,
                 View::Settings,

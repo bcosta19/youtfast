@@ -93,10 +93,10 @@ Schalter.
 Einstellungen → Seitenleiste legt fest, welche Schaltflächen der Seitenleiste
 angezeigt werden und in welcher Reihenfolge (Schalter zum Ausblenden, Pfeile zum
 Verschieben, Standard wiederherstellen zum Rückgängigmachen). Konto und
-Einstellungen können nicht ausgeblendet werden. Videos, die ich mag, und
-Playlists erscheinen weiterhin nur, wenn Sie angemeldet sind. Die Zifferntasten
-1 bis 9 öffnen die Schaltflächen in der Reihenfolge, in der die Seitenleiste sie
-zeigt.
+Einstellungen können nicht ausgeblendet werden. Videos, die ich mag erscheint
+weiterhin nur, wenn Sie angemeldet sind; Playlists ist sowohl abgemeldet (mit
+Geräte-Playlists) als auch angemeldet verfügbar. Die Zifferntasten 1 bis 9 öffnen
+die Schaltflächen in der Reihenfolge, in der die Seitenleiste sie zeigt.
 
 Einstellungen → Wiedergabe → Miniplayer beim Scrollen hält ein Video im
 Eck-Miniplayer sichtbar, wenn Sie daran vorbeiscrollen, um Kommentare zu lesen.
@@ -326,10 +326,14 @@ gefiltert. Überprüfen oder entfernen Sie ausgeblendete Videos (**Löschen**) u
 blockierte Kanäle (**Freigeben**) unter **Einstellungen → Verlauf**.
 
 **Ohne Konto** speichert YouTFast Abos, Wiedergabeverlauf (mit der Stelle, an der
-jedes Video verlassen wurde, um es fortzusetzen) und „Später ansehen“ auf diesem
-Computer, in `~/.local/share/youtfast/library.json`, und seine Einstellungen
-(Videoqualität, Lautstärke, Wiedergabegeschwindigkeit) in `~/.config/youtfast/settings.json`. Der Feed der
-Startseite stammt aus dem RSS jedes abonnierten Kanals. Eine bestehende
+jedes Video verlassen wurde, um es fortzusetzen), „Später ansehen“ und lokale
+Playlists auf diesem Computer, in `~/.local/share/youtfast/library.json`, und
+seine Einstellungen (Videoqualität, Lautstärke, Wiedergabegeschwindigkeit) in
+`~/.config/youtfast/settings.json`. Erstellen, umbenennen, löschen und sortieren
+Sie Geräte-Playlists unter **Playlists** (auch angemeldet mit **Auf diesem Gerät**
+markiert) und fügen Sie Videos über das Menü **Speichern** der Wiedergabeseite
+oder das Menü der Videokarten hinzu oder entfernen Sie sie. Der Feed der Startseite
+stammt aus dem RSS jedes abonnierten Kanals. Eine bestehende
 Mediathek übernehmen Sie aus [Google Takeout](https://takeout.google.com): Wählen
 Sie YouTube und YouTube Music, mit JSON als Format für den Verlauf, und
 importieren Sie `subscriptions.csv` und `watch-history.json`. Nichts davon

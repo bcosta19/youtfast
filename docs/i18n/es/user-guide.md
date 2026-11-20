@@ -92,7 +92,8 @@ pulsar en cualquier parte, no solo sobre el interruptor.
 Configuración → Barra lateral elige qué botones de la barra lateral se muestran y en
 qué orden (el interruptor los oculta, las flechas los mueven y Restaurar valores
 predeterminados lo deshace). Cuenta y Configuración no se pueden ocultar. Vídeos que
-me gustan y Listas de reproducción solo aparecen con la sesión iniciada.
+me gustan solo aparece con la sesión iniciada; Listas de reproducción está disponible
+tanto sin sesión (mostrando listas del dispositivo) como con sesión iniciada.
 Las teclas numéricas del 1 al 9 abren los botones en el orden en que los muestra la
 barra lateral.
 
@@ -317,9 +318,13 @@ canal nunca se filtran. Revisa o deshaz vídeos ocultos (**Borrar**) y canales
 bloqueados (**Desbloquear**) en **Configuración → Historial**.
 
 **Sin cuenta**, YouTFast guarda las suscripciones, el historial de reproducciones
-(con el punto donde se dejó cada vídeo, para reanudarlo) y Ver más tarde en este
-equipo, en `~/.local/share/youtfast/library.json`, y su configuración (calidad de
-vídeo, volumen, velocidad de reproducción) en `~/.config/youtfast/settings.json`. El feed de inicio viene del RSS
+(con el punto donde se dejó cada vídeo, para reanudarlo), Ver más tarde y las
+listas de reproducción locales en este equipo, en `~/.local/share/youtfast/library.json`,
+y su configuración (calidad de vídeo, volumen, velocidad de reproducción) en
+`~/.config/youtfast/settings.json`. Crea, renombra, elimina y reordena listas del
+dispositivo desde **Listas de reproducción** (marcadas como **En este dispositivo**
+también con sesión iniciada), y añade o quita vídeos desde el menú **Guardar**
+de la página del vídeo o el menú de las tarjetas de vídeo. El feed de inicio viene del RSS
 de cada canal suscrito. Trae una biblioteca existente desde
 [Google Takeout](https://takeout.google.com): selecciona YouTube y YouTube
 Music, con JSON como formato del historial, e importa `subscriptions.csv` y

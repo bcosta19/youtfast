@@ -110,8 +110,8 @@ pub(super) fn sidebar(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     });
 }
 
-/// A sidebar button's name. Liked and Playlists are listed even while
-/// signed out: they only show when signed in.
+/// A sidebar button's name. Liked is listed even while signed out: it only
+/// shows when signed in.
 fn sidebar_button_name(locale: Locale, button: SidebarButton) -> String {
     match button {
         SidebarButton::Home => tr(locale, "Home"),

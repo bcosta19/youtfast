@@ -93,9 +93,10 @@ interrupteur peut être cliquée n'importe où, pas seulement sur l'interrupteur
 Paramètres → Volet latéral choisit quels boutons du volet latéral sont affichés
 et leur ordre (l'interrupteur pour masquer, les flèches pour déplacer, Rétablir
 les valeurs par défaut pour annuler). Compte et Paramètres ne peuvent pas être
-masqués. Vidéos « J'aime » et Playlists n'apparaissent toujours que lorsque vous
-êtes connecté. Les touches numériques 1 à 9 ouvrent les boutons dans l'ordre où
-le volet latéral les affiche.
+masqués. Vidéos « J'aime » n'apparaît toujours que lorsque vous êtes connecté ;
+Playlists est disponible aussi bien hors connexion (affichant les playlists de
+l'appareil) que connecté. Les touches numériques 1 à 9 ouvrent les boutons dans
+l'ordre où le volet latéral les affiche.
 
 Paramètres → Lecture → Mini-lecteur pendant le défilement garde une vidéo
 visible dans le mini-lecteur en coin lorsque vous la dépassez en faisant
@@ -334,10 +335,14 @@ chaîne ne sont jamais filtrés. Consultez ou annulez les vidéos masquées
 Historique**.
 
 **Sans compte**, YouTFast conserve les abonnements, l'historique de visionnage
-(avec l'endroit où chaque vidéo a été laissée, pour la reprendre) et À regarder
-plus tard sur cet ordinateur, dans `~/.local/share/youtfast/library.json`, et
-ses paramètres (qualité vidéo, volume, vitesse de lecture) dans `~/.config/youtfast/settings.json`.
-Le flux d'accueil provient du RSS de chaque chaîne suivie. Importez une
+(avec l'endroit où chaque vidéo a été laissée, pour la reprendre), À regarder
+plus tard et les playlists locales sur cet ordinateur, dans
+`~/.local/share/youtfast/library.json`, et ses paramètres (qualité vidéo, volume,
+vitesse de lecture) dans `~/.config/youtfast/settings.json`. Créez, renommez,
+supprimez et réordonnez les playlists de l'appareil depuis **Playlists** (marquées
+**Sur cet appareil** même lorsque vous êtes connecté), et ajoutez ou retirez des
+vidéos depuis le menu **Enregistrer** de la page de la vidéo ou le menu des
+cartes vidéo. Le flux d'accueil provient du RSS de chaque chaîne suivie. Importez une
 bibliothèque existante depuis
 [Google Takeout](https://takeout.google.com) : choisissez YouTube et YouTube
 Music, avec JSON comme format d'historique, et importez `subscriptions.csv` et

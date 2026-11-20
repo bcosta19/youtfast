@@ -270,6 +270,7 @@ fn parse_limited<R: Read>(reader: R, limit: u64) -> Result<Import, String> {
         subscriptions: backup.subscriptions,
         history: backup.history,
         watch_later: backup.watch_later,
+        playlists: Vec::new(),
     })
 }
 

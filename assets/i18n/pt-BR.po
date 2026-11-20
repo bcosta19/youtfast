@@ -2051,3 +2051,41 @@ msgstr[1] "{count} canais bloqueados."
 
 msgid "Unblock"
 msgstr "Desbloquear"
+msgid "On this device"
+msgstr "Neste dispositivo"
+
+msgid "New playlist"
+msgstr "Nova playlist"
+
+msgid "Playlist name"
+msgstr "Nome da playlist"
+
+msgid "Create"
+msgstr "Criar"
+
+msgid "Delete"
+msgstr "Excluir"
+
+msgid "Delete “{name}”?"
+msgstr "Excluir “{name}”?"
+
+msgid "Remove from playlist"
+msgstr "Remover da playlist"
+
+msgid "Create a playlist to save videos on this device"
+msgstr "Crie uma playlist para salvar vídeos neste dispositivo"
+
+msgid "Create a playlist on this device or save one on your account"
+msgstr "Crie uma playlist neste dispositivo ou salve uma na sua conta"
+
+msgid "Save to playlist"
+msgstr "Salvar na playlist"
+
+msgid "No playlists on this device"
+msgstr "Nenhuma playlist neste dispositivo"
+
+msgid "No more device playlists can be created"
+msgstr "Não é possível criar mais playlists neste dispositivo"
+
+msgid "Playlist is full"
+msgstr "A playlist está cheia"

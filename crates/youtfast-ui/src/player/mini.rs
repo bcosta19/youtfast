@@ -5,7 +5,6 @@ use youtfast_i18n::{Locale, gettext as tr};
 
 use super::surface::{on_video_style, picture_rounded, video_context_menu};
 use super::{focused_control, keyboard_video_focus};
-use youtfast_app::player::{next_video, previous_video};
 use youtfast_app::{Action, State};
 use youtfast_appearance::icons::Icon;
 use youtfast_appearance::theme;
@@ -152,17 +151,8 @@ pub fn mini(
                     control_clicked = true;
                     actions.push(Action::TogglePause);
                 }
-                let previous = previous_video(state.watching.as_ref(), &state.up_next);
-                let related = state
-                    .details
-                    .ready()
-                    .map_or(&[][..], |details| details.related.as_slice());
-                let next = next_video(
-                    state.watching.as_ref(),
-                    &state.queue,
-                    &state.up_next,
-                    related,
-                );
+                let previous = state.previous_video();
+                let next = state.next_video();
                 for (offset, available, icon, hint, action) in [
                     (
                         -64.0,

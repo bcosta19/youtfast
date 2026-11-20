@@ -87,8 +87,9 @@ clicada em qualquer lugar, não só no interruptor.
 
 Configurações → Menu lateral escolhe quais botões do menu lateral aparecem e em
 que ordem (interruptor para ocultar, setas para mover, Restaurar padrão para
-desfazer). Conta e Configurações não podem ser ocultados. Marcados com gostei e
-Playlists continuam aparecendo só com uma conta conectada.
+desfazer). Conta e Configurações não podem ser ocultados. Marcados com gostei
+continua aparecendo só com uma conta conectada; Playlists fica disponível tanto
+desconectado (mostrando playlists do dispositivo) quanto conectado.
 As teclas numéricas de 1 a 9 abrem os botões na ordem em que o menu lateral os
 mostra.
 
@@ -307,10 +308,14 @@ vídeos ocultos (**Limpar**) e canais bloqueados (**Desbloquear**) em
 **Configurações → Histórico**.
 
 **Sem uma conta**, o YouTFast guarda as inscrições, o histórico de exibição (com
-o ponto onde cada vídeo parou, para retomá-lo) e o Assistir mais tarde neste
-computador, em `~/.local/share/youtfast/library.json`, e as configurações
-(qualidade do vídeo, volume, velocidade de reprodução) em `~/.config/youtfast/settings.json`. O feed do
-Início vem do RSS de cada canal inscrito. Traga uma biblioteca existente pelo
+o ponto onde cada vídeo parou, para retomá-lo), o Assistir mais tarde e as
+playlists locais neste computador, em `~/.local/share/youtfast/library.json`, e
+as configurações (qualidade do vídeo, volume, velocidade de reprodução) em
+`~/.config/youtfast/settings.json`. Crie, renomeie, exclua e reordene playlists
+do dispositivo em **Playlists** (marcadas como **Neste dispositivo** mesmo ao
+entrar em uma conta) e adicione ou remova vídeos pelo menu **Salvar** da página
+do vídeo ou pelo menu dos cards de vídeo. O feed do Início vem do RSS de cada
+canal inscrito. Traga uma biblioteca existente pelo
 [Google Takeout](https://takeout.google.com): escolha YouTube e YouTube
 Music, com JSON como formato do histórico, e importe `subscriptions.csv` e
 `watch-history.json`. Nada disso mexe em uma conta Google. As importações aceitam

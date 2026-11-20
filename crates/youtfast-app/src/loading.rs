@@ -242,6 +242,12 @@ impl State {
         self.for_you_from_account = false;
         true
     }
+
+    pub(super) fn accepts_loaded_slot(&self, slot: Slot) -> bool {
+        // Device playlists own the page rows and never request a remote page.
+        slot != Slot::Page
+            || !matches!(&self.page, Some(Page::Playlist { id, .. }) if DevicePlaylist::is_local_id(id))
+    }
 }
 
 impl App {
@@ -301,13 +307,18 @@ impl App {
             View::Liked if force || stale(&state.liked) => {
                 self.request(Slot::Liked, Request::Liked)
             }
-            View::Playlists if force || stale(&state.playlists) => {
+            View::Playlists if self.state.signed_in() && (force || stale(&state.playlists)) => {
                 self.request(Slot::Playlists, Request::Playlists);
             }
-            View::Playlist if force || stale(&state.page_videos) => {
+            View::Playlist => {
                 if let Some(Page::Playlist { id, .. }) = &state.page {
-                    let request = Request::Playlist(id.clone());
-                    self.request(Slot::Page, request);
+                    if DevicePlaylist::is_local_id(id) {
+                        let id = id.clone();
+                        self.sync_local_playlist_page(&id);
+                    } else if force || stale(&state.page_videos) {
+                        let request = Request::Playlist(id.clone());
+                        self.request(Slot::Page, request);
+                    }
                 }
             }
             View::Channel => {
@@ -354,6 +365,41 @@ impl App {
         }
         // Back on Home with the feed already here, its shelf is due.
         self.ask_shelf();
+    }
+
+    /// Populates `View::Playlist` directly from a device-local playlist without network requests.
+    pub(super) fn sync_local_playlist_page(&mut self, id: &str) {
+        if let Some(playlist) = self.state.library.playlist(id).cloned() {
+            let thumbnail = playlist.videos.first().map(Video::thumbnail);
+            let count = playlist.videos.len() as u64;
+            self.state.page = Some(Page::Playlist {
+                id: playlist.id,
+                name: playlist.name.clone(),
+            });
+            self.state.playlist_details = Some(innertube::PlaylistDetails {
+                name: playlist.name,
+                thumbnail,
+                channel: Some(
+                    youtfast_i18n::gettext(self.state.settings.language, "On this device")
+                        .into_owned(),
+                ),
+                description: String::new(),
+                videos: Some(count),
+            });
+            self.state.page_more = None;
+            self.state.page_more_state = Fetch::Idle;
+            self.state.page_videos = Listing::Ready(playlist.videos);
+        } else {
+            self.state.page = None;
+            self.state.playlist_details = None;
+            self.state.page_videos = Listing::Idle;
+            self.state.page_more = None;
+            self.state.page_more_state = Fetch::Idle;
+            if self.state.view == View::Playlist {
+                self.state.view = View::Playlists;
+                self.load(View::Playlists, false);
+            }
+        }
     }
 
     /// Loads the combined account + RSS feed for Home and Subscriptions activity.
@@ -1072,6 +1118,29 @@ mod tests {
         assert!(!state.clear_local_for_you());
         assert_eq!(state.for_you.items()[0].id, "account");
         assert!(state.for_you_more.is_some());
+    }
+
+    #[test]
+    fn late_remote_page_cannot_replace_device_playlist_rows() {
+        let mut state = State {
+            page: Some(Page::Playlist {
+                id: "PLremote".into(),
+                name: "Remote".into(),
+            }),
+            ..State::default()
+        };
+        assert!(state.accepts_loaded_slot(Slot::Page));
+
+        state.page = Some(Page::Playlist {
+            id: "local-1".into(),
+            name: "Device".into(),
+        });
+        state.page_videos = Listing::Ready(vec![Video::from_id("device".into())]);
+        if state.accepts_loaded_slot(Slot::Page) {
+            state.page_videos = Listing::Ready(vec![Video::from_id("remote".into())]);
+        }
+        assert_eq!(state.page_videos.items()[0].id, "device");
+        assert!(state.accepts_loaded_slot(Slot::Playlists));
     }
 
     fn more(token: &str) -> innertube::More {

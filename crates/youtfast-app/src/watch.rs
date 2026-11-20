@@ -348,11 +348,11 @@ impl App {
         self.speed_manual = false;
         self.applied_speed_live = video.live;
         self.speed_channel_applied = !video.live && video.channel_id.is_some();
+        let looping = self.state.playback_loop || self.state.loops_short(&video);
         if let Some(player) = &mut self.player {
-            if let Err(error) = player.set_looping(video.short) {
+            if let Err(error) = player.set_looping(looping) {
                 log::warn!("mpv: {error}");
             }
-            let _ = player.set_looping(video.short || self.state.playback_loop);
             let _ = player.set_caption_style(
                 self.state.settings.caption_scale,
                 self.state.settings.caption_background,
@@ -879,10 +879,9 @@ mod tests {
         state.settings.hide_watched = true;
 
         let up_next = visible_videos(&state, &first);
-        assert_eq!(
-            super::super::player::next_video(Some(&first), &[], &up_next, &[]),
-            Some(&next)
-        );
+        state.up_next = up_next;
+        state.watching = Some(first.clone());
+        assert_eq!(state.next_video(), Some(&next));
     }
 
     #[test]
@@ -910,9 +909,7 @@ mod tests {
         assert!(state.playing_playlist.is_none() && state.playing_more.is_none());
         assert!(state.player_error.is_none());
         // With nothing playing and no queue, the media keys find nothing.
-        assert!(
-            super::super::player::next_video(None, &state.queue, &state.up_next, &[]).is_none()
-        );
+        assert!(state.next_video().is_none());
     }
 
     #[test]

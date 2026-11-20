@@ -150,7 +150,7 @@ stateDiagram-v2
 | Aspect | Size from `Status::video_aspect` (`video-out-params/aspect`, after autorotate) |
 | Native integration | Pass Wayland/X11 display handles to mpv for hardware-decoding interop; the eframe fork exposes `CreationContext::get_proc_address` |
 | End of video | `keep-open` makes `eof-reached`, not an end-file event, the playback completion signal |
-| Next video | Queue first, then Up next, then related; Shorts loop with `loop-file` |
+| Next video | Queue first, then Up next, then related; playlists keep mixed video and Shorts order, while standalone Shorts loop with `loop-file` |
 
 Keep the egui/winit fork revisions coordinated. The mini player must continue
 drawing when the watch page is absent: an undrawn render-API output stalls.
@@ -244,7 +244,7 @@ sequenceDiagram
 
 | Stored data | Location and guarantees |
 |---|---|
-| Library | `paths::Dirs::library`: device subscriptions, history/resume positions, Watch later, hidden videos and blocked channels |
+| Library | `paths::Dirs::library`: device subscriptions, history/resume positions, Watch later, hidden videos and blocked channels, and device-only playlists (`local-` prefix, up to 200 playlists × 5,000 videos) |
 | Feed filter persistence | Rebuild indexes on deserialization, keeping the newest 5,000 unique hidden video IDs and 1,000 unique blocked channels. |
 | Settings | `paths::Dirs::settings`: playback, appearance and other preferences; new persisted fields need `#[serde(default)]` |
 | Invalid input | Preserve invalid JSON/UTF-8 before defaults become writable; read failures or failed backups stop startup |

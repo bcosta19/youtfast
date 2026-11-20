@@ -2013,3 +2013,41 @@ msgstr[1] "{count} Kanäle blockiert."
 
 msgid "Unblock"
 msgstr "Freigeben"
+msgid "On this device"
+msgstr "Auf diesem Gerät"
+
+msgid "New playlist"
+msgstr "Neue Playlist"
+
+msgid "Playlist name"
+msgstr "Playlist-Name"
+
+msgid "Create"
+msgstr "Erstellen"
+
+msgid "Delete"
+msgstr "Löschen"
+
+msgid "Delete “{name}”?"
+msgstr "„{name}“ löschen?"
+
+msgid "Remove from playlist"
+msgstr "Aus Playlist entfernen"
+
+msgid "Create a playlist to save videos on this device"
+msgstr "Erstellen Sie eine Playlist, um Videos auf diesem Gerät zu speichern"
+
+msgid "Create a playlist on this device or save one on your account"
+msgstr "Erstellen Sie eine Playlist auf diesem Gerät oder speichern Sie eine in Ihrem Konto"
+
+msgid "Save to playlist"
+msgstr "In Playlist speichern"
+
+msgid "No playlists on this device"
+msgstr "Keine Playlists auf diesem Gerät"
+
+msgid "No more device playlists can be created"
+msgstr "Auf diesem Gerät können keine weiteren Playlists erstellt werden"
+
+msgid "Playlist is full"
+msgstr "Die Playlist ist voll"
