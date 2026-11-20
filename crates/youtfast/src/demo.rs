@@ -463,6 +463,99 @@ impl eframe::App for Demo {
                 Action::SetWatchLaterQuery(v) => self.state.watch_later_query = v,
                 Action::SetLikedQuery(v) => self.state.liked_query = v,
                 Action::SetPlaylistsQuery(v) => self.state.playlists_query = v,
+                Action::CreatePlaylist(name) => {
+                    self.state.library.create_playlist(&name);
+                }
+                Action::CreatePlaylistWithVideo { name, video } => {
+                    if let Some(id) = self.state.library.create_playlist(&name) {
+                        self.state.library.add_to_playlist(&id, video);
+                    }
+                }
+                Action::RenamePlaylist { id, name } => {
+                    if self.state.library.rename_playlist(&id, &name)
+                        && let Some(playlist) = self.state.library.playlist(&id).cloned()
+                        && matches!(&self.state.page, Some(Page::Playlist { id: open_id, .. }) if open_id == &id)
+                    {
+                        self.state.page = Some(Page::Playlist {
+                            id,
+                            name: playlist.name.clone(),
+                        });
+                        if let Some(details) = &mut self.state.playlist_details {
+                            details.name = playlist.name;
+                        }
+                    }
+                }
+                Action::DeletePlaylist(id) => {
+                    if self.state.library.delete_playlist(&id)
+                        && matches!(&self.state.page, Some(Page::Playlist { id: open_id, .. }) if open_id == &id)
+                    {
+                        self.state.page = None;
+                        self.state.playlist_details = None;
+                        self.state.page_videos = Listing::Idle;
+                        self.state.view = View::Playlists;
+                    }
+                }
+                Action::TogglePlaylistVideo { playlist, video } => {
+                    let saved = !self.state.library.in_playlist(&playlist, &video.id);
+                    self.state.library.set_in_playlist(&playlist, video, saved);
+                }
+                Action::SetSaved { playlist, saved }
+                    if youtfast_storage::library::DevicePlaylist::is_local_id(&playlist) =>
+                {
+                    if let Some(video) = self.state.watching.clone() {
+                        self.state.library.set_in_playlist(&playlist, video, saved);
+                    }
+                }
+                Action::RemovePlaylistVideo { playlist, video_id } => {
+                    if self
+                        .state
+                        .library
+                        .remove_from_playlist(&playlist, &video_id)
+                        && let Some(pl) = self.state.library.playlist(&playlist).cloned()
+                        && matches!(&self.state.page, Some(Page::Playlist { id, .. }) if id == &playlist)
+                    {
+                        self.state.page_videos = Listing::Ready(pl.videos);
+                    }
+                }
+                Action::MovePlaylistVideo { playlist, from, to } => {
+                    if self.state.library.move_playlist_video(&playlist, from, to)
+                        && let Some(pl) = self.state.library.playlist(&playlist).cloned()
+                        && matches!(&self.state.page, Some(Page::Playlist { id, .. }) if id == &playlist)
+                    {
+                        self.state.page_videos = Listing::Ready(pl.videos);
+                    }
+                }
+                Action::OpenPlaylist { id, name } => {
+                    if let Some(pl) = self.state.library.playlist(&id).cloned() {
+                        self.state.page = Some(Page::Playlist {
+                            id,
+                            name: pl.name.clone(),
+                        });
+                        self.state.playlist_details =
+                            Some(youtfast_youtube::innertube::PlaylistDetails {
+                                name: pl.name,
+                                thumbnail: pl.videos.first().map(Video::thumbnail),
+                                channel: Some(
+                                    tr(self.state.settings.language, "On this device").into_owned(),
+                                ),
+                                description: String::new(),
+                                videos: Some(pl.videos.len() as u64),
+                            });
+                        self.state.page_videos = Listing::Ready(pl.videos);
+                        self.state.view = View::Playlist;
+                    } else {
+                        self.state.page = Some(Page::Playlist { id, name });
+                        self.state.view = View::Playlist;
+                    }
+                }
+                Action::PlayPlaylist => {
+                    if let Some(video) = self.state.page_videos.items().first().cloned() {
+                        self.state.video_tabs.open(video.clone());
+                        self.state.watching = Some(video);
+                        self.state.view = View::Watch;
+                        self.state.mini_closed = false;
+                    }
+                }
                 Action::SetSubscriptionsQuery(v) => self.state.subscriptions_query = v,
                 Action::SetSubscriptionsSort(v) => self.state.subscriptions_sort = v,
                 Action::SetSource(v) => self.state.source = v,

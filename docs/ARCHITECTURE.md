@@ -244,7 +244,7 @@ sequenceDiagram
 
 | Stored data | Location and guarantees |
 |---|---|
-| Library | `paths::Dirs::library`: device subscriptions, history/resume positions, Watch later, hidden videos and blocked channels |
+| Library | `paths::Dirs::library`: device subscriptions, history/resume positions, Watch later, hidden videos and blocked channels, and device-only playlists (`local-` prefix, up to 200 playlists × 5,000 videos) |
 | Feed filter persistence | Rebuild indexes on deserialization, keeping the newest 5,000 unique hidden video IDs and 1,000 unique blocked channels. |
 | Settings | `paths::Dirs::settings`: playback, appearance and other preferences; new persisted fields need `#[serde(default)]` |
 | Invalid input | Preserve invalid JSON/UTF-8 before defaults become writable; read failures or failed backups stop startup |

@@ -56,16 +56,22 @@ impl State {
         self.for_you_more = None;
         self.for_you_more_state = Fetch::Idle;
         self.for_you_from_account = false;
-        self.page_videos = Listing::Idle;
         self.page_playlists = Listing::Idle;
         self.channel_header = None;
         self.channel_about = Fetch::Idle;
-        self.page_more = None;
-        self.page_more_state = Fetch::Idle;
-        if matches!(self.page, Some(Page::Playlist { .. })) {
-            self.page = None;
-            if self.view == View::Playlist {
-                self.view = View::Home;
+        let local_playlist_open = matches!(
+            &self.page,
+            Some(Page::Playlist { id, .. }) if DevicePlaylist::is_local_id(id)
+        );
+        if !local_playlist_open {
+            self.page_videos = Listing::Idle;
+            self.page_more = None;
+            self.page_more_state = Fetch::Idle;
+            if matches!(self.page, Some(Page::Playlist { .. })) {
+                self.page = None;
+                if self.view == View::Playlist {
+                    self.view = View::Home;
+                }
             }
         }
         self.details = Fetch::Idle;
@@ -291,7 +297,7 @@ impl App {
         // back.
         self.state.library.active_account = retry_account;
         self.save_library();
-        if matches!(self.state.view, View::Liked | View::Playlists) {
+        if self.state.view == View::Liked {
             self.state.view = View::Home;
         }
         self.load(self.state.view, true);
@@ -366,6 +372,30 @@ mod tests {
         assert!(state.queue.is_empty() && state.up_next.is_empty() && state.alerts.is_empty());
         assert_eq!(state.view, View::Home);
         assert_eq!(state.library.history[0].video.id, "device00001");
+    }
+
+    #[test]
+    fn account_changes_keep_an_open_device_playlist() {
+        let mut state = State {
+            view: View::Playlist,
+            page: Some(Page::Playlist {
+                id: "local-1".into(),
+                name: "Local".into(),
+            }),
+            page_videos: Listing::Ready(vec![Video::from_id("device00001".into())]),
+            ..State::default()
+        };
+        let ctx = egui::Context::default();
+        state.forget_account_data(&ctx);
+        assert_eq!(state.view, View::Playlist);
+        assert_eq!(
+            state.page,
+            Some(Page::Playlist {
+                id: "local-1".into(),
+                name: "Local".into(),
+            })
+        );
+        assert_eq!(state.page_videos.items().len(), 1);
     }
 
     #[test]

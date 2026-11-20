@@ -412,6 +412,7 @@ pub fn video_interactions(
             }
         }
         crate::results::video_filter_menu_items(ui, state, video, actions);
+                save_to_playlist_menu(ui, state, video, actions);
     });
     if response.hovered() || response.has_focus() || ui.rect_contains_pointer(response.rect) {
         let clock = Rect::from_min_size(
@@ -467,6 +468,35 @@ pub fn video_interactions(
             Action::Open(video.clone())
         });
     }
+}
+
+/// Submenu for adding or removing `video` from device-local playlists.
+pub(crate) fn save_to_playlist_menu(
+    ui: &mut Ui,
+    state: &State,
+    video: &Video,
+    actions: &mut Vec<Action>,
+) {
+    let locale = state.settings.language;
+    ui.menu_button(tr(locale, "Save to playlist").as_ref(), |ui| {
+        if state.library.playlists.is_empty() {
+            ui.label(
+                egui::RichText::new(tr(locale, "No playlists on this device"))
+                    .font(theme::regular(13.0))
+                    .color(state.palette.secondary),
+            );
+            return;
+        }
+        for playlist in &state.library.playlists {
+            let mut saved = state.library.in_playlist(&playlist.id, &video.id);
+            if ui.checkbox(&mut saved, &playlist.name).changed() {
+                actions.push(Action::TogglePlaylistVideo {
+                    playlist: playlist.id.clone(),
+                    video: video.clone(),
+                });
+            }
+        }
+    });
 }
 
 /// A video as a card in a grid, the way YouTube's home draws it: the

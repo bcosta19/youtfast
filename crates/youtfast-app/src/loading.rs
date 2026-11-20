@@ -301,13 +301,18 @@ impl App {
             View::Liked if force || stale(&state.liked) => {
                 self.request(Slot::Liked, Request::Liked)
             }
-            View::Playlists if force || stale(&state.playlists) => {
+            View::Playlists if self.state.signed_in() && (force || stale(&state.playlists)) => {
                 self.request(Slot::Playlists, Request::Playlists);
             }
-            View::Playlist if force || stale(&state.page_videos) => {
+            View::Playlist => {
                 if let Some(Page::Playlist { id, .. }) = &state.page {
-                    let request = Request::Playlist(id.clone());
-                    self.request(Slot::Page, request);
+                    if DevicePlaylist::is_local_id(id) {
+                        let id = id.clone();
+                        self.sync_local_playlist_page(&id);
+                    } else if force || stale(&state.page_videos) {
+                        let request = Request::Playlist(id.clone());
+                        self.request(Slot::Page, request);
+                    }
                 }
             }
             View::Channel => {
@@ -354,6 +359,41 @@ impl App {
         }
         // Back on Home with the feed already here, its shelf is due.
         self.ask_shelf();
+    }
+
+    /// Populates `View::Playlist` directly from a device-local playlist without network requests.
+    pub(super) fn sync_local_playlist_page(&mut self, id: &str) {
+        if let Some(playlist) = self.state.library.playlist(id).cloned() {
+            let thumbnail = playlist.videos.first().map(Video::thumbnail);
+            let count = playlist.videos.len() as u64;
+            self.state.page = Some(Page::Playlist {
+                id: playlist.id,
+                name: playlist.name.clone(),
+            });
+            self.state.playlist_details = Some(innertube::PlaylistDetails {
+                name: playlist.name,
+                thumbnail,
+                channel: Some(
+                    youtfast_i18n::gettext(self.state.settings.language, "On this device")
+                        .into_owned(),
+                ),
+                description: String::new(),
+                videos: Some(count),
+            });
+            self.state.page_more = None;
+            self.state.page_more_state = Fetch::Idle;
+            self.state.page_videos = Listing::Ready(playlist.videos);
+        } else {
+            self.state.page = None;
+            self.state.playlist_details = None;
+            self.state.page_videos = Listing::Idle;
+            self.state.page_more = None;
+            self.state.page_more_state = Fetch::Idle;
+            if self.state.view == View::Playlist {
+                self.state.view = View::Playlists;
+                self.load(View::Playlists, false);
+            }
+        }
     }
 
     /// Loads the combined account + RSS feed for Home and Subscriptions activity.

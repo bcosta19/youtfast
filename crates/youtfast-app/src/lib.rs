@@ -22,7 +22,7 @@ use youtfast_desktop::instance::{self, Queue as RemoteQueue};
 use youtfast_logic::alerts;
 use youtfast_mpv::{self as mpv, Mpv, NativeDisplay, VideoSurface};
 use youtfast_storage::account;
-use youtfast_storage::library::{Account, Import, Library};
+use youtfast_storage::library::{Account, DevicePlaylist, Import, Library};
 use youtfast_storage::paths::Dirs;
 use youtfast_storage::settings::{Settings, ThemeChoice};
 use youtfast_youtube::innertube;
@@ -793,24 +793,34 @@ impl State {
         filter_videos(self.liked.items(), &self.liked_query)
     }
 
-    /// Account playlists matching `playlists_query`.
-    pub fn visible_playlists(&self) -> Vec<&PlaylistSummary> {
+    /// Device playlists followed by account playlists, matching `playlists_query`.
+    pub fn visible_playlists(&self) -> Vec<PlaylistSummary> {
         let query = self.playlists_query.trim().to_lowercase();
-        if query.is_empty() {
-            return self.playlists.items().iter().collect();
-        }
-        self.playlists
-            .items()
+        let on_device = youtfast_i18n::gettext(self.settings.language, "On this device");
+        let matches = |playlist: &PlaylistSummary| {
+            query.is_empty()
+                || playlist.name.to_lowercase().contains(&query)
+                || playlist
+                    .channel
+                    .as_deref()
+                    .unwrap_or_default()
+                    .to_lowercase()
+                    .contains(&query)
+        };
+        let local = self
+            .library
+            .playlists
             .iter()
-            .filter(|playlist| {
-                playlist.name.to_lowercase().contains(&query)
-                    || playlist
-                        .channel
-                        .as_deref()
-                        .unwrap_or_default()
-                        .to_lowercase()
-                        .contains(&query)
-            })
+            .map(|playlist| PlaylistSummary {
+                id: playlist.id.clone(),
+                name: playlist.name.clone(),
+                thumbnail: playlist.videos.first().map(Video::thumbnail),
+                channel: Some(on_device.clone().into_owned()),
+                videos: Some(playlist.videos.len() as u64),
+            });
+        local
+            .chain(self.playlists.items().iter().cloned())
+            .filter(matches)
             .collect()
     }
 }
@@ -1003,6 +1013,26 @@ mod subscription_state_tests {
                 .map(|p| p.id.as_str())
                 .collect::<Vec<_>>(),
             ["PL_rust"]
+        );
+
+        let local_id = state.library.create_playlist("Rust Study").unwrap();
+        state.playlists_query = "rust".into();
+        assert_eq!(
+            state
+                .visible_playlists()
+                .iter()
+                .map(|p| p.id.as_str())
+                .collect::<Vec<_>>(),
+            [local_id.as_str()]
+        );
+        state.playlists_query = "device".into();
+        assert_eq!(
+            state
+                .visible_playlists()
+                .iter()
+                .map(|p| p.id.as_str())
+                .collect::<Vec<_>>(),
+            [local_id.as_str()]
         );
 
         state.history_query = "gjengset".into();
@@ -1709,6 +1739,65 @@ impl App {
                 self.state.playlists_query = query;
                 self.state.reset_cursor();
             }
+            Action::CreatePlaylist(name) => {
+                if self.state.library.create_playlist(&name).is_some() {
+                    self.save_library();
+                }
+            }
+            Action::CreatePlaylistWithVideo { name, video } => {
+                if let Some(id) = self.state.library.create_playlist(&name) {
+                    self.state.library.add_to_playlist(&id, video);
+                    self.save_library();
+                    if matches!(&self.state.page, Some(Page::Playlist { id: open_id, .. }) if open_id == &id)
+                    {
+                        self.sync_local_playlist_page(&id);
+                    }
+                }
+            }
+            Action::RenamePlaylist { id, name } => {
+                if self.state.library.rename_playlist(&id, &name) {
+                    self.save_library();
+                    if matches!(&self.state.page, Some(Page::Playlist { id: open_id, .. }) if open_id == &id)
+                    {
+                        self.sync_local_playlist_page(&id);
+                    }
+                }
+            }
+            Action::DeletePlaylist(id) => {
+                if self.state.library.delete_playlist(&id) {
+                    self.save_library();
+                    if matches!(&self.state.page, Some(Page::Playlist { id: open_id, .. }) if open_id == &id)
+                    {
+                        self.sync_local_playlist_page(&id);
+                    }
+                }
+            }
+            Action::TogglePlaylistVideo { playlist, video } => {
+                let saved = !self.state.library.in_playlist(&playlist, &video.id);
+                self.set_local_playlist_saved(&playlist, video, saved);
+            }
+            Action::RemovePlaylistVideo { playlist, video_id } => {
+                if self
+                    .state
+                    .library
+                    .remove_from_playlist(&playlist, &video_id)
+                {
+                    self.save_library();
+                    if matches!(&self.state.page, Some(Page::Playlist { id: open_id, .. }) if open_id == &playlist)
+                    {
+                        self.sync_local_playlist_page(&playlist);
+                    }
+                }
+            }
+            Action::MovePlaylistVideo { playlist, from, to } => {
+                if self.state.library.move_playlist_video(&playlist, from, to) {
+                    self.save_library();
+                    if matches!(&self.state.page, Some(Page::Playlist { id: open_id, .. }) if open_id == &playlist)
+                    {
+                        self.sync_local_playlist_page(&playlist);
+                    }
+                }
+            }
             Action::SetSubscriptionsQuery(query) => {
                 self.state.subscriptions_query = query;
                 self.state.reset_cursor();
@@ -1818,6 +1907,12 @@ impl App {
                 self.state.settings.language = language;
                 self.state.osd = None;
                 self.state.notice = None;
+                if let Some(Page::Playlist { id, .. }) = &self.state.page
+                    && DevicePlaylist::is_local_id(id)
+                {
+                    let id = id.clone();
+                    self.sync_local_playlist_page(&id);
+                }
                 self.save_settings();
                 ctx.request_repaint();
             }

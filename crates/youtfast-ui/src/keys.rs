@@ -704,17 +704,21 @@ mod tests {
     fn number_keys_follow_the_buttons_the_sidebar_shows() {
         use youtfast_storage::settings::{SidebarButton, SidebarEntry};
         let mut state = State::default();
-        // Default order, signed out: Liked and Playlists are not drawn, so
-        // 5 is Notifications.
+        // Default order, signed out: Liked is not drawn, so 5 is Playlists
+        // and 6 is Notifications.
         assert_eq!(
             press(&mut state, Key::Num5, egui::Modifiers::NONE),
+            vec![Action::Navigate(View::Playlists)]
+        );
+        assert_eq!(
+            press(&mut state, Key::Num6, egui::Modifiers::NONE),
             vec![Action::Navigate(View::Notifications)]
         );
         assert_eq!(
-            press(&mut state, Key::Num7, egui::Modifiers::NONE),
+            press(&mut state, Key::Num8, egui::Modifiers::NONE),
             vec![Action::Navigate(View::Settings)]
         );
-        assert!(press(&mut state, Key::Num8, egui::Modifiers::NONE).is_empty());
+        assert!(press(&mut state, Key::Num9, egui::Modifiers::NONE).is_empty());
         // Hide Home and move Settings first.
         state.settings.sidebar = youtfast_storage::settings::sanitize_sidebar(vec![
             SidebarEntry {
@@ -734,7 +738,7 @@ mod tests {
             press(&mut state, Key::Num2, egui::Modifiers::NONE),
             vec![Action::Navigate(View::Subscriptions)]
         );
-        // Signed in, Liked and Playlists count again.
+        // Signed in, Liked counts again.
         state.account = youtfast_app::AccountState::SignedIn(1);
         assert_eq!(
             press(&mut state, Key::Num5, egui::Modifiers::NONE),

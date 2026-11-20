@@ -16,6 +16,29 @@ pub enum Action {
     SetWatchLaterQuery(String),
     SetLikedQuery(String),
     SetPlaylistsQuery(String),
+    CreatePlaylist(String),
+    CreatePlaylistWithVideo {
+        name: String,
+        video: Video,
+    },
+    RenamePlaylist {
+        id: String,
+        name: String,
+    },
+    DeletePlaylist(String),
+    TogglePlaylistVideo {
+        playlist: String,
+        video: Video,
+    },
+    RemovePlaylistVideo {
+        playlist: String,
+        video_id: String,
+    },
+    MovePlaylistVideo {
+        playlist: String,
+        from: usize,
+        to: usize,
+    },
     RemoveHistory(String),
     PlayPlaylist,
     /// A search, or a YouTube link to open.
