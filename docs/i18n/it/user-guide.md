@@ -299,6 +299,17 @@ background. Se la raccolta cambia durante l'unione, ripeti l'importazione; quell
 modifiche più recenti non vengono mai sostituite da un'istantanea d'importazione
 più vecchia.
 
+In **Impostazioni → Cronologia**, **Backup della raccolta** esporta le iscrizioni
+del dispositivo, la cronologia delle visualizzazioni (comprese le posizioni di
+ripresa) e Guarda più tardi come file JSON versionato (`youtfast-library.json`)
+tramite **Esporta raccolta (JSON)**, oppure unisce un backup tramite **Importa
+backup** con le stesse regole di unione in background (limite di 64 MiB, fino a
+20.000 iscrizioni uniche, le 1.000 voci di cronologia più recenti e 5.000 video
+di Guarda più tardi). Account e sessioni non vengono mai esportati. **Esporta
+iscrizioni** salva le iscrizioni del dispositivo come file OPML 2.0
+(`youtfast-subscriptions.opml`) con l'URL del feed RSS YouTube di ogni canale
+tramite **Esporta OPML**.
+
 **History sync** (sincronizzazione della cronologia) in Impostazioni → Cronologia si
 applica quando hai effettuato l'accesso:
 

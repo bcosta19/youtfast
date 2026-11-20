@@ -314,6 +314,16 @@ Einlesen und Zusammenführen laufen im Hintergrund. Ändert sich die Mediathek
 während des Zusammenführens, wiederholen Sie den Import; diese neueren Änderungen
 werden nie durch einen älteren Import-Stand ersetzt.
 
+Unter **Einstellungen → Verlauf** exportiert **Mediathek sichern** Ihre
+Geräte-Abos, den Wiedergabeverlauf (einschließlich Fortsetzungspositionen) und
+„Später ansehen“ als versionierte JSON-Datei (`youtfast-library.json`) über
+**Mediathek exportieren (JSON)** oder führt eine Sicherung über **Sicherung
+importieren** mit denselben Hintergrund-Regeln wieder zusammen (64-MiB-Limit,
+bis zu 20.000 eindeutige Abos, die 1.000 neuesten Verlaufseinträge und 5.000
+„Später ansehen“-Videos). Konten und Sitzungen werden nie exportiert. **Abos
+exportieren** schreibt Ihre Geräte-Abos über **OPML exportieren** als OPML-2.0-Datei
+(`youtfast-subscriptions.opml`) mit der YouTube-RSS-Feed-URL jedes Kanals.
+
 **History sync** (Verlaufssynchronisierung) unter Einstellungen → Verlauf gilt, solange Sie
 angemeldet sind:
 

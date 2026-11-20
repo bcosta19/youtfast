@@ -84,6 +84,9 @@ pub enum Action {
     ToggleWatchLater(Video),
     ClearHistory,
     ImportTakeout,
+    ExportLibrary,
+    ExportOpml,
+    ImportBackup,
     /// "sign in with cookies.txt" for the account being added.
     AddAccountFile,
     /// `sign in with <browser>` for the account being added, with the

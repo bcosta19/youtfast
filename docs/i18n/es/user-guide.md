@@ -304,6 +304,18 @@ ejecutan en segundo plano.
 Si la biblioteca cambia durante la fusión, reintenta la importación; esos cambios
 más recientes nunca se sustituyen por una instantánea de importación más antigua.
 
+En **Configuración → Historial**, **Respaldar biblioteca** exporta tus
+suscripciones del dispositivo, el historial de reproducciones (incluidas las
+posiciones de reanudación) y Ver más tarde como un archivo JSON versionado
+(`youtfast-library.json`) mediante **Exportar biblioteca (JSON)**, o combina un
+respaldo de nuevo mediante **Importar respaldo** con las mismas reglas de fusión
+en segundo plano (límite de 64 MiB, hasta 20.000 suscripciones únicas, las 1.000
+entradas más recientes del historial y 5.000 vídeos de Ver más tarde). Las
+cuentas y sesiones nunca se exportan. **Exportar suscripciones** guarda tus
+suscripciones del dispositivo como un archivo OPML 2.0
+(`youtfast-subscriptions.opml`) con la URL del feed RSS de cada canal en YouTube
+mediante **Exportar OPML**.
+
 **History sync** (sincronización del historial), en Configuración → Historial, se aplica con la sesión iniciada:
 
 - **Separate** (separado; la opción predeterminada) mantiene separadas las listas de Cuenta y Este dispositivo.

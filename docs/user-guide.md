@@ -267,6 +267,16 @@ recent unique history entries. Parsing and merging run in the background.
 If the library changes during the merge, retry the import; those newer
 changes are never replaced by an older import snapshot.
 
+Under **Settings → History**, **Back up library** exports your device
+subscriptions, watch history (including resume positions) and Watch later as a
+versioned JSON file (`youtfast-library.json`) via **Export library (JSON)**, or
+merges a backup back in via **Import backup** using the same background merge
+rules (64 MiB limit, up to 20,000 unique subscriptions, 1,000 most recent
+history entries and 5,000 Watch later videos). Accounts and sessions are never
+exported. **Export subscriptions** writes your device subscriptions as an OPML
+2.0 file (`youtfast-subscriptions.opml`) with each channel's YouTube RSS feed
+URL via **Export OPML**.
+
 **History sync** in Settings → History applies while signed in:
 
 - **Separate** (the default) keeps the Account and This device lists separate.

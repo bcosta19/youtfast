@@ -73,11 +73,12 @@ pub struct Watched {
     pub position: f64,
 }
 
-/// What a Google Takeout file brought.
-#[derive(Debug, Default)]
+/// What a Google Takeout or library backup file brought.
+#[derive(Debug, Default, PartialEq)]
 pub struct Import {
     pub subscriptions: Vec<Channel>,
     pub history: Vec<Watched>,
+    pub watch_later: Vec<Video>,
 }
 
 impl Library {
@@ -288,9 +289,16 @@ impl Library {
         })
     }
 
-    /// Adds what a Takeout file brought. Returns how many subscriptions and
-    /// history entries were new.
+    /// Adds what a Takeout or backup file brought. Returns how many
+    /// subscriptions and history entries were new.
     pub fn merge(&mut self, import: Import) -> (usize, usize) {
+        let (subscriptions, history, _) = self.merge_with_watch_later(import);
+        (subscriptions, history)
+    }
+
+    /// Adds what a Takeout or backup file brought. Returns how many
+    /// subscriptions, history entries, and Watch later videos were new.
+    pub fn merge_with_watch_later(&mut self, import: Import) -> (usize, usize, usize) {
         let mut known_channels: HashSet<String> = self
             .subscriptions
             .iter()
@@ -298,7 +306,7 @@ impl Library {
             .collect();
         let mut new_subscriptions = 0;
         for channel in import.subscriptions {
-            if known_channels.insert(channel.id.clone()) {
+            if !channel.id.trim().is_empty() && known_channels.insert(channel.id.clone()) {
                 self.subscriptions.push(channel);
                 new_subscriptions += 1;
             }
@@ -314,9 +322,18 @@ impl Library {
             .collect();
         let mut new_history = 0;
         for watched in import.history {
+            if watched.video.id.trim().is_empty() {
+                continue;
+            }
             match known_videos.entry(watched.video.id.clone()) {
                 std::collections::hash_map::Entry::Occupied(entry) => {
                     let known = &mut self.history[*entry.get()];
+                    if watched.at > known.at
+                        && watched.position.is_finite()
+                        && watched.position > 0.0
+                    {
+                        known.position = watched.position;
+                    }
                     known.at = known.at.max(watched.at);
                 }
                 std::collections::hash_map::Entry::Vacant(entry) => {
@@ -329,7 +346,24 @@ impl Library {
         self.history.sort_by_key(|watched| Reverse(watched.at));
         self.history.truncate(HISTORY_LIMIT);
         self.reindex_watched();
-        (new_subscriptions, new_history)
+
+        let mut known_watch_later: HashSet<String> = self
+            .watch_later
+            .iter()
+            .map(|video| video.id.clone())
+            .collect();
+        let mut new_watch_later = 0;
+        for video in import.watch_later {
+            if self.watch_later.len() >= crate::backup::WATCH_LATER_LIMIT {
+                break;
+            }
+            if !video.id.trim().is_empty() && known_watch_later.insert(video.id.clone()) {
+                self.watch_later.push(video);
+                new_watch_later += 1;
+            }
+        }
+
+        (new_subscriptions, new_history, new_watch_later)
     }
 }
 
@@ -414,7 +448,8 @@ mod tests {
         assert_eq!(
             library.merge(Import {
                 subscriptions: vec![channel.clone(), channel],
-                history
+                history,
+                ..Import::default()
             }),
             (1, 19_999)
         );
@@ -555,6 +590,7 @@ mod tests {
                     position: 0.0,
                 },
             ],
+            ..Import::default()
         };
         assert_eq!(library.merge(import), (1, 1));
         assert_eq!(library.subscriptions.len(), 2);
@@ -581,6 +617,7 @@ mod tests {
                 at: 2,
                 position: 30.0,
             }],
+            ..Import::default()
         });
         assert!(library.watched("bbbbbbbbbbb"));
         assert_eq!(library.resume_position("bbbbbbbbbbb"), Some(30.0));
@@ -639,5 +676,29 @@ mod tests {
         assert_eq!(library.resume_position("aaaaaaaaaaa"), None);
         assert!(!library.watched("aaaaaaaaaaa"));
         assert_ne!(library.history_stamp(), stamp);
+    }
+
+    #[test]
+    fn merging_watch_later_preserves_existing_deduplicates_and_respects_limit() {
+        let mut library = Library::default();
+        library.toggle_watch_later(video("existing001"));
+        let import = Import {
+            watch_later: (0..crate::backup::WATCH_LATER_LIMIT + 5)
+                .map(|i| {
+                    if i == 0 {
+                        video("existing001")
+                    } else {
+                        video(&format!("wl{i:09}"))
+                    }
+                })
+                .collect(),
+            ..Import::default()
+        };
+        let (subs, hist, watch_later) = library.merge_with_watch_later(import);
+        assert_eq!((subs, hist), (0, 0));
+        assert_eq!(watch_later, crate::backup::WATCH_LATER_LIMIT - 1);
+        assert_eq!(library.watch_later.len(), crate::backup::WATCH_LATER_LIMIT);
+        assert_eq!(library.watch_later[0].id, "existing001");
+        assert_eq!(library.watch_later[1].id, "wl000000001");
     }
 }

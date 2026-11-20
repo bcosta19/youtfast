@@ -55,7 +55,7 @@ All paths below are relative to [`crates/`](../crates/).
 | `youtfast-cast` | `src/lib.rs`: Google Cast adapter; `dial`: discovery/app lifecycle; `lounge`: YouTube on TV transport |
 | `youtfast-youtube` | `innertube`: data/account API; `ytdlp`: extraction JSON; `extras`: captions/storyboards; `thumbs`: bounded image cache; `sponsorblock`: segments |
 | `youtfast-logic` | `alerts`, `history`, `recommend`, `video_tabs`: pure decisions over application data |
-| `youtfast-storage` | `library`, `settings`, `account`, `takeout`, `paths`: persistence, credentials and imports |
+| `youtfast-storage` | `library`, `settings`, `account`, `takeout`, `backup`, `paths`: persistence, credentials, imports and exports |
 | `youtfast-desktop` | `instance`: single instance; `diagnostics`: redacted logs; `updater`: verified release installation |
 | `youtfast-core` | `model`, `util`, `links`, `privacy`: shared types, formatting, URL parsing and controlled errors; no IO or drawing |
 | `youtfast-i18n` | Build script compiles catalogs from `assets/i18n` |
@@ -248,7 +248,8 @@ sequenceDiagram
 | Invalid input | Preserve invalid JSON/UTF-8 before defaults become writable; read failures or failed backups stop startup |
 | Atomic writes | Reject non-regular targets; synchronize the parent directory on Unix |
 | Takeout | Parse/merge off the UI thread; subscriptions CSV uses column positions because headings are localized; history comes from `watch-history.json` |
-| Import bounds | 64 MiB; 20,000 unique subscriptions; latest 1,000 unique history entries; merge only if `App::library_revision` still matches |
+| Import bounds | 64 MiB; 20,000 unique subscriptions; latest 1,000 unique history entries; 5,000 Watch later entries; merge only if `App::library_revision` still matches |
+| Library backup | Versioned JSON backup (`subscriptions`, `history` with resume positions, `watch_later`; never accounts or sessions) and OPML 2.0 subscription export, written atomically off the UI thread |
 | Image cache | One download shared by display/persistence; 4 MiB response, 4096 px per side, four million pixels; disk: 2,000 files / 128 MiB |
 | Image lifetime | `images::remote` forgets undrawn images after one minute; downloads are bounded by `thumbs::DOWNLOADS`, retry with backoff, and cannot recreate forgotten retry entries |
 | Kept thumbnails | `thumbs::cached` answers without waiting for a download turn |

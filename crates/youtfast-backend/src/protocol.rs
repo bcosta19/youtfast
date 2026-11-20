@@ -224,6 +224,9 @@ pub enum Command {
         visitor_data: Option<String>,
     },
     ImportTakeout(Picked),
+    ExportLibrary(Picked, Box<Library>),
+    ExportOpml(Picked, Vec<Channel>),
+    ImportBackup(Picked),
     MergeImport {
         library: Box<Library>,
         import: Import,
@@ -327,7 +330,7 @@ pub enum Event {
     Imported(Result<Import, String>),
     ImportMerged {
         library: Box<Library>,
-        counts: (usize, usize),
+        counts: (usize, usize, usize),
         revision: u64,
     },
     Rating {

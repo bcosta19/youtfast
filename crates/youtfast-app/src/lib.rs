@@ -1747,6 +1747,59 @@ impl App {
                     .pick_file();
                 self.backend.send(Command::ImportTakeout(Box::pin(picked)));
             }
+            Action::ExportLibrary => {
+                let picked = rfd::AsyncFileDialog::new()
+                    .set_title(youtfast_i18n::gettext(
+                        self.state.settings.language,
+                        "Export library",
+                    ))
+                    .set_file_name("youtfast-library.json")
+                    .add_filter(
+                        youtfast_i18n::gettext(
+                            self.state.settings.language,
+                            "YouTFast library backup",
+                        ),
+                        &["json"],
+                    )
+                    .save_file();
+                self.backend.send(Command::ExportLibrary(
+                    Box::pin(picked),
+                    Box::new(self.state.library.clone()),
+                ));
+            }
+            Action::ExportOpml => {
+                let picked = rfd::AsyncFileDialog::new()
+                    .set_title(youtfast_i18n::gettext(
+                        self.state.settings.language,
+                        "Export subscriptions",
+                    ))
+                    .set_file_name("youtfast-subscriptions.opml")
+                    .add_filter(
+                        youtfast_i18n::gettext(self.state.settings.language, "OPML subscriptions"),
+                        &["opml", "xml"],
+                    )
+                    .save_file();
+                self.backend.send(Command::ExportOpml(
+                    Box::pin(picked),
+                    self.state.library.subscriptions.clone(),
+                ));
+            }
+            Action::ImportBackup => {
+                let picked = rfd::AsyncFileDialog::new()
+                    .set_title(youtfast_i18n::gettext(
+                        self.state.settings.language,
+                        "Import backup",
+                    ))
+                    .add_filter(
+                        youtfast_i18n::gettext(
+                            self.state.settings.language,
+                            "YouTFast library backup",
+                        ),
+                        &["json"],
+                    )
+                    .pick_file();
+                self.backend.send(Command::ImportBackup(Box::pin(picked)));
+            }
             Action::AddAccountFile => self.add_account_file(),
             Action::AddAccountBrowser => self.add_account_browser(),
             Action::AddAccountProfile(index) => self.add_account_profile(index),

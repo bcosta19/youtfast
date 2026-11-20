@@ -165,7 +165,7 @@ impl State {
     fn accept_import(
         &mut self,
         library: Library,
-        (subscriptions, history): (usize, usize),
+        (subscriptions, history, watch_later): (usize, usize, usize),
         revision: u64,
         current: u64,
     ) -> bool {
@@ -174,14 +174,26 @@ impl State {
             return false;
         }
         self.library = library;
-        self.notice = Some(youtfast_i18n::format(
-            self.settings.language,
-            "Imported {subscriptions} new subscriptions and {history} new videos of history.",
-            &[
-                ("subscriptions", subscriptions.to_string()),
-                ("history", history.to_string()),
-            ],
-        ));
+        self.notice = Some(if watch_later > 0 {
+            youtfast_i18n::format(
+                self.settings.language,
+                "Imported {subscriptions} new subscriptions, {history} new videos of history, and {watch_later} Watch later videos.",
+                &[
+                    ("subscriptions", subscriptions.to_string()),
+                    ("history", history.to_string()),
+                    ("watch_later", watch_later.to_string()),
+                ],
+            )
+        } else {
+            youtfast_i18n::format(
+                self.settings.language,
+                "Imported {subscriptions} new subscriptions and {history} new videos of history.",
+                &[
+                    ("subscriptions", subscriptions.to_string()),
+                    ("history", history.to_string()),
+                ],
+            )
+        });
         true
     }
 }
@@ -529,7 +541,7 @@ impl App {
     pub(super) fn on_import_merged(
         &mut self,
         library: Library,
-        counts: (usize, usize),
+        counts: (usize, usize, usize),
         revision: u64,
     ) {
         if !self
@@ -1320,9 +1332,24 @@ mod tests {
         let mut state = State::default();
         let mut old = Library::default();
         old.record_watch(Video::from_id("old-history".into()), 1);
-        assert!(!state.accept_import(old, (0, 1), 1, 2));
+        assert!(!state.accept_import(old, (0, 1, 0), 1, 2));
         assert!(state.library.history.is_empty());
         assert!(state.notice.unwrap().contains("Retry"));
+    }
+
+    #[test]
+    fn accepting_a_backup_import_with_watch_later_reports_all_three_counts() {
+        let mut state = State::default();
+        let mut imported = Library::default();
+        imported.toggle_watch_later(Video::from_id("wl000000001".into()));
+        assert!(state.accept_import(imported, (2, 3, 1), 4, 4));
+        assert_eq!(state.library.watch_later.len(), 1);
+        assert_eq!(
+            state.notice.as_deref(),
+            Some(
+                "Imported 2 new subscriptions, 3 new videos of history, and 1 Watch later videos."
+            )
+        );
     }
 
     #[test]

@@ -295,6 +295,17 @@ arquivos de até 64 MiB e 20.000 inscrições únicas, e mantêm as 1.000 entrad
 Se a biblioteca mudar durante a mesclagem, tente importar de novo; essas mudanças
 mais recentes nunca são substituídas por uma cópia mais antiga da importação.
 
+Em **Configurações → Histórico**, **Fazer backup da biblioteca** exporta suas
+inscrições do dispositivo, o histórico de exibição (incluindo posições de
+retomada) e Assistir mais tarde como um arquivo JSON versionado
+(`youtfast-library.json`) via **Exportar biblioteca (JSON)**, ou mescla um
+backup de volta via **Importar backup** usando as mesmas regras de mesclagem em
+segundo plano (limite de 64 MiB, até 20.000 inscrições únicas, 1.000 entradas
+mais recentes do histórico e 5.000 vídeos de Assistir mais tarde). Contas e
+sessões nunca são exportadas. **Exportar inscrições** grava as inscrições do
+dispositivo como um arquivo OPML 2.0 (`youtfast-subscriptions.opml`) com a URL
+do feed RSS de cada canal no YouTube via **Exportar OPML**.
+
 **Sincronização do histórico**, em Configurações → Histórico, vale enquanto há
 uma conta conectada:
 

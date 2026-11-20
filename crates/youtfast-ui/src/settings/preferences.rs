@@ -215,8 +215,80 @@ pub(super) fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     .font(theme::regular(13.0))
                     .color(palette.secondary),
             );
+            ui.add_space(16.0);
+            let card = widgets::on_card(palette);
+            let export_json = tr(locale, "Export library (JSON)");
+            let import_backup = tr(locale, "Import backup");
+            let backup_width =
+                button_row_width(ui, &[export_json.as_ref(), import_backup.as_ref()])
+                    .max(CONTROL_WIDTH);
+            setting_row(
+                ui,
+                palette,
+                &tr(locale, "Back up library"),
+                &tr(
+                    locale,
+                    "Export your device subscriptions, watch history with resume positions, and Watch later as JSON, or merge a backup file. Accounts and sessions are never exported.",
+                ),
+                backup_width,
+                |ui| {
+                    ui.spacing_mut().item_spacing.x = 8.0;
+                    if widgets::button(ui, &card, &import_backup, widgets::ButtonStyle::Normal)
+                        .clicked()
+                    {
+                        actions.push(Action::ImportBackup);
+                    }
+                    if widgets::button(ui, &card, &export_json, widgets::ButtonStyle::Normal)
+                        .clicked()
+                    {
+                        actions.push(Action::ExportLibrary);
+                    }
+                },
+            );
+            ui.add_space(12.0);
+            let export_opml = tr(locale, "Export OPML");
+            let opml_width = button_row_width(ui, &[export_opml.as_ref()]).max(CONTROL_WIDTH);
+            setting_row(
+                ui,
+                palette,
+                &tr(locale, "Export subscriptions"),
+                &tr(
+                    locale,
+                    "Export your device subscriptions as an OPML file for RSS readers and other apps.",
+                ),
+                opml_width,
+                |ui| {
+                    if widgets::button(ui, &card, &export_opml, widgets::ButtonStyle::Normal)
+                        .clicked()
+                    {
+                        actions.push(Action::ExportOpml);
+                    }
+                },
+            );
         });
     });
+}
+
+fn button_row_width(ui: &Ui, labels: &[&str]) -> f32 {
+    let mut total = 0.0f32;
+    for (index, label) in labels.iter().enumerate() {
+        if index > 0 {
+            total += 8.0;
+        }
+        let width = (ui
+            .painter()
+            .layout_no_wrap(
+                (*label).to_owned(),
+                theme::medium(14.0),
+                egui::Color32::WHITE,
+            )
+            .size()
+            .x
+            + 28.0)
+            .max(34.0);
+        total += width;
+    }
+    total.ceil()
 }
 
 /// The Notifications group: the check, desktop popups, the interval.
@@ -470,5 +542,83 @@ mod tests {
             output.textures_delta.clear();
         }
         assert_eq!(actions, [Action::ClearChannelSpeeds]);
+    }
+
+    #[test]
+    fn history_backup_and_opml_buttons_render_and_emit_actions() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let state = State::default();
+
+        let render = |events: Vec<egui::Event>, actions: &mut Vec<Action>| {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        vec2(900.0, 800.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| history(ui, &state, actions),
+            );
+            let positions: Vec<(String, egui::Pos2)> = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) => Some((
+                        text.galley.text().to_owned(),
+                        egui::Rect::from_min_size(text.pos, text.galley.size()).center(),
+                    )),
+                    _ => None,
+                })
+                .collect();
+            output.textures_delta.clear();
+            positions
+        };
+
+        let mut actions = Vec::new();
+        let positions = render(Vec::new(), &mut actions);
+        assert!(actions.is_empty());
+        for expected in [
+            "Back up library",
+            "Export library (JSON)",
+            "Import backup",
+            "Export subscriptions",
+            "Export OPML",
+        ] {
+            assert!(
+                positions.iter().any(|(label, _)| label == expected),
+                "missing label: {expected}"
+            );
+        }
+
+        for (button, expected_action) in [
+            ("Export library (JSON)", Action::ExportLibrary),
+            ("Import backup", Action::ImportBackup),
+            ("Export OPML", Action::ExportOpml),
+        ] {
+            let pos = positions
+                .iter()
+                .find(|(label, _)| label == button)
+                .unwrap()
+                .1;
+            for pressed in [true, false] {
+                render(
+                    vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    &mut actions,
+                );
+            }
+            assert_eq!(actions, [expected_action]);
+            actions.clear();
+        }
     }
 }

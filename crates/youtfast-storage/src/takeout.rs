@@ -28,9 +28,20 @@ pub fn parse_reader<R: BufRead>(reader: R) -> Result<Import, String> {
     parse_limited(reader, 64 * 1024 * 1024)
 }
 
-struct Limited<R> {
+pub(crate) struct Limited<R> {
     reader: R,
     remaining: u64,
+    pub(crate) exceeded: bool,
+}
+
+impl<R> Limited<R> {
+    pub(crate) fn new(reader: R, limit: u64) -> Self {
+        Self {
+            reader,
+            remaining: limit,
+            exceeded: false,
+        }
+    }
 }
 
 impl<R: Read> Read for Limited<R> {
@@ -41,7 +52,10 @@ impl<R: Read> Read for Limited<R> {
         if self.remaining == 0 {
             return match self.reader.read(&mut [0])? {
                 0 => Ok(0),
-                _ => Err(std::io::Error::other("Takeout exceeds the size limit")),
+                _ => {
+                    self.exceeded = true;
+                    Err(std::io::Error::other("Input exceeds the size limit"))
+                }
             };
         }
         let count = bytes.len().min(self.remaining as usize);
@@ -51,29 +65,30 @@ impl<R: Read> Read for Limited<R> {
     }
 }
 
-fn parse_limited<R: Read>(reader: R, limit: u64) -> Result<Import, String> {
-    let mut reader = Limited {
-        reader,
-        remaining: limit,
-    };
-    // A UTF-8 BOM first, if there is one.
+/// Reads up to three bytes and discards a leading UTF-8 BOM, returning any
+/// kept prefix bytes and their length.
+pub(crate) fn read_bom_prefix<R: Read>(reader: &mut R) -> std::io::Result<([u8; 3], usize)> {
     let mut prefix = [0; 3];
     let mut length = 0;
     while length < prefix.len() {
-        let read = reader
-            .read(&mut prefix[length..])
-            .map_err(|_| "Could not read this file (64 MiB limit).")?;
+        let read = reader.read(&mut prefix[length..])?;
         if read == 0 {
             break;
         }
         length += read;
     }
-    let prefix = if prefix == [0xEF, 0xBB, 0xBF] {
-        &[][..]
+    if prefix == [0xEF, 0xBB, 0xBF] {
+        Ok(([0; 3], 0))
     } else {
-        &prefix[..length]
-    };
-    let mut reader = std::io::BufReader::new(prefix.chain(reader));
+        Ok((prefix, length))
+    }
+}
+
+fn parse_limited<R: Read>(reader: R, limit: u64) -> Result<Import, String> {
+    let mut reader = Limited::new(reader, limit);
+    let (prefix, length) =
+        read_bom_prefix(&mut reader).map_err(|_| "Could not read this file (64 MiB limit).")?;
+    let mut reader = std::io::BufReader::new(prefix[..length].chain(reader));
     // The first byte that is not whitespace, without consuming it: the
     // parsers below want their text whole.
     let first = loop {
@@ -93,6 +108,7 @@ fn parse_limited<R: Read>(reader: R, limit: u64) -> Result<Import, String> {
         reader.consume(count);
     };
     match first {
+        Some(b'{') => crate::backup::parse_reader(reader),
         Some(b'[') => Ok(Import {
             history: history(reader)?,
             ..Import::default()

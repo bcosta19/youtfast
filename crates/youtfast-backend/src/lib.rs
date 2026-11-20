@@ -18,7 +18,7 @@ use youtfast_storage::library::Account;
 use youtfast_storage::library::Library;
 use youtfast_storage::paths::Dirs;
 use youtfast_storage::settings::Settings;
-use youtfast_storage::{account, takeout};
+use youtfast_storage::{account, backup, paths, takeout};
 use youtfast_youtube::innertube::{self, Client};
 
 mod protocol;
@@ -592,13 +592,60 @@ async fn handle(command: Command, context: Context) {
             .unwrap_or_else(|_| Err("Could not import this Takeout file.".into()));
             context.send(Event::Imported(import));
         }
+        Command::ExportLibrary(picked, library) => {
+            let Some(file) = picked.await else {
+                return;
+            };
+            let path = file.path().to_owned();
+            let result = tokio::task::spawn_blocking(move || {
+                let json = backup::to_json(&library)?;
+                paths::write_atomic(&path, json.as_bytes())
+                    .map_err(|_| "Could not export the library.".to_owned())
+            })
+            .await
+            .unwrap_or_else(|_| Err("Could not export the library.".to_owned()));
+            context.send(Event::Notice(match result {
+                Ok(()) => "Library exported.".to_owned(),
+                Err(error) => error,
+            }));
+        }
+        Command::ExportOpml(picked, subscriptions) => {
+            let Some(file) = picked.await else {
+                return;
+            };
+            let path = file.path().to_owned();
+            let result = tokio::task::spawn_blocking(move || {
+                let xml = backup::to_opml(&subscriptions);
+                paths::write_atomic(&path, xml.as_bytes())
+                    .map_err(|_| "Could not export subscriptions as OPML.".to_owned())
+            })
+            .await
+            .unwrap_or_else(|_| Err("Could not export subscriptions as OPML.".to_owned()));
+            context.send(Event::Notice(match result {
+                Ok(()) => "Subscriptions exported as OPML.".to_owned(),
+                Err(error) => error,
+            }));
+        }
+        Command::ImportBackup(picked) => {
+            let Some(file) = picked.await else {
+                return;
+            };
+            let path = file.path().to_owned();
+            let import = tokio::task::spawn_blocking(move || match std::fs::File::open(path) {
+                Ok(file) => backup::parse_reader(std::io::BufReader::new(file)),
+                Err(_) => Err("Could not open this backup file.".into()),
+            })
+            .await
+            .unwrap_or_else(|_| Err("Could not import this backup file.".into()));
+            context.send(Event::Imported(import));
+        }
         Command::MergeImport {
             mut library,
             import,
             revision,
         } => {
             match tokio::task::spawn_blocking(move || {
-                let counts = library.merge(import);
+                let counts = library.merge_with_watch_later(import);
                 Event::ImportMerged {
                     library,
                     counts,
