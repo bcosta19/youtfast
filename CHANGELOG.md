@@ -12,9 +12,7 @@ are the distribution record.
 
 - Command palette (`Ctrl+K`, `Cmd+K` on macOS): a localized fuzzy list over sidebar views, page and player actions (`Refresh page`, `Toggle sidebar`, `Back`, `Forward`, `New video tab`, `Play` / `Pause`, `Mute` / `Unmute`, `Theater mode`, `Full screen`, `Mini player`, `Captions`, `Audio only`, `Transcript`, `Loop`, `Next video`, `Previous video`), Settings groups (`Appearance`, `Playback`, `Sidebar`, `History`, `Notifications`, `About`), recent searches, and recent watch history entries, navigated with `↑`/`↓`, `Enter`, `Esc` or the mouse without making network requests.
 - Pop-out picture-in-picture OS window (`P` or the player/miniplayer control), with play/pause, close, and return-to-main-window controls alongside the existing in-window mini player. Always-on-top is requested where supported; on Wayland, use compositor rules for `youtfast-pip`.
-- Pop-out picture-in-picture OS window (`P` or the player/miniplayer control), opening a separate, always-on-top, frameless window rendered via a deferred eframe viewport on the shared OpenGL context with play/pause, close, and return-to-app controls alongside the existing in-window mini player.
 - Optional DeArrow integration (both switches off by default under **Settings → Playback**): **Community titles (DeArrow)** sends only a 4-hex-digit SHA-256 prefix to `sponsor.ajay.app` and shows the original title on hover; **Community thumbnails (DeArrow — sends video ID)** sends the video ID to `dearrow-thumb.ajay.app` and keeps the YouTube thumbnail until the community image is ready. A winning vote for the original keeps YouTube branding. Turning thumbnails off cancels queued thumbnail requests; turning both options off also cancels queued title and thumbnail metadata lookups. DeArrow results are kept in memory, never saved to disk.
-- Optional DeArrow integration (both switches off by default under **Settings → Playback**): **Community titles (DeArrow)** fetches community titles via a 4-hex-digit SHA-256 prefix against `sponsor.ajay.app` and shows the original title on hover; **Community thumbnails (DeArrow — sends video ID)** fetches community thumbnails from `dearrow-thumb.ajay.app` (explicitly noting that it sends the video ID) with YouTube fallback. All DeArrow branding responses and thumbnails remain strictly in a bounded in-memory cache and are never written to disk.
 - Local device-only playlists stored in `library.json` (`local-` IDs, up to 200 playlists of 5,000 videos each), available in the **Playlists** sidebar entry both signed out and signed in (marked **On this device**), with create, rename, delete, reorder, **Play all**, and quick saving from the watch page's **Save** menu and video card menus.
 - Playlist save menus scroll through all destinations, and device playlists explain when creation or adding videos is unavailable at capacity. **Play all** follows playlist order across regular videos and Shorts.
 - Local feed filtering on Home and Subscriptions: **Not interested** and **Don't recommend channel** actions in card menus (excluding channel pages) hide individual videos (up to 5,000) and block channels (up to 1,000) on this device, excluding them from Home, Home's Shorts shelf, Subscriptions, and local recommendations (never from search results or channel pages); a persistent **Hide watched** chip toggles hiding watched videos on Home and Subscriptions; and **Settings → History** lists hidden video counts (**Clear**) and blocked channels (**Unblock**).
@@ -29,6 +27,11 @@ are the distribution record.
 
 ### Fixed
 
+- The command palette blocks the mouse Back and Forward buttons while it is open.
+- The command palette offers video full screen only on the watch page.
+- Dismissing the command palette returns keyboard focus to the previous control when it is still available.
+- Enter runs the highlighted command for the updated palette query, not the search behind it, and keeps an unmatched query editable.
+- Tab and Shift+Tab move the command palette highlight forward and backward without leaving the search field.
 - Keep account subscriptions pageable when all channels on the loaded pages are blocked.
 - Keep hidden, blocked and filtered watched Shorts out of the Home shelf's Up next list.
 - Apply channel blocks to signed-in Shorts when YouTube supplies an owner ID for the Short or another copy of it. Shorts without an identifiable owner can still be hidden individually.
@@ -38,14 +41,6 @@ are the distribution record.
 - Unmuting or changing volume overrides SponsorBlock auto-mute for all overlapping segments.
 - SponsorBlock mutes the full duration of a mute segment, including segments shorter than 300 ms.
 - Changing a SponsorBlock category invalidates pending TV skip checks so they cannot seek using the old settings.
-
-### Fixed
-
-- The command palette blocks the mouse Back and Forward buttons while it is open.
-- The command palette offers video full screen only on the watch page.
-- Dismissing the command palette returns keyboard focus to the previous control when it is still available.
-- Enter runs the highlighted command for the updated palette query, not the search behind it, and keeps an unmatched query editable.
-- Tab and Shift+Tab move the command palette highlight forward and backward without leaving the search field.
 
 ## [0.9.1] - 2026-11-17
 
