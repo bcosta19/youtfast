@@ -212,7 +212,15 @@ puede vincular con ese código. La compatibilidad con Google Cast es opcional y 
 Por ejemplo, si ya usas pipx, instálalo con `pipx install catt`.
 Sigue las instrucciones de instalación de catt para tu sistema operativo, comprueba
 `catt --version` en el entorno que inicia YouTFast y luego reinicia YouTFast si
-cambiaste el `PATH`. YouTFast nunca instala el programa auxiliar automáticamente.
+cambiaste el `PATH`. En Windows, YouTFast también encuentra catt donde lo instalan
+pip (`pip install --user catt`) y pipx (`pipx install catt`) —
+`%APPDATA%\Python\Python3*\Scripts` y `%USERPROFILE%\.local\bin`, carpetas que no
+están en el `PATH` que hereda una aplicación de escritorio —, así que basta
+cualquiera de los dos comandos, y un YouTFast en ejecución lo encuentra en la
+siguiente búsqueda. Mientras falte catt, el selector lo indica como guía junto a
+los resultados en lugar de una búsqueda fallida; las rutas por dirección IP y
+código de TV no necesitan programa auxiliar. YouTFast nunca instala el programa
+auxiliar automáticamente.
 El programa auxiliar y sus dependencias de Python no se incluyen en los archivos de
 las versiones.
 Flatpak no puede usar un programa auxiliar arbitrario del sistema anfitrión; esta

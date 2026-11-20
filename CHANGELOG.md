@@ -41,6 +41,9 @@ are the distribution record.
 - Unmuting or changing volume overrides SponsorBlock auto-mute for all overlapping segments.
 - SponsorBlock mutes the full duration of a mute segment, including segments shorter than 300 ms.
 - Changing a SponsorBlock category invalidates pending TV skip checks so they cannot seek using the old settings.
+- On Windows, Google Cast now finds a `catt` installed with `pip install --user catt` or `pipx install catt`, even though those folders are not on the `PATH` a desktop application inherits; a running YouTFast picks it up at the next search.
+- The TV picker no longer reports a missing `catt` as the search's error, which masked why no YouTube TVs were found: it is now guidance beside the results, and the IP-address and TV-code routes stay available without it.
+- The **Cast to TV** picker no longer clips its TV-code section behind a too-short dialog: it now sizes to its full content in every language, and only scrolls when the screen is too short for it.
 
 ## [0.9.1] - 2026-11-17
 

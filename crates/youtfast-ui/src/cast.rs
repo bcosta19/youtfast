@@ -10,6 +10,14 @@ pub fn show(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
     let mut open = state.cast.open;
     let locale = state.settings.language;
     let width = (ctx.content_rect().width() - 48.0).clamp(240.0, 420.0);
+    // egui pins a non-resizable window at its remembered height, a
+    // ScrollArea absorbs overflow instead of growing it, and the app
+    // restores that height from its saved state, so a default-sized
+    // window silently clipped the TV-code section even after an update.
+    // Floor the picker at the height its full content needs in every
+    // language instead; short viewports clamp the window and scroll.
+    const PICKER_HEIGHT: f32 = 560.0;
+    let height = (ctx.content_rect().height() - 100.0).max(120.0);
     egui::Window::new(tr(locale, "Cast to TV"))
         .id(egui::Id::new("cast-to-tv"))
         .open(&mut open)
@@ -17,10 +25,13 @@ pub fn show(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
         .resizable(false)
         .default_width(width)
         .max_width(width)
+        .default_height(PICKER_HEIGHT)
+        .min_height(PICKER_HEIGHT)
+        .max_height(height)
         .default_pos(ctx.content_rect().center() - egui::vec2(width / 2.0, 150.0))
         .show(ctx, |ui| {
             egui::ScrollArea::vertical()
-                .max_height((ctx.content_rect().height() - 100.0).max(120.0))
+                .max_height(height)
                 .show(ui, |ui| body(ui, state, actions));
         });
     state.cast.open = open;
@@ -40,6 +51,19 @@ fn body(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                 "https://github.com/skorokithakis/catt#installation",
             );
         }
+        ui.add_space(8.0);
+    }
+    // Guidance, not an error: the search itself still worked, and the
+    // IP-address and TV-code routes below need no helper.
+    if cast.helper_missing {
+        ui.label(tr(
+            locale,
+            "Google Cast is optional: without the catt tool, only TVs with the YouTube app are found.",
+        ));
+        ui.hyperlink_to(
+            tr(locale, "Install catt"),
+            "https://github.com/skorokithakis/catt#installation",
+        );
         ui.add_space(8.0);
     }
     if cast.busy() {
@@ -172,7 +196,10 @@ mod tests {
             ..Default::default()
         };
         state.cast.prepare(CastAction::Open, None, 0.0, 0);
-        state.cast.finish(Reply::Devices(Ok(vec![device()])));
+        state.cast.finish(Reply::Scanned {
+            devices: Ok(vec![device()]),
+            helper_missing: false,
+        });
         state
     }
 
@@ -314,7 +341,11 @@ mod tests {
     fn missing_helper_and_empty_discovery_render_recovery_in_both_themes_and_languages() {
         for locale in [Locale::English, Locale::PortugueseBrazil] {
             for light in [false, true] {
-                for error in [None, Some(Error::MissingHelper)] {
+                for (error, helper_missing) in [
+                    (None, false),
+                    (None, true),
+                    (Some(Error::MissingHelper), false),
+                ] {
                     let ctx = egui::Context::default();
                     let mut state = fixture();
                     state.settings.language = locale;
@@ -326,6 +357,7 @@ mod tests {
                     youtfast_appearance::theme::apply(&ctx, &state.palette);
                     state.cast.devices.clear();
                     state.cast.error = error;
+                    state.cast.helper_missing = helper_missing;
                     let mut actions = Vec::new();
                     render(
                         &ctx,
@@ -346,19 +378,89 @@ mod tests {
                             .iter()
                             .any(|(text, _)| text == tr(locale, "Search for TVs").as_ref())
                     );
-                    let expected = if error.is_some() {
-                        "Install catt"
+                    let guidance = "Google Cast is optional: without the catt tool, only TVs with the YouTube app are found.";
+                    let empty = "No TVs found. Open YouTube on your TV, check the network, or enter its IP address below.";
+                    let expected = if helper_missing {
+                        vec![guidance, "Install catt"]
+                    } else if error.is_some() {
+                        vec!["Install catt"]
                     } else {
-                        "No TVs found. Open YouTube on your TV, check the network, or enter its IP address below."
+                        vec![empty]
                     };
-                    assert!(
-                        labels
-                            .iter()
-                            .any(|(text, _)| text == tr(locale, expected).as_ref())
-                    );
+                    for label in expected {
+                        assert!(
+                            labels
+                                .iter()
+                                .any(|(text, _)| text == tr(locale, label).as_ref()),
+                            "missing {label} for error={error:?} helper_missing={helper_missing}"
+                        );
+                    }
                     assert!(actions.is_empty());
                 }
             }
+        }
+    }
+
+    #[test]
+    fn link_tv_stays_clickable_without_scrolling_at_typical_sizes() {
+        // The app's own faces decide the real line heights; without them
+        // the test fonts are short enough to hide the clipped section.
+        for locale in [
+            Locale::English,
+            Locale::PortugueseBrazil,
+            Locale::Spanish,
+            Locale::French,
+            Locale::German,
+            Locale::Italian,
+        ] {
+            let ctx = egui::Context::default();
+            youtfast_appearance::theme::install_fonts(&ctx);
+            let mut state = fixture();
+            state.settings.language = locale;
+            state.palette = youtfast_appearance::theme::Palette::dark();
+            youtfast_appearance::theme::apply(&ctx, &state.palette);
+            state.cast.devices.clear();
+            state.cast.helper_missing = true;
+            state.watching.as_mut().unwrap().title =
+                "Travel around the world — a native experience for watching and discovering".into();
+            let mut actions = Vec::new();
+            render(
+                &ctx,
+                &mut state,
+                egui::vec2(1280.0, 800.0),
+                vec![],
+                &mut actions,
+            );
+            let labels = render(
+                &ctx,
+                &mut state,
+                egui::vec2(1280.0, 800.0),
+                vec![],
+                &mut actions,
+            );
+            // egui culls clipped widgets from the tessellation, so a
+            // scrolled-out TV-code button has no painted label at all.
+            let Some(at) = labels
+                .iter()
+                .find(|(text, _)| text == tr(locale, "Link TV").as_ref())
+                .map(|(_, at)| *at)
+            else {
+                panic!("the TV-code section is clipped for {locale:?}");
+            };
+            // The dialog's own rect is the visible region: a label below it
+            // is behind the scroll, which is what the reported dialog did.
+            let rect = ctx.memory(|memory| memory.area_rect(egui::Id::new("cast-to-tv")));
+            assert!(
+                rect.is_some_and(|rect| at.y + 10.0 < rect.bottom() - 24.0 && at.y > rect.top()),
+                "the TV-code section is clipped behind the scroll for {locale:?}"
+            );
+            click(&ctx, &mut state, at, &mut actions);
+            assert!(
+                actions
+                    .iter()
+                    .any(|action| matches!(action, Action::Cast(CastAction::Link(_)))),
+                "the TV-code button does not respond for {locale:?}"
+            );
         }
     }
 

@@ -185,7 +185,14 @@ code instead. Google Cast support is optional and uses
 For example, if you already use pipx, install it with `pipx install catt`.
 Follow catt's installation instructions for your operating system, check
 `catt --version` in the environment that launches YouTFast, then restart
-YouTFast if you changed `PATH`. YouTFast never installs the helper automatically.
+YouTFast if you changed `PATH`. On Windows, YouTFast also finds catt where
+pip (`pip install --user catt`) and pipx (`pipx install catt`) put it —
+`%APPDATA%\Python\Python3*\Scripts` and `%USERPROFILE%\.local\bin`, folders
+that are not on the `PATH` a desktop application inherits — so either
+command is enough, and a running YouTFast finds it at the next search.
+While catt is missing, the picker shows that as guidance beside the results
+instead of a failed search; the IP-address and TV-code routes need no helper.
+YouTFast never installs the helper automatically.
 The helper and its Python dependencies are not bundled in release archives.
 Flatpak cannot use an arbitrary host helper; this integration is not yet
 qualified for the Flatpak package.

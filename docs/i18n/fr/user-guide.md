@@ -219,7 +219,15 @@ est facultative et utilise
 Par exemple, si vous utilisez déjà pipx, installez-le avec `pipx install catt`.
 Suivez les instructions d'installation de catt pour votre système
 d'exploitation, vérifiez `catt --version` dans l'environnement qui lance
-YouTFast, puis redémarrez YouTFast si vous avez modifié le `PATH`. YouTFast
+YouTFast, puis redémarrez YouTFast si vous avez modifié le `PATH`. Sous
+Windows, YouTFast trouve aussi catt là où pip (`pip install --user catt`) et
+pipx (`pipx install catt`) l'installent — `%APPDATA%\Python\Python3*\Scripts`
+et `%USERPROFILE%\.local\bin`, des dossiers absents du `PATH` qu'une
+application de bureau hérite —, donc l'une ou l'autre commande suffit, et un
+YouTFast en cours d'exécution le trouve à la recherche suivante. Tant que catt
+manque, le sélecteur l'affiche comme une indication à côté des résultats au
+lieu d'une recherche échouée ; les parcours par adresse IP et code TV n'ont
+besoin d'aucun outil auxiliaire. YouTFast
 n'installe jamais l'outil auxiliaire automatiquement.
 L'outil et ses dépendances Python ne sont pas inclus dans les archives publiées.
 Le Flatpak ne peut pas utiliser un outil arbitraire de l'hôte ; cette

@@ -302,6 +302,12 @@ installiert sind.
 **Einstellungen → Apps → Installierte Apps → YouTFast** (oder führen Sie
 `Uninstall.exe` aus), wenn über die `.exe` installiert, oder löschen Sie den
 entpackten Ordner, wenn Sie das portable `.zip` verwenden.
+**Google Cast (optional):** Das Senden an die TV nutzt die YouTube-App der TV
+und braucht kein zusätzliches Programm. Um auch Chromecast-Geräte zu finden,
+installieren Sie catt mit `pip install --user catt` (oder `pipx install catt`):
+YouTFast prüft die Ordner, die pip und pipx verwenden, daher ist keine
+`PATH`-Änderung nötig, und ein laufendes YouTFast findet es bei der nächsten
+Suche.
 
 ## macOS
 
