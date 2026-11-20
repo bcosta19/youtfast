@@ -73,6 +73,7 @@ pub(crate) fn show_pip_contents(
 
     if ui.ctx().input(|i| i.viewport().close_requested()) {
         push_action(Action::ClosePip);
+        return;
     }
 
     let rect = ui.max_rect();
@@ -351,7 +352,7 @@ mod tests {
     }
 
     #[test]
-    fn pip_window_handles_os_close_and_space_shortcut() {
+    fn pip_os_close_takes_precedence_over_space() {
         let ctx = egui::Context::default();
         youtfast_appearance::theme::install_fonts(&ctx);
         let bridge = PipBridge::default();
@@ -382,10 +383,7 @@ mod tests {
         );
         let mut output = ctx.run_ui(input, |ui| show_pip_contents(ui, &bridge, None));
         output.textures_delta.clear();
-        assert_eq!(
-            bridge.take_actions(),
-            vec![Action::ClosePip, Action::TogglePause]
-        );
+        assert_eq!(bridge.take_actions(), vec![Action::ClosePip]);
     }
 
     #[test]

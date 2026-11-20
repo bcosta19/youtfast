@@ -2422,10 +2422,12 @@ impl eframe::App for App {
                 self.state.font_families = families.to_vec();
             }
         }
+        // A pending EOF may schedule autoplay; closing PiP must cancel it
+        // before the playback tick can start another video.
+        self.poll();
         for action in self.state.pip_bridge.take_actions() {
             self.apply(ctx, action);
         }
-        self.poll();
         if self.state.pip_open && self.sync_pip_bridge(ctx) {
             ctx.request_repaint_of(player::pip_viewport_id());
         }

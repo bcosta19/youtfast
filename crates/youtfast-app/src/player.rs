@@ -88,11 +88,15 @@ impl PipBridge {
 
     /// Queues an action from the PiP viewport for `App::logic` to apply.
     pub fn push_action(&self, action: Action) {
-        self.0
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .actions
-            .push(action);
+        let mut shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if action == Action::ClosePip {
+            // Close is terminal even if another deferred pass already
+            // queued a playback action which root hasn't consumed yet.
+            shared.actions.clear();
+        } else if shared.actions.last() == Some(&Action::ClosePip) {
+            return;
+        }
+        shared.actions.push(action);
     }
 
     /// Drains queued PiP actions on the root viewport.
@@ -142,6 +146,16 @@ fn snapshot_key(snapshot: &PipSnapshot) -> SnapshotKey<'_> {
         palette: snapshot.palette,
         language: snapshot.language,
     }
+}
+
+fn pause_closed_pip(state: &mut State, player: Option<&Mpv>) {
+    if let Some(player) = player
+        && let Err(error) = player.set_paused(true)
+    {
+        log::warn!("mpv: {error}");
+    }
+    state.playing_waiting = None;
+    state.autoplay = None;
 }
 
 /// How long a note stays over the video.
@@ -673,9 +687,7 @@ impl App {
         ctx.send_viewport_cmd_to(pip_id, egui::ViewportCommand::Close);
         if pause {
             self.remember_position();
-            self.with_player(|player| player.set_paused(true));
-            self.state.playing_waiting = None;
-            self.state.autoplay = None;
+            pause_closed_pip(&mut self.state, self.player.as_ref());
         }
         ctx.request_repaint();
     }
@@ -1681,5 +1693,53 @@ mod tests {
             vec![Action::TogglePause, Action::ReturnFromPip]
         );
         assert!(bridge.take_actions().is_empty());
+    }
+
+    #[test]
+    fn pip_close_keeps_playback_paused_and_cancels_pending_autoplay() {
+        let ctx = egui::Context::default();
+        let mut player = Mpv::new(&ctx, 1080, 0.0, Vec::new()).unwrap();
+        let bridge = PipBridge::default();
+        let wait_for_pause = |player: &mut Mpv, paused| {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            loop {
+                let _ = player.poll();
+                if player.status().paused == paused {
+                    break;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "mpv pause state did not become {paused}"
+                );
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        };
+        for paused in [false, true] {
+            player.set_paused(paused).unwrap();
+            wait_for_pause(&mut player, paused);
+            let mut state = State {
+                autoplay: Some((video("aaaaaaaaaaa"), Instant::now())),
+                ..State::default()
+            };
+            bridge.push_action(Action::TogglePause);
+            bridge.push_action(Action::ClosePip);
+            bridge.push_action(Action::TogglePause);
+            for action in bridge.take_actions() {
+                match action {
+                    Action::ClosePip => pause_closed_pip(&mut state, Some(&player)),
+                    Action::TogglePause => {
+                        let toggled = !player.status().paused;
+                        player.set_paused(toggled).unwrap();
+                        wait_for_pause(&mut player, toggled);
+                    }
+                    _ => unreachable!("unexpected PiP action"),
+                }
+                if action == Action::ClosePip {
+                    wait_for_pause(&mut player, true);
+                }
+            }
+            assert!(player.status().paused);
+            assert!(state.autoplay.is_none());
+        }
     }
 }
