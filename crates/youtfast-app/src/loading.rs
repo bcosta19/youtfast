@@ -242,6 +242,12 @@ impl State {
         self.for_you_from_account = false;
         true
     }
+
+    pub(super) fn accepts_loaded_slot(&self, slot: Slot) -> bool {
+        // Device playlists own the page rows and never request a remote page.
+        slot != Slot::Page
+            || !matches!(&self.page, Some(Page::Playlist { id, .. }) if DevicePlaylist::is_local_id(id))
+    }
 }
 
 impl App {
@@ -1112,6 +1118,29 @@ mod tests {
         assert!(!state.clear_local_for_you());
         assert_eq!(state.for_you.items()[0].id, "account");
         assert!(state.for_you_more.is_some());
+    }
+
+    #[test]
+    fn late_remote_page_cannot_replace_device_playlist_rows() {
+        let mut state = State {
+            page: Some(Page::Playlist {
+                id: "PLremote".into(),
+                name: "Remote".into(),
+            }),
+            ..State::default()
+        };
+        assert!(state.accepts_loaded_slot(Slot::Page));
+
+        state.page = Some(Page::Playlist {
+            id: "local-1".into(),
+            name: "Device".into(),
+        });
+        state.page_videos = Listing::Ready(vec![Video::from_id("device".into())]);
+        if state.accepts_loaded_slot(Slot::Page) {
+            state.page_videos = Listing::Ready(vec![Video::from_id("remote".into())]);
+        }
+        assert_eq!(state.page_videos.items()[0].id, "device");
+        assert!(state.accepts_loaded_slot(Slot::Playlists));
     }
 
     fn more(token: &str) -> innertube::More {

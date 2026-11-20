@@ -1479,7 +1479,9 @@ impl App {
                 generation,
                 result,
             } => {
-                if self.generations.get(&slot) == Some(&generation) {
+                if self.generations.get(&slot) == Some(&generation)
+                    && self.state.accepts_loaded_slot(slot)
+                {
                     self.fill(slot, result);
                 }
             }
