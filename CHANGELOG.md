@@ -21,6 +21,7 @@ are the distribution record.
 
 ### Fixed
 
+- Keep account subscriptions pageable when all channels on the loaded pages are blocked.
 - SponsorBlock restores local audio even if its segment list refreshes during auto-mute.
 - Unmuting or changing volume overrides SponsorBlock auto-mute for all overlapping segments.
 - SponsorBlock mutes the full duration of a mute segment, including segments shorter than 300 ms.

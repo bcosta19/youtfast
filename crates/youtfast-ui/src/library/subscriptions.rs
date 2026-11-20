@@ -54,7 +54,9 @@ pub fn subscriptions(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 Listing::Idle => {}
                 Listing::Loading => results::loading(ui, state, "subscriptions"),
                 Listing::Failed(error) => results::failed(ui, state, error, actions),
-                Listing::Ready(channels) if channels.is_empty() => {
+                Listing::Ready(channels)
+                    if channels.is_empty() && state.subscriptions_more.is_none() =>
+                {
                     results::nothing(
                         ui,
                         state,
@@ -185,30 +187,42 @@ fn subscription_body(
     actions: &mut Vec<Action>,
 ) {
     let locale = state.settings.language;
+    let draw_more = |ui: &mut Ui, actions: &mut Vec<Action>| {
+        if with_more {
+            widgets::more_row(
+                ui,
+                &state.palette,
+                &state.subscriptions_more_state,
+                state.subscriptions_more.is_some(),
+                actions,
+                locale,
+            );
+        }
+    };
     if visible.is_empty() {
-        filtered_empty_state(
-            ui,
-            &state.palette,
-            tr(locale, "No channels match this filter").as_ref(),
-            tr(locale, "Clear filter").as_ref(),
-            || actions.push(Action::SetSubscriptionsQuery(String::new())),
-        );
+        if state.subscriptions_query.trim().is_empty() {
+            results::nothing(
+                ui,
+                state,
+                tr(locale, "No channels match this filter").as_ref(),
+            );
+        } else {
+            filtered_empty_state(
+                ui,
+                &state.palette,
+                tr(locale, "No channels match this filter").as_ref(),
+                tr(locale, "Clear filter").as_ref(),
+                || actions.push(Action::SetSubscriptionsQuery(String::new())),
+            );
+        }
+        draw_more(ui, actions);
         return;
     }
     egui::ScrollArea::vertical()
         .auto_shrink(false)
         .show(ui, |ui| {
             channel_grid_content(ui, state, visible, activity, removable, actions);
-            if with_more {
-                widgets::more_row(
-                    ui,
-                    &state.palette,
-                    &state.subscriptions_more_state,
-                    state.subscriptions_more.is_some(),
-                    actions,
-                    locale,
-                );
-            }
+            draw_more(ui, actions);
         });
 }
 
@@ -773,6 +787,51 @@ mod tests {
     use super::*;
     use youtfast_app::AccountState;
     use youtfast_core::model::View;
+
+    #[test]
+    fn blocked_account_page_still_offers_its_continuation() {
+        use youtfast_youtube::innertube::{ContinuationEndpoint, More};
+
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let channel = Channel {
+            id: "UC_blocked".into(),
+            name: "Blocked Channel".into(),
+            avatar: None,
+        };
+        let mut state = State {
+            view: View::Subscriptions,
+            account: AccountState::SignedIn(1),
+            source: Source::Account,
+            account_subscriptions: Listing::Ready(vec![channel.clone()]),
+            subscriptions_more: Some(More {
+                ctoken: "next-page".into(),
+                endpoint: ContinuationEndpoint::Browse,
+                visitor_data: None,
+                authenticated: true,
+                ours: false,
+                owner: None,
+            }),
+            ..State::default()
+        };
+        assert!(state.library.block_channel(channel));
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(1200.0, 800.0))),
+                ..Default::default()
+            },
+            |ui| subscriptions(ui, &state, &mut Vec::new()),
+        );
+        let has_text = |label| {
+            output.shapes.iter().any(|shape| {
+                matches!(&shape.shape, egui::Shape::Text(text) if text.galley.text() == label)
+            })
+        };
+        assert!(!has_text("Blocked Channel"));
+        assert!(!has_text("Clear filter"));
+        assert!(has_text("Load more"));
+        output.textures_delta.clear();
+    }
 
     #[test]
     fn subscriptions_cards_display_channel_meta_bio_and_clickable_latest_video() {
