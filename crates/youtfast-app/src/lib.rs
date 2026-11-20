@@ -347,6 +347,8 @@ pub struct State {
     pub skipped: HashSet<usize>,
     /// The segment index that SponsorBlock currently has mpv muted for, if any.
     pub sponsor_muted: Option<usize>,
+    /// Bounded in-memory cache of DeArrow community titles/thumbnails (never on disk).
+    pub dearrow: dearrow::DeArrowCache,
     /// What YouTube suggests for the search being typed.
     pub suggestions: Vec<String>,
     /// The suggestion the arrow keys picked, if any.
@@ -1539,7 +1541,12 @@ impl App {
             Event::SignedOut => self.on_signed_out(),
             Event::CheckAlerts => self.check_alerts(),
             Event::Thumbnail { url, result } => {
-                images::completed(self.backend.context(), &url, result)
+                if youtfast_youtube::thumbs::is_memory_only(&url)
+                    && !self.state.settings.dearrow_thumbnails
+                {
+                    return;
+                }
+                images::completed(self.backend.context(), &url, result);
             }
             Event::Suggestions { query, items } => {
                 if query == self.state.query.trim() {
@@ -1554,6 +1561,9 @@ impl App {
                 if self.state.accept_segments(&id, segments) {
                     self.with_player(|player| player.set_muted(false));
                 }
+            }
+            Event::DeArrow { video_id, branding } => {
+                self.state.accept_dearrow(video_id, branding);
             }
             Event::Notice(notice) => self.state.notice = Some(notice),
             Event::CheckUpdates => {
@@ -2147,6 +2157,8 @@ impl App {
             Action::SetSponsorCategory(category, behavior) => {
                 self.set_sponsor_category(category, behavior)
             }
+            Action::SetDeArrowTitles(on) => self.set_dearrow_titles(ctx, on),
+            Action::SetDeArrowThumbnails(on) => self.set_dearrow_thumbnails(ctx, on),
             Action::SkipSegment => self.skip_segment(),
             Action::ReturnToWatch => self.return_to_watch(),
             Action::CloseMiniPlayer => self.close_mini_player(),
@@ -2395,6 +2407,7 @@ impl eframe::App for App {
         if !wanted.is_empty() {
             self.backend.send(Command::CacheThumbnails(wanted));
         }
+        self.drain_dearrow();
         // What later launches sent to the running copy.
         let remote: Vec<instance::Remote> = std::mem::take(
             &mut *self
@@ -2517,6 +2530,7 @@ fn native_display(cc: &eframe::CreationContext<'_>) -> NativeDisplay {
 mod accounts;
 mod action;
 pub mod cast;
+pub mod dearrow;
 mod history_sync;
 pub mod images;
 mod loading;

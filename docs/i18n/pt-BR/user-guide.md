@@ -99,6 +99,16 @@ comentários. Vem desativado por padrão.
 Rolar de volta mostra de novo o player na página; clicar no miniplayer volta ao
 vídeo no topo da página. Fechar o miniplayer pausa a reprodução.
 
+Configurações → Reprodução → **Títulos da comunidade (DeArrow)** e
+**Miniaturas da comunidade (DeArrow — envia o ID do vídeo)** vêm desativados por
+padrão. Os títulos da comunidade consultam `sponsor.ajay.app` usando apenas um
+prefixo de quatro dígitos hexadecimais do SHA-256 do ID do vídeo e mostram o
+título original do YouTube ao passar o cursor sobre um título substituído. As
+miniaturas da comunidade enviam o ID de cada vídeo diretamente para
+`dearrow-thumb.ajay.app` e voltam à miniatura do YouTube quando indisponíveis.
+Todas as respostas e miniaturas do DeArrow ficam apenas em um cache limitado em
+memória e nunca são salvas em disco.
+
 Configurações → Reprodução → Buffer de vídeo escolhe entre o cache padrão do
 demuxer do mpv (**Maior — 150 MiB / 50 MiB**, o padrão, que carrega vários
 minutos adiantados para conexões instáveis e avanços/recuos instantâneos) e

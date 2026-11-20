@@ -350,15 +350,8 @@ fn videos(ui: &mut Ui, state: &State, tab: &ChannelTab, actions: &mut Vec<Action
                         let video = &videos[index];
                         let selected = state.is_cursor(index);
                         let watched = widgets::watched(&state.library, video);
-                        let response = widgets::video_card(
-                            ui,
-                            &state.palette,
-                            video,
-                            watched,
-                            selected,
-                            width,
-                            locale,
-                        );
+                        let response =
+                            widgets::video_card(ui, state, video, watched, selected, width, locale);
                         if selected && state.cursor_moved {
                             response.clone().scroll_to_me(None);
                         }

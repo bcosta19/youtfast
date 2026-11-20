@@ -104,6 +104,17 @@ Standardmäßig ist es ausgeschaltet. Scrollen Sie zurück, erscheint wieder der
 eingebettete Player; ein Klick auf den Miniplayer führt zum Video oben auf der
 Seite zurück. Das Schließen des Miniplayers pausiert die Wiedergabe.
 
+Einstellungen → Wiedergabe → **Community-Titel (DeArrow)** und
+**Community-Vorschaubilder (DeArrow — sendet Video-ID)** sind standardmäßig
+ausgeschaltet. Community-Titel fragen `sponsor.ajay.app` nur mit einem
+vierstelligen Hex-Präfix des SHA-256-Werts der Video-ID ab und zeigen beim
+Überfahren eines ersetzten Titels den ursprünglichen YouTube-Titel an.
+Community-Vorschaubilder senden die ID jedes Videos direkt an
+`dearrow-thumb.ajay.app` und fallen auf das YouTube-Vorschaubild zurück, wenn
+keines verfügbar ist. Alle DeArrow-Antworten und -Vorschaubilder bleiben
+ausschließlich in einem begrenzten Arbeitsspeicher-Cache und werden nie auf der
+Festplatte gespeichert.
+
 Einstellungen → Wiedergabe → Videopuffer wählt zwischen dem Standard-Demuxer-Cache
 von mpv (**Groß — 150 MiB / 50 MiB**, die Voreinstellung, die für instabile
 Verbindungen und sofortiges Spulen mehrere Minuten im Voraus puffert) und

@@ -99,6 +99,16 @@ disattivato per impostazione predefinita. Tornando su riappare il player nella
 pagina; un clic sul miniplayer riporta al video in cima alla pagina. Chiudere il
 miniplayer mette in pausa la riproduzione.
 
+Impostazioni → Riproduzione → **Titoli della community (DeArrow)** e **Miniature
+della community (DeArrow — invia l'ID del video)** sono disattivati per
+impostazione predefinita. I titoli della community interrogano `sponsor.ajay.app`
+usando solo un prefisso di quattro cifre esadecimali dello SHA-256 dell'ID del
+video e mostrano il titolo originale di YouTube passando il puntatore su un
+titolo sostituito. Le miniature della community inviano l'ID di ciascun video
+direttamente a `dearrow-thumb.ajay.app` e tornano alla miniatura di YouTube se
+non disponibili. Tutte le risposte e le miniature DeArrow restano solo in una
+cache limitata in memoria e non vengono mai salvate su disco.
+
 Impostazioni → Riproduzione → Buffer video sceglie tra la cache standard del demuxer
 di mpv (**Grande — 150 MiB / 50 MiB**, il valore predefinito, che bufferizza diversi
 minuti in anticipo per le connessioni instabili e le ricerche istantanee) e

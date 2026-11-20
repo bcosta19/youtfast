@@ -88,10 +88,16 @@ struct Context {
     /// At most this many cache files are read at a time, so a page of
     /// thumbnails does not queue hundreds of blocking reads at once.
     thumb_disk_sem: Arc<tokio::sync::Semaphore>,
+    /// DeArrow branding lookups in flight, so one video is not asked twice at once.
+    dearrow_pending: Arc<std::sync::Mutex<HashSet<String>>>,
+    /// At most this many DeArrow branding lookups at a time.
+    dearrow_sem: Arc<tokio::sync::Semaphore>,
 }
 
 /// How many thumbnails are read from the disk cache at once.
 const THUMB_DISK_READS: usize = 8;
+/// How many DeArrow branding lookups run concurrently.
+const DEARROW_LOOKUPS: usize = 8;
 
 impl Context {
     fn send(&self, event: Event) {
@@ -135,6 +141,8 @@ impl Backend {
                 youtfast_youtube::thumbs::DOWNLOADS,
             )),
             thumb_disk_sem: Arc::new(tokio::sync::Semaphore::new(THUMB_DISK_READS)),
+            dearrow_pending: Arc::new(std::sync::Mutex::new(HashSet::new())),
+            dearrow_sem: Arc::new(tokio::sync::Semaphore::new(DEARROW_LOOKUPS)),
         };
         let backend = Self {
             commands,
@@ -508,6 +516,38 @@ async fn handle(command: Command, context: Context) {
                 Err(error) => log::warn!("the SponsorBlock lookup stopped: {error}"),
             }
         }
+        Command::DeArrow { video_id } => {
+            if !context
+                .dearrow_pending
+                .lock()
+                .unwrap()
+                .insert(video_id.clone())
+            {
+                return;
+            }
+            let context = context.clone();
+            tokio::spawn(async move {
+                let _permit = context.dearrow_sem.acquire().await;
+                let lookup = video_id.clone();
+                let branding = match tokio::task::spawn_blocking(move || {
+                    youtfast_youtube::dearrow::branding(&lookup)
+                })
+                .await
+                {
+                    Ok(Ok(branding)) => branding,
+                    Ok(Err(error)) => {
+                        log::warn!("{error}");
+                        youtfast_youtube::dearrow::Branding::default()
+                    }
+                    Err(error) => {
+                        log::warn!("the DeArrow lookup stopped: {error}");
+                        youtfast_youtube::dearrow::Branding::default()
+                    }
+                };
+                context.dearrow_pending.lock().unwrap().remove(&video_id);
+                context.send(Event::DeArrow { video_id, branding });
+            });
+        }
         Command::LoadRating(id) => {
             let result = innertube::rating(&context.rp, &id).await;
             if let Err(error) = &result {
@@ -831,39 +871,50 @@ async fn handle(command: Command, context: Context) {
                 if !context.thumb_pending.lock().unwrap().insert(url.clone()) {
                     continue;
                 }
+                let memory_only = youtfast_youtube::thumbs::is_memory_only(&url);
                 let path = youtfast_youtube::thumbs::path(&dir, &url);
                 let dir = dir.clone();
                 let context = context.clone();
                 tokio::spawn(async move {
-                    // A kept file answers at once: only downloads wait for
-                    // a turn, so a page's cached thumbnails never queue
-                    // behind its new ones.
-                    let kept = if refresh {
-                        None
-                    } else {
-                        let path = path.clone();
-                        let dir = dir.clone();
-                        let _turn = context.thumb_disk_sem.acquire().await;
+                    let result = if memory_only {
+                        let _permit = context.thumb_sem.acquire().await;
+                        let task = url.clone();
                         tokio::task::spawn_blocking(move || {
-                            let _ = std::fs::create_dir_all(&dir);
-                            youtfast_youtube::thumbs::cached(&path)
+                            youtfast_youtube::thumbs::fetch_in_memory(&task)
                         })
                         .await
-                        .ok()
-                        .flatten()
-                    };
-                    let result = match kept {
-                        Some(bytes) => Ok(bytes),
-                        None => {
-                            let _permit = context.thumb_sem.acquire().await;
-                            let task = url.clone();
+                        .unwrap_or(Err(youtfast_youtube::thumbs::Failure::Network))
+                    } else {
+                        // A kept file answers at once: only downloads wait for
+                        // a turn, so a page's cached thumbnails never queue
+                        // behind its new ones.
+                        let kept = if refresh {
+                            None
+                        } else {
+                            let path = path.clone();
                             let dir = dir.clone();
+                            let _turn = context.thumb_disk_sem.acquire().await;
                             tokio::task::spawn_blocking(move || {
                                 let _ = std::fs::create_dir_all(&dir);
-                                youtfast_youtube::thumbs::load_or_fetch(&task, &path, refresh)
+                                youtfast_youtube::thumbs::cached(&path)
                             })
                             .await
-                            .unwrap_or(Err(youtfast_youtube::thumbs::Failure::Network))
+                            .ok()
+                            .flatten()
+                        };
+                        match kept {
+                            Some(bytes) => Ok(bytes),
+                            None => {
+                                let _permit = context.thumb_sem.acquire().await;
+                                let task = url.clone();
+                                let dir = dir.clone();
+                                tokio::task::spawn_blocking(move || {
+                                    let _ = std::fs::create_dir_all(&dir);
+                                    youtfast_youtube::thumbs::load_or_fetch(&task, &path, refresh)
+                                })
+                                .await
+                                .unwrap_or(Err(youtfast_youtube::thumbs::Failure::Network))
+                            }
                         }
                     };
                     if let Err(reason) = &result {
@@ -1854,6 +1905,8 @@ mod tests {
                 youtfast_youtube::thumbs::DOWNLOADS,
             )),
             thumb_disk_sem: Arc::new(tokio::sync::Semaphore::new(THUMB_DISK_READS)),
+            dearrow_pending: Arc::new(std::sync::Mutex::new(HashSet::new())),
+            dearrow_sem: Arc::new(tokio::sync::Semaphore::new(DEARROW_LOOKUPS)),
         };
         // Slow downloads hold every turn.
         let _turns = context

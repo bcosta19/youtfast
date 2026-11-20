@@ -278,6 +278,10 @@ pub enum Command {
     Suggest(String),
     /// The SponsorBlock segments of a video, by its id.
     LoadSegments(String),
+    /// DeArrow community branding for a video, requested by hash prefix.
+    DeArrow {
+        video_id: String,
+    },
     /// Check GitHub Releases for a newer version of YouTFast.
     CheckForUpdates {
         manual: bool,
@@ -408,6 +412,10 @@ pub enum Event {
         id: String,
         segments: Vec<youtfast_core::model::Segment>,
     },
+    DeArrow {
+        video_id: String,
+        branding: youtfast_youtube::dearrow::Branding,
+    },
     /// The update timer fired; the app triggers a background check if idle.
     CheckUpdates,
     UpdateChecked {
@@ -504,6 +512,7 @@ impl Event {
                     | Self::Thumbnail { .. }
                     | Self::Suggestions { .. }
                     | Self::Segments { .. }
+                    | Self::DeArrow { .. }
                     | Self::UpdateChecked { .. }
                     | Self::UpdateInstalled { .. }
             )

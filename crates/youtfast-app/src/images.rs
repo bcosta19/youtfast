@@ -139,6 +139,72 @@ pub fn drain_expired() -> Vec<(String, bool)> {
         .as_mut()
         .map_or_else(Vec::new, |c| std::mem::take(&mut c.expired))
 }
+
+/// Whether `url` has finished loading into memory and is ready to draw.
+pub fn is_loaded(url: &str) -> bool {
+    CACHE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|c| c.loaded.contains(url))
+}
+
+/// Whether `url` has failed to download (used to fall back to the original YouTube thumbnail).
+pub fn has_failed(url: &str) -> bool {
+    CACHE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|c| c.failed.contains_key(url))
+}
+
+/// Drops every in-memory image entry whose URL starts with `prefix`.
+pub fn evict_prefix(ctx: &Context, prefix: &str) {
+    ctx.data_mut(|data| {
+        data.get_temp_mut_or_default::<Drawn>(id())
+            .0
+            .retain(|url, _| !url.starts_with(prefix));
+    });
+    let forgotten: Vec<String> = {
+        let mut guard = CACHE.lock().unwrap();
+        let Some(cache) = guard.as_mut() else {
+            return;
+        };
+        let mut urls: Vec<String> = cache
+            .loaded
+            .iter()
+            .filter(|url| url.starts_with(prefix))
+            .cloned()
+            .collect();
+        for url in cache.uris.keys() {
+            if url.starts_with(prefix) && !urls.contains(url) {
+                urls.push(url.clone());
+            }
+        }
+        cache.asked.retain(|url| !url.starts_with(prefix));
+        cache.failed.retain(|url, _| !url.starts_with(prefix));
+        cache.loaded.retain(|url| !url.starts_with(prefix));
+        cache.refreshed.retain(|url| !url.starts_with(prefix));
+        cache.repaired.retain(|url| !url.starts_with(prefix));
+        cache.wanted.retain(|(url, _)| !url.starts_with(prefix));
+        cache.expired.retain(|(url, _)| !url.starts_with(prefix));
+        urls.into_iter()
+            .map(|url| {
+                cache
+                    .uris
+                    .remove(&url)
+                    .unwrap_or_else(|| memory_uri(&cache.dir, &url))
+            })
+            .collect()
+    };
+    if !forgotten.is_empty() {
+        animation::install(ctx);
+        for uri in forgotten {
+            animation::forget(ctx, &uri);
+            ctx.forget_image(&uri);
+        }
+    }
+}
 fn id() -> Id {
     Id::new("youtfast-remote-images")
 }
@@ -160,7 +226,7 @@ fn memory_uri(dir: &std::path::Path, url: &str) -> String {
     )
 }
 /// Only the backend accesses files or the network, including a disk cache hit.
-pub fn remote<'a>(ui: &Ui, url: &'a str) -> Image<'a> {
+pub fn remote(ui: &Ui, url: &str) -> Image<'static> {
     #[cfg(feature = "demo")]
     if ui
         .ctx()
@@ -342,6 +408,7 @@ fn take_stale(drawn: &mut HashMap<String, f64>, now: f64, keep: f64) -> Vec<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
     fn cache() -> Cache {
         Cache {
             dir: PathBuf::new(),
@@ -410,5 +477,40 @@ mod tests {
         assert!(c.loaded.contains("recent"));
         assert!(c.uris.contains_key("recent"));
         assert!(drawn.contains_key("recent"));
+    }
+
+    #[test]
+    fn evict_prefix_clears_only_matching_urls_from_cache_and_failures() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let ctx = Context::default();
+        init(PathBuf::from("cache"));
+        let dearrow_url = "https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=abc";
+        let yt_url = "https://i.ytimg.com/vi/abc/mqdefault.jpg";
+
+        if let Some(c) = CACHE.lock().unwrap().as_mut() {
+            c.loaded.insert(dearrow_url.to_owned());
+            c.uris
+                .insert(dearrow_url.to_owned(), memory_uri(&c.dir, dearrow_url));
+            c.failed.insert(
+                "https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=def".to_owned(),
+                Failed {
+                    reason: Failure::Unavailable,
+                    attempt: 1,
+                    retry_at: None,
+                    manual_after: 0.0,
+                },
+            );
+            c.wanted.push((dearrow_url.to_owned(), false));
+            c.loaded.insert(yt_url.to_owned());
+            c.uris.insert(yt_url.to_owned(), memory_uri(&c.dir, yt_url));
+        }
+
+        evict_prefix(&ctx, "https://dearrow-thumb.ajay.app/");
+        assert!(!is_loaded(dearrow_url));
+        assert!(!has_failed(
+            "https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=def"
+        ));
+        assert!(is_loaded(yt_url));
+        assert!(drain_wanted().is_empty());
     }
 }

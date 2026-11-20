@@ -105,6 +105,16 @@ défaut. Revenir en haut fait réapparaître le lecteur intégré ; cliquer sur 
 mini-lecteur ramène à la vidéo en haut de la page. Fermer le mini-lecteur met la
 lecture en pause.
 
+Paramètres → Lecture → **Titres de la communauté (DeArrow)** et **Miniatures de
+la communauté (DeArrow — envoie l'ID de la vidéo)** sont désactivés par défaut.
+Les titres de la communauté interrogent `sponsor.ajay.app` uniquement avec un
+préfixe de quatre chiffres hexadécimaux du SHA-256 de l'ID vidéo et affichent le
+titre YouTube d'origine au survol d'un titre remplacé. Les miniatures de la
+communauté envoient l'ID de chaque vidéo directement à
+`dearrow-thumb.ajay.app` et reviennent à la miniature YouTube lorsqu'aucune
+n'est disponible. Toutes les réponses et miniatures DeArrow restent uniquement
+dans un cache borné en mémoire et ne sont jamais enregistrées sur le disque.
+
 Paramètres → Lecture → Tampon vidéo permet de choisir entre le cache de
 démultiplexage standard de mpv (**Grand — 150 Mio / 50 Mio**, par défaut, qui
 met plusieurs minutes en mémoire tampon pour les connexions instables et la

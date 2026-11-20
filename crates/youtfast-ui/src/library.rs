@@ -213,7 +213,7 @@ pub(super) fn video_card_grid(
                             let selected = state.is_cursor(index);
                             let watched = widgets::watched(&state.library, video);
                             let response = widgets::video_card(
-                                ui, palette, video, watched, selected, width, locale,
+                                ui, state, video, watched, selected, width, locale,
                             );
                             if selected && state.cursor_moved {
                                 response.clone().scroll_to_me(None);

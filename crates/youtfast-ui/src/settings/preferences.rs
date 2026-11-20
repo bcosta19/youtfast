@@ -158,6 +158,36 @@ pub(super) fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 }
             }
             ui.add_space(12.0);
+            let dearrow_titles = state.settings.dearrow_titles;
+            if switch_row(
+                ui,
+                palette,
+                &tr(locale, "Community titles (DeArrow)"),
+                &tr(
+                    locale,
+                    "Replaces clickbait video titles with community titles from DeArrow. Requests to sponsor.ajay.app use a hash prefix matching thousands of videos; hover a replaced title to see the original.",
+                ),
+                dearrow_titles,
+                &tr(locale, "Community titles (DeArrow)"),
+            ) {
+                actions.push(Action::SetDeArrowTitles(!dearrow_titles));
+            }
+            ui.add_space(12.0);
+            let dearrow_thumbnails = state.settings.dearrow_thumbnails;
+            if switch_row(
+                ui,
+                palette,
+                &tr(locale, "Community thumbnails (DeArrow — sends video ID)"),
+                &tr(
+                    locale,
+                    "Replaces video thumbnails with community thumbnails from DeArrow. Sends each video's ID directly to dearrow-thumb.ajay.app; thumbnails stay in memory only and are never saved to disk.",
+                ),
+                dearrow_thumbnails,
+                &tr(locale, "Community thumbnails (DeArrow — sends video ID)"),
+            ) {
+                actions.push(Action::SetDeArrowThumbnails(!dearrow_thumbnails));
+            }
+            ui.add_space(12.0);
             let channel_count = state.settings.channel_speeds.len();
             let card = widgets::on_card(palette);
             let count_text = if channel_count == 0 {
@@ -907,5 +937,93 @@ mod tests {
             }
             assert_eq!(actions, [expected]);
         }
+    }
+
+    #[test]
+    fn dearrow_settings_show_switches_and_video_id_disclosure() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let state = State::default();
+        let mut actions = Vec::new();
+        let mut titles_pos = None;
+        let mut thumbs_pos = None;
+        let mut labels = Vec::new();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(900.0, 1200.0),
+                )),
+                ..Default::default()
+            },
+            |ui| playback(ui, &state, &mut actions),
+        );
+        for shape in &output.shapes {
+            if let egui::Shape::Text(text) = &shape.shape {
+                let label = text.galley.text().to_owned();
+                let center = egui::Rect::from_min_size(text.pos, text.galley.size()).center();
+                if label == "Community titles (DeArrow)" {
+                    titles_pos = Some(center);
+                } else if label == "Community thumbnails (DeArrow — sends video ID)" {
+                    thumbs_pos = Some(center);
+                }
+                labels.push(label);
+            }
+        }
+        output.textures_delta.clear();
+
+        assert!(
+            labels.iter().any(|l| l == "Community titles (DeArrow)"),
+            "missing DeArrow titles switch"
+        );
+        assert!(
+            labels
+                .iter()
+                .any(|l| l == "Community thumbnails (DeArrow — sends video ID)"),
+            "missing DeArrow thumbnails switch with video ID notice"
+        );
+        assert!(
+            labels
+                .iter()
+                .any(|l| l.contains("Sends each video's ID directly to dearrow-thumb.ajay.app")),
+            "missing DeArrow thumbnails video ID description"
+        );
+        assert!(actions.is_empty());
+
+        for pos in [titles_pos.unwrap(), thumbs_pos.unwrap()] {
+            let mut run = |events: Vec<egui::Event>| {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            vec2(900.0, 1200.0),
+                        )),
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| playback(ui, &state, &mut actions),
+                );
+                output.textures_delta.clear();
+            };
+            run(vec![egui::Event::PointerMoved(pos)]);
+            for pressed in [true, false] {
+                run(vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ]);
+            }
+        }
+        assert_eq!(
+            actions,
+            [
+                Action::SetDeArrowTitles(true),
+                Action::SetDeArrowThumbnails(true),
+            ]
+        );
     }
 }

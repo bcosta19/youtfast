@@ -129,24 +129,9 @@ fn rows<'a>(
                     let selected = state.is_cursor(index);
                     let watched = widgets::watched(&state.library, video);
                     let response = if large {
-                        widgets::video_row_large(
-                            ui,
-                            &state.palette,
-                            video,
-                            watched,
-                            selected,
-                            locale,
-                        )
+                        widgets::video_row_large(ui, state, video, watched, selected, locale)
                     } else {
-                        widgets::video_row(
-                            ui,
-                            &state.palette,
-                            video,
-                            None,
-                            watched,
-                            selected,
-                            locale,
-                        )
+                        widgets::video_row(ui, state, video, None, watched, selected, locale)
                     };
                     if selected && state.cursor_moved {
                         response.clone().scroll_to_me(None);

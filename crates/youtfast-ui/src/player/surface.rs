@@ -89,7 +89,7 @@ pub(super) fn picture_rounded(
     ui.painter().rect_filled(rect, radius, Color32::BLACK);
     if state.audio_only {
         if let Some(video) = &state.watching {
-            youtfast_app::images::remote(ui, &video.thumbnail())
+            crate::widgets::video_thumbnail(ui, state, video)
                 .fit_to_exact_size(rect.size())
                 .corner_radius(radius)
                 .paint_at(ui, rect);
