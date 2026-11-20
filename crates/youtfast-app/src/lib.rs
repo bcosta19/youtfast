@@ -1541,12 +1541,16 @@ impl App {
             Event::SignedOut => self.on_signed_out(),
             Event::CheckAlerts => self.check_alerts(),
             Event::Thumbnail { url, result } => {
-                if youtfast_youtube::thumbs::is_memory_only(&url)
-                    && !self.state.settings.dearrow_thumbnails
-                {
-                    return;
-                }
                 images::completed(self.backend.context(), &url, result);
+            }
+            Event::DeArrowThumbnail {
+                url,
+                consent,
+                result,
+            } => {
+                if consent.is_current() && self.state.settings.dearrow_thumbnails {
+                    images::completed(self.backend.context(), &url, result);
+                }
             }
             Event::Suggestions { query, items } => {
                 if query == self.state.query.trim() {
@@ -1562,8 +1566,12 @@ impl App {
                     self.with_player(|player| player.set_muted(false));
                 }
             }
-            Event::DeArrow { video_id, branding } => {
-                self.complete_dearrow(video_id, branding);
+            Event::DeArrow {
+                video_id,
+                consent,
+                branding,
+            } => {
+                self.complete_dearrow(video_id, branding, consent);
             }
             Event::Notice(notice) => self.state.notice = Some(notice),
             Event::CheckUpdates => {
@@ -2402,11 +2410,7 @@ impl eframe::App for App {
         for (url, manual) in images::drain_expired() {
             self.refresh_comment_image(url, manual);
         }
-        // Thumbnails drawn from the network go to the disk cache.
-        let wanted = images::drain_wanted();
-        if !wanted.is_empty() {
-            self.backend.send(Command::CacheThumbnails(wanted));
-        }
+        self.drain_thumbnails();
         self.drain_dearrow();
         // What later launches sent to the running copy.
         let remote: Vec<instance::Remote> = std::mem::take(

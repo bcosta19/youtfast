@@ -51,7 +51,9 @@ impl Failure {
             return None;
         }
         match self {
-            Self::Network | Self::Pending | Self::Server => Some(2.0_f64.powi(attempt as i32) * 5.0),
+            Self::Network | Self::Pending | Self::Server => {
+                Some(2.0_f64.powi(attempt as i32) * 5.0)
+            }
             Self::RateLimited(seconds) => Some(seconds.max(30) as f64),
             _ => None,
         }

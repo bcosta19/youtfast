@@ -5,6 +5,7 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use youtfast_core::model::{
     Channel, ChannelAbout, ChannelHeader, ChannelMeta, HistoryRow, PageItems, PlaylistSummary,
@@ -17,6 +18,27 @@ use youtfast_youtube::innertube;
 /// A file the user is choosing in the native dialog. Made on the interface
 /// thread (macOS requires it there) and awaited on the runtime.
 pub type Picked = Pin<Box<dyn Future<Output = Option<rfd::FileHandle>> + Send>>;
+
+/// A single, revocable opt-in generation. Re-enabling creates a fresh token.
+#[derive(Clone, Debug)]
+pub struct DeArrowConsent(Arc<AtomicBool>);
+
+impl DeArrowConsent {
+    /// Starts a new generation after the user has opted in.
+    pub fn granted() -> Self {
+        Self(Arc::new(AtomicBool::new(true)))
+    }
+
+    /// Revokes this generation for all queued work and outstanding replies.
+    pub fn revoke(self) {
+        self.0.store(false, Ordering::Release);
+    }
+
+    /// Whether this generation still authorizes a request or its reply.
+    pub fn is_current(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+}
 
 /// The list a request fills. One request per slot is current; an answer
 /// to an older one is dropped (see `App::generations`).
@@ -274,6 +296,11 @@ pub enum Command {
     /// Thumbnail URLs the interface is drawing from the network, for the
     /// disk cache to keep next time.
     CacheThumbnails(Vec<(String, bool)>),
+    /// Community thumbnail requests, never written to disk.
+    DeArrowThumbnails {
+        urls: Vec<String>,
+        consent: DeArrowConsent,
+    },
     /// What YouTube suggests for the search being typed.
     Suggest(String),
     /// The SponsorBlock segments of a video, by its id.
@@ -281,6 +308,7 @@ pub enum Command {
     /// DeArrow community branding for a video, requested by hash prefix.
     DeArrow {
         video_id: String,
+        consent: DeArrowConsent,
     },
     /// Check GitHub Releases for a newer version of YouTFast.
     CheckForUpdates {
@@ -404,6 +432,11 @@ pub enum Event {
         url: String,
         result: Result<Arc<[u8]>, youtfast_youtube::thumbs::Failure>,
     },
+    DeArrowThumbnail {
+        url: String,
+        consent: DeArrowConsent,
+        result: Result<Arc<[u8]>, youtfast_youtube::thumbs::Failure>,
+    },
     Suggestions {
         query: String,
         items: Vec<String>,
@@ -414,6 +447,7 @@ pub enum Event {
     },
     DeArrow {
         video_id: String,
+        consent: DeArrowConsent,
         branding: Option<youtfast_youtube::dearrow::Branding>,
     },
     /// The update timer fired; the app triggers a background check if idle.
@@ -510,6 +544,7 @@ impl Event {
                     | Self::CheckAlerts
                     | Self::CheckUpdates
                     | Self::Thumbnail { .. }
+                    | Self::DeArrowThumbnail { .. }
                     | Self::Suggestions { .. }
                     | Self::Segments { .. }
                     | Self::DeArrow { .. }

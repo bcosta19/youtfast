@@ -4,6 +4,7 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use youtfast_backend::DeArrowConsent;
 use youtfast_core::model::Video;
 use youtfast_youtube::dearrow::{Branding, THUMBNAIL_BASE};
 
@@ -21,6 +22,8 @@ pub struct DeArrowCache {
     pending: HashSet<String>,
     wanted: RefCell<Vec<String>>,
     retry_at: Option<std::time::Instant>,
+    branding_consent: Option<DeArrowConsent>,
+    thumbnail_consent: Option<DeArrowConsent>,
 }
 
 impl DeArrowCache {
@@ -97,7 +100,14 @@ impl DeArrowCache {
         self.pending.clear();
         self.wanted.borrow_mut().clear();
         self.retry_at = None;
+        if let Some(consent) = self.branding_consent.take() {
+            consent.revoke();
+        }
     }
+}
+
+fn granted_consent(token: &mut Option<DeArrowConsent>) -> DeArrowConsent {
+    token.get_or_insert_with(DeArrowConsent::granted).clone()
 }
 
 impl State {
@@ -172,6 +182,9 @@ impl State {
 
     pub(super) fn set_dearrow_thumbnails_choice(&mut self, on: bool) {
         self.settings.dearrow_thumbnails = on;
+        if !on && let Some(consent) = self.dearrow.thumbnail_consent.take() {
+            consent.revoke();
+        }
         if !self.dearrow_enabled() {
             self.dearrow.clear();
         }
@@ -199,8 +212,13 @@ impl App {
         ctx.request_repaint();
     }
 
-    pub(super) fn complete_dearrow(&mut self, video_id: String, branding: Option<Branding>) {
-        if !self.state.dearrow_enabled() {
+    pub(super) fn complete_dearrow(
+        &mut self,
+        video_id: String,
+        branding: Option<Branding>,
+        consent: DeArrowConsent,
+    ) {
+        if !consent.is_current() || !self.state.dearrow_enabled() {
             return;
         }
         if let Some(branding) = branding {
@@ -216,8 +234,42 @@ impl App {
             self.state.dearrow.clear();
             return;
         }
-        for video_id in self.state.dearrow.take_wanted() {
-            self.backend.send(Command::DeArrow { video_id });
+        let wanted = self.state.dearrow.take_wanted();
+        if !wanted.is_empty() {
+            let consent = granted_consent(&mut self.state.dearrow.branding_consent);
+            for video_id in wanted {
+                self.backend.send(Command::DeArrow {
+                    video_id,
+                    consent: consent.clone(),
+                });
+            }
+        }
+    }
+
+    pub(super) fn drain_thumbnails(&mut self) {
+        let mut wanted = images::drain_wanted();
+        let mut community = Vec::new();
+        wanted.retain_mut(|(url, _)| {
+            if !url
+                .strip_prefix(THUMBNAIL_BASE)
+                .is_some_and(|rest| rest.starts_with('/'))
+            {
+                return true;
+            }
+            if self.state.settings.dearrow_thumbnails {
+                community.push(std::mem::take(url));
+            }
+            false
+        });
+        if !community.is_empty() {
+            let consent = granted_consent(&mut self.state.dearrow.thumbnail_consent);
+            self.backend.send(Command::DeArrowThumbnails {
+                urls: community,
+                consent,
+            });
+        }
+        if !wanted.is_empty() {
+            self.backend.send(Command::CacheThumbnails(wanted));
         }
     }
 }
@@ -287,6 +339,32 @@ mod tests {
             },
         );
         assert!(state.dearrow.is_empty());
+    }
+
+    #[test]
+    fn thumbnail_and_branding_consent_are_revoked_independently() {
+        let mut state = State::default();
+        state.set_dearrow_titles_choice(true);
+        state.set_dearrow_thumbnails_choice(true);
+        let branding = granted_consent(&mut state.dearrow.branding_consent);
+        let thumbnail = granted_consent(&mut state.dearrow.thumbnail_consent);
+
+        state.set_dearrow_thumbnails_choice(false);
+        assert!(!thumbnail.is_current());
+        assert!(branding.is_current());
+        state.set_dearrow_thumbnails_choice(true);
+        let next_thumbnail = granted_consent(&mut state.dearrow.thumbnail_consent);
+        assert!(next_thumbnail.is_current());
+        assert!(!thumbnail.is_current());
+
+        state.set_dearrow_titles_choice(false);
+        assert!(branding.is_current());
+        state.set_dearrow_thumbnails_choice(false);
+        assert!(!branding.is_current());
+        assert!(!next_thumbnail.is_current());
+        state.set_dearrow_titles_choice(true);
+        assert!(granted_consent(&mut state.dearrow.branding_consent).is_current());
+        assert!(!branding.is_current());
     }
 
     #[test]
