@@ -30,11 +30,12 @@ impl Status {
         &self,
         video: &str,
         segments: &[youtfast_core::model::Segment],
+        categories: &youtfast_core::model::SponsorCategories,
     ) -> Option<f64> {
         if self.video.as_deref() != Some(video) || self.state != Some(1) || self.ad {
             return None;
         }
-        super::sponsor_target(self.seconds?, segments)
+        super::sponsor_target(self.seconds?, segments, categories)
     }
 }
 
@@ -242,6 +243,7 @@ impl Session {
         &mut self,
         video: &str,
         segments: &[youtfast_core::model::Segment],
+        categories: &youtfast_core::model::SponsorCategories,
         enabled: &std::sync::atomic::AtomicBool,
     ) -> Result<Sponsor, Error> {
         self.status.video = None;
@@ -256,8 +258,8 @@ impl Session {
             .status
             .seconds
             .filter(|_| self.status.video.as_deref() == Some(video))
-            .and_then(|at| super::next_segment_in(at, segments));
-        let Some(end) = self.status.sponsor_target(video, segments) else {
+            .and_then(|at| super::next_segment_in(at, segments, categories));
+        let Some(end) = self.status.sponsor_target(video, segments, categories) else {
             return Ok(Sponsor {
                 skipped: None,
                 next_in,
@@ -272,7 +274,7 @@ impl Session {
         self.status.seconds = None;
         Ok(Sponsor {
             skipped: Some(end),
-            next_in: super::next_segment_in(end, segments),
+            next_in: super::next_segment_in(end, segments, categories),
         })
     }
 
@@ -567,10 +569,12 @@ mod tests {
 
     #[test]
     fn sponsor_target_requires_content_playback_and_suppresses_advertisements() {
+        let categories = youtfast_core::model::SponsorCategories::default();
         let segment = youtfast_core::model::Segment {
             category: "sponsor".into(),
             start: 10.0,
             end: 30.0,
+            action: youtfast_core::model::SegmentAction::Skip,
         };
         let mut status = Status {
             video: Some("abcdefghijk".into()),
@@ -579,29 +583,32 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            status.sponsor_target("abcdefghijk", std::slice::from_ref(&segment)),
+            status.sponsor_target("abcdefghijk", std::slice::from_ref(&segment), &categories),
             Some(30.0)
         );
         for state in [-1, 0, 2, 3, 1081, 1082] {
             status.state = Some(state);
             assert_eq!(
-                status.sponsor_target("abcdefghijk", std::slice::from_ref(&segment)),
+                status.sponsor_target("abcdefghijk", std::slice::from_ref(&segment), &categories),
                 None
             );
         }
         status.state = Some(1);
         status.ad = true;
         assert_eq!(
-            status.sponsor_target("abcdefghijk", std::slice::from_ref(&segment)),
+            status.sponsor_target("abcdefghijk", std::slice::from_ref(&segment), &categories),
             None
         );
         status.ad = false;
         assert_eq!(
-            status.sponsor_target("another_one", std::slice::from_ref(&segment)),
+            status.sponsor_target("another_one", std::slice::from_ref(&segment), &categories),
             None
         );
         status.seconds = None;
-        assert_eq!(status.sponsor_target("abcdefghijk", &[segment]), None);
+        assert_eq!(
+            status.sponsor_target("abcdefghijk", &[segment], &categories),
+            None
+        );
     }
 
     #[test]

@@ -213,7 +213,7 @@ order when merging device resume metadata.
 | Links in rich text | `Span` maps same-video timestamps, including `0:00`, to seeks; other video/channel/web links retain their target |
 | TLS | InnerTube uses `reqwest` + the OS verifier (`rustls-platform-verifier`); thumbnails, SponsorBlock and updater use `ureq` with Mozilla roots |
 | History sync | Explicitly opt-in; one report per playback after two seconds of active play, bound to the session at playback start; HTTPS YouTube tracking hosts only, no redirects |
-| SponsorBlock | Off by default; requests use the first four hex digits of the video ID's SHA-256, never the full ID |
+| SponsorBlock | Off by default; requests use the first four hex digits of the video ID's SHA-256, never the full ID; per-category behaviors (`auto_skip`, `manual_skip`, `seek_bar_only`, `ignore`) apply to `skip` and `mute` segment actions |
 
 A history-report failure is `NotReported`, with no URLs, cookies or response
 body exposed. Playback extraction remains independent of history reporting.

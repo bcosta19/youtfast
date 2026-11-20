@@ -108,6 +108,19 @@ player) transmite e decodifica
 apenas a faixa de áudio (`ba/b` e `vid=no`) do vídeo atual, voltando ao vídeo
 normal ao abrir outro vídeo ou reiniciar o app.
 
+Configurações → Reprodução → **Pular patrocínios (SponsorBlock)** vem desativado
+por padrão e consulta o SponsorBlock (`sponsor.ajay.app`) usando apenas os quatro
+primeiros dígitos hexadecimais do hash SHA-256 do ID do vídeo. Quando ativado,
+escolha um comportamento para cada uma das oito categorias (**Patrocínio**,
+**Autopromoção**, **Pedido de interação**, **Introdução**, **Encerramento**,
+**Prévia**, **Trecho sem música**, **Digressão**): **Pular automaticamente**
+(padrão para patrocínios, autopromoção e pedidos de interação), **Mostrar botão de
+pular** (padrão para as demais categorias), **Apenas marcar na barra de progresso**
+ou **Ignorar**. Segmentos de silenciamento em categorias definidas como **Pular
+automaticamente** silenciam a reprodução automaticamente dentro do trecho (quando
+ainda não estava silenciada) e reativam o som ao sair do trecho, parar, abrir
+outro vídeo ou alternar o som manualmente.
+
 A página do vídeo também mostra a descrição (os timestamps levam ao ponto
 indicado), os capítulos e os comentários, carregados pela InnerTube. Comentários
 e respostas também exibem anexos de imagem e GIF/WebP animados. Os anexos usam o
@@ -251,9 +264,9 @@ O app e a conta do YouTube na TV cuidam da reprodução, incluindo anúncios e
 restrições de acesso. O YouTFast não transfere a sessão da conta, os cookies do
 navegador nem a biblioteca local. Com **Pular patrocínios (SponsorBlock)**
 ativado, o YouTFast também acompanha a posição na TV do vídeo enviado e manda
-saltos remotos por DIAL/Lounge ou Google Cast (`catt`). Ele usa as mesmas
-categorias automáticas da reprodução local: patrocínios, autopromoção e pedidos
-de interação. Mantenha o YouTFast aberto e conectado; desconectar ou desativar o
+saltos remotos por DIAL/Lounge ou Google Cast (`catt`). Ele pula automaticamente
+segmentos de salto nas categorias configuradas como **Pular automaticamente**
+(segmentos de silenciamento não são silenciados na TV). Mantenha o YouTFast aberto e conectado; desconectar ou desativar o
 SponsorBlock interrompe os saltos automáticos seguintes.
 Isso vale para o vídeo enviado explicitamente, não para os vídeos seguintes
 escolhidos pela reprodução automática da TV. Transmissões ao vivo, reprodução

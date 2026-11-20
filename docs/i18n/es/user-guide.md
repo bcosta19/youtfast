@@ -113,6 +113,20 @@ reproductor) transmite y decodifica
 solo la pista de audio (`ba/b` y `vid=no`) del vídeo actual, y vuelve al vídeo
 estándar al abrir otro vídeo o reiniciar la app.
 
+Configuración → Reproducción → **Saltar patrocinios (SponsorBlock)** está
+desactivado por defecto y consulta SponsorBlock (`sponsor.ajay.app`) usando solo los
+cuatro primeros dígitos hexadecimales del hash SHA-256 del ID del vídeo. Cuando está
+activado, elige un comportamiento para cada una de las ocho categorías
+(**Patrocinio**, **Autopromoción**, **Recordatorio de interacción**, **Intro**,
+**Outro**, **Vista previa**, **Sección sin música**, **Relleno**): **Saltar
+automáticamente** (predeterminado para patrocinios, autopromoción y recordatorios de
+interacción), **Mostrar botón para saltar** (predeterminado para el resto de
+categorías), **Solo marcar en la barra de progreso** o **Ignorar**. Los segmentos de
+silenciamiento en categorías configuradas como **Saltar automáticamente** silencian
+la reproducción de forma automática dentro del segmento (si no estaba silenciada
+antes) y reactivan el sonido al salir, detener, abrir otro vídeo o cambiar el
+silencio manualmente.
+
 La página del vídeo también muestra la descripción (las marcas de tiempo saltan a
 esa posición), los capítulos y los comentarios, cargados mediante InnerTube. Los
 comentarios y las respuestas también muestran adjuntos de imagen y GIF/WebP
@@ -260,8 +274,9 @@ anuncios y las restricciones de acceso. YouTFast no transfiere su sesión de cue
 las cookies del navegador ni la biblioteca local. Con **Saltar patrocinios
 (SponsorBlock)** activado, YouTFast también comprueba la posición en la TV del vídeo
 enviado y envía saltos remotos por DIAL/Lounge
-o Google Cast (`catt`). Usa las mismas categorías automáticas que la reproducción
-local: patrocinios, autopromoción y recordatorios de interacción. Mantén YouTFast
+o Google Cast (`catt`). Salta automáticamente los segmentos de salto de las
+categorías configuradas como **Saltar automáticamente** (los segmentos de
+silenciamiento no se silencian en la TV). Mantén YouTFast
 abierto y conectado; desconectar o desactivar SponsorBlock detiene los saltos
 automáticos posteriores.
 Esto se aplica al vídeo enviado explícitamente, no a los vídeos siguientes que elija

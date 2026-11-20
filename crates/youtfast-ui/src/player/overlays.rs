@@ -12,6 +12,7 @@ use super::remember_control_focus;
 use super::surface::on_video_style;
 use youtfast_app::{Action, State};
 use youtfast_appearance::theme;
+use youtfast_core::model::SponsorBehavior;
 use youtfast_mpv::Status;
 
 /// A dark rounded label, centred over `bottom`.
@@ -70,11 +71,16 @@ pub(super) fn skip_button(
     actions: &mut Vec<Action>,
 ) {
     let locale: Locale = state.settings.language;
-    let Some(segment) = state
-        .segments
-        .iter()
-        .find(|segment| status.position >= segment.start && status.position < segment.end - 0.3)
-    else {
+    let Some(segment) = state.segments.iter().find(|segment| {
+        matches!(
+            state
+                .settings
+                .sponsorblock_categories
+                .behavior_for(&segment.category),
+            SponsorBehavior::AutoSkip | SponsorBehavior::ManualSkip
+        ) && status.position >= segment.start
+            && status.position < segment.end - 0.3
+    }) else {
         return;
     };
     let label = segment.label();

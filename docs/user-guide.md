@@ -97,6 +97,17 @@ streams and decodes
 only the audio track (`ba/b` and `vid=no`) for the current video, resetting to
 standard video when opening another video or restarting the app.
 
+Settings → Playback → **Skip sponsors (SponsorBlock)** is off by default and queries
+SponsorBlock (`sponsor.ajay.app`) using only the first four hex digits of the video
+ID's SHA-256 hash. When enabled, choose a behavior for each of the eight categories
+(**Sponsor**, **Self-promotion**, **Interaction reminder**, **Intro**, **Outro**,
+**Preview**, **Non-music section**, **Filler**): **Skip automatically** (default for
+sponsors, self-promotion, and interaction reminders), **Show skip button** (default for
+the remaining categories), **Only mark on the seek bar**, or **Ignore**. Mute-action
+segments in categories set to **Skip automatically** automatically mute playback while
+inside the segment (when not already muted) and unmute upon leaving, stopping, opening
+another video, or manually toggling mute.
+
 The watch page also shows the description (timestamps seek), chapters
 and comments, loaded through InnerTube. Comments and replies also display
 image and animated GIF/WebP attachments. Attachments use the bounded thumbnail
@@ -229,8 +240,8 @@ The TV's YouTube application and account handle playback, including ads and
 access restrictions. YouTFast does not transfer its account session, browser
 cookies or local library. With **Skip sponsors (SponsorBlock)** enabled, YouTFast
 also checks the sent video's TV position and sends remote seeks over DIAL/Lounge
-or Google Cast (`catt`). It uses the same automatic categories as local playback:
-sponsors, self-promotion and interaction reminders. Keep YouTFast running and
+or Google Cast (`catt`). It automatically skips skip-action segments for categories
+configured as **Skip automatically** (mute segments are not muted on the TV). Keep YouTFast running and
 connected; disconnecting or disabling SponsorBlock stops further automatic seeks.
 This applies to the video explicitly sent, not subsequent videos chosen by the
 TV's autoplay. Live streams, paused playback and missing seek telemetry are not

@@ -110,6 +110,7 @@ pub enum Request {
         device: Device,
         video: String,
         segments: Vec<youtfast_core::model::Segment>,
+        categories: youtfast_core::model::SponsorCategories,
     },
     Scan,
     Disconnect,
@@ -266,6 +267,7 @@ async fn execute_with_session(
             device,
             video,
             segments,
+            categories,
         } => {
             let result = tokio::time::timeout(Duration::from_secs(15), async {
                 if !reachable(&device) || start_args(&device, &video, 0).is_err() {
@@ -276,12 +278,14 @@ async fn execute_with_session(
                         .as_mut()
                         .filter(|(target, _)| target == &device)
                         .ok_or(Error::ConnectionExpired)?;
-                    return session.skip_sponsor(&video, &segments, &enabled).await;
+                    return session
+                        .skip_sponsor(&video, &segments, &categories, &enabled)
+                        .await;
                 }
                 let info = run(program, &target_args(&device, &["info", "--json-output"])).await?;
                 let next_in = cast_position(&info, &video)?
-                    .and_then(|position| next_segment_in(position, &segments));
-                let Some(end) = cast_sponsor_target(&info, &video, &segments)? else {
+                    .and_then(|position| next_segment_in(position, &segments, &categories));
+                let Some(end) = cast_sponsor_target(&info, &video, &segments, &categories)? else {
                     return Ok(Sponsor {
                         skipped: None,
                         next_in,
@@ -295,7 +299,7 @@ async fn execute_with_session(
                 run(program, &args).await?;
                 Ok(Sponsor {
                     skipped: Some(end),
-                    next_in: next_segment_in(end, &segments),
+                    next_in: next_segment_in(end, &segments, &categories),
                 })
             })
             .await
@@ -447,10 +451,21 @@ fn cast_position(json: &[u8], video: &str) -> Result<Option<f64>, Error> {
         .flatten())
 }
 
+/// Whether a segment should be auto-skipped on Cast: configured as `AutoSkip`
+/// and using `SegmentAction::Skip` (mute-only segments cannot be muted on TV).
+fn should_cast_auto_skip(
+    segment: &youtfast_core::model::Segment,
+    categories: &youtfast_core::model::SponsorCategories,
+) -> bool {
+    categories.behavior_for(&segment.category) == youtfast_core::model::SponsorBehavior::AutoSkip
+        && segment.action == youtfast_core::model::SegmentAction::Skip
+}
+
 /// Seconds until the next skippable segment starts, to space out checks.
 pub(crate) fn next_segment_in(
     position: f64,
     segments: &[youtfast_core::model::Segment],
+    categories: &youtfast_core::model::SponsorCategories,
 ) -> Option<f64> {
     if !position.is_finite() || position < 0.0 {
         return None;
@@ -458,7 +473,9 @@ pub(crate) fn next_segment_in(
     segments
         .iter()
         .filter(|segment| {
-            segment.skipped_at_once() && segment.start.is_finite() && segment.start > position
+            should_cast_auto_skip(segment, categories)
+                && segment.start.is_finite()
+                && segment.start > position
         })
         .map(|segment| segment.start - position)
         .min_by(f64::total_cmp)
@@ -470,6 +487,7 @@ fn cast_sponsor_target(
     json: &[u8],
     video: &str,
     segments: &[youtfast_core::model::Segment],
+    categories: &youtfast_core::model::SponsorCategories,
 ) -> Result<Option<f64>, Error> {
     let info: serde_json::Value =
         serde_json::from_slice(json).map_err(|_| Error::InvalidResponse)?;
@@ -483,12 +501,13 @@ fn cast_sponsor_target(
     }
     Ok(info["current_time"]
         .as_f64()
-        .and_then(|position| sponsor_target(position, segments)))
+        .and_then(|position| sponsor_target(position, segments, categories)))
 }
 
 pub(crate) fn sponsor_target(
     position: f64,
     segments: &[youtfast_core::model::Segment],
+    categories: &youtfast_core::model::SponsorCategories,
 ) -> Option<f64> {
     if !position.is_finite() || position < 0.0 {
         return None;
@@ -496,7 +515,7 @@ pub(crate) fn sponsor_target(
     segments
         .iter()
         .filter(|segment| {
-            segment.skipped_at_once()
+            should_cast_auto_skip(segment, categories)
                 && segment.start.is_finite()
                 && segment.end.is_finite()
                 && segment.start >= 0.0
@@ -731,17 +750,24 @@ mod tests {
             category: "sponsor".into(),
             start: 10.0,
             end: 30.25,
+            action: youtfast_core::model::SegmentAction::Skip,
         }
     }
 
     #[test]
     fn automatic_skips_require_a_valid_matching_segment_and_tv_telemetry() {
         let segments = [sponsor()];
+        let categories = youtfast_core::model::SponsorCategories::default();
         let base = serde_json::json!({"content_id":"abcdefghijk", "player_state":"PLAYING",
             "current_time":12.0, "stream_type":"BUFFERED", "supported_media_commands":2});
         let target = |info: &serde_json::Value| {
-            cast_sponsor_target(&serde_json::to_vec(info).unwrap(), "abcdefghijk", &segments)
-                .unwrap()
+            cast_sponsor_target(
+                &serde_json::to_vec(info).unwrap(),
+                "abcdefghijk",
+                &segments,
+                &categories,
+            )
+            .unwrap()
         };
         assert_eq!(target(&base), Some(30.25));
         for (key, value) in [
@@ -771,13 +797,28 @@ mod tests {
         }
         let mut segment = sponsor();
         segment.category = "intro".into();
-        assert_eq!(sponsor_target(12.0, &[segment]), None);
+        assert_eq!(
+            sponsor_target(12.0, std::slice::from_ref(&segment), &categories),
+            None
+        );
+        let mut custom = categories;
+        custom.set(
+            youtfast_core::model::SponsorCategory::Intro,
+            youtfast_core::model::SponsorBehavior::AutoSkip,
+        );
+        assert_eq!(
+            sponsor_target(12.0, std::slice::from_ref(&segment), &custom),
+            Some(30.25)
+        );
+        let mut mute = sponsor();
+        mute.action = youtfast_core::model::SegmentAction::Mute;
+        assert_eq!(sponsor_target(12.0, &[mute], &categories), None);
         for position in [f64::NAN, f64::INFINITY, -1.0, 9.0, 29.0, 30.25] {
-            assert_eq!(sponsor_target(position, &segments), None);
+            assert_eq!(sponsor_target(position, &segments, &categories), None);
         }
         let mut invalid = sponsor();
         invalid.end = f64::INFINITY;
-        assert_eq!(sponsor_target(12.0, &[invalid]), None);
+        assert_eq!(sponsor_target(12.0, &[invalid], &categories), None);
     }
 
     #[test]
@@ -880,14 +921,15 @@ mod tests {
 
     #[test]
     fn checks_are_spaced_by_the_time_to_the_next_segment() {
+        let categories = youtfast_core::model::SponsorCategories::default();
         let mut later = sponsor();
         later.start = 100.0;
         later.end = 120.0;
         let segments = [sponsor(), later];
-        assert_eq!(next_segment_in(0.0, &segments), Some(10.0));
-        assert_eq!(next_segment_in(12.0, &segments), Some(88.0));
-        assert_eq!(next_segment_in(130.0, &segments), None);
-        assert_eq!(next_segment_in(f64::NAN, &segments), None);
+        assert_eq!(next_segment_in(0.0, &segments, &categories), Some(10.0));
+        assert_eq!(next_segment_in(12.0, &segments, &categories), Some(88.0));
+        assert_eq!(next_segment_in(130.0, &segments, &categories), None);
+        assert_eq!(next_segment_in(f64::NAN, &segments, &categories), None);
     }
 
     #[test]
@@ -1049,37 +1091,67 @@ else:
         }
 
         #[tokio::test]
-        async fn sponsor_monitor_reads_tv_position_and_uses_an_absolute_seek() {
+        async fn sponsor_monitor_checks_cancellation_after_reading_tv_position() {
             let fixture = Fixture::new(
                 r#"
-import sys, json
+import sys, json, time
+from pathlib import Path
+root = Path(__file__).parent
 args = sys.argv[1:]
 assert args[:2] == ['--device', '192.168.1.20']
 if args[2:] == ['info', '--json-output']:
+    (root / 'checking').touch()
+    deadline = time.monotonic() + 5
+    while not (root / 'release').exists():
+        assert time.monotonic() < deadline, 'telemetry was not released'
+        time.sleep(0.01)
     print(json.dumps({'content_id':'abcdefghijk', 'player_state':'PLAYING', 'current_time':12,
         'stream_type':'BUFFERED', 'supported_media_commands':2}))
 else:
     assert args[2:] == ['seek', '31']
-    from pathlib import Path
-    Path(__file__).with_name('sought').touch()
+    (root / 'sought').touch()
 "#,
             );
-            for enabled in [false, true] {
-                let reply = execute(
-                    &fixture.helper(),
+            use std::sync::{
+                Arc,
+                atomic::{AtomicBool, Ordering},
+            };
+
+            for allow_seek in [false, true] {
+                let enabled = Arc::new(AtomicBool::new(true));
+                let helper = fixture.helper();
+                let check = execute(
+                    &helper,
                     Request::CheckSponsor {
                         device: device(),
                         video: "abcdefghijk".into(),
                         segments: vec![sponsor()],
-                        enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(enabled)),
+                        categories: youtfast_core::model::SponsorCategories::default(),
+                        enabled: Arc::clone(&enabled),
                     },
-                )
-                .await;
+                );
+                let release_telemetry = async {
+                    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+                    while !fixture.0.join("checking").exists() {
+                        assert!(
+                            tokio::time::Instant::now() < deadline,
+                            "helper did not start"
+                        );
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                    if !allow_seek {
+                        enabled.store(false, Ordering::Relaxed);
+                    }
+                    std::fs::write(fixture.0.join("release"), "").unwrap();
+                };
+                let (reply, ()) = tokio::join!(check, release_telemetry);
                 let Reply::SponsorChecked(result) = reply else {
                     panic!("wrong reply")
                 };
-                assert_eq!(result.unwrap().skipped, enabled.then_some(30.25));
-                assert_eq!(fixture.0.join("sought").exists(), enabled);
+                assert_eq!(result.unwrap().skipped, allow_seek.then_some(30.25));
+                assert_eq!(fixture.0.join("sought").exists(), allow_seek);
+                std::fs::remove_file(fixture.0.join("checking")).unwrap();
+                std::fs::remove_file(fixture.0.join("release")).unwrap();
             }
         }
 
@@ -1107,6 +1179,7 @@ else:
                     device: device(),
                     video: "abcdefghijk".into(),
                     segments: vec![sponsor()],
+                    categories: youtfast_core::model::SponsorCategories::default(),
                     enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
                 })
                 .unwrap();

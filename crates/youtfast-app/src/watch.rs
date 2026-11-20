@@ -28,6 +28,7 @@ impl State {
         self.autoplay = None;
         self.segments.clear();
         self.skipped.clear();
+        self.sponsor_muted = None;
         self.resolutions.clear();
         self.player_error = None;
         self.seek_preview = None;
@@ -148,6 +149,7 @@ impl App {
                     }
                 }
                 mpv::Event::Finished => {
+                    self.clear_sponsor_mute();
                     if let Some(video) = &self.state.watching {
                         self.state.library.mark_finished(&video.id);
                         self.save_library();
@@ -247,6 +249,7 @@ impl App {
 
     fn stop_playback(&mut self, ctx: &egui::Context) {
         self.close_mini_player();
+        self.clear_sponsor_mute();
         if let Some(surface) = &self.surface {
             surface.forget();
         }
@@ -300,6 +303,7 @@ impl App {
         self.state.mini_closed = false;
         self.state.watch_scroll_to_video = true;
         self.state.player_menu = crate::PlayerMenu::Closed;
+        self.clear_sponsor_mute();
         self.state.segments.clear();
         self.state.skipped.clear();
         if self.state.audio_only || self.player.as_ref().is_some_and(|p| p.audio_only()) {

@@ -10,12 +10,20 @@ are the distribution record.
 
 ### Added
 
+- Per-category SponsorBlock controls in **Settings → Playback** (`Sponsor`, `Self-promotion`, `Interaction reminder`, `Intro`, `Outro`, `Preview`, `Non-music section`, `Filler`), each configurable as **Skip automatically**, **Show skip button**, **Only mark on the seek bar**, or **Ignore**, with defaults preserving existing behavior. SponsorBlock requests now include `mute` segments, automatically muting playback inside `Skip automatically` mute segments and restoring audio on exit, stop, video change, or manual mute toggle; TV casting skips `Skip automatically` skip segments.
 - Versioned JSON library backup and restore (**Settings → History → Back up library**: **Export library (JSON)** / **Import backup**, preserving device subscriptions, watch history with resume positions, and Watch later while leaving out accounts, sessions, and avatar URLs; also accepted by the Takeout picker) plus OPML 2.0 subscription export (**Export OPML**) for valid YouTube channel IDs. Exports cannot replace the app’s live library or settings files, and JSON exports must fit the restore limits.
 - Remember playback speed globally across videos and restarts, with a **Remember for this channel** switch in the player's speed menu for per-channel overrides (channel speed takes precedence over global speed; temporary 2× hold-to-speed-up never overwrites stored speeds), plus **Settings → Playback → Per-channel playback speeds** to clear saved channel entries. Live streams stay at 1× at the live edge, while rewound live streams keep speed controls and 2× hold available to catch up and reset to 1× once back at the edge without overwriting saved speeds.
 
 ### Changed
 
 - Stop submitting releases to the official Winget catalog; the maintainer has not accepted Microsoft's Contributor License Agreement. Windows setup and portable downloads, Homebrew updates and website deployment remain available.
+
+### Fixed
+
+- SponsorBlock restores local audio even if its segment list refreshes during auto-mute.
+- Unmuting or changing volume overrides SponsorBlock auto-mute for all overlapping segments.
+- SponsorBlock mutes the full duration of a mute segment, including segments shorter than 300 ms.
+- Changing a SponsorBlock category invalidates pending TV skip checks so they cannot seek using the old settings.
 
 ## [0.9.1] - 2026-11-17
 

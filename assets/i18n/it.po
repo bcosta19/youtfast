@@ -1903,3 +1903,80 @@ msgstr "Questo file di backup supera le 20.000 iscrizioni."
 
 msgid "Imported {subscriptions} new subscriptions, {history} new videos of history, and {watch_later} Watch later videos."
 msgstr "Importate {subscriptions} nuove iscrizioni, {history} nuovi video della cronologia e {watch_later} video di Guarda più tardi."
+msgid "Sponsor"
+msgstr "Sponsor"
+
+msgid "Self-promotion"
+msgstr "Autopromozione"
+
+msgid "Interaction reminder"
+msgstr "Promemoria di interazione"
+
+msgid "Intro"
+msgstr "Intro"
+
+msgid "Outro"
+msgstr "Outro"
+
+msgid "Preview"
+msgstr "Anteprima"
+
+msgid "Non-music section"
+msgstr "Sezione non musicale"
+
+msgid "Filler"
+msgstr "Riempitivo"
+
+msgid "Skip automatically"
+msgstr "Salta automaticamente"
+
+msgid "Show skip button"
+msgstr "Mostra pulsante per saltare"
+
+msgid "Only mark on the seek bar"
+msgstr "Segna solo sulla barra di avanzamento"
+
+msgid "Ignore"
+msgstr "Ignora"
+
+msgid "Intro skipped"
+msgstr "Intro saltata"
+
+msgid "Outro skipped"
+msgstr "Outro saltato"
+
+msgid "Preview skipped"
+msgstr "Anteprima saltata"
+
+msgid "Non-music section skipped"
+msgstr "Sezione non musicale saltata"
+
+msgid "Filler skipped"
+msgstr "Riempitivo saltato"
+
+msgid "Sponsor muted"
+msgstr "Sponsor silenziato"
+
+msgid "Self-promotion muted"
+msgstr "Autopromozione silenziata"
+
+msgid "Interaction reminder muted"
+msgstr "Promemoria di interazione silenziato"
+
+msgid "Intro muted"
+msgstr "Intro silenziata"
+
+msgid "Outro muted"
+msgstr "Outro silenziato"
+
+msgid "Preview muted"
+msgstr "Anteprima silenziata"
+
+msgid "Non-music section muted"
+msgstr "Sezione non musicale silenziata"
+
+msgid "Filler muted"
+msgstr "Riempitivo silenziato"
+
+msgid "Segment muted"
+msgstr "Segmento silenziato"

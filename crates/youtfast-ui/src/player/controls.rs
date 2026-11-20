@@ -12,7 +12,7 @@ use youtfast_app::player::{LIVE_BEHIND, at_live_edge, next_video, speed_label};
 use youtfast_app::{Action, PlayerMenu, State};
 use youtfast_appearance::icons::Icon;
 use youtfast_appearance::theme;
-use youtfast_core::model::{Fetch, Segment, Video};
+use youtfast_core::model::{Fetch, Segment, SponsorBehavior, Video};
 use youtfast_core::util;
 use youtfast_mpv::Status;
 
@@ -439,11 +439,18 @@ pub(super) fn seek_bar(
     );
     painter.rect_filled(span(0.0, position), radius, state.palette.accent);
     for segment in &state.segments {
-        painter.rect_filled(
-            span(segment.start, segment.end),
-            radius,
-            segment_color(segment),
-        );
+        if state
+            .settings
+            .sponsorblock_categories
+            .behavior_for(&segment.category)
+            != SponsorBehavior::Ignore
+        {
+            painter.rect_filled(
+                span(segment.start, segment.end),
+                radius,
+                segment_color(segment),
+            );
+        }
     }
     // The chapters: a gap in the track where each one starts.
     if let Fetch::Ready(details) = &state.details {

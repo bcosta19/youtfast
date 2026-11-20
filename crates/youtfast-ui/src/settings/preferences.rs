@@ -7,6 +7,7 @@ use super::{CONTROL_WIDTH, combo_width, setting_row, switch, switch_row};
 use crate::widgets;
 use youtfast_app::{Action, State};
 use youtfast_appearance::theme;
+use youtfast_core::model::{SponsorBehavior, SponsorCategory};
 use youtfast_storage::settings::{HistorySync, PlaybackBuffer};
 
 /// How often the checks may run, in minutes.
@@ -115,6 +116,46 @@ pub(super) fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 "SponsorBlock",
             ) {
                 actions.push(Action::SetSponsorBlock(!sponsorblock));
+            }
+            if sponsorblock {
+                let behavior_width = combo_width(
+                    ui,
+                    SponsorBehavior::ALL
+                        .iter()
+                        .map(|behavior| tr(locale, behavior.label())),
+                );
+                for category in SponsorCategory::ALL {
+                    ui.add_space(8.0);
+                    let current = state.settings.sponsorblock_categories.get(category);
+                    setting_row(
+                        ui,
+                        palette,
+                        &tr(locale, category.display_name()),
+                        "",
+                        behavior_width.max(CONTROL_WIDTH),
+                        |ui| {
+                            egui::ComboBox::from_id_salt(("sponsorblock-category", category))
+                                .width(behavior_width)
+                                .selected_text(tr(locale, current.label()))
+                                .show_ui(ui, |ui| {
+                                    for behavior in SponsorBehavior::ALL {
+                                        if ui
+                                            .selectable_label(
+                                                current == behavior,
+                                                tr(locale, behavior.label()),
+                                            )
+                                            .clicked()
+                                        {
+                                            actions.push(Action::SetSponsorCategory(
+                                                category, behavior,
+                                            ));
+                                            ui.close();
+                                        }
+                                    }
+                                });
+                        },
+                    );
+                }
             }
             ui.add_space(12.0);
             let channel_count = state.settings.channel_speeds.len();
@@ -620,5 +661,69 @@ mod tests {
             assert_eq!(actions, [expected_action]);
             actions.clear();
         }
+    }
+
+    #[test]
+    fn playback_shows_sponsorblock_category_choices_when_enabled() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+
+        let mut state = State::default();
+        let mut actions = Vec::new();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(900.0, 1200.0),
+                )),
+                ..Default::default()
+            },
+            |ui| playback(ui, &state, &mut actions),
+        );
+        let disabled_labels: Vec<_> = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                _ => None,
+            })
+            .collect();
+        output.textures_delta.clear();
+        assert!(!disabled_labels.iter().any(|l| l == "Non-music section"));
+
+        state.settings.sponsorblock = true;
+        state
+            .settings
+            .sponsorblock_categories
+            .set(SponsorCategory::Filler, SponsorBehavior::Ignore);
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(900.0, 1200.0),
+                )),
+                ..Default::default()
+            },
+            |ui| playback(ui, &state, &mut actions),
+        );
+        let labels: Vec<_> = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                _ => None,
+            })
+            .collect();
+        output.textures_delta.clear();
+        for cat in SponsorCategory::ALL {
+            assert!(
+                labels.iter().any(|l| l == cat.display_name()),
+                "missing category {}",
+                cat.display_name()
+            );
+        }
+        assert!(labels.iter().any(|l| l == "Skip automatically"));
+        assert!(labels.iter().any(|l| l == "Show skip button"));
+        assert!(labels.iter().any(|l| l == "Ignore"));
     }
 }
