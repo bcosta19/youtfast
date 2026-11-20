@@ -60,9 +60,15 @@ ayant le focus gèrent Espace, et un curseur de volume ayant le focus conserve
 ses touches fléchées. Hors du lecteur, ↑/↓ font défiler verticalement la page
 active et J/K déplacent la sélection d'élément (`g`/`G` vont en haut ou en
 bas). Maintenez le clic sur la vidéo pour la lire temporairement à 2× ;
-relâcher rétablit la vitesse précédente. Le menu du lecteur propose aussi la
-lecture en boucle, la taille et l'arrière-plan des sous-titres, la copie d'un
-lien avec le minutage et l'ouverture de la vidéo dans un navigateur.
+relâcher rétablit la vitesse précédente sans modifier la vitesse enregistrée. La
+vitesse choisie avec `<`/`>` ou dans le menu **Vitesse de lecture** du lecteur
+est mémorisée entre les vidéos et les redémarrages ; activez **Mémoriser pour
+cette chaîne** dans ce menu pour enregistrer une vitesse pour la chaîne en
+cours (la vitesse de la chaîne prévaut sur la vitesse globale, jusqu'à 500
+chaînes). Les directs au bord du direct restent à 1× sans écraser les vitesses
+enregistrées. Le menu du lecteur propose aussi la lecture en boucle, la taille
+et l'arrière-plan des sous-titres, la copie d'un lien avec le minutage et
+l'ouverture de la vidéo dans un navigateur.
 
 La recherche utilise directement l'interface InnerTube de YouTube, avec des
 résultats séparés pour les vidéos, les chaînes et les playlists. Les filtres
@@ -300,7 +306,7 @@ chaînes de l'appareil proviennent de leurs onglets Shorts.
 **Sans compte**, YouTFast conserve les abonnements, l'historique de visionnage
 (avec l'endroit où chaque vidéo a été laissée, pour la reprendre) et À regarder
 plus tard sur cet ordinateur, dans `~/.local/share/youtfast/library.json`, et
-ses paramètres (qualité vidéo, volume) dans `~/.config/youtfast/settings.json`.
+ses paramètres (qualité vidéo, volume, vitesse de lecture) dans `~/.config/youtfast/settings.json`.
 Le flux d'accueil provient du RSS de chaque chaîne suivie. Importez une
 bibliothèque existante depuis
 [Google Takeout](https://takeout.google.com) : choisissez YouTube et YouTube

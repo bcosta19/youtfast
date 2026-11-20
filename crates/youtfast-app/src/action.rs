@@ -170,6 +170,10 @@ pub enum Action {
     LoadMore,
     /// 0.25 to 2.
     SetSpeed(f64),
+    /// Temporary 2× hold and its restore; never persisted.
+    SetTemporarySpeed(f64),
+    /// Remember or forget the current playback speed for the current channel.
+    SetRememberChannelSpeed(bool),
     ToggleMute,
     /// One frame ahead (`true`) or back, paused.
     FrameStep(bool),

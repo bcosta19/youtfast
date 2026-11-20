@@ -1085,6 +1085,12 @@ pub struct App {
     /// The kept captions language still has to be picked for the video
     /// loaded.
     captions_pending: bool,
+    /// User changed playback speed manually during the current video.
+    speed_manual: bool,
+    /// Whether the current video's initially applied speed treated it as live.
+    applied_speed_live: bool,
+    /// Whether per-channel speed precedence has been resolved for the current video.
+    speed_channel_applied: bool,
     /// What later launches ask the running copy, drained each frame.
     remote: RemoteQueue,
     /// The desktop's media controls.
@@ -1218,6 +1224,9 @@ impl App {
             suggested: String::new(),
             query_changed: None,
             captions_pending: false,
+            speed_manual: false,
+            applied_speed_live: false,
+            speed_channel_applied: false,
             remote: guard.commands(),
             media: now_playing::MediaControls::start(ctx),
             fonts,
@@ -1810,6 +1819,8 @@ impl App {
             Action::SetChannelQuery(text) => self.state.channel_query = text,
             Action::LoadMore => self.load_more(),
             Action::SetSpeed(speed) => self.set_speed(speed),
+            Action::SetTemporarySpeed(speed) => self.set_temporary_speed(speed),
+            Action::SetRememberChannelSpeed(remember) => self.set_remember_channel_speed(remember),
             Action::ToggleMute => self.toggle_mute(),
             Action::FrameStep(forward) => self.with_player(|player| player.frame_step(forward)),
             Action::SeekFraction(fraction) => self.seek_fraction(fraction),

@@ -764,6 +764,9 @@ msgstr "Suggestions"
 msgid "Relevance"
 msgstr "Pertinence"
 
+msgid "Remember for this channel"
+msgstr "Mémoriser pour cette chaîne"
+
 msgid "Remove"
 msgstr "Supprimer"
 

@@ -54,8 +54,13 @@ Text inputs and menus keep their own keys. Focused buttons own Space, and a
 focused volume slider keeps its arrow keys. Outside the player, ↑/↓ scroll the
 active page vertically and J/K move item selection (`g`/`G` jump to the top or
 bottom). Hold the video to temporarily play at 2×; releasing restores the
-previous speed. The player menu also offers repeat, caption size/background,
-copying a timestamped link, and opening the video in a browser.
+previous speed without changing the saved speed. Playback speed chosen via
+`<`/`>` or the player's **Playback speed** menu is remembered across videos and
+restarts; toggle **Remember for this channel** in that menu to save a speed for
+the current channel instead (channel speed takes precedence over the global
+speed, up to 500 channels). Live streams at the live edge stay at 1× without
+overwriting saved speeds. The player menu also offers repeat, caption
+size/background, copying a timestamped link, and opening the video in a browser.
 
 Search uses YouTube's InnerTube interface directly, with separate video,
 channel and playlist results. Video filters include date, duration, live status and ordering.
@@ -249,7 +254,7 @@ by YouTube, the device channels' come from their Shorts tabs.
 **Without an account**, YouTFast keeps subscriptions, watch history (with
 where each video was left, to resume it) and Watch later on this computer,
 in `~/.local/share/youtfast/library.json`, and its settings (video quality,
-volume) in `~/.config/youtfast/settings.json`. The home feed comes from each
+volume, playback speed) in `~/.config/youtfast/settings.json`. The home feed comes from each
 subscribed channel's RSS. Bring an existing library over from
 [Google Takeout](https://takeout.google.com): choose YouTube and YouTube
 Music, with JSON as the history format, and import `subscriptions.csv` and

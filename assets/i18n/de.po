@@ -764,6 +764,9 @@ msgstr "Ähnliche Videos"
 msgid "Relevance"
 msgstr "Relevanz"
 
+msgid "Remember for this channel"
+msgstr "Für diesen Kanal merken"
+
 msgid "Remove"
 msgstr "Entfernen"
 

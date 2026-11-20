@@ -124,7 +124,7 @@ pub fn release_speed_hold(ctx: &egui::Context, state: &State, actions: &mut Vec<
     if let Some(hold) = stop {
         ctx.data_mut(|data| data.remove::<SpeedHold>(hold_id()));
         if hold.active {
-            actions.push(Action::SetSpeed(hold.original));
+            actions.push(Action::SetTemporarySpeed(hold.original));
         }
     }
 }
@@ -145,7 +145,7 @@ fn speed_hold(
     if let Some(mut hold) = hold {
         if held && !hold.active && now - hold.started >= HOLD_AFTER {
             hold.active = true;
-            actions.push(Action::SetSpeed(2.0));
+            actions.push(Action::SetTemporarySpeed(2.0));
             consumed = true;
             ui.ctx().data_mut(|data| data.insert_temp(id, hold));
         }
@@ -157,7 +157,7 @@ fn speed_hold(
         && !status.idle
         && !status.paused
         && state.player_error.is_none()
-        && !state.watching_live()
+        && !youtfast_app::player::at_live_edge(state.watching_live(), status)
         && let Some(video) = &state.watching
     {
         ui.ctx().data_mut(|data| {
@@ -487,7 +487,13 @@ mod tests {
             });
             output.textures_delta.clear();
         }
-        assert_eq!(actions, [Action::SetSpeed(2.0), Action::SetSpeed(1.25)]);
+        assert_eq!(
+            actions,
+            [
+                Action::SetTemporarySpeed(2.0),
+                Action::SetTemporarySpeed(1.25)
+            ]
+        );
     }
 
     #[test]
@@ -643,7 +649,7 @@ mod tests {
             |ui| release_speed_hold(ui.ctx(), &state, &mut actions),
         );
         output.textures_delta.clear();
-        assert_eq!(actions, [Action::SetSpeed(0.75)]);
+        assert_eq!(actions, [Action::SetTemporarySpeed(0.75)]);
         state.view = youtfast_core::model::View::Watch;
         release_speed_hold(&ctx, &state, &mut actions);
         assert_eq!(actions.len(), 1);

@@ -425,7 +425,19 @@ impl eframe::App for Demo {
                 }
                 Action::TogglePause => self.status.paused = !self.status.paused,
                 Action::ToggleMute => self.status.muted = !self.status.muted,
-                Action::SetSpeed(v) => self.status.speed = v,
+                Action::SetSpeed(v) => {
+                    let live_edge = youtfast_app::player::at_live_edge(
+                        self.state.watching_live(),
+                        &self.status,
+                    );
+                    let (applied, _) = self.state.record_speed(v, live_edge);
+                    self.status.speed = applied;
+                }
+                Action::SetTemporarySpeed(v) => self.status.speed = v,
+                Action::SetRememberChannelSpeed(remember) => {
+                    self.state
+                        .set_remember_channel_speed(remember, self.status.speed);
+                }
                 Action::SetVolume(v) => self.status.volume = v,
                 Action::SeekTo { seconds, .. } => self.status.position = seconds,
                 Action::SeekBy(v) => {

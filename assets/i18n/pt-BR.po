@@ -764,6 +764,9 @@ msgstr "Relacionados"
 msgid "Relevance"
 msgstr "Relevância"
 
+msgid "Remember for this channel"
+msgstr "Lembrar para este canal"
+
 msgid "Remove"
 msgstr "Remover"
 

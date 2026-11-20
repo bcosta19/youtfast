@@ -59,9 +59,15 @@ belegen die Leertaste, und ein fokussierter Lautstärkeregler behält seine
 Pfeiltasten. Außerhalb des Players scrollen ↑/↓ die aktive Seite vertikal, und
 J/K verschieben die Auswahl (`g`/`G` springen zum Anfang oder Ende). Halten Sie
 das Video gedrückt, um es vorübergehend mit 2× abzuspielen; beim Loslassen gilt
-wieder die vorherige Geschwindigkeit. Das Player-Menü bietet außerdem
-Wiederholen, Untertitelgröße/-hintergrund, das Kopieren eines Links mit
-Zeitstempel und das Öffnen des Videos im Browser.
+wieder die vorherige Geschwindigkeit, ohne die gespeicherte Geschwindigkeit zu
+ändern. Die über `<`/`>` oder im Menü **Wiedergabegeschwindigkeit** des Players
+gewählte Geschwindigkeit wird über Videos und Neustarts hinweg gespeichert;
+aktivieren Sie dort **Für diesen Kanal merken**, um eine Geschwindigkeit für den
+aktuellen Kanal zu speichern (die Kanalgeschwindigkeit hat Vorrang vor der
+globalen Geschwindigkeit, bis zu 500 Kanäle). Livestreams am Live-Rand bleiben
+bei 1×, ohne gespeicherte Geschwindigkeiten zu überschreiben. Das Player-Menü
+bietet außerdem Wiederholen, Untertitelgröße/-hintergrund, das Kopieren eines
+Links mit Zeitstempel und das Öffnen des Videos im Browser.
 
 Die Suche nutzt direkt die InnerTube-Schnittstelle von YouTube, mit getrennten
 Ergebnissen für Videos, Kanäle und Playlists. Videofilter umfassen Datum, Dauer,
@@ -293,7 +299,7 @@ Shorts-Tabs.
 **Ohne Konto** speichert YouTFast Abos, Wiedergabeverlauf (mit der Stelle, an der
 jedes Video verlassen wurde, um es fortzusetzen) und „Später ansehen“ auf diesem
 Computer, in `~/.local/share/youtfast/library.json`, und seine Einstellungen
-(Videoqualität, Lautstärke) in `~/.config/youtfast/settings.json`. Der Feed der
+(Videoqualität, Lautstärke, Wiedergabegeschwindigkeit) in `~/.config/youtfast/settings.json`. Der Feed der
 Startseite stammt aus dem RSS jedes abonnierten Kanals. Eine bestehende
 Mediathek übernehmen Sie aus [Google Takeout](https://takeout.google.com): Wählen
 Sie YouTube und YouTube Music, mit JSON als Format für den Verlauf, und

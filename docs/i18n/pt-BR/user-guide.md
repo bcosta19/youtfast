@@ -57,9 +57,14 @@ Campos de texto e menus mantêm suas próprias teclas. Botões em foco ficam com
 Espaço, e um controle de volume em foco mantém as setas. Fora do player, ↑/↓
 rolam a página ativa na vertical e J/K movem a seleção de itens (`g`/`G` pulam
 para o topo ou para o fim). Segure o vídeo para reproduzir temporariamente em 2×;
-ao soltar, a velocidade anterior volta. O menu do player também oferece
-repetição, tamanho/fundo das legendas, cópia de um link com o instante atual e
-abertura do vídeo no navegador.
+ao soltar, a velocidade anterior volta sem alterar a velocidade salva. A
+velocidade escolhida com `<`/`>` ou no menu **Velocidade de reprodução** do
+player é lembrada entre vídeos e reinicializações; ative **Lembrar para este
+canal** nesse menu para salvar uma velocidade para o canal atual (a velocidade
+do canal tem precedência sobre a global, até 500 canais). Transmissões ao vivo
+no tempo real permanecem em 1× sem sobrescrever as velocidades salvas. O menu
+do player também oferece repetição, tamanho/fundo das legendas, cópia de um
+link com o instante atual e abertura do vídeo no navegador.
 
 A pesquisa usa diretamente a interface InnerTube do YouTube, com resultados
 separados de vídeos, canais e playlists. Os filtros de vídeo incluem data,
@@ -276,7 +281,7 @@ deles.
 **Sem uma conta**, o YouTFast guarda as inscrições, o histórico de exibição (com
 o ponto onde cada vídeo parou, para retomá-lo) e o Assistir mais tarde neste
 computador, em `~/.local/share/youtfast/library.json`, e as configurações
-(qualidade do vídeo, volume) em `~/.config/youtfast/settings.json`. O feed do
+(qualidade do vídeo, volume, velocidade de reprodução) em `~/.config/youtfast/settings.json`. O feed do
 Início vem do RSS de cada canal inscrito. Traga uma biblioteca existente pelo
 [Google Takeout](https://takeout.google.com): escolha YouTube e YouTube
 Music, com JSON como formato do histórico, e importe `subscriptions.csv` e

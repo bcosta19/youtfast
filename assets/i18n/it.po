@@ -764,6 +764,9 @@ msgstr "Correlati"
 msgid "Relevance"
 msgstr "Pertinenza"
 
+msgid "Remember for this channel"
+msgstr "Ricorda per questo canale"
+
 msgid "Remove"
 msgstr "Rimuovi"
 
