@@ -989,7 +989,7 @@ mod tests {
                     |ui| {
                         let response = video_card(
                             ui,
-                            &state.palette,
+                            &state,
                             &videos[0],
                             None,
                             false,

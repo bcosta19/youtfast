@@ -612,7 +612,7 @@ pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                                                 |ui| {
                                                     widgets::video_row(
                                                         ui,
-                                                        &state.palette,
+                                                        state,
                                                         video,
                                                         Some(&note),
                                                         widgets::watched(&state.library, video),
@@ -674,7 +674,7 @@ pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                                 } else {
                                     let response = widgets::video_row(
                                         ui,
-                                        &state.palette,
+                                        state,
                                         video,
                                         Some(&note),
                                         widgets::watched(&state.library, video),
