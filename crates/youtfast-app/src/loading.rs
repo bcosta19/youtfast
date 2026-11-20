@@ -229,6 +229,19 @@ impl State {
         });
         true
     }
+
+    /// Account recommendations are filtered at display time; local ranking and
+    /// any pending request's fallback take filters as inputs.
+    fn clear_local_for_you(&mut self) -> bool {
+        if self.for_you_from_account && matches!(self.for_you, Listing::Ready(_)) {
+            return false;
+        }
+        self.for_you = Listing::Idle;
+        self.for_you_more = None;
+        self.for_you_more_state = Fetch::Idle;
+        self.for_you_from_account = false;
+        true
+    }
 }
 
 impl App {
@@ -384,6 +397,23 @@ impl App {
                 taste,
             },
         );
+    }
+
+    pub(super) fn save_feed_filters(&mut self) {
+        self.save_library();
+        if self.state.clear_local_for_you() {
+            self.generations.remove(&Slot::ForYou);
+            self.load_visible_for_you();
+        }
+    }
+
+    pub(super) fn load_visible_for_you(&mut self) {
+        if self.state.view == View::Home
+            && self.state.feed_filter == FeedFilter::ForYou
+            && matches!(self.state.for_you, Listing::Idle)
+        {
+            self.load_for_you();
+        }
     }
 
     /// Asks the backend for a list, marking it loading.
@@ -1020,6 +1050,29 @@ fn merge_shelf(shorts: &mut Vec<Video>, incoming: Vec<Video>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn filter_changes_reset_local_and_pending_for_you_but_keep_account_results() {
+        let mut state = State {
+            for_you: Listing::Ready(vec![Video::from_id("old-ranking".into())]),
+            ..State::default()
+        };
+        assert!(state.clear_local_for_you());
+        assert!(matches!(state.for_you, Listing::Idle));
+
+        state.for_you = Listing::Loading;
+        state.for_you_from_account = true; // the previous result was from the account
+        assert!(state.clear_local_for_you());
+        assert!(matches!(state.for_you, Listing::Idle));
+        assert!(!state.for_you_from_account);
+
+        state.for_you = Listing::Ready(vec![Video::from_id("account".into())]);
+        state.for_you_from_account = true;
+        state.for_you_more = Some(more("account-continuation"));
+        assert!(!state.clear_local_for_you());
+        assert_eq!(state.for_you.items()[0].id, "account");
+        assert!(state.for_you_more.is_some());
+    }
 
     fn more(token: &str) -> innertube::More {
         innertube::More {

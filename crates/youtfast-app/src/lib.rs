@@ -1975,7 +1975,10 @@ impl App {
             Action::LoadSaveTargets => self.load_save_targets(),
             Action::SetSaved { playlist, saved } => self.set_saved(playlist, saved),
             Action::SetShareAtTime(on) => self.state.share_at_time = on,
-            Action::SetFeedFilter(filter) => self.state.feed_filter = filter,
+            Action::SetFeedFilter(filter) => {
+                self.state.feed_filter = filter;
+                self.load_visible_for_you();
+            }
             Action::CopyLink(url) => {
                 ctx.copy_text(url);
                 self.state.notice = Some("Link copied".to_owned());
@@ -2134,22 +2137,22 @@ impl App {
             }
             Action::HideVideo(id) => {
                 if self.state.library.hide_video(id) {
-                    self.save_library();
+                    self.save_feed_filters();
                 }
             }
             Action::ClearHiddenVideos => {
                 if self.state.library.clear_hidden_videos() {
-                    self.save_library();
+                    self.save_feed_filters();
                 }
             }
             Action::BlockChannel(channel) => {
                 if self.state.library.block_channel(channel) {
-                    self.save_library();
+                    self.save_feed_filters();
                 }
             }
             Action::UnblockChannel(id) => {
                 if self.state.library.unblock_channel(&id) {
-                    self.save_library();
+                    self.save_feed_filters();
                 }
             }
             Action::SetHideWatched(hide) => {
