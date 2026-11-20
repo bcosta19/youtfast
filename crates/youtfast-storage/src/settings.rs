@@ -188,6 +188,16 @@ pub struct Settings {
     /// Per-category SponsorBlock behaviors.
     #[serde(default)]
     pub sponsorblock_categories: SponsorCategories,
+    /// Replace clickbait titles with community titles through DeArrow
+    /// (sponsor.ajay.app), asked by a prefix of the id's hash so the video
+    /// is not named. Off by default.
+    #[serde(default)]
+    pub dearrow_titles: bool,
+    /// Replace thumbnails with community thumbnails through DeArrow
+    /// (dearrow-thumb.ajay.app). Sends the video ID to DeArrow's thumbnail
+    /// server; off by default.
+    #[serde(default)]
+    pub dearrow_thumbnails: bool,
     /// Check for new YouTFast releases and show a system notification when
     /// an update is available.
     #[serde(default = "on")]
@@ -378,6 +388,8 @@ impl Default for Settings {
             caption_background: false,
             sponsorblock: false,
             sponsorblock_categories: SponsorCategories::default(),
+            dearrow_titles: false,
+            dearrow_thumbnails: false,
             update_notifications: on(),
             auto_update: false,
             last_notified_version: None,
@@ -946,5 +958,24 @@ mod tests {
         assert!(loaded.hide_watched);
         assert_eq!(loaded, settings);
         std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn dearrow_settings_default_to_false_and_round_trip() {
+        let defaults = Settings::default();
+        assert!(!defaults.dearrow_titles);
+        assert!(!defaults.dearrow_thumbnails);
+
+        let legacy: Settings = serde_json::from_str(r#"{"volume": 65.0}"#).unwrap();
+        assert!(!legacy.dearrow_titles);
+        assert!(!legacy.dearrow_thumbnails);
+
+        let enabled = Settings {
+            dearrow_titles: true,
+            dearrow_thumbnails: true,
+            ..Settings::default()
+        };
+        let json = serde_json::to_string(&enabled).unwrap();
+        assert_eq!(serde_json::from_str::<Settings>(&json).unwrap(), enabled);
     }
 }

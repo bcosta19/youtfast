@@ -339,6 +339,7 @@ impl App {
         if self.state.settings.sponsorblock && !video.live {
             self.backend.send(Command::LoadSegments(video.id.clone()));
         }
+        self.state.request_dearrow(&video.id);
         // A live stream starts at its live edge, not where it was left.
         let start = start.filter(|_| !video.live);
         if let Some(surface) = &self.surface {

@@ -218,6 +218,12 @@ msgstr "Image du commentaire"
 msgid "Comments"
 msgstr "Commentaires"
 
+msgid "Community thumbnails (DeArrow — sends video ID)"
+msgstr "Miniatures de la communauté (DeArrow — envoie l'ID de la vidéo)"
+
+msgid "Community titles (DeArrow)"
+msgstr "Titres de la communauté (DeArrow)"
+
 msgid "Copy"
 msgstr "Copier"
 
@@ -659,6 +665,9 @@ msgstr "Ouvrir les notifications"
 msgid "Or a cookies.txt file"
 msgstr "Ou un fichier cookies.txt"
 
+msgid "Original title: {title}"
+msgstr "Titre d'origine : {title}"
+
 msgid "Over 20 minutes"
 msgstr "Plus de 20 minutes"
 
@@ -793,6 +802,12 @@ msgstr "Renommer"
 
 msgid "Replay GIF"
 msgstr "Rejouer le GIF"
+
+msgid "Replaces clickbait video titles with community titles from DeArrow. Requests to sponsor.ajay.app send only the first four hex digits of a hash of the video ID, not the full ID; hover a replaced title to see the original."
+msgstr "Remplace les titres accrocheurs par des titres de la communauté DeArrow. Les requêtes vers sponsor.ajay.app n’envoient que les quatre premiers chiffres hexadécimaux d’un hachage de l’identifiant de la vidéo, pas l’identifiant complet. Survolez un titre remplacé pour voir l’original."
+
+msgid "Replaces video thumbnails with community thumbnails from DeArrow. Sends each video's ID directly to dearrow-thumb.ajay.app; thumbnails stay in memory only and are never saved to disk."
+msgstr "Remplace les miniatures vidéo par des miniatures de la communauté DeArrow. Envoie l'ID de chaque vidéo directement à dearrow-thumb.ajay.app ; les miniatures restent uniquement en mémoire et ne sont jamais enregistrées sur le disque."
 
 msgid "Report this"
 msgstr "Signaler ceci"

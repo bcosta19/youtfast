@@ -89,6 +89,14 @@ corner miniplayer when you scroll past it to read comments. It is off by default
 Scrolling back reveals the inline player again; clicking the miniplayer returns
 to the video at the top of the page. Closing the miniplayer pauses playback.
 
+Settings → Playback → **Community titles (DeArrow)** and **Community thumbnails
+(DeArrow — sends video ID)** are off by default. Community titles query
+`sponsor.ajay.app` using only a four-hex-digit SHA-256 prefix of the video ID
+and show the original YouTube title when hovering a replaced title. Community
+thumbnails send each video's ID directly to `dearrow-thumb.ajay.app` and fall
+back to YouTube's thumbnail when unavailable. All DeArrow responses and
+thumbnails stay in a bounded in-memory cache only and are never saved to disk.
+
 Settings → Playback → Video buffer chooses between mpv's standard demuxer cache
 (**Large — 150 MiB / 50 MiB**, the default, buffering several minutes ahead for
 unstable connections and instant seeking) and **Small — 50 MiB / 20 MiB** (to

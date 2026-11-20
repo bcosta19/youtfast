@@ -50,10 +50,10 @@ All paths below are relative to [`crates/`](../crates/).
 |---|---|
 | `youtfast` | `src/main.rs`: CLI/startup; `src/demo.rs`: offline harness behind `demo`; `build.rs`: Windows icon embedding |
 | `youtfast-ui` | `frame`: views; `player`, `watch`, `widgets`, `settings`, `account`: presentation; `bench`: frame-cost harness |
-| `youtfast-app` | `App`, `State`, `Action`; `loading`, `watch`, `accounts`, `notifications`, `player`, `images`, `now_playing` |
+| `youtfast-app` | `App`, `State`, `Action`; `loading`, `watch`, `accounts`, `notifications`, `player`, `images`, `dearrow`, `now_playing` |
 | `youtfast-backend` | `src/lib.rs`: runtime, request scheduling and persistence writers; `protocol`: `Command`, `Event`, `Slot` |
 | `youtfast-cast` | `src/lib.rs`: Google Cast adapter; `dial`: discovery/app lifecycle; `lounge`: YouTube on TV transport |
-| `youtfast-youtube` | `innertube`: data/account API; `ytdlp`: extraction JSON; `extras`: captions/storyboards; `thumbs`: bounded image cache; `sponsorblock`: segments |
+| `youtfast-youtube` | `innertube`: data/account API; `ytdlp`: extraction JSON; `extras`: captions/storyboards; `thumbs`: bounded image cache; `sponsorblock`: segments; `dearrow`: community titles/thumbnails |
 | `youtfast-logic` | `alerts`, `history`, `recommend`, `video_tabs`: pure decisions over application data |
 | `youtfast-storage` | `library`, `settings`, `account`, `takeout`, `backup`, `paths`: persistence, credentials, imports and exports |
 | `youtfast-desktop` | `instance`: single instance; `diagnostics`: redacted logs; `updater`: verified release installation |
@@ -212,9 +212,12 @@ order when merging device resume metadata.
 | Comments | `commentSurfaceKey` resolves attachments and voice transcripts; written content wins over a transcript; thread priority marks pinned comments |
 | Continuations | Both endpoint and button forms can load comment replies/pages; authenticated continuations keep their session context |
 | Links in rich text | `Span` maps same-video timestamps, including `0:00`, to seeks; other video/channel/web links retain their target |
-| TLS | InnerTube uses `reqwest` + the OS verifier (`rustls-platform-verifier`); thumbnails, SponsorBlock and updater use `ureq` with Mozilla roots |
+| TLS | InnerTube uses `reqwest` + the OS verifier (`rustls-platform-verifier`); thumbnails, DeArrow branding and updater use `ureq` with Mozilla roots |
 | History sync | Explicitly opt-in; one report per playback after two seconds of active play, bound to the session at playback start; HTTPS YouTube tracking hosts only, no redirects |
 | SponsorBlock | Off by default; requests use the first four hex digits of the video ID's SHA-256, never the full ID; per-category behaviors (`auto_skip`, `manual_skip`, `seek_bar_only`, `ignore`) apply to `skip` and `mute` segment actions |
+| DeArrow | Off by default; branding requests send the first four hex digits of the video ID's SHA-256, cap the decoded response at 1 MiB and keep only the selected branding in a bounded in-memory cache (`DEARROW_CACHE_LIMIT`); optional community thumbnails from `dearrow-thumb.ajay.app` send the video ID and are kept in memory only (`thumbs::is_memory_only`), never written to disk. Disabling thumbnails revokes their queued requests and outstanding replies; disabling both switches also revokes branding lookups |
+
+
 
 A history-report failure is `NotReported`, with no URLs, cookies or response
 body exposed. Playback extraction remains independent of history reporting.
@@ -251,8 +254,7 @@ sequenceDiagram
 | Atomic writes | Reject non-regular targets; synchronize the parent directory on Unix |
 | Takeout | Parse/merge off the UI thread; subscriptions CSV uses column positions because headings are localized; history comes from `watch-history.json` |
 | Import bounds | 64 MiB; 20,000 unique subscriptions; latest 1,000 unique history entries; 5,000 Watch later entries. Bounds apply during parsing. Check `App::library_revision` from the import action before merging and again before applying results. Success counts include only rows retained by the merge. |
-| Library backup | Versioned JSON backup (subscriptions, history with resume positions and Watch later; never accounts, sessions or avatar URLs) and OPML 2.0 feeds for canonical YouTube channels. JSON exports must fit restore limits; both exports are written atomically off the UI thread outside managed save paths. |
-| Image cache | One download shared by display/persistence; 4 MiB response, 4096 px per side, four million pixels; disk: 2,000 files / 128 MiB |
+| Library backup | Versioned JSON backup (subscriptions, history with resume positions and Watch later; never accounts, sessions or avatar URLs) and OPML 2.0 feeds for canonical YouTube channels. JSON exports must fit restore limits; both exports are written atomically off the UI thread outside managed save paths. || Image cache | One download shared by display/persistence; 4 MiB response, 4096 px per side, four million pixels; disk: 2,000 files / 128 MiB (`thumbs::is_memory_only` skips disk storage for DeArrow thumbnails) |
 | Image lifetime | `images::remote` forgets undrawn images after one minute; downloads are bounded by `thumbs::DOWNLOADS`, retry with backoff, and cannot recreate forgotten retry entries |
 | Kept thumbnails | `thumbs::cached` answers without waiting for a download turn |
 | Watch details | `App::details_cache`: latest 50 videos, 30-minute lifetime |

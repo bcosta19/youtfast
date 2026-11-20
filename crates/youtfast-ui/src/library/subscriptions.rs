@@ -6,7 +6,7 @@ use egui::text::LayoutJob;
 use egui::{
     Color32, CornerRadius, CursorIcon, FontId, Rect, RichText, Sense, Stroke, Ui, pos2, vec2,
 };
-use youtfast_i18n::{Locale, gettext as tr};
+use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 use super::{controls, filtered_empty_state};
 use crate::{results, widgets};
@@ -685,7 +685,7 @@ fn paint_card_preview_strip(
     let thumb_rect = Rect::from_min_size(strip_rect.min + vec2(5.0, 5.0), vec2(74.0, 42.0));
     widgets::thumbnail(
         ui,
-        palette,
+        state,
         video,
         thumb_rect,
         widgets::watched(&state.library, video),
@@ -694,9 +694,10 @@ fn paint_card_preview_strip(
 
     let text_left = thumb_rect.right() + 10.0;
     let text_w = (strip_rect.right() - text_left - 10.0).max(20.0);
+    let display_title = state.display_title(video);
     let title_galley = single_line_galley(
         ui,
-        &video.title,
+        display_title,
         theme::semibold(12.5),
         palette.text,
         text_w,
@@ -731,7 +732,16 @@ fn paint_card_preview_strip(
         actions.push(Action::Open(video.clone()));
     }
     strip_resp.hovered().then(|| {
-        strip_resp.clone().on_hover_text(&video.title);
+        let hover = if state.dearrow_replacement_title(video).is_some() && !video.title.is_empty() {
+            trf(
+                locale,
+                "Original title: {title}",
+                &[("title", video.title.clone())],
+            )
+        } else {
+            video.title.clone()
+        };
+        strip_resp.clone().on_hover_text(hover);
     });
     strip_resp.clicked()
 }

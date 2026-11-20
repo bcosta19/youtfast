@@ -296,15 +296,29 @@ fn shorts(
         .corner_radius(8)
         .inner_margin(8)
         .show(&mut metadata, |ui| {
+            let title = state
+                .dearrow_replacement_title(&watching)
+                .unwrap_or(watching.title.as_str());
+            let hover_title = if state.dearrow_replacement_title(&watching).is_some()
+                && !watching.title.is_empty()
+            {
+                trf(
+                    locale,
+                    "Original title: {title}",
+                    &[("title", watching.title.clone())],
+                )
+            } else {
+                watching.title.clone()
+            };
             ui.add(
                 egui::Label::new(
-                    RichText::new(watching.title.replace(['\r', '\n'], " "))
+                    RichText::new(title.replace(['\r', '\n'], " "))
                         .font(theme::semibold(15.0))
                         .color(Color32::WHITE),
                 )
                 .truncate(),
             )
-            .on_hover_text(&watching.title);
+            .on_hover_text(hover_title);
             if let Some(channel) = &watching.channel {
                 let response = ui
                     .add(
@@ -511,16 +525,28 @@ fn about_video(
     let locale: Locale = state.settings.language;
     let palette = state.palette;
     // A video opened from a link has no title until mpv reads it.
-    let title = Some(watching.title.as_str())
+    let original_title = Some(watching.title.as_str())
         .filter(|title| !title.is_empty())
         .or_else(|| status.and_then(|status| status.title.as_deref()))
         .unwrap_or(&tr(locale, "Loading…"))
         .to_owned();
-    ui.label(
-        RichText::new(title)
+    let dearrow_title = state.dearrow_title_by_id(&watching.id);
+    let display_title = dearrow_title.unwrap_or(original_title.as_str());
+    let title_response = ui.label(
+        RichText::new(display_title)
             .font(theme::bold(20.0))
             .color(palette.text),
     );
+    if let Some(dearrow) = dearrow_title
+        && dearrow != original_title
+        && original_title != tr(locale, "Loading…").as_ref()
+    {
+        title_response.on_hover_text(trf(
+            locale,
+            "Original title: {title}",
+            &[("title", original_title)],
+        ));
+    }
     ui.add_space(12.0);
     channel_line(ui, state, watching, status, actions);
     ui.add_space(16.0);
@@ -1636,13 +1662,7 @@ fn queue(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                                     ui.set_width(width);
                                     let watched = widgets::watched(&state.library, video);
                                     widgets::video_row(
-                                        ui,
-                                        &state.palette,
-                                        video,
-                                        None,
-                                        watched,
-                                        false,
-                                        locale,
+                                        ui, state, video, None, watched, false, locale,
                                     )
                                 })
                                 .inner;
@@ -2533,6 +2553,88 @@ mod tests {
                 playlist: id,
                 saved: true,
             }]
+        );
+    }
+
+    #[test]
+    fn watch_page_shows_dearrow_title_and_original_title_on_hover() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let mut video = Video::from_id("dQw4w9WgXcQ".into());
+        video.title = "CLICKBAIT WATCH TITLE".into();
+        let mut state = State {
+            view: youtfast_core::model::View::Watch,
+            watching: Some(video.clone()),
+            details: Fetch::Ready(youtfast_core::model::Details::default()),
+            ..State::default()
+        };
+        state.settings.dearrow_titles = true;
+        state.dearrow.insert(
+            video.id.clone(),
+            youtfast_youtube::dearrow::Branding {
+                title: Some("Clear Watch Title".into()),
+                thumbnail: None,
+            },
+        );
+        let status = Status {
+            paused: true,
+            ..Status::default()
+        };
+        let mut title_pos = None;
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1280.0, 800.0))),
+                ..Default::default()
+            },
+            |ui| {
+                let mut actions = Vec::new();
+                show(ui, &mut state, Some(&status), None, &mut actions);
+            },
+        );
+        for shape in &output.shapes {
+            if let egui::Shape::Text(text) = &shape.shape
+                && text.galley.text() == "Clear Watch Title"
+            {
+                title_pos = Some(egui::Rect::from_min_size(text.pos, text.galley.size()).center());
+            }
+        }
+        output.textures_delta.clear();
+        let pos = title_pos.expect("watch page should render DeArrow title");
+
+        let mut labels = Vec::new();
+        for (idx, time) in [0.0, 1.0, 2.0].into_iter().enumerate() {
+            let events = if idx == 0 {
+                vec![egui::Event::PointerMoved(pos)]
+            } else {
+                Vec::new()
+            };
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1280.0, 800.0))),
+                    events,
+                    time: Some(time),
+                    ..Default::default()
+                },
+                |ui| {
+                    let mut actions = Vec::new();
+                    show(ui, &mut state, Some(&status), None, &mut actions);
+                },
+            );
+            labels = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                    _ => None,
+                })
+                .collect();
+            output.textures_delta.clear();
+        }
+        assert!(
+            labels
+                .iter()
+                .any(|l| l == "Original title: CLICKBAIT WATCH TITLE"),
+            "hovering watch title should show original title; got {labels:?}"
         );
     }
 }

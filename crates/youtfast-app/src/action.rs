@@ -234,6 +234,8 @@ pub enum Action {
     ClearQueue,
     SetSponsorBlock(bool),
     SetSponsorCategory(SponsorCategory, SponsorBehavior),
+    SetDeArrowTitles(bool),
+    SetDeArrowThumbnails(bool),
     /// Jumps over the SponsorBlock segment being played.
     SkipSegment,
     /// The mini player's video, back on its watch page.

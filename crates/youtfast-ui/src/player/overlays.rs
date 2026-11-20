@@ -147,10 +147,11 @@ pub(super) fn countdown(ui: &mut Ui, rect: Rect, state: &State, actions: &mut Ve
         .color(Color32::from_white_alpha(200)),
     );
     ui.add_space(6.0);
-    let title = if video.title.is_empty() {
+    let display_title = state.display_title(video);
+    let title = if display_title.is_empty() {
         tr(locale, "Next video")
     } else {
-        std::borrow::Cow::Borrowed(video.title.as_str())
+        std::borrow::Cow::Borrowed(display_title)
     };
     ui.add(
         egui::Label::new(

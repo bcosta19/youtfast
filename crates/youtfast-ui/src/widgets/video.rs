@@ -5,7 +5,7 @@ use egui::{
     Color32, CornerRadius, CursorIcon, FontId, Id, Pos2, Rect, Response, Sense, Stroke, Ui, pos2,
     vec2,
 };
-use youtfast_i18n::{Locale, gettext as tr};
+use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 use super::{avatar, focus_outline, hover_fade, line, mix, press_fade, row_fill_radius};
 use youtfast_app::{Action, State};
@@ -80,22 +80,39 @@ fn badge(ui: &Ui, thumbnail: Rect, video: &Video, palette: &Palette, locale: Loc
     painter.galley(rect.min + vec2(5.0, 2.0), galley, Color32::WHITE);
 }
 
+/// Uses a community thumbnail only after egui has decoded and uploaded it.
+pub(crate) fn video_thumbnail(ui: &Ui, state: &State, video: &Video) -> egui::Image<'static> {
+    if let Some(url) = state.dearrow_thumbnail_url(video) {
+        let dearrow = youtfast_app::images::remote(ui, &url);
+        if youtfast_app::images::is_loaded(&url)
+            && matches!(
+                dearrow.load_for_size(ui.ctx(), egui::Vec2::ZERO),
+                Ok(egui::load::TexturePoll::Ready { .. })
+            )
+        {
+            return dearrow;
+        }
+    }
+    youtfast_app::images::remote(ui, &video.thumbnail())
+}
+
 /// The thumbnail, rounded, with its corner badge, and the part watched
 /// (0..1) as YouTube's red bar along its bottom edge.
 pub(crate) fn thumbnail(
     ui: &mut Ui,
-    palette: &Palette,
+    state: &State,
     video: &Video,
     rect: Rect,
     watched: Option<f32>,
     locale: Locale,
 ) {
+    let palette = &state.palette;
     if !ui.is_rect_visible(rect) {
         return;
     }
     let radius = CornerRadius::same(RADIUS);
     ui.painter().rect_filled(rect, radius, palette.surface);
-    youtfast_app::images::remote(ui, &video.thumbnail())
+    video_thumbnail(ui, state, video)
         .fit_to_exact_size(rect.size())
         .corner_radius(radius)
         .paint_at(ui, rect);
@@ -143,7 +160,7 @@ pub(crate) fn thumbnail(
 )]
 fn video_text(
     ui: &Ui,
-    palette: &Palette,
+    state: &State,
     video: &Video,
     note: Option<&str>,
     id: Id,
@@ -151,6 +168,7 @@ fn video_text(
     width: f32,
     locale: Locale,
 ) -> f32 {
+    let palette = &state.palette;
     let painter = ui.painter();
     let lines = |text: &str, font: FontId, color: Color32, rows: usize| {
         let mut job = LayoutJob::default();
@@ -161,7 +179,12 @@ fn video_text(
         painter.layout_job(job)
     };
     let mut y = at.y;
-    let title = lines(&video.title, theme::semibold(14.0), palette.text, 2);
+    let title = lines(
+        state.display_title(video),
+        theme::semibold(14.0),
+        palette.text,
+        2,
+    );
     y += title.rect.height() + 5.0;
     painter.galley(at, title, palette.text);
     if let Some(channel) = video.channel.as_deref().filter(|name| !name.is_empty()) {
@@ -207,7 +230,7 @@ pub fn watched(library: &Library, video: &Video) -> Option<f32> {
 /// watched (0..1). `selected` marks the keyboard's cursor.
 pub fn video_row(
     ui: &mut Ui,
-    palette: &Palette,
+    state: &State,
     video: &Video,
     note: Option<&str>,
     watched: Option<f32>,
@@ -216,7 +239,7 @@ pub fn video_row(
 ) -> Response {
     video_row_sized(
         ui,
-        palette,
+        state,
         video,
         note,
         watched,
@@ -229,7 +252,7 @@ pub fn video_row(
 /// [`video_row`] with a larger thumbnail, as search results show them.
 pub fn video_row_large(
     ui: &mut Ui,
-    palette: &Palette,
+    state: &State,
     video: &Video,
     watched: Option<f32>,
     selected: bool,
@@ -238,7 +261,7 @@ pub fn video_row_large(
     // Up to 360x202, and never more than half the row.
     let width = (ui.available_width() / 2.0).clamp(168.0, 360.0);
     let thumb = vec2(width, width * 9.0 / 16.0);
-    video_row_sized(ui, palette, video, None, watched, selected, thumb, locale)
+    video_row_sized(ui, state, video, None, watched, selected, thumb, locale)
 }
 
 #[allow(
@@ -247,7 +270,7 @@ pub fn video_row_large(
 )]
 fn video_row_sized(
     ui: &mut Ui,
-    palette: &Palette,
+    state: &State,
     video: &Video,
     note: Option<&str>,
     watched: Option<f32>,
@@ -255,8 +278,9 @@ fn video_row_sized(
     thumb: egui::Vec2,
     locale: Locale,
 ) -> Response {
+    let palette = &state.palette;
     let pad = 6.0;
-    let (rect, response) = ui.allocate_exact_size(
+    let (rect, mut response) = ui.allocate_exact_size(
         vec2(ui.available_width(), thumb.y + 2.0 * pad),
         Sense::click(),
     );
@@ -272,12 +296,12 @@ fn video_row_sized(
         CornerRadius::same(RADIUS + 4),
     );
     let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), thumb);
-    thumbnail(ui, palette, video, thumb_rect, watched, locale);
+    thumbnail(ui, state, video, thumb_rect, watched, locale);
     let text_x = thumb_rect.right() + 12.0;
     let width = (rect.right() - text_x - pad - 34.0).max(20.0);
     video_text(
         ui,
-        palette,
+        state,
         video,
         note,
         response.id,
@@ -285,6 +309,13 @@ fn video_row_sized(
         width,
         locale,
     );
+    if state.dearrow_replacement_title(video).is_some() && !video.title.is_empty() {
+        response = response.on_hover_text(trf(
+            locale,
+            "Original title: {title}",
+            &[("title", video.title.clone())],
+        ));
+    }
     response
 }
 
@@ -307,7 +338,11 @@ pub fn video_interactions(
         return;
     }
     response.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), &video.title)
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::Button,
+            ui.is_enabled(),
+            state.display_title(video),
+        )
     });
     // `put` advances its Ui's layout cursor. These controls overlay a card
     // already allocated by the parent, so keep their layout and automatic
@@ -533,18 +568,19 @@ pub(crate) fn device_playlist_checkbox(
 /// card's.
 pub fn video_card(
     ui: &mut Ui,
-    palette: &Palette,
+    state: &State,
     video: &Video,
     watched: Option<f32>,
     selected: bool,
     width: f32,
     locale: Locale,
 ) -> Response {
+    let palette = &state.palette;
     let pad = 6.0;
     let thumb = vec2(width - 2.0 * pad, (width - 2.0 * pad) * 9.0 / 16.0);
     // Room for two title lines, the channel and the meta line.
     let text = 2.0 * line(ui) + 2.0 * line(ui) + 10.0;
-    let (rect, response) =
+    let (rect, mut response) =
         ui.allocate_exact_size(vec2(width, thumb.y + text + 3.0 * pad), Sense::click());
     if !ui.is_rect_visible(rect) {
         return response;
@@ -558,7 +594,7 @@ pub fn video_card(
         CornerRadius::same(RADIUS + 4),
     );
     let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), thumb);
-    thumbnail(ui, palette, video, thumb_rect, watched, locale);
+    thumbnail(ui, state, video, thumb_rect, watched, locale);
     let avatar_rect = Rect::from_min_size(
         pos2(thumb_rect.left(), thumb_rect.bottom() + 10.0),
         vec2(36.0, 36.0),
@@ -574,7 +610,7 @@ pub fn video_card(
         .data_mut(|d| d.insert_temp(response.id.with("avatar-rect"), avatar_rect));
     video_text(
         ui,
-        palette,
+        state,
         video,
         None,
         response.id,
@@ -582,6 +618,13 @@ pub fn video_card(
         (thumb.x - 78.0).max(20.0),
         locale,
     );
+    if state.dearrow_replacement_title(video).is_some() && !video.title.is_empty() {
+        response = response.on_hover_text(trf(
+            locale,
+            "Original title: {title}",
+            &[("title", video.title.clone())],
+        ));
+    }
     response
 }
 
@@ -634,11 +677,12 @@ mod tests {
     fn thumbnail_draws_only_positive_watched_progress() {
         for watched in [None, Some(0.0), Some(0.5), Some(1.5)] {
             let ctx = egui::Context::default();
-            let palette = Palette::dark();
+            let state = State::default();
+            let palette = state.palette;
             let rect = Rect::from_min_size(pos2(10.0, 10.0), vec2(168.0, 94.0));
             let video = Video::from_id("thumbnail00".into());
             let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
-                thumbnail(ui, &palette, &video, rect, watched, Locale::English);
+                thumbnail(ui, &state, &video, rect, watched, Locale::English);
             });
             output.textures_delta.clear();
             let bars: Vec<_> = output
@@ -725,15 +769,8 @@ mod tests {
                     ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing.x = gap;
                         for video in row {
-                            let response = video_card(
-                                ui,
-                                &state.palette,
-                                video,
-                                None,
-                                false,
-                                card_width,
-                                locale,
-                            );
+                            let response =
+                                video_card(ui, state, video, None, false, card_width, locale);
                             cards.push((response.id, response.rect));
                             video_interactions(ui, &response, state, video, &mut actions);
                         }
@@ -952,7 +989,7 @@ mod tests {
                     |ui| {
                         let response = video_card(
                             ui,
-                            &state.palette,
+                            &state,
                             &videos[0],
                             None,
                             false,
@@ -1024,5 +1061,60 @@ mod tests {
                 assert_eq!(actions, [Action::HideVideo(videos[0].id.clone())]);
             }
         }
+    }
+
+    #[test]
+    fn dearrow_title_renders_and_hover_shows_original_title() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let mut state = State::default();
+        state.settings.dearrow_titles = true;
+        let mut video = Video::from_id("dQw4w9WgXcQ".into());
+        video.title = "YOU WON'T BELIEVE THIS!".into();
+        state.dearrow.insert(
+            video.id.clone(),
+            youtfast_youtube::dearrow::Branding {
+                title: Some("Clear descriptive title".into()),
+                thumbnail: None,
+            },
+        );
+
+        let (cards, _) = draw_action_cards(&ctx, &state, &[video.clone()], 1, 480.0, Vec::new());
+        let pos = cards[0].1.center();
+        let mut labels = Vec::new();
+        for (idx, time) in [0.0, 1.0, 2.0].into_iter().enumerate() {
+            let events = if idx == 0 {
+                vec![egui::Event::PointerMoved(pos)]
+            } else {
+                Vec::new()
+            };
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(480.0, 600.0))),
+                    events,
+                    time: Some(time),
+                    ..Default::default()
+                },
+                |ui| {
+                    let _ = video_card(ui, &state, &video, None, false, 400.0, Locale::English);
+                },
+            );
+            labels = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                    _ => None,
+                })
+                .collect();
+            output.textures_delta.clear();
+        }
+        assert!(labels.iter().any(|l| l == "Clear descriptive title"));
+        assert!(
+            labels
+                .iter()
+                .any(|l| l == "Original title: YOU WON'T BELIEVE THIS!"),
+            "hovering a DeArrow-titled card should show the original title; got {labels:?}"
+        );
     }
 }

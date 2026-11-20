@@ -377,7 +377,7 @@ fn rows(ui: &mut Ui, state: &State, actions: &mut Vec<Action>, page: bool) {
                 let selected = page && state.is_cursor(index);
                 let watched = widgets::watched(&state.library, video);
                 let response =
-                    widgets::video_row(ui, &state.palette, video, None, watched, selected, locale);
+                    widgets::video_row(ui, state, video, None, watched, selected, locale);
                 if selected && state.cursor_moved {
                     response.clone().scroll_to_me(None);
                 }

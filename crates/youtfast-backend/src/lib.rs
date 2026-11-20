@@ -22,7 +22,9 @@ use youtfast_storage::{account, backup, paths, takeout};
 use youtfast_youtube::innertube::{self, Client};
 
 mod protocol;
-pub use protocol::{Command, CommentsKey, Event, Payload, Request, SignInMethod, Slot};
+pub use protocol::{
+    Command, CommentsKey, DeArrowConsent, Event, Payload, Request, SignInMethod, Slot,
+};
 
 #[derive(Default)]
 struct SaveGate(std::sync::Mutex<bool>);
@@ -88,10 +90,14 @@ struct Context {
     /// At most this many cache files are read at a time, so a page of
     /// thumbnails does not queue hundreds of blocking reads at once.
     thumb_disk_sem: Arc<tokio::sync::Semaphore>,
+    /// At most this many DeArrow branding lookups at a time.
+    dearrow_sem: Arc<tokio::sync::Semaphore>,
 }
 
 /// How many thumbnails are read from the disk cache at once.
 const THUMB_DISK_READS: usize = 8;
+/// How many DeArrow branding lookups run concurrently.
+const DEARROW_LOOKUPS: usize = 8;
 
 impl Context {
     fn send(&self, event: Event) {
@@ -135,6 +141,7 @@ impl Backend {
                 youtfast_youtube::thumbs::DOWNLOADS,
             )),
             thumb_disk_sem: Arc::new(tokio::sync::Semaphore::new(THUMB_DISK_READS)),
+            dearrow_sem: Arc::new(tokio::sync::Semaphore::new(DEARROW_LOOKUPS)),
         };
         let backend = Self {
             commands,
@@ -398,6 +405,22 @@ async fn watched<R: Send + 'static>(
     }
 }
 
+/// Waiting for a semaphore or a blocking worker does not authorize a request.
+async fn dearrow_request<T: Send + 'static>(
+    turns: &tokio::sync::Semaphore,
+    consent: &DeArrowConsent,
+    request: impl FnOnce() -> T + Send + 'static,
+) -> Option<Result<T, tokio::task::JoinError>> {
+    let _turn = turns.acquire().await.ok()?;
+    if !consent.is_current() {
+        return None;
+    }
+    let consent = consent.clone();
+    tokio::task::spawn_blocking(move || consent.is_current().then(request))
+        .await
+        .transpose()
+}
+
 async fn handle(command: Command, context: Context) {
     match command {
         Command::MarkWatched { id, session } => {
@@ -507,6 +530,37 @@ async fn handle(command: Command, context: Context) {
                 Ok(Err(error)) => log::warn!("{error}"),
                 Err(error) => log::warn!("the SponsorBlock lookup stopped: {error}"),
             }
+        }
+        Command::DeArrow { video_id, consent } => {
+            tokio::spawn(async move {
+                let lookup = video_id.clone();
+                let Some(result) = dearrow_request(&context.dearrow_sem, &consent, move || {
+                    youtfast_youtube::dearrow::branding(&lookup)
+                })
+                .await
+                else {
+                    return;
+                };
+                let branding = match result {
+                    Ok(Ok(branding)) => Some(branding),
+                    Ok(Err(error)) => {
+                        log::warn!("{error}");
+                        None
+                    }
+                    Err(error) => {
+                        log::warn!("the DeArrow lookup stopped: {error}");
+                        None
+                    }
+                };
+                if !consent.is_current() {
+                    return;
+                }
+                context.send(Event::DeArrow {
+                    video_id,
+                    consent,
+                    branding,
+                });
+            });
         }
         Command::LoadRating(id) => {
             let result = innertube::rating(&context.rp, &id).await;
@@ -825,9 +879,40 @@ async fn handle(command: Command, context: Context) {
                 }
             });
         }
+        Command::DeArrowThumbnails { urls, consent } => {
+            for url in urls {
+                let task = url.clone();
+                let context = context.clone();
+                let consent = consent.clone();
+                tokio::spawn(async move {
+                    let Some(result) = dearrow_request(&context.thumb_sem, &consent, move || {
+                        youtfast_youtube::thumbs::fetch_in_memory(&task)
+                    })
+                    .await
+                    else {
+                        return;
+                    };
+                    if !consent.is_current() {
+                        return;
+                    }
+                    let result = result.unwrap_or(Err(youtfast_youtube::thumbs::Failure::Network));
+                    if let Err(reason) = &result {
+                        log::warn!("{}", reason.code());
+                    }
+                    context.send(Event::DeArrowThumbnail {
+                        url,
+                        consent,
+                        result,
+                    });
+                });
+            }
+        }
         Command::CacheThumbnails(urls) => {
             let dir = context.dirs.cache.join("thumbnails");
             for (url, refresh) in urls {
+                if youtfast_youtube::thumbs::is_memory_only(&url) {
+                    continue;
+                }
                 if !context.thumb_pending.lock().unwrap().insert(url.clone()) {
                     continue;
                 }
@@ -857,7 +942,6 @@ async fn handle(command: Command, context: Context) {
                         None => {
                             let _permit = context.thumb_sem.acquire().await;
                             let task = url.clone();
-                            let dir = dir.clone();
                             tokio::task::spawn_blocking(move || {
                                 let _ = std::fs::create_dir_all(&dir);
                                 youtfast_youtube::thumbs::load_or_fetch(&task, &path, refresh)
@@ -1813,6 +1897,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn revoking_dearrow_consent_prevents_queued_http_requests() {
+        use std::io::{ErrorKind, Write as _};
+        use std::net::{TcpListener, TcpStream};
+
+        for (turns, path) in [
+            (DEARROW_LOOKUPS, "/api/branding/abcd"),
+            (
+                youtfast_youtube::thumbs::DOWNLOADS,
+                "/api/v1/getThumbnail?videoID=synthetic",
+            ),
+        ] {
+            let server = TcpListener::bind("127.0.0.1:0").unwrap();
+            server.set_nonblocking(true).unwrap();
+            let address = server.local_addr().unwrap();
+            let permits = tokio::sync::Semaphore::new(turns);
+            let held = permits.acquire_many(turns as u32).await.unwrap();
+            let consent = DeArrowConsent::granted();
+            let cancel = consent.clone();
+            let request = dearrow_request(&permits, &consent, move || {
+                write!(TcpStream::connect(address)?, "GET {path} HTTP/1.0\r\n\r\n")
+            });
+            tokio::pin!(request);
+            tokio::select! {
+                biased;
+                _ = &mut request => panic!("request did not wait for a permit: {path}"),
+                () = tokio::task::yield_now() => {}
+            }
+            cancel.revoke();
+            drop(held);
+            assert!(request.await.is_none(), "revoked {path} ran");
+            assert_eq!(server.accept().unwrap_err().kind(), ErrorKind::WouldBlock);
+        }
+    }
+
+    #[tokio::test]
     async fn kept_thumbnails_answer_while_downloads_hold_every_turn() {
         let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
@@ -1854,6 +1973,7 @@ mod tests {
                 youtfast_youtube::thumbs::DOWNLOADS,
             )),
             thumb_disk_sem: Arc::new(tokio::sync::Semaphore::new(THUMB_DISK_READS)),
+            dearrow_sem: Arc::new(tokio::sync::Semaphore::new(DEARROW_LOOKUPS)),
         };
         // Slow downloads hold every turn.
         let _turns = context

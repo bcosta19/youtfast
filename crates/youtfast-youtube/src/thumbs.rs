@@ -28,6 +28,7 @@ pub enum Failure {
     Access,
     Unavailable,
     RateLimited(u64),
+    Pending,
     Server,
     TooLarge,
     Invalid,
@@ -39,6 +40,7 @@ impl Failure {
             Self::Access => "image: HTTP access denied",
             Self::Unavailable => "image: unavailable",
             Self::RateLimited(_) => "image: rate limited",
+            Self::Pending => "image: not generated yet",
             Self::Server => "image: server error",
             Self::TooLarge => "image: response too large",
             Self::Invalid => "image: invalid data",
@@ -49,7 +51,9 @@ impl Failure {
             return None;
         }
         match self {
-            Self::Network | Self::Server => Some(2.0_f64.powi(attempt as i32) * 5.0),
+            Self::Network | Self::Pending | Self::Server => {
+                Some(2.0_f64.powi(attempt as i32) * 5.0)
+            }
             Self::RateLimited(seconds) => Some(seconds.max(30) as f64),
             _ => None,
         }
@@ -74,6 +78,22 @@ pub fn cached(path: &Path) -> Option<std::sync::Arc<[u8]>> {
     Some(bytes.into())
 }
 
+/// Returns whether `url` must stay in memory only and never touch the disk cache
+/// (e.g. DeArrow thumbnails from `dearrow-thumb.ajay.app`).
+pub fn is_memory_only(url: &str) -> bool {
+    url::Url::parse(url)
+        .ok()
+        .and_then(|parsed| parsed.host_str().map(str::to_owned))
+        .is_some_and(|host| host.eq_ignore_ascii_case("dearrow-thumb.ajay.app"))
+}
+
+/// Downloads and validates a thumbnail strictly in memory without reading or
+/// writing any disk cache files.
+pub fn fetch_in_memory(url: &str) -> Result<std::sync::Arc<[u8]>, Failure> {
+    let (bytes, _) = download(url)?;
+    Ok(bytes.into())
+}
+
 /// A cache hit and a network response follow the same bounded validation path.
 /// A corrupt regular cache entry is repaired once; no other files are touched.
 pub fn load_or_fetch(
@@ -81,6 +101,9 @@ pub fn load_or_fetch(
     path: &Path,
     refresh: bool,
 ) -> Result<std::sync::Arc<[u8]>, Failure> {
+    if is_memory_only(url) {
+        return fetch_in_memory(url);
+    }
     if let Ok(meta) = std::fs::symlink_metadata(path) {
         if !meta.is_file() {
             return fetch(url, path);
@@ -96,6 +119,9 @@ pub fn load_or_fetch(
 }
 
 pub fn fetch(url: &str, path: &Path) -> Result<std::sync::Arc<[u8]>, Failure> {
+    if is_memory_only(url) {
+        return fetch_in_memory(url);
+    }
     let (bytes, store) = download(url)?;
     let _disk = DISK.lock().unwrap();
     if store
@@ -141,6 +167,9 @@ fn download(url: &str) -> Result<(Vec<u8>, bool), Failure> {
     use std::io::Read;
     let mut response = agent().get(url).call().map_err(|_| Failure::Network)?;
     let status = response.status().as_u16();
+    if status == 204 {
+        return Err(Failure::Pending);
+    }
     if !(200..300).contains(&status) {
         return Err(match status {
             401 | 403 | 410 => Failure::Access,
@@ -311,6 +340,16 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), image);
         assert_eq!(worker.join().unwrap(), 2);
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn a_thumbnail_still_being_generated_can_be_retried() {
+        let (url, worker) = server(vec![(204, Vec::new()), (200, png())]);
+        let failure = fetch_in_memory(&url).unwrap_err();
+        assert_eq!(failure, Failure::Pending);
+        assert!(failure.retry_delay(0).is_some());
+        assert_eq!(fetch_in_memory(&url).unwrap().as_ref(), png());
+        assert_eq!(worker.join().unwrap(), 2);
     }
 
     #[test]
@@ -493,5 +532,29 @@ mod tests {
         assert!(!path.exists());
         assert_eq!(fetch(&url, &path).err(), Some(Failure::RateLimited(120)));
         assert_eq!(worker.join().unwrap(), 2);
+    }
+
+    #[test]
+    fn dearrow_thumbnails_are_memory_only_and_never_written_to_disk() {
+        assert!(is_memory_only(
+            "https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=dQw4w9WgXcQ"
+        ));
+        assert!(is_memory_only(
+            "https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=dQw4w9WgXcQ&time=12.5"
+        ));
+        assert!(!is_memory_only(
+            "https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg"
+        ));
+
+        let image = png();
+        let (url, worker) = server(vec![(200, image.clone())]);
+        let path = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+            .join("target")
+            .join(format!("dearrow-memory-only-{}", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let bytes = fetch_in_memory(&url).unwrap();
+        assert_eq!(bytes.as_ref(), image);
+        assert!(!path.exists());
+        assert_eq!(worker.join().unwrap(), 1);
     }
 }

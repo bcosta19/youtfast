@@ -235,7 +235,7 @@ fn history_row(
                 |ui| {
                     let response = widgets::video_row(
                         ui,
-                        &state.palette,
+                        state,
                         video,
                         note.as_deref(),
                         fraction,

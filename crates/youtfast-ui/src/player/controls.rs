@@ -88,7 +88,7 @@ pub(super) fn buttons(
     let next = state.next_video();
     if !live && mode != Mode::Short && (next.is_some() || state.playing_more.is_some()) {
         let hint = next
-            .map(|video| next_hint(video, locale))
+            .map(|video| next_hint(state, video, locale))
             .unwrap_or_else(|| tr(locale, "Load next videos / retry (Shift+N)").into());
         if control_button(ui, Icon::SkipForward, 18.0, &hint).clicked() {
             actions.push(Action::PlayNext);
@@ -212,14 +212,15 @@ fn accent_line(ui: &Ui, response: &egui::Response, accent: Color32) {
 }
 
 /// `Next: <title> (N)` for the next button's hover.
-fn next_hint(video: &Video, locale: Locale) -> String {
-    if video.title.is_empty() {
+fn next_hint(state: &State, video: &Video, locale: Locale) -> String {
+    let title = state.display_title(video);
+    if title.is_empty() {
         tr(locale, "Next (Shift+N)").into_owned()
     } else {
         trf(
             locale,
             "Next: {title} (Shift+N)",
-            &[("title", video.title.clone())],
+            &[("title", title.to_owned())],
         )
     }
 }
@@ -497,10 +498,11 @@ mod tests {
 
     #[test]
     fn next_hint_translates_interface_text_and_preserves_the_video_title() {
+        let state = State::default();
         let mut video = Video::from_id("aaaaaaaaaaa".into());
         video.title = "Qualidade {title}: um vídeo do canal".into();
-        let english = next_hint(&video, Locale::English);
-        let portuguese = next_hint(&video, Locale::PortugueseBrazil);
+        let english = next_hint(&state, &video, Locale::English);
+        let portuguese = next_hint(&state, &video, Locale::PortugueseBrazil);
         assert_eq!(english, format!("Next: {} (Shift+N)", video.title));
         assert_eq!(portuguese, format!("Próximo: {} (Shift+N)", video.title));
         assert!(english.contains(&video.title));

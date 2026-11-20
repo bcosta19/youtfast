@@ -2,7 +2,7 @@
 
 use egui::text::LayoutJob;
 use egui::{Color32, CornerRadius, Rect, RichText, Sense, Stroke, Ui, pos2, vec2};
-use youtfast_i18n::gettext as tr;
+use youtfast_i18n::{format as trf, gettext as tr};
 
 use super::CARD_WIDTH;
 use crate::{notifications, results, widgets};
@@ -290,7 +290,7 @@ fn feed_card(
     let video = videos[index];
     let selected = state.is_cursor(index);
     let watched = widgets::watched(&state.library, video);
-    let response = widgets::video_card(ui, &state.palette, video, watched, selected, width, locale);
+    let response = widgets::video_card(ui, state, video, watched, selected, width, locale);
     if selected && state.cursor_moved {
         response.clone().scroll_to_me(None);
     }
@@ -442,7 +442,7 @@ fn short_card(
     let thumb_w = SHORT_CARD_WIDTH - 2.0 * SHORT_CARD_PAD;
     let thumb = vec2(thumb_w, (thumb_w * 16.0 / 9.0).round());
     let text_area = if show_channel_slot { 88.0 } else { 72.0 };
-    let (rect, response) = ui.allocate_exact_size(
+    let (rect, mut response) = ui.allocate_exact_size(
         vec2(SHORT_CARD_WIDTH, SHORT_CARD_PAD + thumb.y + text_area),
         Sense::click(),
     );
@@ -457,7 +457,7 @@ fn short_card(
     let thumb_radius = CornerRadius::same(RADIUS);
     ui.painter()
         .rect_filled(thumb_rect, thumb_radius, palette.surface);
-    youtfast_app::images::remote(ui, &video.thumbnail())
+    widgets::video_thumbnail(ui, state, video)
         .uv(widgets::short_uv())
         .fit_to_exact_size(thumb)
         .corner_radius(thumb_radius)
@@ -479,7 +479,7 @@ fn short_card(
     let text_x = thumb_rect.left();
     let painter = ui.painter();
     let mut job = LayoutJob::single_section(
-        video.title.clone(),
+        state.display_title(video).to_owned(),
         egui::TextFormat::simple(theme::semibold(13.5), palette.text),
     );
     job.wrap.max_width = text_w;
@@ -527,6 +527,13 @@ fn short_card(
         painter.galley(pos2(text_x, y), views_galley, palette.secondary);
     }
 
+    if state.dearrow_replacement_title(video).is_some() && !video.title.is_empty() {
+        response = response.on_hover_text(trf(
+            locale,
+            "Original title: {title}",
+            &[("title", video.title.clone())],
+        ));
+    }
     widgets::video_interactions(ui, &response, state, video, actions);
 }
 

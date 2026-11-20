@@ -25,22 +25,9 @@ pub(super) fn show(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) 
                     ui.horizontal_centered(|ui| {
                         for video in state.video_tabs.videos() {
                             ui.push_id(&video.id, |ui| {
-                                let title = if video.title.is_empty() {
-                                    &video.id
-                                } else {
-                                    &video.title
-                                };
                                 let selected = state.view == View::Watch
                                     && state.video_tabs.active() == Some(video.id.as_str());
-                                video_tab(
-                                    ui,
-                                    palette,
-                                    &video.id,
-                                    title,
-                                    selected,
-                                    state.settings.language,
-                                    actions,
-                                );
+                                video_tab(ui, state, video, selected, actions);
                             });
                         }
                         new_tab_button(ui, state.settings.language, actions);
@@ -51,13 +38,29 @@ pub(super) fn show(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) 
 
 fn video_tab(
     ui: &mut egui::Ui,
-    palette: &youtfast_appearance::theme::Palette,
-    id: &str,
-    title: &str,
+    state: &State,
+    video: &youtfast_core::model::Video,
     selected: bool,
-    locale: youtfast_i18n::Locale,
     actions: &mut Vec<Action>,
 ) {
+    let palette = &state.palette;
+    let locale = state.settings.language;
+    let id = video.id.as_str();
+    let display_title = state.display_title(video);
+    let title = if display_title.is_empty() {
+        id
+    } else {
+        display_title
+    };
+    let hover = if state.dearrow_replacement_title(video).is_some() && !video.title.is_empty() {
+        trf(
+            locale,
+            "Original title: {title}",
+            &[("title", video.title.clone())],
+        )
+    } else {
+        title.to_owned()
+    };
     let tab_size = vec2(204.0, 30.0);
     let (rect, response) = ui.allocate_exact_size(tab_size, Sense::click());
     response.widget_info(|| {
@@ -148,7 +151,7 @@ fn video_tab(
     } else if response.clicked() && !close_response.hovered() {
         actions.push(Action::SelectVideoTab(id.to_owned()));
     }
-    response.on_hover_text(title);
+    response.on_hover_text(hover);
 }
 
 fn new_tab_button(
