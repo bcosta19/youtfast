@@ -600,7 +600,9 @@ async fn handle(command: Command, context: Context) {
                 return;
             };
             let path = file.path().to_owned();
+            let dirs = context.dirs.clone();
             let result = tokio::task::spawn_blocking(move || {
+                let path = dirs.export_path(&path)?;
                 let json = backup::to_json(&library)?;
                 paths::write_atomic(&path, json.as_bytes())
                     .map_err(|_| "Could not export the library.".to_owned())
@@ -617,7 +619,9 @@ async fn handle(command: Command, context: Context) {
                 return;
             };
             let path = file.path().to_owned();
+            let dirs = context.dirs.clone();
             let result = tokio::task::spawn_blocking(move || {
+                let path = dirs.export_path(&path)?;
                 let xml = backup::to_opml(&subscriptions);
                 paths::write_atomic(&path, xml.as_bytes())
                     .map_err(|_| "Could not export subscriptions as OPML.".to_owned())
