@@ -234,7 +234,11 @@ pub fn show(
                 ui.add_space(24.0);
             }
         });
-        if scrolled_past_video && state.settings.scroll_miniplayer && !state.mini_closed {
+        if scrolled_past_video
+            && state.settings.scroll_miniplayer
+            && !state.mini_closed
+            && !state.pip_open
+        {
             player::mini(ui.ctx(), state, status, surface, actions);
         }
     });

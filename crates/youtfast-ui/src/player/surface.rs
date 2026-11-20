@@ -3,6 +3,7 @@
 use egui::{Color32, CornerRadius, Mesh, Rect, Shape, Ui, pos2, vec2};
 use youtfast_i18n::{Locale, gettext as tr};
 
+use youtfast_app::player::PictureStatus;
 use youtfast_app::{Action, State};
 use youtfast_appearance::theme;
 use youtfast_core::util;
@@ -66,7 +67,7 @@ pub(super) fn picture(
 }
 
 /// Whether the player is still opening the selected video.
-fn opening(status: &Status, waiting_for_frame: bool, audio_only: bool) -> bool {
+fn opening(status: &PictureStatus, waiting_for_frame: bool, audio_only: bool) -> bool {
     if audio_only {
         return false;
     }
@@ -77,6 +78,16 @@ fn opening(status: &Status, waiting_for_frame: bool, audio_only: bool) -> bool {
     waiting || (!status.idle && (status.buffering || (status.position <= 0.0 && !status.paused)))
 }
 
+/// Inputs needed to draw the picture surface (video, audio-only cover, error,
+/// or opening spinner) from either [`State`] or a detached PiP snapshot.
+pub(super) struct PictureContent<'a> {
+    pub locale: Locale,
+    pub audio_only: bool,
+    pub thumbnail: Option<&'a str>,
+    pub player_error: Option<&'a str>,
+    pub demo_synthetic_images: bool,
+}
+
 pub(super) fn picture_rounded(
     ui: &mut Ui,
     rect: Rect,
@@ -85,11 +96,54 @@ pub(super) fn picture_rounded(
     status: Option<&Status>,
     surface: Option<&VideoSurface>,
 ) {
-    let locale: Locale = state.settings.language;
+    let thumbnail = state
+        .watching
+        .as_ref()
+        .filter(|_| state.audio_only)
+        .map(|video| {
+            state
+                .dearrow_thumbnail_url(video)
+                .filter(|url| youtfast_app::images::is_loaded(url))
+                .unwrap_or_else(|| video.thumbnail())
+        });
+    let demo_synthetic_images = cfg!(feature = "demo")
+        && ui.ctx().data(|d| {
+            d.get_temp::<bool>(egui::Id::new("synthetic-picture"))
+                .unwrap_or(true)
+        })
+        && ui
+            .ctx()
+            .data(|d| d.get_temp::<bool>(egui::Id::new("synthetic-images")))
+            .unwrap_or(false);
+    picture_content(
+        ui,
+        rect,
+        radius,
+        PictureContent {
+            locale: state.settings.language,
+            audio_only: state.audio_only,
+            thumbnail: thumbnail.as_deref(),
+            player_error: state.player_error.as_deref(),
+            demo_synthetic_images,
+        },
+        status.map(PictureStatus::from).as_ref(),
+        surface,
+    );
+}
+
+pub(super) fn picture_content(
+    ui: &mut Ui,
+    rect: Rect,
+    radius: CornerRadius,
+    content: PictureContent<'_>,
+    status: Option<&PictureStatus>,
+    surface: Option<&VideoSurface>,
+) {
+    let locale = content.locale;
     ui.painter().rect_filled(rect, radius, Color32::BLACK);
-    if state.audio_only {
-        if let Some(video) = &state.watching {
-            crate::widgets::video_thumbnail(ui, state, video)
+    if content.audio_only {
+        if let Some(thumbnail) = content.thumbnail {
+            youtfast_app::images::remote(ui, thumbnail)
                 .fit_to_exact_size(rect.size())
                 .corner_radius(radius)
                 .paint_at(ui, rect);
@@ -120,24 +174,14 @@ pub(super) fn picture_rounded(
         if let Some(surface) = surface {
             surface.paint(ui, rect);
         }
-        #[cfg(feature = "demo")]
-        if surface.is_none()
-            && ui.ctx().data(|d| {
-                d.get_temp::<bool>(egui::Id::new("synthetic-picture"))
-                    .unwrap_or(true)
-            })
-            && ui
-                .ctx()
-                .data(|d| d.get_temp::<bool>(egui::Id::new("synthetic-images")))
-                .unwrap_or(false)
-        {
+        if cfg!(feature = "demo") && surface.is_none() && content.demo_synthetic_images {
             youtfast_app::images::remote(ui, "demo")
                 .fit_to_exact_size(rect.size())
                 .corner_radius(radius)
                 .paint_at(ui, rect);
         }
     }
-    if let Some(error) = &state.player_error {
+    if let Some(error) = content.player_error {
         let galley = ui.painter().layout(
             youtfast_i18n::message(locale, error).into_owned(),
             theme::regular(16.0),
@@ -150,7 +194,7 @@ pub(super) fn picture_rounded(
         opening(
             status,
             surface.is_none_or(VideoSurface::waiting_for_frame),
-            state.audio_only,
+            content.audio_only,
         )
     }) {
         let size = (rect.height() / 6.0).clamp(20.0, 40.0);
@@ -160,6 +204,45 @@ pub(super) fn picture_rounded(
             .paint_at(ui, Rect::from_center_size(rect.center(), vec2(size, size)));
         ui.ctx().request_repaint();
     }
+}
+
+/// Draws a thin playback progress bar along the bottom edge of `rect`.
+pub(super) fn progress_strip(
+    ui: &Ui,
+    rect: Rect,
+    bottom_radius: u8,
+    position: f64,
+    duration: f64,
+    watching_live: bool,
+    accent: Color32,
+) {
+    if duration <= 0.0 || watching_live {
+        return;
+    }
+    let fraction = (position / duration).clamp(0.0, 1.0) as f32;
+    let track = Rect::from_min_max(pos2(rect.left(), rect.bottom() - 3.0), rect.max);
+    let track_radius = CornerRadius {
+        nw: 0,
+        ne: 0,
+        sw: bottom_radius,
+        se: bottom_radius,
+    };
+    ui.painter()
+        .rect_filled(track, track_radius, Color32::from_white_alpha(45));
+    let line = Rect::from_min_max(
+        pos2(rect.left(), rect.bottom() - 3.0),
+        pos2(rect.left() + rect.width() * fraction, rect.bottom()),
+    );
+    ui.painter().rect_filled(
+        line,
+        CornerRadius {
+            nw: 0,
+            ne: 0,
+            sw: bottom_radius,
+            se: if fraction >= 0.99 { bottom_radius } else { 0 },
+        },
+        accent,
+    );
 }
 
 /// White text and icons, and hovers that read over any picture, whatever
@@ -202,7 +285,7 @@ mod tests {
         const VIDEO: bool = false;
         const AUDIO_ONLY: bool = true;
 
-        let idle = Status {
+        let idle = PictureStatus {
             idle: true,
             ..Default::default()
         };
@@ -219,20 +302,20 @@ mod tests {
             "audio-only mode never shows the opening spinner"
         );
 
-        let buffering = Status {
+        let buffering = PictureStatus {
             buffering: true,
             ..Default::default()
         };
         assert!(opening(&buffering, FRAME_SHOWN, VIDEO));
 
-        let paused_at_start = Status {
+        let paused_at_start = PictureStatus {
             position: 0.0,
             paused: true,
             ..Default::default()
         };
         assert!(!opening(&paused_at_start, FRAME_SHOWN, VIDEO));
 
-        let playing = Status {
+        let playing = PictureStatus {
             position: 3.0,
             has_video: true,
             ..Default::default()
@@ -243,7 +326,7 @@ mod tests {
             "the spinner lasts until the first frame, not just until audio starts"
         );
 
-        let without_picture = Status {
+        let without_picture = PictureStatus {
             position: 3.0,
             has_video: false,
             ..Default::default()

@@ -46,7 +46,7 @@ cargo run --locked --release -- "rust egui"                      # or search
 | ↑, ↓; M | Scorrimento verticale della pagina fuori dal player; volume ±5% nel player; disattiva l'audio (negli Shorts ↑/↓ cambiano video) |
 | C; <, >; virgola, punto | Sottotitoli; velocità; fotogramma precedente / successivo in pausa |
 | Shift+N, Shift+P | Successivo / precedente nella sorgente di riproduzione |
-| I; T; Shift+A | Miniplayer; modalità cinema; modalità Solo audio |
+| I; P; T; Shift+A | Miniplayer; finestra picture-in-picture; modalità cinema; modalità Solo audio |
 | F, doppio clic | Schermo intero |
 | /; ? | Attiva la ricerca; apri l'aiuto delle scorciatoie |
 | Alt+← / →; pulsanti indietro / avanti del mouse | Naviga indietro / avanti (tasti Alt su Linux/Windows) |
@@ -79,8 +79,16 @@ Le schede hanno link al canale, un menu e azioni rapide per Guarda più tardi e 
 la coda. La coda si può riordinare o accorciare; il miniplayer è un riquadro video
 compatto 16:9 senza bordi nell'angolo in basso a destra (fai clic per tornare alla
 pagina del video, o passaci sopra con il mouse per i controlli di riproduzione/pausa
-e chiusura). La riproduzione delle playlist continua oltre la pagina caricata
-inizialmente. La cronologia del dispositivo permette di filtrare e rimuovere singole voci.
+e chiusura), mentre la finestra mobile picture-in-picture (`P` o il controllo del
+player) apre una finestra separata con i controlli di riproduzione/pausa,
+chiusura e **Riporta il video nella finestra principale**. Questo comando
+sposta la riproduzione senza metterla in pausa; se la finestra principale
+rimane ridotta a icona, ripristinala manualmente. Su Wayland, l'app non può
+tenere la finestra picture-in-picture sopra le altre né portare in primo piano
+o ripristinare la finestra principale. Se il compositore supporta regole per
+le finestre, usa l'ID `youtfast-pip` per tenerla sopra le altre. La riproduzione
+delle playlist continua oltre la pagina caricata inizialmente. La cronologia
+del dispositivo permette di filtrare e rimuovere singole voci.
 
 In una finestra larga, Impostazioni elenca i suoi gruppi in un indice accanto a
 essi: fai clic su un gruppo per scorrere fino a esso. Una riga con un interruttore

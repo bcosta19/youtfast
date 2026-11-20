@@ -2066,3 +2066,14 @@ msgstr "Impossible de créer d’autres playlists sur cet appareil"
 
 msgid "Playlist is full"
 msgstr "La playlist est pleine"
+msgid "Picture-in-picture"
+msgstr "Incrustation vidéo"
+
+msgid "Picture-in-picture (p)"
+msgstr "Incrustation vidéo (p)"
+
+msgid "Playing in picture-in-picture"
+msgstr "Lecture en incrustation vidéo"
+
+msgid "Return video to main window"
+msgstr "Renvoyer la vidéo vers la fenêtre principale"

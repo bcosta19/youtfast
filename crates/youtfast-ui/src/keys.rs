@@ -143,9 +143,13 @@ pub(super) fn handle(
         if input.key_pressed(Key::B) {
             actions.push(Action::ToggleSidebar);
         }
-        let playing = state.watching.is_some() && !state.mini_closed;
+        let playing = state.watching.is_some() && (!state.mini_closed || state.pip_open);
         if input.key_pressed(Key::I) && playing {
             actions.push(Action::ToggleMiniPlayer);
+            return;
+        }
+        if !input.modifiers.shift && input.key_pressed(Key::P) && state.watching.is_some() {
+            actions.push(Action::TogglePip);
             return;
         }
         // Unambiguous playback commands also work while browsing with the mini player.
@@ -255,7 +259,9 @@ pub(super) fn handle(
                 actions.push(Action::SwitchAccount(accounts[at].id));
             }
             if input.consume_key(egui::Modifiers::NONE, Key::Escape) {
-                actions.push(if playing {
+                actions.push(if state.pip_open {
+                    Action::ClosePip
+                } else if playing {
                     Action::CloseMiniPlayer
                 } else {
                     Action::Back
@@ -625,8 +631,30 @@ mod tests {
             press(&mut state, Key::I, egui::Modifiers::NONE),
             vec![Action::ToggleMiniPlayer]
         );
+        assert_eq!(
+            press(&mut state, Key::P, egui::Modifiers::NONE),
+            vec![Action::TogglePip]
+        );
         assert!(press(&mut state, Key::K, egui::Modifiers::NONE).is_empty());
     }
+
+    #[test]
+    fn browsing_escape_closes_the_detached_player_before_the_mini_player() {
+        for mini_closed in [false, true] {
+            let mut state = State {
+                watching: Some(youtfast_core::model::Video::from_id("aaaaaaaaaaa".into())),
+                pip_open: true,
+                mini_closed,
+                ..State::default()
+            };
+            assert_eq!(
+                press(&mut state, Key::Escape, egui::Modifiers::NONE),
+                vec![Action::ClosePip]
+            );
+            assert_eq!(state.mini_closed, mini_closed);
+        }
+    }
+
     #[test]
     fn shift_a_toggles_audio_only_while_playing() {
         let mut state = State {

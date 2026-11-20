@@ -2066,3 +2066,14 @@ msgstr "Auf diesem Gerät können keine weiteren Playlists erstellt werden"
 
 msgid "Playlist is full"
 msgstr "Die Playlist ist voll"
+msgid "Picture-in-picture"
+msgstr "Bild-in-Bild"
+
+msgid "Picture-in-picture (p)"
+msgstr "Bild-in-Bild (p)"
+
+msgid "Playing in picture-in-picture"
+msgstr "Wiedergabe im Bild-in-Bild-Fenster"
+
+msgid "Return video to main window"
+msgstr "Video zurück ins Hauptfenster"

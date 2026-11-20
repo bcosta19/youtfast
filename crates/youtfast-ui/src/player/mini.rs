@@ -1,9 +1,9 @@
 //! The floating corner miniplayer shown when navigating away from the watch page.
 
-use egui::{Color32, CornerRadius, Rect, Sense, Stroke, UiBuilder, pos2, vec2};
+use egui::{Color32, CornerRadius, Rect, Sense, Stroke, UiBuilder, vec2};
 use youtfast_i18n::{Locale, gettext as tr};
 
-use super::surface::{on_video_style, picture_rounded, video_context_menu};
+use super::surface::{on_video_style, picture_rounded, progress_strip, video_context_menu};
 use super::{focused_control, keyboard_video_focus};
 use youtfast_app::{Action, State};
 use youtfast_appearance::icons::Icon;
@@ -76,36 +76,15 @@ pub fn mini(
             picture_rounded(ui, rect, radius, state, Some(status), surface);
             video_context_menu(&response, state, status, actions);
             // The part played, along the picture's bottom edge.
-            if status.duration > 0.0 && !state.watching_live() {
-                let fraction = (status.position / status.duration).clamp(0.0, 1.0) as f32;
-                let track = Rect::from_min_max(pos2(rect.left(), rect.bottom() - 3.0), rect.max);
-                let track_radius = CornerRadius {
-                    nw: 0,
-                    ne: 0,
-                    sw: theme::RADIUS - 1,
-                    se: theme::RADIUS - 1,
-                };
-                ui.painter()
-                    .rect_filled(track, track_radius, Color32::from_white_alpha(45));
-                let line = Rect::from_min_max(
-                    pos2(rect.left(), rect.bottom() - 3.0),
-                    pos2(rect.left() + rect.width() * fraction, rect.bottom()),
-                );
-                ui.painter().rect_filled(
-                    line,
-                    CornerRadius {
-                        nw: 0,
-                        ne: 0,
-                        sw: theme::RADIUS - 1,
-                        se: if fraction >= 0.99 {
-                            theme::RADIUS - 1
-                        } else {
-                            0
-                        },
-                    },
-                    palette.accent,
-                );
-            }
+            progress_strip(
+                ui,
+                rect,
+                theme::RADIUS - 1,
+                status.position,
+                status.duration,
+                state.watching_live(),
+                palette.accent,
+            );
             let mut control_clicked = false;
             let mini_controls = egui::Id::new("mini-player-control-focus");
             let keyboard_focus = keyboard_video_focus(&response);
@@ -219,6 +198,24 @@ pub fn mini(
                     control_clicked = true;
                     actions.push(Action::ReturnToWatch);
                 }
+                let pop_out = rect.left_top() + vec2(52.0, 20.0);
+                if over
+                    .scope_builder(place(18.0, pop_out), |ui| {
+                        mini_control(
+                            crate::widgets::icon_button(
+                                ui,
+                                Icon::ExternalLink,
+                                18.0,
+                                &tr(locale, "Picture-in-picture (p)"),
+                            ),
+                            mini_controls,
+                        )
+                    })
+                    .inner
+                {
+                    control_clicked = true;
+                    actions.push(Action::TogglePip);
+                }
             }
             ui.painter().rect_stroke(
                 rect.expand(1.5),
@@ -241,6 +238,7 @@ pub fn mini(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use egui::pos2;
     use youtfast_core::model::Video;
 
     #[test]

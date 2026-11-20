@@ -48,7 +48,7 @@ cargo run --locked --release -- "rust egui"                      # or search
 | ↑, ↓; M | Desplazar la página verticalmente fuera del reproductor; volumen ±5% dentro del reproductor; silenciar (los Shorts usan ↑/↓ para cambiar de vídeo) |
 | C; <, >; coma, punto | Subtítulos; velocidad; fotograma anterior / siguiente en pausa |
 | Shift+N, Shift+P | Siguiente / anterior en el origen de reproducción |
-| I; T; Shift+A | Minirreproductor; modo cine; modo solo audio |
+| I; P; T; Shift+A | Minirreproductor; ventana de imagen en imagen; modo cine; modo solo audio |
 | F, doble clic | Pantalla completa |
 | /; ? | Enfocar la búsqueda; abrir la ayuda de atajos |
 | Alt+← / →; botones atrás / adelante del ratón | Navegar atrás / adelante (teclas Alt en Linux/Windows) |
@@ -81,9 +81,16 @@ posición de desplazamiento. Las tarjetas tienen enlaces al canal, un menú y ac
 rápidas de Ver más tarde/cola. La cola se puede reordenar o recortar; el
 minirreproductor es un recuadro de vídeo 16:9 compacto y sin marco en la esquina
 inferior derecha (haz clic para volver a la página del vídeo, o pasa el ratón por
-encima para ver los controles de reproducir/pausar y cerrar). La reproducción de
-listas continúa más allá de la página cargada inicialmente. El historial del
-dispositivo permite filtrar y quitar entradas individuales.
+encima para ver los controles de reproducir/pausar y cerrar), y la ventana flotante
+de imagen en imagen (`P` o el control del reproductor) abre una ventana separada
+con controles de reproducir/pausar, cerrar y **Devolver el vídeo a la ventana
+principal**. Esto devuelve la reproducción sin pausarla; si la ventana principal
+sigue minimizada, restáurala manualmente. En Wayland, la aplicación no puede
+mantener esa ventana encima ni traer al frente o restaurar la ventana principal.
+Si tu compositor permite reglas de ventanas, usa el ID `youtfast-pip` para
+mantenerla encima. La reproducción de listas continúa más allá de la página
+cargada inicialmente. El historial del dispositivo permite filtrar y quitar
+entradas individuales.
 
 En una ventana ancha, Configuración muestra sus grupos en un índice a su lado: haz
 clic en un grupo para desplazarte hasta él. Una fila con un interruptor se puede

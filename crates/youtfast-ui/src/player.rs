@@ -11,9 +11,11 @@ mod controls;
 mod menu;
 mod mini;
 mod overlays;
+mod pip;
 mod surface;
 
 pub use mini::mini;
+pub use pip::pip;
 
 use std::time::{Duration, Instant};
 
@@ -203,6 +205,37 @@ pub fn player(
     actions: &mut Vec<Action>,
 ) {
     let locale: Locale = state.settings.language;
+    if state.pip_open {
+        ui.painter()
+            .rect_filled(rect, CornerRadius::ZERO, egui::Color32::BLACK);
+        let mut box_ui = ui.new_child(
+            UiBuilder::new()
+                .max_rect(rect)
+                .layout(Layout::centered_and_justified(egui::Direction::TopDown)),
+        );
+        box_ui.vertical_centered(|ui| {
+            let space = (rect.height() / 2.0 - 36.0).max(12.0);
+            ui.add_space(space);
+            ui.label(
+                egui::RichText::new(tr(locale, "Playing in picture-in-picture"))
+                    .font(youtfast_appearance::theme::medium(15.0))
+                    .color(egui::Color32::WHITE),
+            );
+            ui.add_space(12.0);
+            let palette = crate::widgets::on_card(&state.palette);
+            if crate::widgets::button(
+                ui,
+                &palette,
+                tr(locale, "Return video to main window").as_ref(),
+                crate::widgets::ButtonStyle::Primary,
+            )
+            .clicked()
+            {
+                actions.push(Action::ReturnFromPip);
+            }
+        });
+        return;
+    }
     let response = ui.interact(rect, ui.id().with("video"), Sense::click_and_drag());
     ui.ctx()
         .data_mut(|d| d.insert_temp(egui::Id::new("video-keyboard-focus"), response.id));
@@ -653,6 +686,59 @@ mod tests {
         state.view = youtfast_core::model::View::Watch;
         release_speed_hold(&ctx, &state, &mut actions);
         assert_eq!(actions.len(), 1);
+    }
+
+    #[test]
+    fn inline_player_shows_return_to_app_placeholder_while_pip_is_open() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let mut state = State {
+            view: youtfast_core::model::View::Watch,
+            watching: Some(Video::from_id("aaaaaaaaaaa".into())),
+            pip_open: true,
+            ..State::default()
+        };
+        let mut actions = Vec::new();
+        let screen = Rect::from_min_size(pos2(0.0, 0.0), vec2(640.0, 360.0));
+        let mut draw = |events: Vec<egui::Event>| {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    player(
+                        ui,
+                        screen,
+                        &mut state,
+                        Some(&Status::default()),
+                        None,
+                        Mode::Page,
+                        &mut actions,
+                    );
+                },
+            );
+            output.textures_delta.clear();
+        };
+        draw(vec![]);
+        let button_pos = screen.center() + vec2(0.0, 12.0);
+        draw(vec![
+            egui::Event::PointerMoved(button_pos),
+            egui::Event::PointerButton {
+                pos: button_pos,
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: egui::Modifiers::NONE,
+            },
+            egui::Event::PointerButton {
+                pos: button_pos,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            },
+        ]);
+        assert_eq!(actions, vec![Action::ReturnFromPip]);
     }
 
     /// Every state the player draws over the video lays out without a NaN

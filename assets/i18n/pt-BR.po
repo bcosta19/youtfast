@@ -2104,3 +2104,14 @@ msgstr "Não é possível criar mais playlists neste dispositivo"
 
 msgid "Playlist is full"
 msgstr "A playlist está cheia"
+msgid "Picture-in-picture"
+msgstr "Picture-in-picture"
+
+msgid "Picture-in-picture (p)"
+msgstr "Picture-in-picture (p)"
+
+msgid "Playing in picture-in-picture"
+msgstr "Reproduzindo em picture-in-picture"
+
+msgid "Return video to main window"
+msgstr "Voltar com o vídeo para a janela principal"

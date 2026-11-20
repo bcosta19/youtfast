@@ -2,7 +2,204 @@
 //! plays next, live streams' edge, SponsorBlock's skips, the mini player,
 //! and the search field's suggestions.
 
+use std::sync::{Arc, Mutex, PoisonError};
+
 use super::*;
+
+/// The viewport identifier for the pop-out picture-in-picture OS window.
+pub fn pip_viewport_id() -> egui::ViewportId {
+    egui::ViewportId::from_hash_of("pip-window")
+}
+
+/// Computes the initial logical size of the pop-out picture-in-picture window
+/// from `aspect`, keeping it within sensible bounds around 16:9.
+pub fn pip_window_size(aspect: f64) -> [f32; 2] {
+    let aspect = if aspect.is_finite() && aspect > 0.25 && aspect <= 4.0 {
+        aspect as f32
+    } else {
+        16.0 / 9.0
+    };
+    if aspect >= 1.0 {
+        let width = 384.0_f32;
+        [width, (width / aspect).clamp(135.0, 720.0)]
+    } else {
+        let height = 384.0_f32;
+        [(height * aspect).clamp(240.0, 480.0), height]
+    }
+}
+
+/// The scalar playback fields used by the video picture and detached controls.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PictureStatus {
+    pub position: f64,
+    pub duration: f64,
+    pub video_aspect: f64,
+    pub paused: bool,
+    pub idle: bool,
+    pub buffering: bool,
+    pub has_video: bool,
+}
+
+impl From<&mpv::Status> for PictureStatus {
+    fn from(status: &mpv::Status) -> Self {
+        Self {
+            position: status.position,
+            duration: status.duration,
+            video_aspect: status.video_aspect,
+            paused: status.paused,
+            idle: status.idle,
+            buffering: status.buffering,
+            has_video: status.has_video,
+        }
+    }
+}
+
+/// Snapshot of playback and theme state mirrored to the deferred PiP viewport.
+#[derive(Clone, Debug, Default)]
+pub struct PipSnapshot {
+    pub status: Option<PictureStatus>,
+    pub player_error: Option<Arc<str>>,
+    pub audio_only: bool,
+    pub watching_live: bool,
+    pub thumbnail: Option<Arc<str>>,
+    pub palette: Palette,
+    pub language: youtfast_i18n::Locale,
+    pub demo_synthetic_images: bool,
+}
+
+#[derive(Default)]
+struct PipShared {
+    snapshot: PipSnapshot,
+    thumbnail_video_id: Option<String>,
+    actions: Vec<Action>,
+}
+
+/// Thread-safe bridge between `App` on the root viewport and the deferred PiP
+/// viewport callback.
+#[derive(Clone, Default)]
+pub struct PipBridge(Arc<Mutex<PipShared>>);
+
+impl PipBridge {
+    /// Updates the mirrored snapshot and returns whether visible PiP state
+    /// changed since the previous sync.
+    pub fn sync(
+        &self,
+        state: &State,
+        status: Option<&mpv::Status>,
+        demo_synthetic_images: bool,
+    ) -> bool {
+        let mut shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let cover_video = state.watching.as_ref().filter(|_| state.audio_only);
+        let cover_id = cover_video.map(|video| video.id.as_str());
+        let thumbnail = if shared.thumbnail_video_id.as_deref() == cover_id {
+            shared.snapshot.thumbnail.clone()
+        } else {
+            shared.thumbnail_video_id = cover_id.map(str::to_owned);
+            cover_video.map(|video| Arc::from(video.thumbnail()))
+        };
+        let player_error =
+            if shared.snapshot.player_error.as_deref() == state.player_error.as_deref() {
+                shared.snapshot.player_error.clone()
+            } else {
+                state.player_error.as_deref().map(Arc::from)
+            };
+        let next = PipSnapshot {
+            status: status.map(PictureStatus::from),
+            player_error,
+            audio_only: state.audio_only,
+            watching_live: state.watching_live(),
+            thumbnail,
+            palette: state.palette,
+            language: state.settings.language,
+            demo_synthetic_images,
+        };
+        let changed = snapshot_key(&shared.snapshot) != snapshot_key(&next);
+        shared.snapshot = next;
+        changed
+    }
+
+    /// Returns a cloned snapshot for painting the PiP viewport.
+    pub fn snapshot(&self) -> PipSnapshot {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .snapshot
+            .clone()
+    }
+
+    /// Queues an action from the PiP viewport for `App::logic` to apply.
+    pub fn push_action(&self, action: Action) {
+        let mut shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if action == Action::ClosePip {
+            // Close is terminal even if another deferred pass already
+            // queued a playback action which root hasn't consumed yet.
+            shared.actions.clear();
+        } else if shared.actions.last() == Some(&Action::ClosePip) {
+            return;
+        }
+        shared.actions.push(action);
+    }
+
+    /// Drains queued PiP actions on the root viewport.
+    pub fn take_actions(&self) -> Vec<Action> {
+        let mut shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        std::mem::take(&mut shared.actions)
+    }
+}
+
+#[derive(PartialEq)]
+struct StatusKey {
+    paused: bool,
+    idle: bool,
+    buffering: bool,
+    has_video: bool,
+    position_tenths: i64,
+    duration_tenths: i64,
+    aspect_bits: u64,
+}
+
+#[derive(PartialEq)]
+struct SnapshotKey<'a> {
+    status: Option<StatusKey>,
+    player_error: Option<&'a str>,
+    audio_only: bool,
+    watching_live: bool,
+    thumbnail: Option<&'a str>,
+    palette: Palette,
+    language: youtfast_i18n::Locale,
+    demo_synthetic_images: bool,
+}
+
+fn snapshot_key(snapshot: &PipSnapshot) -> SnapshotKey<'_> {
+    SnapshotKey {
+        status: snapshot.status.as_ref().map(|s| StatusKey {
+            paused: s.paused,
+            idle: s.idle,
+            buffering: s.buffering,
+            has_video: s.has_video,
+            position_tenths: (s.position * 10.0).round() as i64,
+            duration_tenths: (s.duration * 10.0).round() as i64,
+            aspect_bits: s.video_aspect.to_bits(),
+        }),
+        player_error: snapshot.player_error.as_deref(),
+        audio_only: snapshot.audio_only,
+        watching_live: snapshot.watching_live,
+        thumbnail: snapshot.thumbnail.as_deref(),
+        palette: snapshot.palette,
+        language: snapshot.language,
+        demo_synthetic_images: snapshot.demo_synthetic_images,
+    }
+}
+
+fn pause_closed_pip(state: &mut State, player: Option<&Mpv>) {
+    if let Some(player) = player
+        && let Err(error) = player.set_paused(true)
+    {
+        log::warn!("mpv: {error}");
+    }
+    state.playing_waiting = None;
+    state.autoplay = None;
+}
 
 /// How long a note stays over the video.
 const OSD_FOR: Duration = Duration::from_millis(900);
@@ -497,6 +694,65 @@ impl App {
         self.state.mini_closed = true;
         self.state.playing_waiting = None;
         self.state.autoplay = None;
+    }
+
+    pub(super) fn open_pip(&mut self, ctx: &egui::Context) {
+        if self.state.watching.is_none() {
+            return;
+        }
+        let aspect = self
+            .player
+            .as_ref()
+            .map_or(0.0, |player| player.status().video_aspect);
+        self.state.pip_size = pip_window_size(aspect);
+        self.state.pip_open = true;
+        self.state.player_menu = crate::PlayerMenu::Closed;
+        self.set_fullscreen(ctx, false);
+        let pip_id = pip_viewport_id();
+        if let Some(surface) = &self.surface {
+            surface.set_viewport(Some(pip_id));
+        }
+        self.sync_pip_bridge(ctx);
+        ctx.send_viewport_cmd_to(pip_id, egui::ViewportCommand::Visible(true));
+        ctx.request_repaint_of(pip_id);
+    }
+
+    pub(super) fn close_pip(&mut self, ctx: &egui::Context, pause: bool) {
+        if !self.state.pip_open {
+            return;
+        }
+        self.state.pip_open = false;
+        if let Some(surface) = &self.surface {
+            surface.set_viewport(None);
+        }
+        let pip_id = pip_viewport_id();
+        ctx.send_viewport_cmd_to(pip_id, egui::ViewportCommand::Visible(false));
+        ctx.send_viewport_cmd_to(pip_id, egui::ViewportCommand::Close);
+        if pause {
+            self.remember_position();
+            pause_closed_pip(&mut self.state, self.player.as_ref());
+        }
+        ctx.request_repaint();
+    }
+
+    pub(super) fn return_from_pip(&mut self, ctx: &egui::Context) {
+        self.close_pip(ctx, false);
+        self.return_to_watch();
+        // Raising or restoring root is best effort; Wayland does not support it.
+        focus(ctx);
+    }
+
+    pub(super) fn sync_pip_bridge(&self, ctx: &egui::Context) -> bool {
+        let demo_synthetic = cfg!(feature = "demo")
+            && ctx.data(|d| {
+                d.get_temp::<bool>(egui::Id::new("synthetic-images"))
+                    .unwrap_or(false)
+            });
+        self.state.pip_bridge.sync(
+            &self.state,
+            self.player.as_ref().map(Mpv::status),
+            demo_synthetic,
+        )
     }
 
     /// Each frame: the countdown to the next video, SponsorBlock's skips,
@@ -1442,5 +1698,118 @@ mod tests {
             ..mpv::Status::default()
         };
         assert!(!at_live_edge(true, &behind_status));
+    }
+
+    #[test]
+    fn pip_window_size_matches_landscape_portrait_and_invalid_aspects() {
+        assert_eq!(pip_window_size(16.0 / 9.0), [384.0, 216.0]);
+        assert_eq!(pip_window_size(0.0), [384.0, 216.0]);
+        assert_eq!(pip_window_size(f64::NAN), [384.0, 216.0]);
+        let portrait = pip_window_size(9.0 / 16.0);
+        assert_eq!(portrait[1], 384.0);
+        assert!((portrait[0] - 240.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn pip_bridge_syncs_state_and_drains_actions() {
+        let bridge = PipBridge::default();
+        let mut state = State {
+            watching: Some(video("aaaaaaaaaaa")),
+            player_error: Some("Playback failed".into()),
+            ..State::default()
+        };
+        let status = mpv::Status {
+            paused: true,
+            position: 12.0,
+            duration: 60.0,
+            ..mpv::Status::default()
+        };
+        assert!(bridge.sync(&state, Some(&status), false));
+        assert!(!bridge.sync(&state, Some(&status), false));
+        let snap = bridge.snapshot();
+        assert!(!snap.audio_only);
+        assert!(snap.thumbnail.is_none());
+        assert!(!bridge.sync(
+            &state,
+            Some(&mpv::Status {
+                title: Some("Unpainted title".into()),
+                ..status.clone()
+            }),
+            false,
+        ));
+        state.audio_only = true;
+        assert!(bridge.sync(&state, Some(&status), false));
+        let cover = bridge.snapshot().thumbnail.unwrap();
+        assert_eq!(cover.as_ref(), video("aaaaaaaaaaa").thumbnail());
+        assert!(!bridge.sync(&state, Some(&status), false));
+        let steady = bridge.snapshot();
+        assert!(Arc::ptr_eq(&cover, steady.thumbnail.as_ref().unwrap()));
+        assert!(Arc::ptr_eq(
+            snap.player_error.as_ref().unwrap(),
+            steady.player_error.as_ref().unwrap(),
+        ));
+        state.watching = Some(video("bbbbbbbbbbb"));
+        assert!(bridge.sync(&state, Some(&status), false));
+        assert_eq!(
+            bridge.snapshot().thumbnail.unwrap().as_ref(),
+            video("bbbbbbbbbbb").thumbnail(),
+        );
+        assert_eq!(snap.status.as_ref().map(|s| s.position), Some(12.0));
+
+        bridge.push_action(Action::TogglePause);
+        bridge.push_action(Action::ReturnFromPip);
+        assert_eq!(
+            bridge.take_actions(),
+            vec![Action::TogglePause, Action::ReturnFromPip]
+        );
+        assert!(bridge.take_actions().is_empty());
+    }
+
+    #[test]
+    fn pip_close_keeps_playback_paused_and_cancels_pending_autoplay() {
+        let ctx = egui::Context::default();
+        let mut player = Mpv::new(&ctx, 1080, 0.0, Vec::new()).unwrap();
+        let bridge = PipBridge::default();
+        let wait_for_pause = |player: &mut Mpv, paused| {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            loop {
+                let _ = player.poll();
+                if player.status().paused == paused {
+                    break;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "mpv pause state did not become {paused}"
+                );
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        };
+        for paused in [false, true] {
+            player.set_paused(paused).unwrap();
+            wait_for_pause(&mut player, paused);
+            let mut state = State {
+                autoplay: Some((video("aaaaaaaaaaa"), Instant::now())),
+                ..State::default()
+            };
+            bridge.push_action(Action::TogglePause);
+            bridge.push_action(Action::ClosePip);
+            bridge.push_action(Action::TogglePause);
+            for action in bridge.take_actions() {
+                match action {
+                    Action::ClosePip => pause_closed_pip(&mut state, Some(&player)),
+                    Action::TogglePause => {
+                        let toggled = !player.status().paused;
+                        player.set_paused(toggled).unwrap();
+                        wait_for_pause(&mut player, toggled);
+                    }
+                    _ => unreachable!("unexpected PiP action"),
+                }
+                if action == Action::ClosePip {
+                    wait_for_pause(&mut player, true);
+                }
+            }
+            assert!(player.status().paused);
+            assert!(state.autoplay.is_none());
+        }
     }
 }

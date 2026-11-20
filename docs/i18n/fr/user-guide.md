@@ -48,7 +48,7 @@ cargo run --locked --release -- "rust egui"                      # or search
 | ↑, ↓ ; M | Défilement vertical de la page hors du lecteur ; volume ±5 % dans le lecteur ; couper le son (les Shorts utilisent ↑/↓ pour changer de vidéo) |
 | C ; <, > ; virgule, point | Sous-titres ; vitesse ; image précédente / suivante en pause |
 | Maj+N, Maj+P | Suivant / précédent dans la source de lecture |
-| I ; T ; Maj+A | Mini-lecteur ; mode cinéma ; mode audio seul |
+| I ; P ; T ; Maj+A | Mini-lecteur ; fenêtre d'incrustation vidéo ; mode cinéma ; mode audio seul |
 | F, double-clic | Plein écran |
 | / ; ? | Activer la recherche ; ouvrir l'aide des raccourcis |
 | Alt+← / → ; boutons précédent / suivant de la souris | Naviguer en arrière / en avant (touches Alt sous Linux/Windows) |
@@ -82,9 +82,17 @@ menu et des actions rapides À regarder plus tard/file d'attente. La file
 d'attente peut être réordonnée ou réduite ; le mini-lecteur est une petite
 fenêtre vidéo 16:9 sans bordure dans le coin inférieur droit (cliquez pour
 revenir à la page de la vidéo, ou survolez-la pour afficher les commandes
-lecture/pause et fermer). La lecture d'une playlist continue au-delà de la page
-chargée initialement. L'historique de l'appareil permet de filtrer et de
-supprimer des entrées individuelles.
+lecture/pause et fermer), tandis que la fenêtre flottante d'incrustation vidéo (`P`
+ou le bouton du lecteur) ouvre une fenêtre séparée avec des commandes de
+lecture/pause, de fermeture et **Renvoyer la vidéo vers la fenêtre principale**.
+Cette commande renvoie la lecture sans la mettre en pause ; si la fenêtre
+principale reste réduite, restaurez-la manuellement. Sous Wayland, l'application
+ne peut ni maintenir l'incrustation au-dessus des autres fenêtres ni remettre au
+premier plan ou restaurer la fenêtre principale. Si votre compositeur accepte
+les règles de fenêtres, utilisez l'identifiant `youtfast-pip` pour garder
+l'incrustation au-dessus des autres fenêtres. La lecture d'une playlist continue
+au-delà de la page chargée initialement. L'historique de l'appareil permet de
+filtrer et de supprimer des entrées individuelles.
 
 Dans une fenêtre large, Paramètres affiche ses groupes dans un index à côté
 d'eux : cliquez sur un groupe pour y faire défiler la page. Une ligne avec un

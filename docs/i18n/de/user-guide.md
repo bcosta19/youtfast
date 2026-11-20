@@ -47,7 +47,7 @@ cargo run --locked --release -- "rust egui"                      # or search
 | ↑, ↓; M | Außerhalb des Players die Seite vertikal scrollen; im Player Lautstärke ±5 %; stummschalten (in Shorts wechseln ↑/↓ die Videos) |
 | C; <, >; Komma, Punkt | Untertitel; Geschwindigkeit; vorheriges / nächstes Einzelbild bei Pause |
 | Umschalt+N, Umschalt+P | Nächstes / vorheriges Element der Wiedergabequelle |
-| I; T; Umschalt+A | Miniplayer; Kinomodus; Nur-Audio-Modus |
+| I; P; T; Umschalt+A | Miniplayer; Bild-in-Bild-Fenster; Kinomodus; Nur-Audio-Modus |
 | F, Doppelklick | Vollbild |
 | /; ? | Suche fokussieren; Hilfe zu Tastaturkürzeln öffnen |
 | Alt+← / →; Maustaste zurück / vor | Zurück / vor navigieren (Alt-Tasten unter Linux/Windows) |
@@ -81,9 +81,16 @@ Schnellaktionen für „Später ansehen“ und die Warteschlange. Die Warteschla
 lässt sich umsortieren oder kürzen; der Miniplayer ist ein kompaktes, rahmenloses
 16:9-Videofeld in der unteren rechten Ecke (klicken, um zur Wiedergabeseite
 zurückzukehren, oder mit der Maus darüberfahren für Wiedergabe/Pause und
-Schließen). Die Wiedergabe einer Playlist geht über die zuerst geladene Seite
-hinaus weiter. Der Geräteverlauf lässt sich filtern, und einzelne Einträge
-können entfernt werden.
+Schließen), und das schwebende Bild-in-Bild-Fenster (`P` oder über die
+Player-Schaltfläche) öffnet ein separates Fenster mit Schaltflächen für
+Wiedergabe/Pause, Schließen und **Video zurück ins Hauptfenster**. Letzteres
+verschiebt die Wiedergabe ohne Pause; bleibt das Hauptfenster minimiert,
+stellen Sie es manuell wieder her. Unter Wayland kann die App weder das
+Bild-in-Bild-Fenster im Vordergrund halten noch das Hauptfenster anheben oder
+wiederherstellen. Wenn Ihr Compositor Fensterregeln unterstützt, können Sie das
+Bild-in-Bild-Fenster anhand der App-ID `youtfast-pip` im Vordergrund halten.
+Die Wiedergabe einer Playlist geht über die zuerst geladene Seite hinaus.
+Der Geräteverlauf lässt sich filtern, und einzelne Einträge können entfernt werden.
 
 In einem breiten Fenster zeigt Einstellungen seine Gruppen in einem Verzeichnis
 daneben an: Klicken Sie auf eine Gruppe, um zu ihr zu scrollen. Eine Zeile mit

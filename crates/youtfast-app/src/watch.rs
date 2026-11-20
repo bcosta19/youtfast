@@ -248,6 +248,7 @@ impl App {
     }
 
     fn stop_playback(&mut self, ctx: &egui::Context) {
+        self.close_pip(ctx, false);
         self.close_mini_player();
         self.clear_sponsor_mute();
         if let Some(surface) = &self.surface {
@@ -702,10 +703,10 @@ impl App {
         self.state.watch_scroll_to_video = true;
     }
 
-    /// A video playing must be drawn: the mini player does it, and once it
-    /// was closed the watch page does.
+    /// A video playing must be drawn: the mini player or pop-out PiP does
+    /// it, and once closed the watch page does.
     pub(super) fn show_playing(&mut self) {
-        if self.state.mini_closed {
+        if !self.state.pip_open && self.state.mini_closed {
             self.return_to_watch();
         }
     }
@@ -718,13 +719,18 @@ impl App {
         self.state.player_menu = crate::PlayerMenu::Closed;
         if self.state.view == View::Watch {
             self.remember_position();
-            if self.state.mini_closed {
+            if self.state.mini_closed && !self.state.pip_open {
                 self.with_player(|player| player.set_paused(true));
             }
         }
     }
 
     pub(super) fn set_fullscreen(&mut self, ctx: &egui::Context, fullscreen: bool) {
+        if fullscreen {
+            // Fullscreen draws only in the root viewport. Reclaim the video
+            // surface before the next frame, without changing playback.
+            self.close_pip(ctx, false);
+        }
         if self.state.fullscreen != fullscreen {
             self.state.fullscreen = fullscreen;
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(fullscreen));
