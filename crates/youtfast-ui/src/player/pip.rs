@@ -9,7 +9,7 @@ use youtfast_i18n::gettext as tr;
 
 use super::surface::{PictureContent, on_video_style, picture_content, progress_strip};
 use super::{focused_control, keyboard_video_focus};
-use youtfast_app::player::{PipBridge, pip_viewport_id, pip_window_size};
+use youtfast_app::player::{PipBridge, PipSnapshot, pip_viewport_id, pip_window_size};
 use youtfast_app::{Action, State};
 use youtfast_appearance::icons::Icon;
 use youtfast_mpv::VideoSurface;
@@ -54,18 +54,17 @@ pub fn pip(ctx: &egui::Context, state: &State, surface: Option<&VideoSurface>) {
             .fill(Color32::BLACK)
             .stroke(Stroke::new(1.0, snapshot.palette.outline));
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
-            show_pip_contents(ui, &bridge, surface.as_ref());
+            show_pip_contents(ui, &bridge, &snapshot, surface.as_ref());
         });
     });
 }
 
-/// Draws the contents of the pop-out picture-in-picture window.
-pub(crate) fn show_pip_contents(
+fn show_pip_contents(
     ui: &mut egui::Ui,
     bridge: &PipBridge,
+    snapshot: &PipSnapshot,
     surface: Option<&VideoSurface>,
 ) {
-    let snapshot = bridge.snapshot();
     let locale = snapshot.language;
     let status = snapshot.status.as_ref();
 
@@ -115,7 +114,8 @@ pub(crate) fn show_pip_contents(
             ui,
             rect,
             0,
-            status,
+            status.position,
+            status.duration,
             snapshot.watching_live,
             snapshot.palette.accent,
         );
@@ -345,7 +345,7 @@ mod tests {
                     events,
                     ..Default::default()
                 },
-                |ui| show_pip_contents(ui, &bridge, None),
+                |ui| show_pip_contents(ui, &bridge, &bridge.snapshot(), None),
             );
             output.textures_delta.clear();
         };
@@ -392,7 +392,9 @@ mod tests {
                 ..Default::default()
             },
         );
-        let mut output = ctx.run_ui(input, |ui| show_pip_contents(ui, &bridge, None));
+        let mut output = ctx.run_ui(input, |ui| {
+            show_pip_contents(ui, &bridge, &bridge.snapshot(), None);
+        });
         output.textures_delta.clear();
         assert_eq!(bridge.take_actions(), vec![Action::ClosePip]);
     }
@@ -428,7 +430,7 @@ mod tests {
                         screen_rect: Some(Rect::from_min_size(egui::pos2(0.0, 0.0), size)),
                         ..Default::default()
                     },
-                    |ui| show_pip_contents(ui, &bridge, None),
+                    |ui| show_pip_contents(ui, &bridge, &bridge.snapshot(), None),
                 );
                 output.textures_delta.clear();
                 state.watching = None;

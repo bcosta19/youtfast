@@ -3,6 +3,7 @@
 use egui::{Color32, CornerRadius, Mesh, Rect, Shape, Ui, pos2, vec2};
 use youtfast_i18n::{Locale, gettext as tr};
 
+use youtfast_app::player::PictureStatus;
 use youtfast_app::{Action, State};
 use youtfast_appearance::theme;
 use youtfast_core::util;
@@ -66,7 +67,7 @@ pub(super) fn picture(
 }
 
 /// Whether the player is still opening the selected video.
-fn opening(status: &Status, waiting_for_frame: bool, audio_only: bool) -> bool {
+fn opening(status: &PictureStatus, waiting_for_frame: bool, audio_only: bool) -> bool {
     if audio_only {
         return false;
     }
@@ -95,12 +96,16 @@ pub(super) fn picture_rounded(
     status: Option<&Status>,
     surface: Option<&VideoSurface>,
 ) {
-    let thumbnail = state.watching.as_ref().map(|video| {
-        state
-            .dearrow_thumbnail_url(video)
-            .filter(|url| youtfast_app::images::is_loaded(url))
-            .unwrap_or_else(|| video.thumbnail())
-    });
+    let thumbnail = state
+        .watching
+        .as_ref()
+        .filter(|_| state.audio_only)
+        .map(|video| {
+            state
+                .dearrow_thumbnail_url(video)
+                .filter(|url| youtfast_app::images::is_loaded(url))
+                .unwrap_or_else(|| video.thumbnail())
+        });
     let demo_synthetic_images = cfg!(feature = "demo")
         && ui.ctx().data(|d| {
             d.get_temp::<bool>(egui::Id::new("synthetic-picture"))
@@ -121,7 +126,7 @@ pub(super) fn picture_rounded(
             player_error: state.player_error.as_deref(),
             demo_synthetic_images,
         },
-        status,
+        status.map(PictureStatus::from).as_ref(),
         surface,
     );
 }
@@ -131,7 +136,7 @@ pub(super) fn picture_content(
     rect: Rect,
     radius: CornerRadius,
     content: PictureContent<'_>,
-    status: Option<&Status>,
+    status: Option<&PictureStatus>,
     surface: Option<&VideoSurface>,
 ) {
     let locale = content.locale;
@@ -206,14 +211,15 @@ pub(super) fn progress_strip(
     ui: &Ui,
     rect: Rect,
     bottom_radius: u8,
-    status: &Status,
+    position: f64,
+    duration: f64,
     watching_live: bool,
     accent: Color32,
 ) {
-    if status.duration <= 0.0 || watching_live {
+    if duration <= 0.0 || watching_live {
         return;
     }
-    let fraction = (status.position / status.duration).clamp(0.0, 1.0) as f32;
+    let fraction = (position / duration).clamp(0.0, 1.0) as f32;
     let track = Rect::from_min_max(pos2(rect.left(), rect.bottom() - 3.0), rect.max);
     let track_radius = CornerRadius {
         nw: 0,
@@ -279,7 +285,7 @@ mod tests {
         const VIDEO: bool = false;
         const AUDIO_ONLY: bool = true;
 
-        let idle = Status {
+        let idle = PictureStatus {
             idle: true,
             ..Default::default()
         };
@@ -296,20 +302,20 @@ mod tests {
             "audio-only mode never shows the opening spinner"
         );
 
-        let buffering = Status {
+        let buffering = PictureStatus {
             buffering: true,
             ..Default::default()
         };
         assert!(opening(&buffering, FRAME_SHOWN, VIDEO));
 
-        let paused_at_start = Status {
+        let paused_at_start = PictureStatus {
             position: 0.0,
             paused: true,
             ..Default::default()
         };
         assert!(!opening(&paused_at_start, FRAME_SHOWN, VIDEO));
 
-        let playing = Status {
+        let playing = PictureStatus {
             position: 3.0,
             has_video: true,
             ..Default::default()
@@ -320,7 +326,7 @@ mod tests {
             "the spinner lasts until the first frame, not just until audio starts"
         );
 
-        let without_picture = Status {
+        let without_picture = PictureStatus {
             position: 3.0,
             has_video: false,
             ..Default::default()

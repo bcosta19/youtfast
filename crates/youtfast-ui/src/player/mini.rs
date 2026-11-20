@@ -80,7 +80,8 @@ pub fn mini(
                 ui,
                 rect,
                 theme::RADIUS - 1,
-                status,
+                status.position,
+                status.duration,
                 state.watching_live(),
                 palette.accent,
             );

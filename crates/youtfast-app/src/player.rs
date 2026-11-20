@@ -28,14 +28,40 @@ pub fn pip_window_size(aspect: f64) -> [f32; 2] {
     }
 }
 
+/// The scalar playback fields used by the video picture and detached controls.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PictureStatus {
+    pub position: f64,
+    pub duration: f64,
+    pub video_aspect: f64,
+    pub paused: bool,
+    pub idle: bool,
+    pub buffering: bool,
+    pub has_video: bool,
+}
+
+impl From<&mpv::Status> for PictureStatus {
+    fn from(status: &mpv::Status) -> Self {
+        Self {
+            position: status.position,
+            duration: status.duration,
+            video_aspect: status.video_aspect,
+            paused: status.paused,
+            idle: status.idle,
+            buffering: status.buffering,
+            has_video: status.has_video,
+        }
+    }
+}
+
 /// Snapshot of playback and theme state mirrored to the deferred PiP viewport.
 #[derive(Clone, Debug, Default)]
 pub struct PipSnapshot {
-    pub status: Option<mpv::Status>,
-    pub player_error: Option<String>,
+    pub status: Option<PictureStatus>,
+    pub player_error: Option<Arc<str>>,
     pub audio_only: bool,
     pub watching_live: bool,
-    pub thumbnail: Option<String>,
+    pub thumbnail: Option<Arc<str>>,
     pub palette: Palette,
     pub language: youtfast_i18n::Locale,
     pub demo_synthetic_images: bool,
@@ -44,6 +70,7 @@ pub struct PipSnapshot {
 #[derive(Default)]
 struct PipShared {
     snapshot: PipSnapshot,
+    thumbnail_video_id: Option<String>,
     actions: Vec<Action>,
 }
 
@@ -61,17 +88,31 @@ impl PipBridge {
         status: Option<&mpv::Status>,
         demo_synthetic_images: bool,
     ) -> bool {
+        let mut shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let cover_video = state.watching.as_ref().filter(|_| state.audio_only);
+        let cover_id = cover_video.map(|video| video.id.as_str());
+        let thumbnail = if shared.thumbnail_video_id.as_deref() == cover_id {
+            shared.snapshot.thumbnail.clone()
+        } else {
+            shared.thumbnail_video_id = cover_id.map(str::to_owned);
+            cover_video.map(|video| Arc::from(video.thumbnail()))
+        };
+        let player_error = if shared.snapshot.player_error.as_deref() == state.player_error.as_deref()
+        {
+            shared.snapshot.player_error.clone()
+        } else {
+            state.player_error.as_deref().map(Arc::from)
+        };
         let next = PipSnapshot {
-            status: status.cloned(),
-            player_error: state.player_error.clone(),
+            status: status.map(PictureStatus::from),
+            player_error,
             audio_only: state.audio_only,
             watching_live: state.watching_live(),
-            thumbnail: state.watching.as_ref().map(Video::thumbnail),
+            thumbnail,
             palette: state.palette,
             language: state.settings.language,
             demo_synthetic_images,
         };
-        let mut shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         let changed = snapshot_key(&shared.snapshot) != snapshot_key(&next);
         shared.snapshot = next;
         changed
@@ -126,6 +167,7 @@ struct SnapshotKey<'a> {
     thumbnail: Option<&'a str>,
     palette: Palette,
     language: youtfast_i18n::Locale,
+    demo_synthetic_images: bool,
 }
 
 fn snapshot_key(snapshot: &PipSnapshot) -> SnapshotKey<'_> {
@@ -145,6 +187,7 @@ fn snapshot_key(snapshot: &PipSnapshot) -> SnapshotKey<'_> {
         thumbnail: snapshot.thumbnail.as_deref(),
         palette: snapshot.palette,
         language: snapshot.language,
+        demo_synthetic_images: snapshot.demo_synthetic_images,
     }
 }
 
@@ -1670,9 +1713,9 @@ mod tests {
     #[test]
     fn pip_bridge_syncs_state_and_drains_actions() {
         let bridge = PipBridge::default();
-        let state = State {
+        let mut state = State {
             watching: Some(video("aaaaaaaaaaa")),
-            audio_only: true,
+            player_error: Some("Playback failed".into()),
             ..State::default()
         };
         let status = mpv::Status {
@@ -1684,7 +1727,33 @@ mod tests {
         assert!(bridge.sync(&state, Some(&status), false));
         assert!(!bridge.sync(&state, Some(&status), false));
         let snap = bridge.snapshot();
-        assert!(snap.audio_only);
+        assert!(!snap.audio_only);
+        assert!(snap.thumbnail.is_none());
+        assert!(!bridge.sync(
+            &state,
+            Some(&mpv::Status {
+                title: Some("Unpainted title".into()),
+                ..status.clone()
+            }),
+            false,
+        ));
+        state.audio_only = true;
+        assert!(bridge.sync(&state, Some(&status), false));
+        let cover = bridge.snapshot().thumbnail.unwrap();
+        assert_eq!(cover.as_ref(), video("aaaaaaaaaaa").thumbnail());
+        assert!(!bridge.sync(&state, Some(&status), false));
+        let steady = bridge.snapshot();
+        assert!(Arc::ptr_eq(&cover, steady.thumbnail.as_ref().unwrap()));
+        assert!(Arc::ptr_eq(
+            snap.player_error.as_ref().unwrap(),
+            steady.player_error.as_ref().unwrap(),
+        ));
+        state.watching = Some(video("bbbbbbbbbbb"));
+        assert!(bridge.sync(&state, Some(&status), false));
+        assert_eq!(
+            bridge.snapshot().thumbnail.unwrap().as_ref(),
+            video("bbbbbbbbbbb").thumbnail(),
+        );
         assert_eq!(snap.status.as_ref().map(|s| s.position), Some(12.0));
 
         bridge.push_action(Action::TogglePause);
