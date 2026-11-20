@@ -48,6 +48,7 @@ cargo run --locked --release -- "rust egui"                      # or search
 | Shift+N, Shift+P | Successivo / precedente nella sorgente di riproduzione |
 | I; P; T; Shift+A | Miniplayer; finestra picture-in-picture; modalità cinema; modalità Solo audio |
 | F, doppio clic | Schermo intero |
+| Ctrl/Cmd+K | Tavolozza dei comandi (viste, azioni del player e della pagina, gruppi di Impostazioni, ricerche recenti e cronologia recente) |
 | /; ? | Attiva la ricerca; apri l'aiuto delle scorciatoie |
 | Alt+← / →; pulsanti indietro / avanti del mouse | Naviga indietro / avanti (tasti Alt su Linux/Windows) |
 | Ctrl/Cmd+R | Aggiorna la pagina corrente |

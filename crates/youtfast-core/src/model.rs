@@ -984,6 +984,51 @@ pub enum View {
     Settings,
 }
 
+/// One of the sections on the Settings page.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum SettingsGroup {
+    #[default]
+    Appearance,
+    Playback,
+    Sidebar,
+    History,
+    Notifications,
+    About,
+}
+
+impl SettingsGroup {
+    pub const ALL: [Self; 6] = [
+        Self::Appearance,
+        Self::Playback,
+        Self::Sidebar,
+        Self::History,
+        Self::Notifications,
+        Self::About,
+    ];
+
+    pub fn index(self) -> usize {
+        match self {
+            Self::Appearance => 0,
+            Self::Playback => 1,
+            Self::Sidebar => 2,
+            Self::History => 3,
+            Self::Notifications => 4,
+            Self::About => 5,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Appearance => "Appearance",
+            Self::Playback => "Playback",
+            Self::Sidebar => "Sidebar",
+            Self::History => "History",
+            Self::Notifications => "Notifications",
+            Self::About => "About",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{FeedFilter, Video};

@@ -21,6 +21,7 @@ pub use player::release_speed_hold;
 mod channel;
 mod library;
 mod notifications;
+mod palette;
 mod player;
 mod results;
 mod settings;
@@ -69,10 +70,16 @@ pub fn show(
     if !state.cast.open {
         keys::handle(ui.ctx(), state, status, actions);
     }
+    if let Some(group) = state.settings_group.take() {
+        settings::jump_to(ui.ctx(), group);
+    }
     if state.view == View::Watch && state.fullscreen {
         watch::fullscreen(ui, state, status, surface, actions);
         if state.keys_open {
             keys_overlay(ui.ctx(), state);
+        }
+        if state.palette_open {
+            palette::show(ui.ctx(), state, status, actions);
         }
         cast::show(ui.ctx(), state, actions);
         return;
@@ -121,6 +128,9 @@ pub fn show(
     notice_toast(ui.ctx(), state, actions);
     if state.keys_open {
         keys_overlay(ui.ctx(), state);
+    }
+    if state.palette_open {
+        palette::show(ui.ctx(), state, status, actions);
     }
     cast::show(ui.ctx(), state, actions);
 }
@@ -935,7 +945,7 @@ fn keys_overlay(ctx: &egui::Context, state: &mut State) {
     let id = egui::Id::new("keys");
     // The area's first sizing pass otherwise caps the modal at egui's
     // default height, so the list below would scroll despite the room.
-    let height = (ctx.content_rect().height() - 96.0).clamp(240.0, 680.0);
+    let height = (ctx.content_rect().height() - 64.0).clamp(240.0, 720.0);
     let margin_y = 16;
     let response = egui::Modal::new(id)
         .area(egui::Modal::default_area(id).default_height(height))
@@ -945,6 +955,7 @@ fn keys_overlay(ctx: &egui::Context, state: &mut State) {
         )
         .show(ctx, |ui| {
             let shell: &[(&'static str, &'static str)] = &[
+                ("Ctrl/Cmd+K", "Command palette"),
                 ("/", "Focus search"),
                 ("Enter", "Search or open link"),
                 ("1–9", "Views (outside the video)"),

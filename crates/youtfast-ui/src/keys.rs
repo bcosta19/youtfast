@@ -19,6 +19,18 @@ pub(super) fn handle(
     if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Extra2)) {
         actions.push(Action::Forward);
     }
+    if let Some(first) =
+        ctx.input_mut(|input| consume_once(input, egui::Modifiers::COMMAND, Key::K))
+    {
+        if first {
+            palette::toggle(ctx, state);
+        }
+        return;
+    }
+    if state.palette_open {
+        palette::handle_keys(ctx, state, status, actions, true);
+        return;
+    }
     if ctx.text_edit_focused() || state.notifications_popup_open || egui::Popup::is_any_open(ctx) {
         return;
     }
@@ -798,5 +810,70 @@ mod tests {
             output.textures_delta.clear();
             assert_eq!(actions, [Action::SetSpeed(expected)]);
         }
+    }
+
+    #[test]
+    fn command_palette_shortcut_toggles_even_when_search_field_is_focused_and_blocks_background_keys()
+     {
+        let ctx = egui::Context::default();
+        let mut state = State {
+            view: View::Watch,
+            watching: Some(youtfast_core::model::Video::from_id("aaaaaaaaaaa".into())),
+            keys_open: true,
+            notifications_popup_open: true,
+            player_menu: youtfast_app::PlayerMenu::Main,
+            ..State::default()
+        };
+        ctx.memory_mut(|m| m.request_focus(command_line_id()));
+
+        let run_key = |ctx: &egui::Context, state: &mut State, key: Key, modifiers| {
+            let mut actions = Vec::new();
+            for pressed in [true, false] {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        events: vec![
+                            egui::Event::ModifiersChanged(modifiers),
+                            egui::Event::Key {
+                                key,
+                                physical_key: None,
+                                pressed,
+                                repeat: false,
+                                modifiers,
+                            },
+                        ],
+                        ..Default::default()
+                    },
+                    |ui| {
+                        handle(ui.ctx(), state, Some(&Status::default()), &mut actions);
+                        ui.add(egui::TextEdit::singleline(&mut state.query).id(command_line_id()));
+                        if state.palette_open {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut state.palette_query)
+                                    .id(palette::input_id()),
+                            );
+                        }
+                    },
+                );
+                output.textures_delta.clear();
+            }
+            actions
+        };
+
+        // Ctrl/Cmd+K opens the command palette even while the top search bar is focused,
+        // closes other overlays, and focuses the palette input.
+        assert!(run_key(&ctx, &mut state, Key::K, egui::Modifiers::COMMAND).is_empty());
+        assert!(state.palette_open);
+        assert!(!state.keys_open);
+        assert!(!state.notifications_popup_open);
+        assert_eq!(state.player_menu, youtfast_app::PlayerMenu::Closed);
+        assert!(ctx.memory(|m| m.has_focus(palette::input_id())));
+
+        // While open, background player keys (like Space or F) must not fire player actions.
+        assert!(run_key(&ctx, &mut state, Key::F, egui::Modifiers::NONE).is_empty());
+        assert!(run_key(&ctx, &mut state, Key::Space, egui::Modifiers::NONE).is_empty());
+
+        // Pressing Ctrl/Cmd+K again closes the palette.
+        assert!(run_key(&ctx, &mut state, Key::K, egui::Modifiers::COMMAND).is_empty());
+        assert!(!state.palette_open);
     }
 }

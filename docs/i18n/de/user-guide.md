@@ -49,6 +49,7 @@ cargo run --locked --release -- "rust egui"                      # or search
 | Umschalt+N, Umschalt+P | Nächstes / vorheriges Element der Wiedergabequelle |
 | I; P; T; Umschalt+A | Miniplayer; Bild-in-Bild-Fenster; Kinomodus; Nur-Audio-Modus |
 | F, Doppelklick | Vollbild |
+| Strg/Cmd+K | Befehlspalette (Ansichten, Player- und Seitenaktionen, Einstellungsgruppen, letzte Suchanfragen und jüngster Verlauf) |
 | /; ? | Suche fokussieren; Hilfe zu Tastaturkürzeln öffnen |
 | Alt+← / →; Maustaste zurück / vor | Zurück / vor navigieren (Alt-Tasten unter Linux/Windows) |
 | Strg/Cmd+R | Aktuelle Seite neu laden |

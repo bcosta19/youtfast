@@ -50,6 +50,7 @@ cargo run --locked --release -- "rust egui"                      # or search
 | Maj+N, Maj+P | Suivant / précédent dans la source de lecture |
 | I ; P ; T ; Maj+A | Mini-lecteur ; fenêtre d'incrustation vidéo ; mode cinéma ; mode audio seul |
 | F, double-clic | Plein écran |
+| Ctrl/Cmd+K | Palette de commandes (vues, actions du lecteur et de la page, groupes de Paramètres, recherches récentes et historique récent) |
 | / ; ? | Activer la recherche ; ouvrir l'aide des raccourcis |
 | Alt+← / → ; boutons précédent / suivant de la souris | Naviguer en arrière / en avant (touches Alt sous Linux/Windows) |
 | Ctrl/Cmd+R | Actualiser la page actuelle |

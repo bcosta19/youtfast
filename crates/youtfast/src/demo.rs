@@ -238,6 +238,8 @@ pub(crate) fn fixture(page: &str) -> State {
     state.fullscreen = page == "fullscreen";
     state.settings.theater = page == "theater";
     state.keys_open = page == "help";
+    state.palette_open = page == "palette";
+    state.recent_searches = vec!["rust".into(), "egui".into(), "libmpv".into()];
     state.transcript_open = page == "transcript";
     state.transcript_follow = true;
     if page == "loading" {
@@ -381,6 +383,31 @@ impl eframe::App for Demo {
                     self.state.alerts_visit.clear();
                 }
                 Action::SetAlerts(on) => self.state.settings.alerts = on,
+                Action::ToggleCommandPalette => {
+                    self.state.palette_open = !self.state.palette_open;
+                    self.state.palette_query.clear();
+                    self.state.palette_cursor = 0;
+                }
+                Action::CloseCommandPalette => {
+                    self.state.palette_open = false;
+                    self.state.palette_query.clear();
+                    self.state.palette_cursor = 0;
+                }
+                Action::SetSettingsGroup(group) => {
+                    self.state.settings_group = Some(group);
+                }
+                Action::Search(text) => {
+                    let text = text.trim().to_owned();
+                    if !text.is_empty() {
+                        self.state.record_recent_search(&text);
+                        self.state.query = text.clone();
+                        self.state.search_query = text;
+                        self.state.view = View::Results;
+                    }
+                }
+                Action::ToggleLoop => {
+                    self.state.playback_loop = !self.state.playback_loop;
+                }
                 Action::Navigate(v) => self.state.view = v,
                 Action::Open(v) => {
                     self.state.video_tabs.open(v.clone());
@@ -663,7 +690,7 @@ impl eframe::App for Demo {
                 _ => {}
             }
         }
-        let capture_ready = if self.state.notifications_popup_open {
+        let capture_ready = if self.state.notifications_popup_open || self.state.palette_open {
             self.frames >= 12
         } else {
             self.frames >= 300

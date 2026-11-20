@@ -2115,3 +2115,41 @@ msgstr "Reproduzindo em picture-in-picture"
 
 msgid "Return video to main window"
 msgstr "Voltar com o vídeo para a janela principal"
+msgid "Command palette"
+msgstr "Paleta de comandos"
+
+msgid "Type a command or search…"
+msgstr "Digite um comando ou pesquise…"
+
+msgid "No matching commands"
+msgstr "Nenhum comando correspondente"
+
+msgid "View"
+msgstr "Tela"
+
+msgid "Action"
+msgstr "Ação"
+
+msgid "Recent searches"
+msgstr "Pesquisas recentes"
+
+msgid "Toggle sidebar"
+msgstr "Alternar menu lateral"
+
+msgid "Back"
+msgstr "Voltar"
+
+msgid "Forward"
+msgstr "Avançar"
+
+msgid "New video tab"
+msgstr "Nova aba de vídeo"
+
+msgid "Mini player"
+msgstr "Miniplayer"
+
+msgid "Transcript"
+msgstr "Transcrição"
+
+msgid "Loop"
+msgstr "Repetir"

@@ -1,14 +1,20 @@
 //! What the views ask the application to do.
 
 use youtfast_core::model::{
-    Channel, ChannelTab, FeedFilter, Quality, Rating, Source, SponsorBehavior, SponsorCategory,
-    Video, View,
+    Channel, ChannelTab, FeedFilter, Quality, Rating, SettingsGroup, Source, SponsorBehavior,
+    SponsorCategory, Video, View,
 };
 
 /// What a view asks the app to do. Views push these while drawing; the app
 /// applies them after the frame.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action {
+    /// Open or close the command palette (`Ctrl+K` / `Cmd+K`).
+    ToggleCommandPalette,
+    /// Close the command palette.
+    CloseCommandPalette,
+    /// Jump to a section on the Settings page.
+    SetSettingsGroup(SettingsGroup),
     Cast(youtfast_cast::Action),
     SetSearchOptions(youtfast_youtube::innertube::SearchOptions),
     SetChannelOrder(youtfast_youtube::innertube::ChannelOrder),

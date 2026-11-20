@@ -14,8 +14,8 @@ use youtfast_backend::{
 use youtfast_core::model::{
     AccountSource, Channel, ChannelAbout, ChannelHeader, ChannelMeta, ChannelTab, CommentRow,
     Details, FeedFilter, Fetch, HistoryRow, Listing, PageItems, PlaylistSummary, Quality, Rating,
-    Resolution, Results, SaveTarget, Segment, SegmentAction, Source, SponsorBehavior,
-    SponsorCategory, SubscriptionSort, Video, View,
+    Resolution, Results, SaveTarget, Segment, SegmentAction, SettingsGroup, Source,
+    SponsorBehavior, SponsorCategory, SubscriptionSort, Video, View,
 };
 use youtfast_core::util;
 use youtfast_desktop::instance::{self, Queue as RemoteQueue};
@@ -378,7 +378,20 @@ pub struct State {
     pub update: youtfast_desktop::updater::UpdateState,
     /// Whether the full installed changelog is expanded in Settings → About.
     pub full_changelog_open: bool,
+    /// Whether the `Ctrl+K` / `Cmd+K` command palette modal is open.
+    pub palette_open: bool,
+    /// The text currently typed in the command palette's search box.
+    pub palette_query: String,
+    /// The highlighted row index in the command palette's filtered list.
+    pub palette_cursor: usize,
+    /// Recent non-empty search queries submitted in this session, most recent first.
+    pub recent_searches: Vec<String>,
+    /// A Settings section requested by the command palette to scroll into view.
+    pub settings_group: Option<SettingsGroup>,
 }
+
+/// Maximum number of recent searches kept in memory for the command palette.
+pub const RECENT_SEARCHES_LIMIT: usize = 20;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PlaylistAdvance {
@@ -447,6 +460,20 @@ impl State {
     pub fn reset_cursor(&mut self) {
         self.cursor = 0;
         self.cursor_active = false;
+    }
+
+    /// Records a submitted search query at the front of [`Self::recent_searches`],
+    /// deduplicating case-insensitively and bounding to [`RECENT_SEARCHES_LIMIT`].
+    pub fn record_recent_search(&mut self, query: &str) {
+        let query = query.trim();
+        if query.is_empty() {
+            return;
+        }
+        let lowered = query.to_lowercase();
+        self.recent_searches
+            .retain(|existing| existing.to_lowercase() != lowered);
+        self.recent_searches.insert(0, query.to_owned());
+        self.recent_searches.truncate(RECENT_SEARCHES_LIMIT);
     }
 
     /// The account the app is signed in as, by its library id.
@@ -1607,6 +1634,24 @@ impl App {
 
     fn apply(&mut self, ctx: &egui::Context, action: Action) {
         match action {
+            Action::ToggleCommandPalette => {
+                self.state.palette_open = !self.state.palette_open;
+                self.state.palette_query.clear();
+                self.state.palette_cursor = 0;
+                if self.state.palette_open {
+                    self.state.keys_open = false;
+                    self.state.notifications_popup_open = false;
+                    self.state.player_menu = PlayerMenu::Closed;
+                }
+            }
+            Action::CloseCommandPalette => {
+                self.state.palette_open = false;
+                self.state.palette_query.clear();
+                self.state.palette_cursor = 0;
+            }
+            Action::SetSettingsGroup(group) => {
+                self.state.settings_group = Some(group);
+            }
             Action::Cast(action) => self.cast_action(ctx, action),
             Action::Search(text) => {
                 let text = text.trim();
@@ -1629,6 +1674,7 @@ impl App {
                 self.suggested = text.to_owned();
                 self.state.query = text.to_owned();
                 self.state.search_query = text.to_owned();
+                self.state.record_recent_search(text);
                 self.state.view = View::Results;
                 self.load(View::Results, true);
             }
