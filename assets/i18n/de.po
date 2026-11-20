@@ -2045,3 +2045,9 @@ msgstr "In Playlist speichern"
 
 msgid "No playlists on this device"
 msgstr "Keine Playlists auf diesem Gerät"
+
+msgid "No more device playlists can be created"
+msgstr "Auf diesem Gerät können keine weiteren Playlists erstellt werden"
+
+msgid "Playlist is full"
+msgstr "Die Playlist ist voll"

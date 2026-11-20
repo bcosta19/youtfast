@@ -262,6 +262,7 @@ fn playlists_toolbar(
         .ctx()
         .data(|d| d.get_temp::<String>(new_name_id))
         .unwrap_or_default();
+    let has_capacity = state.library.can_create_playlist();
 
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
@@ -281,27 +282,32 @@ fn playlists_toolbar(
             }
         }
         if !creating {
-            if widgets::icon_text_button(
-                ui,
-                palette,
-                Some(Icon::Plus),
-                tr(locale, "New playlist").as_ref(),
-                widgets::ButtonStyle::Primary,
-            )
-            .clicked()
+            if ui
+                .add_enabled_ui(has_capacity, |ui| {
+                    widgets::icon_text_button(
+                        ui,
+                        palette,
+                        Some(Icon::Plus),
+                        tr(locale, "New playlist").as_ref(),
+                        widgets::ButtonStyle::Primary,
+                    )
+                })
+                .inner
+                .clicked()
             {
                 creating = true;
                 draft.clear();
                 ui.memory_mut(|m| m.request_focus(new_input_id));
             }
         } else {
-            let response = ui.add(
+            let response = ui.add_enabled(
+                has_capacity,
                 egui::TextEdit::singleline(&mut draft)
                     .id(new_input_id)
                     .hint_text(tr(locale, "Playlist name").as_ref())
                     .desired_width(180.0),
             );
-            let can_create = !draft.trim().is_empty();
+            let can_create = has_capacity && !draft.trim().is_empty();
             let enter = response.lost_focus()
                 && ui.input(|i| i.key_pressed(egui::Key::Enter))
                 && can_create;
@@ -334,6 +340,9 @@ fn playlists_toolbar(
                 creating = false;
                 draft.clear();
             }
+        }
+        if !has_capacity {
+            ui.label(tr(locale, "No more device playlists can be created"));
         }
         if total > 0 || !state.playlists_query.trim().is_empty() {
             let summary = if !state.playlists_query.trim().is_empty() {

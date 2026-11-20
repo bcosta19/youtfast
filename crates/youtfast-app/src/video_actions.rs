@@ -156,6 +156,14 @@ impl App {
             if matches!(&self.state.page, Some(Page::Playlist { id, .. }) if id == playlist) {
                 self.sync_local_playlist_page(playlist);
             }
+        } else if saved
+            && self
+                .state
+                .library
+                .playlist(playlist)
+                .is_some_and(DevicePlaylist::is_full)
+        {
+            self.state.notice = Some("Playlist is full".into());
         }
     }
 

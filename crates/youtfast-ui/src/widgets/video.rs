@@ -491,16 +491,41 @@ pub(crate) fn save_to_playlist_menu(
             .max_height((ui.ctx().content_rect().height() * 0.4).min(320.0))
             .show(ui, |ui| {
                 for playlist in &state.library.playlists {
-                    let mut saved = playlist.videos.iter().any(|v| v.id == video.id);
-                    if ui.checkbox(&mut saved, &playlist.name).changed() {
-                        actions.push(Action::TogglePlaylistVideo {
-                            playlist: playlist.id.clone(),
-                            video: video.clone(),
-                        });
-                    }
+                    ui.horizontal(|ui| {
+                        if device_playlist_checkbox(ui, playlist, &video.id, locale).is_some() {
+                            actions.push(Action::TogglePlaylistVideo {
+                                playlist: playlist.id.clone(),
+                                video: video.clone(),
+                            });
+                        }
+                    });
                 }
             });
     });
+}
+
+/// The changed membership of a device playlist, if the checkbox was toggled.
+pub(crate) fn device_playlist_checkbox(
+    ui: &mut Ui,
+    playlist: &youtfast_storage::library::DevicePlaylist,
+    video_id: &str,
+    locale: Locale,
+) -> Option<bool> {
+    let mut saved = playlist.videos.iter().any(|video| video.id == video_id);
+    let can_toggle = saved || !playlist.is_full();
+    let changed = ui
+        .add_enabled(
+            can_toggle,
+            egui::Checkbox::new(
+                &mut saved,
+                egui::RichText::new(&playlist.name).font(theme::regular(14.0)),
+            ),
+        )
+        .changed();
+    if !can_toggle {
+        ui.label(tr(locale, "Playlist is full"));
+    }
+    changed.then_some(saved)
 }
 
 /// A video as a card in a grid, the way YouTube's home draws it: the

@@ -1744,6 +1744,8 @@ impl App {
             Action::CreatePlaylist(name) => {
                 if self.state.library.create_playlist(&name).is_some() {
                     self.save_library();
+                } else if !self.state.library.can_create_playlist() {
+                    self.state.notice = Some("No more device playlists can be created".into());
                 }
             }
             Action::CreatePlaylistWithVideo { name, video } => {
@@ -1754,6 +1756,8 @@ impl App {
                     {
                         self.sync_local_playlist_page(&id);
                     }
+                } else if !self.state.library.can_create_playlist() {
+                    self.state.notice = Some("No more device playlists can be created".into());
                 }
             }
             Action::RenamePlaylist { id, name } => {

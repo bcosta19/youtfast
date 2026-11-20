@@ -983,17 +983,19 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
                 actions.push(Action::ToggleWatchLater(watching.clone()));
             }
             ui.separator();
+            let has_capacity = state.library.can_create_playlist();
             let mut draft = ui
                 .ctx()
                 .data(|d| d.get_temp::<String>(draft_id))
                 .unwrap_or_default();
             ui.horizontal(|ui| {
-                let input = ui.add(
+                let input = ui.add_enabled(
+                    has_capacity,
                     egui::TextEdit::singleline(&mut draft)
                         .hint_text(tr(locale, "New playlist").as_ref())
                         .desired_width(150.0),
                 );
-                let can_create = !draft.trim().is_empty();
+                let can_create = has_capacity && !draft.trim().is_empty();
                 let enter = input.lost_focus()
                     && ui.input(|i| i.key_pressed(egui::Key::Enter))
                     && can_create;
@@ -1017,19 +1019,17 @@ fn save_menu(ui: &mut Ui, state: &State, watching: &Video, actions: &mut Vec<Act
                 }
             });
             ui.ctx().data_mut(|d| d.insert_temp(draft_id, draft));
+            if !has_capacity {
+                ui.label(tr(locale, "No more device playlists can be created"));
+            }
             ui.separator();
             egui::ScrollArea::vertical()
                 .max_height((ui.ctx().content_rect().height() * 0.4).min(320.0))
                 .show(ui, |ui| {
                     for playlist in &state.library.playlists {
-                        let mut saved = playlist.videos.iter().any(|v| v.id == watching.id);
                         ui.horizontal(|ui| {
-                            if ui
-                                .checkbox(
-                                    &mut saved,
-                                    RichText::new(&playlist.name).font(theme::regular(14.0)),
-                                )
-                                .changed()
+                            if let Some(saved) =
+                                widgets::device_playlist_checkbox(ui, playlist, &watching.id, locale)
                             {
                                 actions.push(Action::SetSaved {
                                     playlist: playlist.id.clone(),

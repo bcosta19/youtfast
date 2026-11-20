@@ -40,6 +40,11 @@ impl DevicePlaylist {
         id.starts_with(LOCAL_PLAYLIST_PREFIX)
     }
 
+    /// Whether additional videos no longer fit in this playlist.
+    pub fn is_full(&self) -> bool {
+        self.videos.len() >= PLAYLIST_VIDEOS_LIMIT
+    }
+
     fn number(id: &str) -> Option<u64> {
         id.strip_prefix(LOCAL_PLAYLIST_PREFIX)?.parse().ok()
     }
@@ -416,6 +421,11 @@ impl Library {
         self.playlists = clean;
     }
 
+    /// Whether another device playlist can be allocated.
+    pub fn can_create_playlist(&self) -> bool {
+        self.playlists.len() < PLAYLISTS_LIMIT && self.next_playlist_number().is_some()
+    }
+
     /// Creates a new device-local playlist and returns its `local-` ID.
     pub fn create_playlist(&mut self, name: &str) -> Option<String> {
         let name = name.trim();
@@ -491,9 +501,7 @@ impl Library {
         else {
             return false;
         };
-        if playlist.videos.len() >= PLAYLIST_VIDEOS_LIMIT
-            || playlist.videos.iter().any(|known| known.id == video.id)
-        {
+        if playlist.is_full() || playlist.videos.iter().any(|known| known.id == video.id) {
             return false;
         }
         playlist.videos.push(video);
@@ -1353,6 +1361,7 @@ mod tests {
             playlist_high_water: u64::MAX,
             ..Library::default()
         };
+        assert!(!library.can_create_playlist());
         assert_eq!(library.create_playlist("No available ID"), None);
     }
 
@@ -1365,6 +1374,7 @@ mod tests {
                 "playlist {i} should fit"
             );
         }
+        assert!(!library.can_create_playlist());
         assert_eq!(library.playlists.len(), PLAYLISTS_LIMIT);
         assert_eq!(library.create_playlist("Overflow"), None);
 
@@ -1377,6 +1387,9 @@ mod tests {
             PLAYLIST_VIDEOS_LIMIT
         );
         assert!(!library.add_to_playlist(&first_id, video("overflowvid")));
+        assert!(library.playlist(&first_id).unwrap().is_full());
+        assert!(library.remove_from_playlist(&first_id, "00000000000"));
+        assert!(!library.playlist(&first_id).unwrap().is_full());
 
         // Legacy library JSON without `playlists` loads cleanly.
         let legacy: Library =
