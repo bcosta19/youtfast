@@ -1401,7 +1401,9 @@ impl App {
                 if self.state.settings.sponsorblock {
                     self.state.cast.receive_segments(&id, &segments);
                 }
-                self.state.accept_segments(&id, segments);
+                if self.state.accept_segments(&id, segments) {
+                    self.with_player(|player| player.set_muted(false));
+                }
             }
             Event::Notice(notice) => self.state.notice = Some(notice),
             Event::CheckUpdates => {

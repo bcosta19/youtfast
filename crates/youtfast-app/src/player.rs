@@ -707,13 +707,22 @@ impl State {
             .map(|video| (video, deadline));
     }
 
-    pub(super) fn accept_segments(&mut self, id: &str, segments: Vec<Segment>) {
-        if self.settings.sponsorblock && self.watching.as_ref().is_some_and(|video| video.id == id)
+    /// Replaces the segments for this video; returns whether mpv needs to be unmuted.
+    pub(super) fn accept_segments(&mut self, id: &str, segments: Vec<Segment>) -> bool {
+        if !self.settings.sponsorblock
+            || self.watching.as_ref().is_none_or(|video| video.id != id)
+            || self.segments == segments
         {
-            self.segments = segments;
-            self.skipped.clear();
-            self.sponsor_muted = None;
+            return false;
         }
+        let previous_mute = self.sponsor_muted;
+        self.sponsor_muted = previous_mute.and_then(|index| {
+            let active = self.segments.get(index)?;
+            segments.iter().position(|segment| segment == active)
+        });
+        self.segments = segments;
+        self.skipped.clear();
+        previous_mute.is_some() && self.sponsor_muted.is_none()
     }
 
     /// First active segment that can be skipped via the skip button (`AutoSkip` or `ManualSkip`).
@@ -951,6 +960,41 @@ mod tests {
         assert!(state.segments.is_empty());
         state.accept_segments("current", vec![segment.clone()]);
         assert_eq!(state.segments, vec![segment]);
+    }
+
+    #[test]
+    fn sponsorblock_refresh_keeps_mute_ownership_until_exit() {
+        let mut state = State {
+            watching: Some(video("current")),
+            ..Default::default()
+        };
+        state.settings.sponsorblock = true;
+        let mute = Segment {
+            category: "sponsor".into(),
+            start: 10.0,
+            end: 20.0,
+            action: SegmentAction::Mute,
+        };
+        assert!(!state.accept_segments("current", vec![mute.clone()]));
+        assert_eq!(
+            state.tick_sponsorblock(false, true, false, 12.0).set_muted,
+            Some(true)
+        );
+        assert!(!state.accept_segments("current", vec![mute.clone()]));
+        assert_eq!(
+            state.tick_sponsorblock(false, true, true, 20.0).set_muted,
+            Some(false)
+        );
+        assert_eq!(
+            state.tick_sponsorblock(false, true, false, 12.0).set_muted,
+            Some(true)
+        );
+        let mut earlier = mute.clone();
+        earlier.start = 1.0;
+        earlier.end = 2.0;
+        assert!(!state.accept_segments("current", vec![earlier, mute]));
+        assert_eq!(state.sponsor_muted, Some(1));
+        assert!(state.accept_segments("current", vec![]));
     }
 
     #[test]

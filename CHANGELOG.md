@@ -18,6 +18,10 @@ are the distribution record.
 
 - Stop submitting releases to the official Winget catalog; the maintainer has not accepted Microsoft's Contributor License Agreement. Windows setup and portable downloads, Homebrew updates and website deployment remain available.
 
+### Fixed
+
+- SponsorBlock restores local audio even if its segment list refreshes during auto-mute.
+
 ## [0.9.1] - 2026-11-17
 
 ### Changed
