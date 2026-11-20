@@ -243,6 +243,9 @@ impl App {
         let Some(muted) = self.player.as_ref().map(|player| player.status().muted) else {
             return;
         };
+        if let Some(index) = self.state.sponsor_muted.take() {
+            self.state.skipped.insert(index);
+        }
         self.with_player(|player| player.set_muted(!muted));
         self.show_osd(if muted { "Unmuted" } else { "Muted" }.to_owned());
     }
@@ -415,6 +418,12 @@ impl App {
         self.state.refresh_autoplay();
     }
 
+    pub(super) fn clear_sponsor_mute(&mut self) {
+        if self.state.sponsor_muted.take().is_some() {
+            self.with_player(|player| player.set_muted(false));
+        }
+    }
+
     pub(super) fn set_sponsorblock(&mut self, on: bool) {
         self.state.settings.sponsorblock = on;
         self.state
@@ -430,7 +439,9 @@ impl App {
                 .send(Command::LoadSegments(session.video.id.clone()));
         }
         if !on {
+            self.clear_sponsor_mute();
             self.state.segments.clear();
+            self.state.skipped.clear();
         } else if let Some(video) = &self.state.watching
             && !video.live
         {
@@ -438,12 +449,26 @@ impl App {
         }
     }
 
-    /// The segment being played, if any, by index.
-    fn current_segment(&self, position: f64) -> Option<usize> {
+    pub(super) fn set_sponsor_category(
+        &mut self,
+        category: SponsorCategory,
+        behavior: SponsorBehavior,
+    ) {
         self.state
-            .segments
-            .iter()
-            .position(|segment| position >= segment.start && position < segment.end - 0.3)
+            .settings
+            .sponsorblock_categories
+            .set(category, behavior);
+        self.save_settings();
+        if behavior != SponsorBehavior::AutoSkip
+            && let Some(index) = self.state.sponsor_muted
+            && self
+                .state
+                .segments
+                .get(index)
+                .is_some_and(|segment| segment.category == category.as_str())
+        {
+            self.clear_sponsor_mute();
+        }
     }
 
     /// The skip button: past the segment playing.
@@ -451,9 +476,19 @@ impl App {
         let Some(position) = self.player.as_ref().map(|player| player.status().position) else {
             return;
         };
-        if let Some(index) = self.current_segment(position) {
+        if let Some(index) = self.state.current_skippable_segment(position) {
             let end = self.state.segments[index].end;
             self.state.skipped.insert(index);
+            if let Some(muted_index) = self.state.sponsor_muted
+                && (muted_index == index
+                    || self
+                        .state
+                        .segments
+                        .get(muted_index)
+                        .is_none_or(|segment| end < segment.start || end >= segment.end - 0.3))
+            {
+                self.clear_sponsor_mute();
+            }
             self.apply_seek(end);
         }
     }
@@ -491,12 +526,13 @@ impl App {
         }
         // Only what the checks below read: this runs every frame, and the
         // status carries strings and the captions' list.
-        let Some((paused, seekable, position, speed, live_edge)) =
+        let Some((paused, seekable, muted, position, speed, live_edge)) =
             self.player.as_ref().map(|player| {
                 let status = player.status();
                 (
                     status.paused,
                     status.seekable,
+                    status.muted,
                     status.position,
                     status.speed,
                     at_live_edge(self.state.watching_live(), status),
@@ -526,25 +562,17 @@ impl App {
                 self.with_player(|player| player.set_subtitle(Some(id)));
             }
         }
-        if self.state.settings.sponsorblock
-            && !paused
-            && seekable
-            && let Some(index) = self.current_segment(position)
-            && !self.state.skipped.contains(&index)
-            && self.state.segments[index].skipped_at_once()
-        {
-            let segment = self.state.segments[index].clone();
-            self.state.skipped.insert(index);
-            self.apply_seek(segment.end);
-            self.show_osd(
-                match segment.category.as_str() {
-                    "sponsor" => "Sponsor skipped",
-                    "selfpromo" => "Self-promotion skipped",
-                    "interaction" => "Interaction reminder skipped",
-                    _ => "Segment skipped",
-                }
-                .to_owned(),
-            );
+        let tick = self
+            .state
+            .tick_sponsorblock(paused, seekable, muted, position);
+        if let Some(mute) = tick.set_muted {
+            self.with_player(|player| player.set_muted(mute));
+        }
+        if let Some(end) = tick.seek_to {
+            self.apply_seek(end);
+        }
+        if let Some(osd) = tick.osd {
+            self.show_osd(osd.to_owned());
         }
     }
 
@@ -684,8 +712,110 @@ impl State {
         {
             self.segments = segments;
             self.skipped.clear();
+            self.sponsor_muted = None;
         }
     }
+
+    /// First active segment that can be skipped via the skip button (`AutoSkip` or `ManualSkip`).
+    pub(super) fn current_skippable_segment(&self, position: f64) -> Option<usize> {
+        self.segments.iter().position(|segment| {
+            matches!(
+                self.settings
+                    .sponsorblock_categories
+                    .behavior_for(&segment.category),
+                SponsorBehavior::AutoSkip | SponsorBehavior::ManualSkip
+            ) && position >= segment.start
+                && position < segment.end - 0.3
+        })
+    }
+
+    /// Advances SponsorBlock's auto-skip and auto-mute state for the current playback position.
+    pub(super) fn tick_sponsorblock(
+        &mut self,
+        paused: bool,
+        seekable: bool,
+        muted: bool,
+        position: f64,
+    ) -> SponsorTick {
+        let mut tick = SponsorTick::default();
+        if let Some(muted_index) = self.sponsor_muted {
+            let still_active = self.settings.sponsorblock
+                && self.segments.get(muted_index).is_some_and(|segment| {
+                    self.settings
+                        .sponsorblock_categories
+                        .behavior_for(&segment.category)
+                        == SponsorBehavior::AutoSkip
+                        && segment.action == SegmentAction::Mute
+                        && position >= segment.start
+                        && position < segment.end - 0.3
+                });
+            if !still_active {
+                self.sponsor_muted = None;
+                tick.set_muted = Some(false);
+            }
+        }
+        if !self.settings.sponsorblock || paused || !seekable {
+            return tick;
+        }
+        if let Some((index, segment)) = self.segments.iter().enumerate().find(|(index, segment)| {
+            !self.skipped.contains(index)
+                && self
+                    .settings
+                    .sponsorblock_categories
+                    .behavior_for(&segment.category)
+                    == SponsorBehavior::AutoSkip
+                && segment.action == SegmentAction::Skip
+                && position >= segment.start
+                && position < segment.end - 0.3
+        }) {
+            self.skipped.insert(index);
+            if self.sponsor_muted.take().is_some() {
+                tick.set_muted = Some(false);
+            }
+            tick.seek_to = Some(segment.end);
+            tick.osd = Some(skipped_osd(&segment.category));
+            return tick;
+        }
+        if self.sponsor_muted.is_none()
+            && let Some((index, segment)) =
+                self.segments.iter().enumerate().find(|(index, segment)| {
+                    !self.skipped.contains(index)
+                        && self
+                            .settings
+                            .sponsorblock_categories
+                            .behavior_for(&segment.category)
+                            == SponsorBehavior::AutoSkip
+                        && segment.action == SegmentAction::Mute
+                        && position >= segment.start
+                        && position < segment.end - 0.3
+                })
+        {
+            let already_user_muted = muted && tick.set_muted != Some(false);
+            if already_user_muted {
+                self.skipped.insert(index);
+            } else {
+                self.sponsor_muted = Some(index);
+                tick.set_muted = Some(true);
+                tick.osd = Some(muted_osd(&segment.category));
+            }
+        }
+        tick
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct SponsorTick {
+    pub set_muted: Option<bool>,
+    pub seek_to: Option<f64>,
+    pub osd: Option<&'static str>,
+}
+
+fn skipped_osd(category: &str) -> &'static str {
+    SponsorCategory::parse(category).map_or("Segment skipped", SponsorCategory::skipped_osd)
+}
+
+fn muted_osd(category: &str) -> &'static str {
+    SponsorCategory::parse(category).map_or("Segment muted", SponsorCategory::muted_osd)
 }
 
 #[cfg(test)]
@@ -811,6 +941,7 @@ mod tests {
             category: "sponsor".into(),
             start: 1.0,
             end: 3.0,
+            action: SegmentAction::Skip,
         };
         state.settings.sponsorblock = false;
         state.accept_segments("current", vec![segment.clone()]);
@@ -820,6 +951,190 @@ mod tests {
         assert!(state.segments.is_empty());
         state.accept_segments("current", vec![segment.clone()]);
         assert_eq!(state.segments, vec![segment]);
+    }
+
+    #[test]
+    fn sponsorblock_categories_drive_skip_mute_manual_seekbar_and_ignore() {
+        let make_seg = |category: &str, start: f64, end: f64, action: SegmentAction| Segment {
+            category: category.to_owned(),
+            start,
+            end,
+            action,
+        };
+
+        // Default behaviors: sponsor/selfpromo/interaction AutoSkip;
+        // intro/outro/preview/music_offtopic/filler ManualSkip.
+        let mut state = State::default();
+        state.settings.sponsorblock = true;
+        state.segments = vec![
+            make_seg("sponsor", 10.0, 20.0, SegmentAction::Skip),
+            make_seg("intro", 30.0, 40.0, SegmentAction::Skip),
+        ];
+
+        // AutoSkip + Skip triggers seek + OSD; ManualSkip does not auto-skip.
+        let tick = state.tick_sponsorblock(false, true, false, 12.0);
+        assert_eq!(
+            tick,
+            SponsorTick {
+                set_muted: None,
+                seek_to: Some(20.0),
+                osd: Some("Sponsor skipped"),
+            }
+        );
+        assert!(state.skipped.contains(&0));
+        // Seeking back into an already-skipped AutoSkip segment does not re-skip.
+        assert_eq!(
+            state.tick_sponsorblock(false, true, false, 15.0),
+            SponsorTick::default()
+        );
+        // Playing inside ManualSkip intro does not auto-skip, but is skippable by button.
+        assert_eq!(
+            state.tick_sponsorblock(false, true, false, 32.0),
+            SponsorTick::default()
+        );
+        assert_eq!(state.current_skippable_segment(32.0), Some(1));
+
+        // Configuring intro to AutoSkip skips it and shows "Intro skipped".
+        state
+            .settings
+            .sponsorblock_categories
+            .set(SponsorCategory::Intro, SponsorBehavior::AutoSkip);
+        assert_eq!(
+            state.tick_sponsorblock(false, true, false, 32.0),
+            SponsorTick {
+                set_muted: None,
+                seek_to: Some(40.0),
+                osd: Some("Intro skipped"),
+            }
+        );
+
+        // SeekBarOnly and Ignore never auto-skip and are never skippable by button.
+        state
+            .settings
+            .sponsorblock_categories
+            .set(SponsorCategory::Outro, SponsorBehavior::SeekBarOnly);
+        state
+            .settings
+            .sponsorblock_categories
+            .set(SponsorCategory::Filler, SponsorBehavior::Ignore);
+        state.segments = vec![
+            make_seg("outro", 50.0, 60.0, SegmentAction::Skip),
+            make_seg("filler", 70.0, 80.0, SegmentAction::Mute),
+        ];
+        assert_eq!(
+            state.tick_sponsorblock(false, true, false, 52.0),
+            SponsorTick::default()
+        );
+        assert_eq!(state.current_skippable_segment(52.0), None);
+        assert_eq!(
+            state.tick_sponsorblock(false, true, false, 72.0),
+            SponsorTick::default()
+        );
+        assert_eq!(state.current_skippable_segment(72.0), None);
+    }
+
+    #[test]
+    fn sponsorblock_auto_mute_lifecycle_handles_entry_exit_user_mute_and_toggle() {
+        let mut state = State::default();
+        state.settings.sponsorblock = true;
+        state.segments = vec![
+            Segment {
+                category: "sponsor".into(),
+                start: 10.0,
+                end: 20.0,
+                action: SegmentAction::Mute,
+            },
+            Segment {
+                category: "selfpromo".into(),
+                start: 30.0,
+                end: 40.0,
+                action: SegmentAction::Mute,
+            },
+        ];
+
+        // Entering unmuted mutes mpv and records sponsor_muted.
+        let tick = state.tick_sponsorblock(false, true, false, 11.0);
+        assert_eq!(
+            tick,
+            SponsorTick {
+                set_muted: Some(true),
+                seek_to: None,
+                osd: Some("Sponsor muted"),
+            }
+        );
+        assert_eq!(state.sponsor_muted, Some(0));
+
+        // While staying inside, no repeated mute/OSD.
+        assert_eq!(
+            state.tick_sponsorblock(false, true, true, 15.0),
+            SponsorTick::default()
+        );
+
+        // Leaving segment unmutes mpv automatically.
+        assert_eq!(
+            state.tick_sponsorblock(false, true, true, 20.0),
+            SponsorTick {
+                set_muted: Some(false),
+                seek_to: None,
+                osd: None,
+            }
+        );
+        assert_eq!(state.sponsor_muted, None);
+
+        // If already muted before entering segment 1, SponsorBlock leaves mute untouched
+        // on entry and on exit.
+        assert_eq!(
+            state.tick_sponsorblock(false, true, true, 32.0),
+            SponsorTick::default()
+        );
+        assert_eq!(state.sponsor_muted, None);
+        assert_eq!(
+            state.tick_sponsorblock(false, true, true, 41.0),
+            SponsorTick::default()
+        );
+
+        // Manual unmute inside an active sponsor-muted segment prevents re-muting
+        // on subsequent frames.
+        state.skipped.clear();
+        assert_eq!(
+            state.tick_sponsorblock(false, true, false, 12.0).set_muted,
+            Some(true)
+        );
+        if let Some(index) = state.sponsor_muted.take() {
+            state.skipped.insert(index);
+        }
+        assert_eq!(
+            state.tick_sponsorblock(false, true, false, 13.0),
+            SponsorTick::default()
+        );
+
+        // Disabling SponsorBlock while paused inside a sponsor-muted segment unmutes.
+        state.skipped.clear();
+        assert_eq!(
+            state.tick_sponsorblock(false, true, false, 12.0).set_muted,
+            Some(true)
+        );
+        state.settings.sponsorblock = false;
+        assert_eq!(
+            state.tick_sponsorblock(true, true, true, 12.5),
+            SponsorTick {
+                set_muted: Some(false),
+                seek_to: None,
+                osd: None,
+            }
+        );
+    }
+
+    #[test]
+    fn every_category_has_distinct_skipped_and_muted_osd_text() {
+        for cat in SponsorCategory::ALL {
+            assert_eq!(skipped_osd(cat.as_str()), cat.skipped_osd());
+            assert_eq!(muted_osd(cat.as_str()), cat.muted_osd());
+            assert!(cat.skipped_osd().ends_with(" skipped"));
+            assert!(cat.muted_osd().ends_with(" muted"));
+        }
+        assert_eq!(skipped_osd("unknown"), "Segment skipped");
+        assert_eq!(muted_osd("unknown"), "Segment muted");
     }
 
     #[test]

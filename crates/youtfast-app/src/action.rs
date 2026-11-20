@@ -1,6 +1,9 @@
 //! What the views ask the application to do.
 
-use youtfast_core::model::{Channel, ChannelTab, FeedFilter, Quality, Rating, Source, Video, View};
+use youtfast_core::model::{
+    Channel, ChannelTab, FeedFilter, Quality, Rating, Source, SponsorBehavior, SponsorCategory,
+    Video, View,
+};
 
 /// What a view asks the app to do. Views push these while drawing; the app
 /// applies them after the frame.
@@ -207,6 +210,7 @@ pub enum Action {
     Dequeue(String),
     ClearQueue,
     SetSponsorBlock(bool),
+    SetSponsorCategory(SponsorCategory, SponsorBehavior),
     /// Jumps over the SponsorBlock segment being played.
     SkipSegment,
     /// The mini player's video, back on its watch page.

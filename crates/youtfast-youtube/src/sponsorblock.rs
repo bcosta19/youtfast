@@ -7,12 +7,13 @@
 
 use sha2::{Digest, Sha256};
 
-use youtfast_core::model::Segment;
+use youtfast_core::model::{Segment, SegmentAction};
 
-/// What the request asks for: every category YouTFast names, segments to
-/// skip only (not the "full video is a sponsor" labels).
+/// What the request asks for: every category YouTFast names, skip and mute
+/// segments (not the "full video is a sponsor" labels).
 const CATEGORIES: &str =
     r#"["sponsor","selfpromo","interaction","intro","outro","preview","music_offtopic","filler"]"#;
+const ACTION_TYPES: &str = r#"["skip","mute"]"#;
 
 /// The segments of `id`, in time order. None
 /// known is an empty list, not an error.
@@ -21,7 +22,7 @@ pub fn segments(id: &str) -> Result<Vec<Segment>, String> {
         "https://sponsor.ajay.app/api/skipSegments/{}?categories={}&actionTypes={}",
         prefix(id),
         encode(CATEGORIES),
-        encode(r#"["skip"]"#),
+        encode(ACTION_TYPES),
     );
     let response = ehttp::fetch_blocking(&ehttp::Request::get(url))
         .map_err(|_| "SponsorBlock could not be reached".to_owned())?;
@@ -70,10 +71,19 @@ fn parse(json: &str, id: &str) -> Vec<Segment> {
             let start = times.first()?.as_f64()?;
             let end = times.get(1)?.as_f64()?;
             let category = segment["category"].as_str()?.to_owned();
+            let action = match segment.get("actionType") {
+                None => SegmentAction::Skip,
+                Some(value) => match value.as_str() {
+                    Some("skip") => SegmentAction::Skip,
+                    Some("mute") => SegmentAction::Mute,
+                    _ => return None,
+                },
+            };
             (end > start).then_some(Segment {
                 category,
                 start,
                 end,
+                action,
             })
         })
         .collect();
@@ -89,7 +99,7 @@ mod tests {
     fn the_request_names_only_a_hash_prefix() {
         // SHA-256 of "dQw4w9WgXcQ" starts 5f6b.
         assert_eq!(prefix("dQw4w9WgXcQ"), "5f6b");
-        assert_eq!(encode(r#"["skip"]"#), "%5B%22skip%22%5D");
+        assert_eq!(encode(ACTION_TYPES), "%5B%22skip%22%2C%22mute%22%5D");
     }
 
     #[test]
@@ -99,8 +109,11 @@ mod tests {
                 {"category": "sponsor", "segment": [1.0, 2.0]}
             ]},
             {"videoID": "abc", "segments": [
-                {"category": "outro", "segment": [90.0, 100.0]},
+                {"category": "outro", "segment": [90.0, 100.0], "actionType": "skip"},
                 {"category": "sponsor", "segment": [10.5, 30.0]},
+                {"category": "selfpromo", "segment": [40.0, 50.0], "actionType": "mute"},
+                {"category": "sponsor", "segment": [0.0, 0.0], "actionType": "full"},
+                {"category": "sponsor", "segment": [55.0, 65.0], "actionType": "poi"},
                 {"category": "intro", "segment": [5.0, 5.0]}
             ]}
         ]"#;
@@ -112,11 +125,19 @@ mod tests {
                     category: "sponsor".to_owned(),
                     start: 10.5,
                     end: 30.0,
+                    action: SegmentAction::Skip,
+                },
+                Segment {
+                    category: "selfpromo".to_owned(),
+                    start: 40.0,
+                    end: 50.0,
+                    action: SegmentAction::Mute,
                 },
                 Segment {
                     category: "outro".to_owned(),
                     start: 90.0,
                     end: 100.0,
+                    action: SegmentAction::Skip,
                 },
             ]
         );

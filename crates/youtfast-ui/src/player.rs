@@ -348,7 +348,7 @@ pub fn player(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use youtfast_core::model::{Chapter, Details, Fetch, Segment, Video};
+    use youtfast_core::model::{Chapter, Details, Fetch, Segment, SegmentAction, Video};
     use youtfast_mpv::Subtitle;
 
     #[test]
@@ -711,6 +711,7 @@ mod tests {
                                 category: "intro".to_owned(),
                                 start: 20.0,
                                 end: 40.0,
+                                action: SegmentAction::Skip,
                             }],
                             details: Fetch::Ready(Details {
                                 chapters: vec![
@@ -853,5 +854,111 @@ mod tests {
                 .any(|action| matches!(action, Action::RetryPlayback)),
             "clicking the retry overlay must still retry: {actions:?}"
         );
+    }
+
+    #[test]
+    fn seek_bar_and_skip_button_respect_sponsorblock_category_behaviors() {
+        use youtfast_core::model::{SponsorBehavior, SponsorCategory};
+
+        fn render(state: &mut State, position: f64) -> (Vec<String>, bool, bool) {
+            let ctx = egui::Context::default();
+            youtfast_appearance::theme::install_fonts(&ctx);
+            let status = Status {
+                duration: 100.0,
+                position,
+                ..Default::default()
+            };
+            let video = Rect::from_min_size(pos2(0.0, 0.0), vec2(800.0, 450.0));
+            let mut actions = Vec::new();
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(video),
+                    ..Default::default()
+                },
+                |ui| {
+                    controls::seek_bar(
+                        ui,
+                        Rect::from_min_max(pos2(16.0, 400.0), pos2(784.0, 412.0)),
+                        state,
+                        &status,
+                        &mut actions,
+                    );
+                    overlays::skip_button(
+                        ui,
+                        video,
+                        Rect::from_min_max(pos2(0.0, 386.0), pos2(800.0, 450.0)),
+                        state,
+                        &status,
+                        true,
+                        &mut actions,
+                    );
+                },
+            );
+            let texts: Vec<_> = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                    _ => None,
+                })
+                .collect();
+            let has_sponsor_green = output.shapes.iter().any(|shape| match &shape.shape {
+                egui::Shape::Rect(rect) => rect.fill == egui::Color32::from_rgb(0x00, 0xd4, 0x00),
+                _ => false,
+            });
+            let has_intro_cyan = output.shapes.iter().any(|shape| match &shape.shape {
+                egui::Shape::Rect(rect) => rect.fill == egui::Color32::from_rgb(0x00, 0xff, 0xff),
+                _ => false,
+            });
+            output.textures_delta.clear();
+            (texts, has_sponsor_green, has_intro_cyan)
+        }
+
+        let mut state = State {
+            watching: Some(Video::from_id("aaaaaaaaaaa".into())),
+            segments: vec![
+                Segment {
+                    category: "sponsor".into(),
+                    start: 10.0,
+                    end: 20.0,
+                    action: SegmentAction::Skip,
+                },
+                Segment {
+                    category: "intro".into(),
+                    start: 30.0,
+                    end: 40.0,
+                    action: SegmentAction::Mute,
+                },
+            ],
+            ..State::default()
+        };
+
+        // Ignore hides segment from seek bar and never shows skip button.
+        state
+            .settings
+            .sponsorblock_categories
+            .set(SponsorCategory::Sponsor, SponsorBehavior::Ignore);
+        // SeekBarOnly draws on seek bar without showing skip button.
+        state
+            .settings
+            .sponsorblock_categories
+            .set(SponsorCategory::Intro, SponsorBehavior::SeekBarOnly);
+
+        let (texts, green, cyan) = render(&mut state, 15.0);
+        assert!(!green);
+        assert!(cyan);
+        assert!(!texts.iter().any(|t| t.starts_with("Skip ")));
+
+        let (texts, _, _) = render(&mut state, 35.0);
+        assert!(!texts.iter().any(|t| t.starts_with("Skip ")));
+
+        // ManualSkip shows skip button even when action is Mute.
+        state
+            .settings
+            .sponsorblock_categories
+            .set(SponsorCategory::Intro, SponsorBehavior::ManualSkip);
+        let (texts, _, cyan) = render(&mut state, 35.0);
+        assert!(cyan);
+        assert!(texts.iter().any(|t| t == "Skip intro"));
     }
 }

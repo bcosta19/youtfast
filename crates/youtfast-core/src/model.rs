@@ -256,24 +256,366 @@ impl Span {
     }
 }
 
+/// A SponsorBlock segment category.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SponsorCategory {
+    Sponsor,
+    Selfpromo,
+    Interaction,
+    Intro,
+    Outro,
+    Preview,
+    MusicOfftopic,
+    Filler,
+}
+
+impl SponsorCategory {
+    /// All categories in canonical display order.
+    pub const ALL: [Self; 8] = [
+        Self::Sponsor,
+        Self::Selfpromo,
+        Self::Interaction,
+        Self::Intro,
+        Self::Outro,
+        Self::Preview,
+        Self::MusicOfftopic,
+        Self::Filler,
+    ];
+
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "sponsor" => Some(Self::Sponsor),
+            "selfpromo" => Some(Self::Selfpromo),
+            "interaction" => Some(Self::Interaction),
+            "intro" => Some(Self::Intro),
+            "outro" => Some(Self::Outro),
+            "preview" => Some(Self::Preview),
+            "music_offtopic" => Some(Self::MusicOfftopic),
+            "filler" => Some(Self::Filler),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Sponsor => "sponsor",
+            Self::Selfpromo => "selfpromo",
+            Self::Interaction => "interaction",
+            Self::Intro => "intro",
+            Self::Outro => "outro",
+            Self::Preview => "preview",
+            Self::MusicOfftopic => "music_offtopic",
+            Self::Filler => "filler",
+        }
+    }
+
+    /// Default behavior matching YouTFast's original SponsorBlock behavior.
+    pub fn default_behavior(self) -> SponsorBehavior {
+        match self {
+            Self::Sponsor | Self::Selfpromo | Self::Interaction => SponsorBehavior::AutoSkip,
+            Self::Intro | Self::Outro | Self::Preview | Self::MusicOfftopic | Self::Filler => {
+                SponsorBehavior::ManualSkip
+            }
+        }
+    }
+
+    /// Display name for Settings → Playback.
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Sponsor => "Sponsor",
+            Self::Selfpromo => "Self-promotion",
+            Self::Interaction => "Interaction reminder",
+            Self::Intro => "Intro",
+            Self::Outro => "Outro",
+            Self::Preview => "Preview",
+            Self::MusicOfftopic => "Non-music section",
+            Self::Filler => "Filler",
+        }
+    }
+
+    /// OSD message shown when a segment of this category is automatically skipped.
+    pub fn skipped_osd(self) -> &'static str {
+        match self {
+            Self::Sponsor => "Sponsor skipped",
+            Self::Selfpromo => "Self-promotion skipped",
+            Self::Interaction => "Interaction reminder skipped",
+            Self::Intro => "Intro skipped",
+            Self::Outro => "Outro skipped",
+            Self::Preview => "Preview skipped",
+            Self::MusicOfftopic => "Non-music section skipped",
+            Self::Filler => "Filler skipped",
+        }
+    }
+
+    /// OSD message shown when a segment of this category is automatically muted.
+    pub fn muted_osd(self) -> &'static str {
+        match self {
+            Self::Sponsor => "Sponsor muted",
+            Self::Selfpromo => "Self-promotion muted",
+            Self::Interaction => "Interaction reminder muted",
+            Self::Intro => "Intro muted",
+            Self::Outro => "Outro muted",
+            Self::Preview => "Preview muted",
+            Self::MusicOfftopic => "Non-music section muted",
+            Self::Filler => "Filler muted",
+        }
+    }
+}
+
+/// How YouTFast handles segments in a SponsorBlock category.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SponsorBehavior {
+    AutoSkip,
+    ManualSkip,
+    SeekBarOnly,
+    Ignore,
+}
+
+impl SponsorBehavior {
+    pub const ALL: [Self; 4] = [
+        Self::AutoSkip,
+        Self::ManualSkip,
+        Self::SeekBarOnly,
+        Self::Ignore,
+    ];
+
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "auto_skip" => Some(Self::AutoSkip),
+            "manual_skip" => Some(Self::ManualSkip),
+            "seek_bar_only" => Some(Self::SeekBarOnly),
+            "ignore" => Some(Self::Ignore),
+            _ => None,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::AutoSkip => "Skip automatically",
+            Self::ManualSkip => "Show skip button",
+            Self::SeekBarOnly => "Only mark on the seek bar",
+            Self::Ignore => "Ignore",
+        }
+    }
+}
+
+/// Per-category SponsorBlock behaviors persisted in settings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct SponsorCategories {
+    pub sponsor: SponsorBehavior,
+    pub selfpromo: SponsorBehavior,
+    pub interaction: SponsorBehavior,
+    pub intro: SponsorBehavior,
+    pub outro: SponsorBehavior,
+    pub preview: SponsorBehavior,
+    pub music_offtopic: SponsorBehavior,
+    pub filler: SponsorBehavior,
+}
+
+impl Default for SponsorCategories {
+    fn default() -> Self {
+        Self {
+            sponsor: SponsorCategory::Sponsor.default_behavior(),
+            selfpromo: SponsorCategory::Selfpromo.default_behavior(),
+            interaction: SponsorCategory::Interaction.default_behavior(),
+            intro: SponsorCategory::Intro.default_behavior(),
+            outro: SponsorCategory::Outro.default_behavior(),
+            preview: SponsorCategory::Preview.default_behavior(),
+            music_offtopic: SponsorCategory::MusicOfftopic.default_behavior(),
+            filler: SponsorCategory::Filler.default_behavior(),
+        }
+    }
+}
+
+impl SponsorCategories {
+    pub fn get(self, category: SponsorCategory) -> SponsorBehavior {
+        match category {
+            SponsorCategory::Sponsor => self.sponsor,
+            SponsorCategory::Selfpromo => self.selfpromo,
+            SponsorCategory::Interaction => self.interaction,
+            SponsorCategory::Intro => self.intro,
+            SponsorCategory::Outro => self.outro,
+            SponsorCategory::Preview => self.preview,
+            SponsorCategory::MusicOfftopic => self.music_offtopic,
+            SponsorCategory::Filler => self.filler,
+        }
+    }
+
+    pub fn set(&mut self, category: SponsorCategory, behavior: SponsorBehavior) {
+        match category {
+            SponsorCategory::Sponsor => self.sponsor = behavior,
+            SponsorCategory::Selfpromo => self.selfpromo = behavior,
+            SponsorCategory::Interaction => self.interaction = behavior,
+            SponsorCategory::Intro => self.intro = behavior,
+            SponsorCategory::Outro => self.outro = behavior,
+            SponsorCategory::Preview => self.preview = behavior,
+            SponsorCategory::MusicOfftopic => self.music_offtopic = behavior,
+            SponsorCategory::Filler => self.filler = behavior,
+        }
+    }
+
+    /// Resolves the configured behavior for a segment category string.
+    /// Unknown categories default to `ManualSkip` (matching legacy behavior).
+    pub fn behavior_for(self, category: &str) -> SponsorBehavior {
+        SponsorCategory::parse(category).map_or(SponsorBehavior::ManualSkip, |cat| self.get(cat))
+    }
+}
+
+struct ResilientBehavior(Option<SponsorBehavior>);
+
+impl<'de> Deserialize<'de> for ResilientBehavior {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct BehaviorVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for BehaviorVisitor {
+            type Value = ResilientBehavior;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a SponsorBehavior string or any value")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Ok(ResilientBehavior(SponsorBehavior::parse(v)))
+            }
+
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(ResilientBehavior(None))
+            }
+
+            fn visit_none<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(ResilientBehavior(None))
+            }
+
+            fn visit_bool<E: serde::de::Error>(self, _: bool) -> Result<Self::Value, E> {
+                Ok(ResilientBehavior(None))
+            }
+
+            fn visit_i64<E: serde::de::Error>(self, _: i64) -> Result<Self::Value, E> {
+                Ok(ResilientBehavior(None))
+            }
+
+            fn visit_u64<E: serde::de::Error>(self, _: u64) -> Result<Self::Value, E> {
+                Ok(ResilientBehavior(None))
+            }
+
+            fn visit_f64<E: serde::de::Error>(self, _: f64) -> Result<Self::Value, E> {
+                Ok(ResilientBehavior(None))
+            }
+
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<Self::Value, A::Error> {
+                while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
+                Ok(ResilientBehavior(None))
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Self::Value, A::Error> {
+                while map
+                    .next_entry::<serde::de::IgnoredAny, serde::de::IgnoredAny>()?
+                    .is_some()
+                {}
+                Ok(ResilientBehavior(None))
+            }
+        }
+
+        deserializer.deserialize_any(BehaviorVisitor)
+    }
+}
+
+impl<'de> Deserialize<'de> for SponsorCategories {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct CategoriesVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for CategoriesVisitor {
+            type Value = SponsorCategories;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a map of SponsorBlock category behaviors")
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut categories = SponsorCategories::default();
+                while let Some((key, value)) = map.next_entry::<String, ResilientBehavior>()? {
+                    if let Some(category) = SponsorCategory::parse(&key)
+                        && let Some(behavior) = value.0
+                    {
+                        categories.set(category, behavior);
+                    }
+                }
+                Ok(categories)
+            }
+
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(SponsorCategories::default())
+            }
+
+            fn visit_none<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(SponsorCategories::default())
+            }
+
+            fn visit_bool<E: serde::de::Error>(self, _: bool) -> Result<Self::Value, E> {
+                Ok(SponsorCategories::default())
+            }
+
+            fn visit_i64<E: serde::de::Error>(self, _: i64) -> Result<Self::Value, E> {
+                Ok(SponsorCategories::default())
+            }
+
+            fn visit_u64<E: serde::de::Error>(self, _: u64) -> Result<Self::Value, E> {
+                Ok(SponsorCategories::default())
+            }
+
+            fn visit_f64<E: serde::de::Error>(self, _: f64) -> Result<Self::Value, E> {
+                Ok(SponsorCategories::default())
+            }
+
+            fn visit_str<E: serde::de::Error>(self, _: &str) -> Result<Self::Value, E> {
+                Ok(SponsorCategories::default())
+            }
+
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<Self::Value, A::Error> {
+                while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
+                Ok(SponsorCategories::default())
+            }
+        }
+
+        deserializer.deserialize_any(CategoriesVisitor)
+    }
+}
+
+/// The action SponsorBlock associates with a segment.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SegmentAction {
+    #[default]
+    Skip,
+    Mute,
+}
+
 /// A part of the video SponsorBlock's users marked.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Segment {
     /// "sponsor", "selfpromo", "intro"…
     pub category: String,
     pub start: f64,
     pub end: f64,
+    #[serde(default)]
+    pub action: SegmentAction,
 }
 
 impl Segment {
-    /// Skipped as it starts; the other categories only offer a button.
-    pub fn skipped_at_once(&self) -> bool {
-        matches!(
-            self.category.as_str(),
-            "sponsor" | "selfpromo" | "interaction"
-        )
-    }
-
     /// The category as the skip button names it.
     pub fn label(&self) -> &'static str {
         match self.category.as_str() {
@@ -665,5 +1007,43 @@ mod tests {
         assert!(!FeedFilter::Unwatched.keeps(&fresh, true, &today));
         assert!(FeedFilter::Live.keeps(&live, false, &today));
         assert!(!FeedFilter::Live.keeps(&fresh, false, &today));
+    }
+
+    #[test]
+    fn sponsor_categories_defaults_and_setters() {
+        use super::{SegmentAction, SponsorBehavior, SponsorCategories, SponsorCategory};
+
+        let mut categories = SponsorCategories::default();
+        assert_eq!(
+            categories.behavior_for("sponsor"),
+            SponsorBehavior::AutoSkip
+        );
+        assert_eq!(
+            categories.behavior_for("selfpromo"),
+            SponsorBehavior::AutoSkip
+        );
+        assert_eq!(
+            categories.behavior_for("interaction"),
+            SponsorBehavior::AutoSkip
+        );
+        for cat in ["intro", "outro", "preview", "music_offtopic", "filler"] {
+            assert_eq!(categories.behavior_for(cat), SponsorBehavior::ManualSkip);
+        }
+        assert_eq!(
+            categories.behavior_for("unknown"),
+            SponsorBehavior::ManualSkip
+        );
+
+        categories.set(SponsorCategory::Sponsor, SponsorBehavior::Ignore);
+        categories.set(SponsorCategory::Intro, SponsorBehavior::AutoSkip);
+        assert_eq!(
+            categories.get(SponsorCategory::Sponsor),
+            SponsorBehavior::Ignore
+        );
+        assert_eq!(
+            categories.get(SponsorCategory::Intro),
+            SponsorBehavior::AutoSkip
+        );
+        assert_eq!(SegmentAction::default(), SegmentAction::Skip);
     }
 }

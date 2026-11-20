@@ -1903,3 +1903,80 @@ msgstr "Ce fichier de sauvegarde dépasse 20 000 abonnements."
 
 msgid "Imported {subscriptions} new subscriptions, {history} new videos of history, and {watch_later} Watch later videos."
 msgstr "{subscriptions} nouveaux abonnements, {history} nouvelles vidéos d'historique et {watch_later} vidéos À regarder plus tard ont été importés."
+msgid "Sponsor"
+msgstr "Sponsor"
+
+msgid "Self-promotion"
+msgstr "Auto-promotion"
+
+msgid "Interaction reminder"
+msgstr "Rappel d'interaction"
+
+msgid "Intro"
+msgstr "Introduction"
+
+msgid "Outro"
+msgstr "Outro"
+
+msgid "Preview"
+msgstr "Aperçu"
+
+msgid "Non-music section"
+msgstr "Section non musicale"
+
+msgid "Filler"
+msgstr "Digression"
+
+msgid "Skip automatically"
+msgstr "Ignorer automatiquement"
+
+msgid "Show skip button"
+msgstr "Afficher le bouton pour ignorer"
+
+msgid "Only mark on the seek bar"
+msgstr "Marquer uniquement sur la barre de progression"
+
+msgid "Ignore"
+msgstr "Ne rien faire"
+
+msgid "Intro skipped"
+msgstr "Introduction ignorée"
+
+msgid "Outro skipped"
+msgstr "Outro ignorée"
+
+msgid "Preview skipped"
+msgstr "Aperçu ignoré"
+
+msgid "Non-music section skipped"
+msgstr "Section non musicale ignorée"
+
+msgid "Filler skipped"
+msgstr "Digression ignorée"
+
+msgid "Sponsor muted"
+msgstr "Sponsor mis en sourdine"
+
+msgid "Self-promotion muted"
+msgstr "Auto-promotion mise en sourdine"
+
+msgid "Interaction reminder muted"
+msgstr "Rappel d'interaction mis en sourdine"
+
+msgid "Intro muted"
+msgstr "Introduction mise en sourdine"
+
+msgid "Outro muted"
+msgstr "Outro mise en sourdine"
+
+msgid "Preview muted"
+msgstr "Aperçu mis en sourdine"
+
+msgid "Non-music section muted"
+msgstr "Section non musicale mise en sourdine"
+
+msgid "Filler muted"
+msgstr "Digression mise en sourdine"
+
+msgid "Segment muted"
+msgstr "Segment mis en sourdine"

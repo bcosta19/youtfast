@@ -1903,3 +1903,80 @@ msgstr "Diese Sicherungsdatei überschreitet 20.000 Abos."
 
 msgid "Imported {subscriptions} new subscriptions, {history} new videos of history, and {watch_later} Watch later videos."
 msgstr "{subscriptions} neue Abos, {history} neue Verlaufsvideos und {watch_later} „Später ansehen“-Videos importiert."
+msgid "Sponsor"
+msgstr "Sponsor"
+
+msgid "Self-promotion"
+msgstr "Eigenwerbung"
+
+msgid "Interaction reminder"
+msgstr "Interaktionserinnerung"
+
+msgid "Intro"
+msgstr "Intro"
+
+msgid "Outro"
+msgstr "Outro"
+
+msgid "Preview"
+msgstr "Vorschau"
+
+msgid "Non-music section"
+msgstr "Nicht-Musik-Abschnitt"
+
+msgid "Filler"
+msgstr "Füllmaterial"
+
+msgid "Skip automatically"
+msgstr "Automatisch überspringen"
+
+msgid "Show skip button"
+msgstr "Überspringen-Schaltfläche anzeigen"
+
+msgid "Only mark on the seek bar"
+msgstr "Nur auf der Fortschrittsleiste markieren"
+
+msgid "Ignore"
+msgstr "Ignorieren"
+
+msgid "Intro skipped"
+msgstr "Intro übersprungen"
+
+msgid "Outro skipped"
+msgstr "Outro übersprungen"
+
+msgid "Preview skipped"
+msgstr "Vorschau übersprungen"
+
+msgid "Non-music section skipped"
+msgstr "Nicht-Musik-Abschnitt übersprungen"
+
+msgid "Filler skipped"
+msgstr "Füllmaterial übersprungen"
+
+msgid "Sponsor muted"
+msgstr "Sponsor stummgeschaltet"
+
+msgid "Self-promotion muted"
+msgstr "Eigenwerbung stummgeschaltet"
+
+msgid "Interaction reminder muted"
+msgstr "Interaktionserinnerung stummgeschaltet"
+
+msgid "Intro muted"
+msgstr "Intro stummgeschaltet"
+
+msgid "Outro muted"
+msgstr "Outro stummgeschaltet"
+
+msgid "Preview muted"
+msgstr "Vorschau stummgeschaltet"
+
+msgid "Non-music section muted"
+msgstr "Nicht-Musik-Abschnitt stummgeschaltet"
+
+msgid "Filler muted"
+msgstr "Füllmaterial stummgeschaltet"
+
+msgid "Segment muted"
+msgstr "Segment stummgeschaltet"

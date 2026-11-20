@@ -6,7 +6,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use youtfast_appearance::theme::{CustomTheme, Palette};
-use youtfast_core::model::Quality;
+use youtfast_core::model::{Quality, SponsorCategories};
 
 fn on() -> bool {
     true
@@ -185,6 +185,9 @@ pub struct Settings {
     /// asked by a prefix of the id's hash so the video is not named.
     #[serde(default)]
     pub sponsorblock: bool,
+    /// Per-category SponsorBlock behaviors.
+    #[serde(default)]
+    pub sponsorblock_categories: SponsorCategories,
     /// Check for new YouTFast releases and show a system notification when
     /// an update is available.
     #[serde(default = "on")]
@@ -371,6 +374,7 @@ impl Default for Settings {
             caption_scale: 1.0,
             caption_background: false,
             sponsorblock: false,
+            sponsorblock_categories: SponsorCategories::default(),
             update_notifications: on(),
             auto_update: false,
             last_notified_version: None,
@@ -810,5 +814,116 @@ mod tests {
         assert_eq!(parsed.channel_speed("UC_a"), Some(1.5));
         assert_eq!(parsed.channel_speed("UC_b"), Some(2.0));
         assert_eq!(parsed.channel_speeds.len(), 2);
+    }
+
+    #[test]
+    fn sponsorblock_categories_default_to_original_behavior_and_survive_damaged_entries() {
+        use youtfast_core::model::{SponsorBehavior, SponsorCategory};
+
+        // Old settings.json with only `"sponsorblock": true` matches legacy behavior.
+        let old_path = path("sb-old");
+        std::fs::write(&old_path, r#"{"sponsorblock": true}"#).unwrap();
+        let old = Settings::load(&old_path).unwrap();
+        assert!(old.sponsorblock);
+        assert_eq!(
+            old.sponsorblock_categories.get(SponsorCategory::Sponsor),
+            SponsorBehavior::AutoSkip
+        );
+        assert_eq!(
+            old.sponsorblock_categories.get(SponsorCategory::Selfpromo),
+            SponsorBehavior::AutoSkip
+        );
+        assert_eq!(
+            old.sponsorblock_categories
+                .get(SponsorCategory::Interaction),
+            SponsorBehavior::AutoSkip
+        );
+        for cat in [
+            SponsorCategory::Intro,
+            SponsorCategory::Outro,
+            SponsorCategory::Preview,
+            SponsorCategory::MusicOfftopic,
+            SponsorCategory::Filler,
+        ] {
+            assert_eq!(
+                old.sponsorblock_categories.get(cat),
+                SponsorBehavior::ManualSkip
+            );
+        }
+        std::fs::remove_file(&old_path).unwrap();
+
+        // Invalid/unknown values inside sponsorblock_categories fall back per category
+        // without moving the file aside.
+        let damaged_path = path("sb-damaged");
+        std::fs::write(
+            &damaged_path,
+            r#"{
+                "volume": 55.0,
+                "sponsorblock": true,
+                "sponsorblock_categories": {
+                    "sponsor": "ignore",
+                    "intro": "auto_skip",
+                    "outro": "seek_bar_only",
+                    "selfpromo": "not_a_behavior",
+                    "preview": 42,
+                    "future_category": "auto_skip"
+                }
+            }"#,
+        )
+        .unwrap();
+        let loaded = Settings::load(&damaged_path).unwrap();
+        assert!(damaged_path.exists());
+        assert_eq!(loaded.volume, 55.0);
+        assert!(loaded.sponsorblock);
+        assert_eq!(
+            loaded.sponsorblock_categories.get(SponsorCategory::Sponsor),
+            SponsorBehavior::Ignore
+        );
+        assert_eq!(
+            loaded.sponsorblock_categories.get(SponsorCategory::Intro),
+            SponsorBehavior::AutoSkip
+        );
+        assert_eq!(
+            loaded.sponsorblock_categories.get(SponsorCategory::Outro),
+            SponsorBehavior::SeekBarOnly
+        );
+        assert_eq!(
+            loaded
+                .sponsorblock_categories
+                .get(SponsorCategory::Selfpromo),
+            SponsorBehavior::AutoSkip
+        );
+        assert_eq!(
+            loaded.sponsorblock_categories.get(SponsorCategory::Preview),
+            SponsorBehavior::ManualSkip
+        );
+        std::fs::remove_file(&damaged_path).unwrap();
+
+        // Non-object sponsorblock_categories also falls back cleanly.
+        let non_object: Settings =
+            serde_json::from_str(r#"{"sponsorblock_categories": "invalid"}"#).unwrap();
+        assert_eq!(
+            non_object.sponsorblock_categories,
+            SponsorCategories::default()
+        );
+
+        // Customized categories round-trip through save/load.
+        let rt_path = path("sb-roundtrip");
+        let mut settings = Settings {
+            sponsorblock: true,
+            ..Settings::default()
+        };
+        settings
+            .sponsorblock_categories
+            .set(SponsorCategory::Intro, SponsorBehavior::AutoSkip);
+        settings
+            .sponsorblock_categories
+            .set(SponsorCategory::Filler, SponsorBehavior::SeekBarOnly);
+        settings
+            .sponsorblock_categories
+            .set(SponsorCategory::Sponsor, SponsorBehavior::Ignore);
+        settings.save(&rt_path).unwrap();
+        assert_eq!(Settings::load(&rt_path).unwrap(), settings);
+        std::fs::remove_file(&rt_path).unwrap();
     }
 }

@@ -7,7 +7,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 use youtfast_cast::{Action, Control, Device, Error, Reply, Request, Worker};
-use youtfast_core::model::{Segment, Video};
+use youtfast_core::model::{Segment, SegmentAction, SponsorBehavior, SponsorCategories, Video};
 
 #[derive(Default)]
 pub struct State {
@@ -54,7 +54,12 @@ impl State {
         }
     }
 
-    fn sponsor_request(&mut self, enabled: bool, now: Instant) -> Option<Request> {
+    fn sponsor_request(
+        &mut self,
+        enabled: bool,
+        categories: SponsorCategories,
+        now: Instant,
+    ) -> Option<Request> {
         if !enabled
             || self.busy()
             || self.sponsor_pending
@@ -70,7 +75,9 @@ impl State {
             .sponsor_segments
             .iter()
             .filter(|segment| {
-                segment.skipped_at_once() && !self.sponsor_skipped.contains(&segment.end)
+                categories.behavior_for(&segment.category) == SponsorBehavior::AutoSkip
+                    && segment.action == SegmentAction::Skip
+                    && !self.sponsor_skipped.contains(&segment.end)
             })
             .cloned()
             .collect();
@@ -85,6 +92,7 @@ impl State {
             device: session.device.clone(),
             video: session.video.id.clone(),
             segments,
+            categories,
         })
     }
 
@@ -371,11 +379,11 @@ impl super::App {
         if enabled {
             ctx.request_repaint_after(Duration::from_secs(1));
         }
-        if let Some(request) = self
-            .state
-            .cast
-            .sponsor_request(self.state.settings.sponsorblock, Instant::now())
-            && let Some(worker) = &self.cast_worker
+        if let Some(request) = self.state.cast.sponsor_request(
+            self.state.settings.sponsorblock,
+            self.state.settings.sponsorblock_categories,
+            Instant::now(),
+        ) && let Some(worker) = &self.cast_worker
             && let Err(error) = worker.send(request)
         {
             self.state.cast.sponsor_pending = false;
@@ -420,6 +428,7 @@ mod tests {
                 category: "sponsor".into(),
                 start: 10.0,
                 end: 30.0,
+                action: SegmentAction::Skip,
             }],
         );
         state
@@ -428,16 +437,17 @@ mod tests {
     #[test]
     fn sponsor_checks_are_opt_in_bounded_and_do_not_consume_remote_replies() {
         let mut state = monitoring();
+        let categories = SponsorCategories::default();
         let now = Instant::now();
-        assert!(state.sponsor_request(false, now).is_none());
+        assert!(state.sponsor_request(false, categories, now).is_none());
         assert!(matches!(
-            state.sponsor_request(true, now),
+            state.sponsor_request(true, categories, now),
             Some(Request::CheckSponsor { .. })
         ));
         assert!(!state.busy());
         assert!(
             state
-                .sponsor_request(true, now + Duration::from_secs(3))
+                .sponsor_request(true, categories, now + Duration::from_secs(3))
                 .is_none()
         );
         assert!(matches!(
@@ -453,12 +463,12 @@ mod tests {
         assert!(!state.busy());
         assert!(
             state
-                .sponsor_request(true, now + Duration::from_secs(1))
+                .sponsor_request(true, categories, now + Duration::from_secs(1))
                 .is_none()
         );
         assert!(
             state
-                .sponsor_request(true, now + Duration::from_secs(3))
+                .sponsor_request(true, categories, now + Duration::from_secs(3))
                 .is_some()
         );
         state.finish(Reply::SponsorChecked(Ok(Sponsor {
@@ -467,7 +477,7 @@ mod tests {
         })));
         assert!(
             state
-                .sponsor_request(true, now + Duration::from_secs(10))
+                .sponsor_request(true, categories, now + Duration::from_secs(10))
                 .is_none()
         );
     }
@@ -475,19 +485,53 @@ mod tests {
     #[test]
     fn monitoring_ignores_other_videos_live_unconfirmed_and_disconnected_sessions() {
         let now = Instant::now();
+        let categories = SponsorCategories::default();
         let mut state = monitoring();
         state.receive_segments("another_one", &[]);
         assert_eq!(state.sponsor_segments.len(), 1);
         state.session.as_mut().unwrap().confirmed = false;
-        assert!(state.sponsor_request(true, now).is_none());
+        assert!(state.sponsor_request(true, categories, now).is_none());
         state.session.as_mut().unwrap().confirmed = true;
         state.session.as_mut().unwrap().video.live = true;
-        assert!(state.sponsor_request(true, now).is_none());
+        assert!(state.sponsor_request(true, categories, now).is_none());
         state.session.as_mut().unwrap().video.live = false;
         state.prepare(Action::Disconnect, None, 0.0, 1);
-        assert!(state.sponsor_request(true, now).is_none());
+        assert!(state.sponsor_request(true, categories, now).is_none());
         state.finish(Reply::Disconnected);
-        assert!(state.sponsor_request(true, now).is_none());
+        assert!(state.sponsor_request(true, categories, now).is_none());
+    }
+
+    #[test]
+    fn cast_skips_only_auto_skip_skip_segments() {
+        use youtfast_core::model::SponsorCategory;
+        let mut state = monitoring();
+        state.receive_segments(
+            "abcdefghijk",
+            &[
+                Segment {
+                    category: "sponsor".into(),
+                    start: 5.0,
+                    end: 10.0,
+                    action: SegmentAction::Mute,
+                },
+                Segment {
+                    category: "intro".into(),
+                    start: 15.0,
+                    end: 25.0,
+                    action: SegmentAction::Skip,
+                },
+            ],
+        );
+        let now = Instant::now();
+        let defaults = SponsorCategories::default();
+        assert!(state.sponsor_request(true, defaults, now).is_none());
+
+        let mut custom = defaults;
+        custom.set(SponsorCategory::Intro, SponsorBehavior::AutoSkip);
+        assert!(matches!(
+            state.sponsor_request(true, custom, now),
+            Some(Request::CheckSponsor { ref segments, .. }) if segments.len() == 1 && segments[0].category == "intro"
+        ));
     }
 
     #[test]
@@ -512,20 +556,21 @@ mod tests {
     #[test]
     fn sponsor_checks_wait_longer_when_the_next_segment_is_far() {
         let mut state = monitoring();
+        let categories = SponsorCategories::default();
         let now = Instant::now();
-        assert!(state.sponsor_request(true, now).is_some());
+        assert!(state.sponsor_request(true, categories, now).is_some());
         state.finish(Reply::SponsorChecked(Ok(Sponsor {
             skipped: None,
             next_in: Some(60.0),
         })));
         assert!(
             state
-                .sponsor_request(true, now + Duration::from_secs(9))
+                .sponsor_request(true, categories, now + Duration::from_secs(9))
                 .is_none()
         );
         assert!(
             state
-                .sponsor_request(true, now + Duration::from_secs(10))
+                .sponsor_request(true, categories, now + Duration::from_secs(10))
                 .is_some()
         );
         state.finish(Reply::SponsorChecked(Ok(Sponsor {
@@ -535,12 +580,12 @@ mod tests {
         let at = now + Duration::from_secs(10);
         assert!(
             state
-                .sponsor_request(true, at + Duration::from_secs(1))
+                .sponsor_request(true, categories, at + Duration::from_secs(1))
                 .is_none()
         );
         assert!(
             state
-                .sponsor_request(true, at + Duration::from_secs(2))
+                .sponsor_request(true, categories, at + Duration::from_secs(2))
                 .is_some()
         );
     }

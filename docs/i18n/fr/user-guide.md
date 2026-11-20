@@ -116,6 +116,20 @@ uniquement la piste audio (`ba/b` et `vid=no`) de la vidéo actuelle, et revient
 à la vidéo standard à l'ouverture d'une autre vidéo ou au redémarrage de
 l'application.
 
+Paramètres → Lecture → **Ignorer les sponsors (SponsorBlock)** est désactivé par
+défaut et interroge SponsorBlock (`sponsor.ajay.app`) en n'envoyant que les quatre
+premiers chiffres hexadécimaux du hachage SHA-256 de l'identifiant vidéo. Une fois
+activé, choisissez un comportement pour chacune des huit catégories (**Sponsor**,
+**Auto-promotion**, **Rappel d'interaction**, **Introduction**, **Outro**,
+**Aperçu**, **Section non musicale**, **Digression**) : **Ignorer automatiquement**
+(par défaut pour les sponsors, l'auto-promotion et les rappels d'interaction),
+**Afficher le bouton pour ignorer** (par défaut pour les autres catégories),
+**Marquer uniquement sur la barre de progression** ou **Ne rien faire**. Les
+segments de mise en sourdine des catégories réglées sur **Ignorer automatiquement**
+coupent automatiquement le son pendant le segment (s'il n'était pas déjà coupé) et
+le réactivent à la sortie, à l'arrêt, à l'ouverture d'une autre vidéo ou lors d'un
+basculement manuel du son.
+
 La page de la vidéo affiche aussi la description (les horodatages permettent de
 se déplacer), les chapitres et les commentaires, chargés via InnerTube. Les
 commentaires et les réponses affichent aussi les pièces jointes images et GIF/WebP
@@ -272,8 +286,9 @@ publicités et les restrictions d'accès. YouTFast ne transfère pas sa session 
 compte, les cookies du navigateur ni la bibliothèque locale. Avec **Ignorer les
 sponsors (SponsorBlock)** activé, YouTFast vérifie aussi la position de la vidéo
 envoyée sur la TV et envoie des déplacements à distance via DIAL/Lounge ou
-Google Cast (`catt`). Il utilise les mêmes catégories automatiques que la
-lecture locale : sponsors, autopromotion et rappels d'interaction. Laissez
+Google Cast (`catt`). Il passe automatiquement les segments de saut des catégories
+réglées sur **Ignorer automatiquement** (les segments de mise en sourdine ne sont
+pas mis en sourdine sur la TV). Laissez
 YouTFast ouvert et connecté ; se déconnecter ou désactiver SponsorBlock arrête
 les déplacements automatiques suivants.
 Cela s'applique à la vidéo explicitement envoyée, pas aux vidéos suivantes

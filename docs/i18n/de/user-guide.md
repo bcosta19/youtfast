@@ -114,6 +114,20 @@ Player-Steuerung) streamt und dekodiert
 nur die Tonspur (`ba/b` und `vid=no`) des aktuellen Videos und kehrt beim Öffnen
 eines anderen Videos oder beim Neustart der App zum normalen Video zurück.
 
+Einstellungen → Wiedergabe → **Sponsoren überspringen (SponsorBlock)** ist
+standardmäßig ausgeschaltet und fragt SponsorBlock (`sponsor.ajay.app`) nur mit den
+ersten vier Hexadezimalziffern des SHA-256-Hashs der Video-ID ab. Bei aktiviertem
+Schalter wählen Sie für jede der acht Kategorien (**Sponsor**, **Eigenwerbung**,
+**Interaktionserinnerung**, **Intro**, **Outro**, **Vorschau**,
+**Nicht-Musik-Abschnitt**, **Füllmaterial**) ein Verhalten: **Automatisch
+überspringen** (Standard für Sponsoren, Eigenwerbung und Interaktionserinnerungen),
+**Überspringen-Schaltfläche anzeigen** (Standard für die übrigen Kategorien),
+**Nur auf der Fortschrittsleiste markieren** oder **Ignorieren**. Segmente zum
+Stummschalten in Kategorien mit **Automatisch überspringen** schalten die
+Wiedergabe innerhalb des Segments automatisch stumm (sofern nicht bereits
+stummgeschaltet) und heben die Stummschaltung beim Verlassen, Stoppen, Öffnen
+eines anderen Videos oder manuellem Umschalten wieder auf.
+
 Die Wiedergabeseite zeigt außerdem die Beschreibung (Zeitstempel springen an die
 Stelle), Kapitel und Kommentare, geladen über InnerTube. Kommentare und Antworten
 zeigen auch Bild- sowie animierte GIF/WebP-Anhänge an. Anhänge nutzen den
@@ -267,9 +281,9 @@ Werbung und Zugriffsbeschränkungen. YouTFast überträgt weder seine Kontositzu
 noch Browser-Cookies oder die lokale Mediathek. Wenn
 **Sponsoren überspringen (SponsorBlock)** aktiviert ist, prüft YouTFast außerdem
 die TV-Position des gesendeten Videos und sendet Sprungbefehle aus der Ferne über
-DIAL/Lounge oder Google Cast (`catt`). Es nutzt dieselben automatischen
-Kategorien wie die lokale Wiedergabe: Sponsoren, Eigenwerbung und
-Interaktionserinnerungen. Lassen Sie YouTFast laufen und verbunden; Trennen oder
+DIAL/Lounge oder Google Cast (`catt`). Es überspringt automatisch Sprungsegmente
+für Kategorien mit **Automatisch überspringen** (Stummschalt-Segmente werden auf
+dem TV nicht stummgeschaltet). Lassen Sie YouTFast laufen und verbunden; Trennen oder
 das Deaktivieren von SponsorBlock beendet weitere automatische Sprünge.
 Das gilt für das ausdrücklich gesendete Video, nicht für nachfolgende Videos, die
 die automatische Wiedergabe des TVs auswählt. Livestreams, pausierte Wiedergabe

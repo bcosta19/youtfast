@@ -14,7 +14,8 @@ use youtfast_backend::{
 use youtfast_core::model::{
     AccountSource, Channel, ChannelAbout, ChannelHeader, ChannelMeta, ChannelTab, CommentRow,
     Details, FeedFilter, Fetch, HistoryRow, Listing, PageItems, PlaylistSummary, Quality, Rating,
-    Resolution, Results, SaveTarget, Segment, Source, SubscriptionSort, Video, View,
+    Resolution, Results, SaveTarget, Segment, SegmentAction, Source, SponsorBehavior,
+    SponsorCategory, SubscriptionSort, Video, View,
 };
 use youtfast_core::util;
 use youtfast_desktop::instance::{self, Queue as RemoteQueue};
@@ -341,9 +342,11 @@ pub struct State {
     pub autoplay: Option<(Video, Instant)>,
     /// SponsorBlock's segments of the video being watched.
     pub segments: Vec<Segment>,
-    /// The segments already skipped, by index: seeking back into one plays
-    /// it.
+    /// The segments already skipped (or whose auto-mute was manually
+    /// overridden), by index: seeking back into a skipped segment plays it.
     pub skipped: HashSet<usize>,
+    /// The segment index that SponsorBlock currently has mpv muted for, if any.
+    pub sponsor_muted: Option<usize>,
     /// What YouTube suggests for the search being typed.
     pub suggestions: Vec<String>,
     /// The suggestion the arrow keys picked, if any.
@@ -1664,6 +1667,9 @@ impl App {
                     .as_ref()
                     .is_some_and(|player| player.status().muted)
                 {
+                    if let Some(index) = self.state.sponsor_muted.take() {
+                        self.state.skipped.insert(index);
+                    }
                     self.with_player(|player| player.set_muted(false));
                 }
                 self.with_player(|player| player.set_volume(volume));
@@ -1917,6 +1923,9 @@ impl App {
                 self.state.refresh_autoplay();
             }
             Action::SetSponsorBlock(on) => self.set_sponsorblock(on),
+            Action::SetSponsorCategory(category, behavior) => {
+                self.set_sponsor_category(category, behavior)
+            }
             Action::SkipSegment => self.skip_segment(),
             Action::ReturnToWatch => self.return_to_watch(),
             Action::CloseMiniPlayer => self.close_mini_player(),
