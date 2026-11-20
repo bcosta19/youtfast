@@ -301,28 +301,30 @@ pub fn candidate_items(state: &State, status: Option<&Status>) -> Vec<PaletteIte
             actions: vec![Action::ToggleTheater],
             search_query: None,
         });
-        items.push(PaletteItem {
-            category: player_category.clone(),
-            label: tr(
-                locale,
-                if state.fullscreen {
-                    "Exit full screen"
+        if state.view == View::Watch {
+            items.push(PaletteItem {
+                category: player_category.clone(),
+                label: tr(
+                    locale,
+                    if state.fullscreen {
+                        "Exit full screen"
+                    } else {
+                        "Full screen"
+                    },
+                )
+                .into_owned(),
+                detail: None,
+                keywords: Some(tr(locale, "Full screen").into_owned()),
+                shortcut: Some("f".into()),
+                icon: if state.fullscreen {
+                    Icon::ExitFullscreen
                 } else {
-                    "Full screen"
+                    Icon::Fullscreen
                 },
-            )
-            .into_owned(),
-            detail: None,
-            keywords: Some(tr(locale, "Full screen").into_owned()),
-            shortcut: Some("f".into()),
-            icon: if state.fullscreen {
-                Icon::ExitFullscreen
-            } else {
-                Icon::Fullscreen
-            },
-            actions: vec![Action::ToggleFullscreen],
-            search_query: None,
-        });
+                actions: vec![Action::ToggleFullscreen],
+                search_query: None,
+            });
+        }
         items.push(PaletteItem {
             category: player_category.clone(),
             label: tr(locale, "Mini player").into_owned(),
@@ -1033,7 +1035,6 @@ mod tests {
             Action::TogglePause,
             Action::ToggleMute,
             Action::ToggleTheater,
-            Action::ToggleFullscreen,
             Action::ToggleMiniPlayer,
             Action::ToggleCaptions,
             Action::ToggleAudioOnly,
@@ -1075,6 +1076,27 @@ mod tests {
                 && i.detail.as_deref() == Some("Fabio Akita")
                 && matches!(i.actions.as_slice(), [Action::Open(v)] if v.id == "hist0000002")
         }));
+    }
+
+    #[test]
+    fn fullscreen_command_is_only_available_on_watch() {
+        let mut state = sample_state();
+        for (view, fullscreen, expected) in [
+            (View::Home, false, None),
+            (View::Watch, false, Some("Full screen")),
+            (View::Watch, true, Some("Exit full screen")),
+        ] {
+            state.view = view;
+            state.fullscreen = fullscreen;
+            let items = candidate_items(&state, None);
+            assert_eq!(
+                items
+                    .iter()
+                    .find(|item| item.actions == [Action::ToggleFullscreen])
+                    .map(|item| item.label.as_str()),
+                expected
+            );
+        }
     }
 
     #[test]

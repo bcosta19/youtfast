@@ -42,6 +42,7 @@ are the distribution record.
 ### Fixed
 
 - The command palette blocks the mouse Back and Forward buttons while it is open.
+- The command palette offers video full screen only on the watch page.
 
 ## [0.9.1] - 2026-11-17
 
