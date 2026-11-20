@@ -121,10 +121,8 @@ impl RepaintTarget {
 
     fn request(&self) {
         let viewport = *self.viewport.lock().unwrap_or_else(PoisonError::into_inner);
-        match viewport {
-            Some(id) => self.ctx.request_repaint_of(id),
-            None => self.ctx.request_repaint(),
-        }
+        self.ctx
+            .request_repaint_of(viewport.unwrap_or(egui::ViewportId::ROOT));
     }
 }
 
@@ -753,5 +751,23 @@ mod tests {
             *requested.lock().unwrap(),
             vec![egui::ViewportId::ROOT, pip, egui::ViewportId::ROOT]
         );
+    }
+
+    #[test]
+    fn frame_ready_falls_back_to_root_from_a_child_pass() {
+        let ctx = egui::Context::default();
+        let child = egui::ViewportId::from_hash_of("pip-window");
+        let mut input = egui::RawInput {
+            viewport_id: child,
+            ..Default::default()
+        };
+        input.viewports.insert(child, egui::ViewportInfo::default());
+        let target = RepaintTarget::new(ctx.clone());
+        let _ = ctx.run_ui(input, |ui| {
+            assert_eq!(ui.ctx().viewport_id(), child);
+            assert!(!ctx.has_requested_repaint_for(egui::ViewportId::ROOT));
+            target.request();
+            assert!(ctx.has_requested_repaint_for(egui::ViewportId::ROOT));
+        });
     }
 }

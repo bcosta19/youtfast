@@ -935,7 +935,8 @@ impl Mpv {
                 .unwrap_or(0.0);
             if self.is_playing() {
                 // SAFETY: the boxed context lives until Drop.
-                unsafe { &*self.wakeup }.request_repaint_after(POSITION_EVERY);
+                unsafe { &*self.wakeup }
+                    .request_repaint_after_for(POSITION_EVERY, egui::ViewportId::ROOT);
             }
         }
         let playing = self.is_playing();
@@ -1063,16 +1064,34 @@ fn unquoted(value: String) -> String {
     serde_json::from_str::<String>(&value).unwrap_or(value)
 }
 
-/// mpv's wakeup callback: events are waiting, so ask for a frame to read
-/// them. It may run on any thread and must not call back into mpv.
+/// mpv's client-event wakeup: only the root viewport runs the app logic
+/// that drains these events. This callback may run on any thread.
 unsafe extern "C" fn wake(context: *mut c_void) {
     // SAFETY: the pointer is the boxed context Mpv::new registered.
     let context = unsafe { &*(context as *const egui::Context) };
-    context.request_repaint();
+    context.request_repaint_of(egui::ViewportId::ROOT);
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn client_events_wake_root_from_a_child_pass() {
+        let ctx = egui::Context::default();
+        let child = egui::ViewportId::from_hash_of("pip-window");
+        let mut input = egui::RawInput {
+            viewport_id: child,
+            ..Default::default()
+        };
+        input.viewports.insert(child, egui::ViewportInfo::default());
+        let _ = ctx.run_ui(input, |ui| {
+            assert_eq!(ui.ctx().viewport_id(), child);
+            assert!(!ctx.has_requested_repaint_for(egui::ViewportId::ROOT));
+            // SAFETY: the context stays live for the synchronous callback.
+            unsafe { super::wake(std::ptr::from_ref(&ctx).cast_mut().cast()) };
+            assert!(ctx.has_requested_repaint_for(egui::ViewportId::ROOT));
+        });
+    }
+
     #[test]
     fn replacement_ignores_old_events_until_its_own_load_started() {
         let mut gate = super::PlaybackEvents {
