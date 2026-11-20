@@ -46,7 +46,7 @@ cargo run --locked --release -- "rust egui"                      # or search
 | ↑, ↓; M | Rolar a página na vertical fora do player; volume ±5% dentro do player; silenciar (nos Shorts, ↑/↓ trocam de vídeo) |
 | C; <, >; vírgula, ponto | Legendas; velocidade; quadro anterior / próximo com o vídeo pausado |
 | Shift+N, Shift+P | Próximo / anterior na fonte de reprodução |
-| I; T; Shift+A | Miniplayer; modo cinema; modo apenas áudio |
+| I; P; T; Shift+A | Miniplayer; janela picture-in-picture; modo cinema; modo apenas áudio |
 | F, clique duplo | Tela cheia |
 | /; ? | Focar a pesquisa; abrir a ajuda dos atalhos |
 | Alt+← / →; botões voltar / avançar do mouse | Navegar para trás / para frente (teclas Alt no Linux/Windows) |
@@ -78,7 +78,9 @@ de rolagem. Os cards têm links para o canal, um menu e ações rápidas de Assi
 mais tarde/fila. A fila pode ser reordenada ou enxugada; o miniplayer é uma caixa
 de vídeo compacta 16:9, sem moldura, no canto inferior direito (clique para voltar
 à página do vídeo, ou passe o mouse para ver os controles de reproduzir/pausar e
-fechar). A reprodução de playlists continua além da primeira página carregada. O
+fechar), e a janela flutuante picture-in-picture (`P` ou o botão no player) abre
+uma janela do sistema separada, sem moldura e sempre no topo, com controles de
+reproduzir/pausar, fechar e voltar ao aplicativo. A reprodução de playlists continua além da primeira página carregada. O
 histórico do dispositivo permite filtrar e remover entradas individuais.
 
 Em uma janela larga, Configurações lista seus grupos em um índice ao lado deles:

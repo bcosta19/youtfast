@@ -157,6 +157,11 @@ drawing when the watch page is absent: an undrawn render-API output stalls.
 Closing it pauses playback; desktop Play returns via `App::show_playing`.
 `Settings::scroll_miniplayer` also allows handoff when the inline player scrolls
 completely out of view; returning sets `State::watch_scroll_to_video`.
+Pop-out picture-in-picture opens a deferred, always-on-top, frameless viewport
+(`player::pip`) alongside the in-window mini player: `eframe`'s `glow` backend
+shares one OpenGL context across viewports while switching per-viewport surfaces,
+and `VideoSurface::set_viewport` routes `frame_ready` repaints to the active
+viewport.
 
 ```mermaid
 stateDiagram-v2

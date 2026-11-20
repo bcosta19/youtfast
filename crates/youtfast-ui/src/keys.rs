@@ -143,9 +143,13 @@ pub(super) fn handle(
         if input.key_pressed(Key::B) {
             actions.push(Action::ToggleSidebar);
         }
-        let playing = state.watching.is_some() && !state.mini_closed;
+        let playing = state.watching.is_some() && (!state.mini_closed || state.pip_open);
         if input.key_pressed(Key::I) && playing {
             actions.push(Action::ToggleMiniPlayer);
+            return;
+        }
+        if !input.modifiers.shift && input.key_pressed(Key::P) && state.watching.is_some() {
+            actions.push(Action::TogglePip);
             return;
         }
         // Unambiguous playback commands also work while browsing with the mini player.
@@ -624,6 +628,10 @@ mod tests {
         assert_eq!(
             press(&mut state, Key::I, egui::Modifiers::NONE),
             vec![Action::ToggleMiniPlayer]
+        );
+        assert_eq!(
+            press(&mut state, Key::P, egui::Modifiers::NONE),
+            vec![Action::TogglePip]
         );
         assert!(press(&mut state, Key::K, egui::Modifiers::NONE).is_empty());
     }

@@ -47,7 +47,7 @@ cargo run --locked --release -- "rust egui"                      # or search
 | ↑, ↓; M | Außerhalb des Players die Seite vertikal scrollen; im Player Lautstärke ±5 %; stummschalten (in Shorts wechseln ↑/↓ die Videos) |
 | C; <, >; Komma, Punkt | Untertitel; Geschwindigkeit; vorheriges / nächstes Einzelbild bei Pause |
 | Umschalt+N, Umschalt+P | Nächstes / vorheriges Element der Wiedergabequelle |
-| I; T; Umschalt+A | Miniplayer; Kinomodus; Nur-Audio-Modus |
+| I; P; T; Umschalt+A | Miniplayer; Bild-in-Bild-Fenster; Kinomodus; Nur-Audio-Modus |
 | F, Doppelklick | Vollbild |
 | /; ? | Suche fokussieren; Hilfe zu Tastaturkürzeln öffnen |
 | Alt+← / →; Maustaste zurück / vor | Zurück / vor navigieren (Alt-Tasten unter Linux/Windows) |
@@ -81,7 +81,10 @@ Schnellaktionen für „Später ansehen“ und die Warteschlange. Die Warteschla
 lässt sich umsortieren oder kürzen; der Miniplayer ist ein kompaktes, rahmenloses
 16:9-Videofeld in der unteren rechten Ecke (klicken, um zur Wiedergabeseite
 zurückzukehren, oder mit der Maus darüberfahren für Wiedergabe/Pause und
-Schließen). Die Wiedergabe einer Playlist geht über die zuerst geladene Seite
+Schließen), und das schwebende Bild-in-Bild-Fenster (`P` oder über die
+Player-Schaltfläche) öffnet ein separates, rahmenloses OS-Fenster im
+Vordergrund mit Schaltflächen für Wiedergabe/Pause, Schließen und Zurück zur
+App. Die Wiedergabe einer Playlist geht über die zuerst geladene Seite
 hinaus weiter. Der Geräteverlauf lässt sich filtern, und einzelne Einträge
 können entfernt werden.
 

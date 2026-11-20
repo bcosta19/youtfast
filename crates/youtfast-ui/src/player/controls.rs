@@ -32,6 +32,7 @@ pub(super) fn buttons(
     let row = ui.available_rect_before_wrap();
     let spacing = 4.0;
     let page_controls = mode == Mode::Page && !state.watching_short();
+    let pip_button = page_controls && row.width() >= 332.0;
     let fullscreen_button = mode != Mode::Short || row.width() >= 152.0;
     let captions_button =
         !status.subtitles.is_empty() && (mode != Mode::Short || row.width() >= 188.0);
@@ -43,6 +44,7 @@ pub(super) fn buttons(
     let right_count = 1
         + usize::from(fullscreen_button)
         + usize::from(page_controls) * 2
+        + usize::from(pip_button)
         + usize::from(captions_button)
         + usize::from(audio_only_button) * 2;
     let speed = (!at_live_edge(live, status) && status.speed != 1.0 && row.width() >= 900.0)
@@ -147,6 +149,17 @@ pub(super) fn buttons(
             };
             if control_button(ui, Icon::Theater, 18.0, &hint).clicked() {
                 actions.push(Action::ToggleTheater);
+            }
+            if pip_button
+                && control_button(
+                    ui,
+                    Icon::ExternalLink,
+                    18.0,
+                    &tr(locale, "Picture-in-picture (p)"),
+                )
+                .clicked()
+            {
+                actions.push(Action::TogglePip);
             }
             if control_button(ui, Icon::MiniPlayer, 18.0, &tr(locale, "Miniplayer (i)")).clicked() {
                 actions.push(Action::ToggleMiniPlayer);

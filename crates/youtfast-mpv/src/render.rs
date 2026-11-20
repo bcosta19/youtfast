@@ -99,11 +99,40 @@ impl Frame {
     }
 }
 
+/// Where [`frame_ready`] requests the next egui frame: the root window by
+/// default, or a pop-out viewport while that viewport paints the surface.
+struct RepaintTarget {
+    ctx: egui::Context,
+    viewport: Mutex<Option<egui::ViewportId>>,
+}
+
+impl RepaintTarget {
+    fn new(ctx: egui::Context) -> Self {
+        Self {
+            ctx,
+            viewport: Mutex::new(None),
+        }
+    }
+
+    fn set_viewport(&self, viewport: Option<egui::ViewportId>) {
+        let mut current = self.viewport.lock().unwrap_or_else(PoisonError::into_inner);
+        *current = viewport.filter(|&id| id != egui::ViewportId::ROOT);
+    }
+
+    fn request(&self) {
+        let viewport = *self.viewport.lock().unwrap_or_else(PoisonError::into_inner);
+        match viewport {
+            Some(id) => self.ctx.request_repaint_of(id),
+            None => self.ctx.request_repaint(),
+        }
+    }
+}
+
 struct Inner {
     mpv: Arc<Handle>,
     get_proc_address: GetProcAddress,
     display: NativeDisplay,
-    repaint: egui::Context,
+    repaint: Arc<RepaintTarget>,
     render: Option<RenderContext>,
     target: Option<Target>,
     frame: Frame,
@@ -132,7 +161,7 @@ impl VideoSurface {
                 mpv,
                 get_proc_address,
                 display,
-                repaint,
+                repaint: Arc::new(RepaintTarget::new(repaint)),
                 render: None,
                 target: None,
                 frame: Frame::default(),
@@ -142,9 +171,26 @@ impl VideoSurface {
         }
     }
 
+    /// Routes mpv frame-ready repaints to `viewport` (or the root viewport
+    /// when `None`).
+    pub fn set_viewport(&self, viewport: Option<egui::ViewportId>) {
+        let repaint = Arc::clone(
+            &self
+                .inner
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .repaint,
+        );
+        repaint.set_viewport(viewport);
+    }
+
     /// Queues the video into `rect` of the current egui frame.
     pub fn paint(&self, ui: &egui::Ui, rect: egui::Rect) {
         let inner = Arc::clone(&self.inner);
+        {
+            let repaint = Arc::clone(&inner.lock().unwrap_or_else(PoisonError::into_inner).repaint);
+            repaint.set_viewport(Some(ui.ctx().viewport_id()));
+        }
         let callback = egui_glow::CallbackFn::new(move |info, painter| {
             let mut inner = inner.lock().unwrap_or_else(PoisonError::into_inner);
             inner.draw(&info, painter.gl());
@@ -454,7 +500,7 @@ impl Target {
 struct RenderContext {
     ptr: *mut ffi::mpv_render_context,
     get_proc_address: *mut GetProcAddress,
-    repaint: *mut egui::Context,
+    repaint: *mut Arc<RepaintTarget>,
     /// Keeps mpv alive until the renderer is freed, as libmpv requires.
     _mpv: Arc<Handle>,
 }
@@ -467,7 +513,7 @@ impl RenderContext {
         mpv: &Arc<Handle>,
         get_proc_address: &GetProcAddress,
         display: NativeDisplay,
-        repaint: &egui::Context,
+        repaint: &Arc<RepaintTarget>,
     ) -> Result<Self, Error> {
         let proc_context = Box::into_raw(Box::new(Arc::clone(get_proc_address)));
         let mut init = ffi::mpv_opengl_init_params {
@@ -510,7 +556,7 @@ impl RenderContext {
             drop(unsafe { Box::from_raw(proc_context) });
             return Err(Error::new(code, "creating the OpenGL renderer"));
         }
-        let repaint = Box::into_raw(Box::new(repaint.clone()));
+        let repaint = Box::into_raw(Box::new(Arc::clone(repaint)));
         // SAFETY: the callback only asks egui for a repaint; free() removes
         // it before the context is dropped.
         unsafe {
@@ -606,9 +652,9 @@ unsafe extern "C" fn lookup(context: *mut c_void, name: *const c_char) -> *mut c
 /// mpv's update callback: a new frame is due. It may run on any thread and
 /// must not call back into mpv.
 unsafe extern "C" fn frame_ready(context: *mut c_void) {
-    // SAFETY: the pointer is the boxed context RenderContext::new registered.
-    let context = unsafe { &*(context as *const egui::Context) };
-    context.request_repaint();
+    // SAFETY: the pointer is the boxed Arc<RepaintTarget> RenderContext::new registered.
+    let target = unsafe { &*(context as *const Arc<RepaintTarget>) };
+    target.request();
 }
 
 #[cfg(test)]
@@ -687,5 +733,25 @@ mod tests {
             MPV_RENDER_FRAME_INFO_PRESENT | MPV_RENDER_FRAME_INFO_REDRAW
         ));
         assert!(!new_picture(0));
+    }
+
+    #[test]
+    fn repaint_target_routes_frames_to_active_viewport() {
+        let pip = egui::ViewportId::from_hash_of("pip-window");
+        let requested = Arc::new(Mutex::new(Vec::new()));
+        for viewport in [None, Some(pip), Some(egui::ViewportId::ROOT)] {
+            let ctx = egui::Context::default();
+            let seen = Arc::clone(&requested);
+            ctx.set_request_repaint_callback(move |info| {
+                seen.lock().unwrap().push(info.viewport_id);
+            });
+            let target = RepaintTarget::new(ctx);
+            target.set_viewport(viewport);
+            target.request();
+        }
+        assert_eq!(
+            *requested.lock().unwrap(),
+            vec![egui::ViewportId::ROOT, pip, egui::ViewportId::ROOT]
+        );
     }
 }

@@ -43,7 +43,7 @@ cargo run --locked --release -- "rust egui"                      # or search
 | ↑, ↓; M | Scroll page vertically outside the player; volume ±5% inside the player; mute (Shorts use ↑/↓ for videos) |
 | C; <, >; comma, period | Captions; speed; previous / next paused frame |
 | Shift+N, Shift+P | Next / previous in the playback source |
-| I; T; Shift+A | Mini player; theater mode; audio-only mode |
+| I; P; T; Shift+A | Mini player; picture-in-picture window; theater mode; audio-only mode |
 | F, double click | Full screen |
 | /; ? | Focus search; open shortcut help |
 | Alt+← / →; mouse back / forward | Browse back / forward (Alt keys on Linux/Windows) |
@@ -71,7 +71,9 @@ Back/forward restores the page, query, filters, selection and scroll position.
 Cards have channel links, a menu and quick Watch later/queue actions. The queue
 can be reordered or trimmed; the mini player is a compact frameless 16:9 video
 box in the bottom-right corner (click to return to the watch page, or hover for
-play/pause and close controls). Playlist playback continues beyond the initially
+play/pause and close controls), and the pop-out picture-in-picture window (`P`
+or the player control) opens a separate, always-on-top, frameless OS window with
+play/pause, close, and return-to-app controls. Playlist playback continues beyond the initially
 loaded page. Device history supports filtering and removing individual entries.
 
 In a wide window, Settings lists its groups in an index beside them: click a

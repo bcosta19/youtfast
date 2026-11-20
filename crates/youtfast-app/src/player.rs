@@ -2,7 +2,147 @@
 //! plays next, live streams' edge, SponsorBlock's skips, the mini player,
 //! and the search field's suggestions.
 
+use std::sync::{Arc, Mutex, PoisonError};
+
 use super::*;
+
+/// The viewport identifier for the pop-out picture-in-picture OS window.
+pub fn pip_viewport_id() -> egui::ViewportId {
+    egui::ViewportId::from_hash_of("pip-window")
+}
+
+/// Computes the initial logical size of the pop-out picture-in-picture window
+/// from `aspect`, keeping it within sensible bounds around 16:9.
+pub fn pip_window_size(aspect: f64) -> [f32; 2] {
+    let aspect = if aspect.is_finite() && aspect > 0.25 && aspect <= 4.0 {
+        aspect as f32
+    } else {
+        16.0 / 9.0
+    };
+    if aspect >= 1.0 {
+        let width = 384.0_f32;
+        [width, (width / aspect).clamp(135.0, 720.0)]
+    } else {
+        let height = 384.0_f32;
+        [(height * aspect).clamp(240.0, 480.0), height]
+    }
+}
+
+/// Snapshot of playback and theme state mirrored to the deferred PiP viewport.
+#[derive(Clone, Debug, Default)]
+pub struct PipSnapshot {
+    pub status: Option<mpv::Status>,
+    pub player_error: Option<String>,
+    pub audio_only: bool,
+    pub watching_live: bool,
+    pub thumbnail: Option<String>,
+    pub palette: Palette,
+    pub language: youtfast_i18n::Locale,
+    pub demo_synthetic_images: bool,
+}
+
+#[derive(Default)]
+struct PipShared {
+    snapshot: PipSnapshot,
+    actions: Vec<Action>,
+}
+
+/// Thread-safe bridge between `App` on the root viewport and the deferred PiP
+/// viewport callback.
+#[derive(Clone, Default)]
+pub struct PipBridge(Arc<Mutex<PipShared>>);
+
+impl PipBridge {
+    /// Updates the mirrored snapshot and returns whether visible PiP state
+    /// changed since the previous sync.
+    pub fn sync(
+        &self,
+        state: &State,
+        status: Option<&mpv::Status>,
+        demo_synthetic_images: bool,
+    ) -> bool {
+        let next = PipSnapshot {
+            status: status.cloned(),
+            player_error: state.player_error.clone(),
+            audio_only: state.audio_only,
+            watching_live: state.watching_live(),
+            thumbnail: state.watching.as_ref().map(Video::thumbnail),
+            palette: state.palette,
+            language: state.settings.language,
+            demo_synthetic_images,
+        };
+        let mut shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let changed = snapshot_key(&shared.snapshot) != snapshot_key(&next);
+        shared.snapshot = next;
+        changed
+    }
+
+    /// Returns a cloned snapshot for painting the PiP viewport.
+    pub fn snapshot(&self) -> PipSnapshot {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .snapshot
+            .clone()
+    }
+
+    /// Queues an action from the PiP viewport for `App::logic` to apply.
+    pub fn push_action(&self, action: Action) {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .actions
+            .push(action);
+    }
+
+    /// Drains queued PiP actions on the root viewport.
+    pub fn take_actions(&self) -> Vec<Action> {
+        let mut shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        std::mem::take(&mut shared.actions)
+    }
+}
+
+#[derive(PartialEq)]
+struct StatusKey {
+    paused: bool,
+    idle: bool,
+    buffering: bool,
+    has_video: bool,
+    position_tenths: i64,
+    duration_tenths: i64,
+    aspect_bits: u64,
+}
+
+#[derive(PartialEq)]
+struct SnapshotKey<'a> {
+    status: Option<StatusKey>,
+    player_error: Option<&'a str>,
+    audio_only: bool,
+    watching_live: bool,
+    thumbnail: Option<&'a str>,
+    palette: Palette,
+    language: youtfast_i18n::Locale,
+}
+
+fn snapshot_key(snapshot: &PipSnapshot) -> SnapshotKey<'_> {
+    SnapshotKey {
+        status: snapshot.status.as_ref().map(|s| StatusKey {
+            paused: s.paused,
+            idle: s.idle,
+            buffering: s.buffering,
+            has_video: s.has_video,
+            position_tenths: (s.position * 10.0).round() as i64,
+            duration_tenths: (s.duration * 10.0).round() as i64,
+            aspect_bits: s.video_aspect.to_bits(),
+        }),
+        player_error: snapshot.player_error.as_deref(),
+        audio_only: snapshot.audio_only,
+        watching_live: snapshot.watching_live,
+        thumbnail: snapshot.thumbnail.as_deref(),
+        palette: snapshot.palette,
+        language: snapshot.language,
+    }
+}
 
 /// How long a note stays over the video.
 const OSD_FOR: Duration = Duration::from_millis(900);
@@ -497,6 +637,66 @@ impl App {
         self.state.mini_closed = true;
         self.state.playing_waiting = None;
         self.state.autoplay = None;
+    }
+
+    pub(super) fn open_pip(&mut self, ctx: &egui::Context) {
+        if self.state.watching.is_none() {
+            return;
+        }
+        let aspect = self
+            .player
+            .as_ref()
+            .map_or(0.0, |player| player.status().video_aspect);
+        self.state.pip_size = pip_window_size(aspect);
+        self.state.pip_open = true;
+        self.state.player_menu = crate::PlayerMenu::Closed;
+        self.set_fullscreen(ctx, false);
+        let pip_id = pip_viewport_id();
+        if let Some(surface) = &self.surface {
+            surface.set_viewport(Some(pip_id));
+        }
+        self.sync_pip_bridge(ctx);
+        ctx.send_viewport_cmd_to(pip_id, egui::ViewportCommand::Visible(true));
+        ctx.request_repaint_of(pip_id);
+    }
+
+    pub(super) fn close_pip(&mut self, ctx: &egui::Context, pause: bool) {
+        if !self.state.pip_open {
+            return;
+        }
+        self.state.pip_open = false;
+        if let Some(surface) = &self.surface {
+            surface.set_viewport(None);
+        }
+        let pip_id = pip_viewport_id();
+        ctx.send_viewport_cmd_to(pip_id, egui::ViewportCommand::Visible(false));
+        ctx.send_viewport_cmd_to(pip_id, egui::ViewportCommand::Close);
+        if pause {
+            self.remember_position();
+            self.with_player(|player| player.set_paused(true));
+            self.state.playing_waiting = None;
+            self.state.autoplay = None;
+        }
+        ctx.request_repaint();
+    }
+
+    pub(super) fn return_from_pip(&mut self, ctx: &egui::Context) {
+        self.close_pip(ctx, false);
+        self.return_to_watch();
+        focus(ctx);
+    }
+
+    pub(super) fn sync_pip_bridge(&self, ctx: &egui::Context) -> bool {
+        let demo_synthetic = cfg!(feature = "demo")
+            && ctx.data(|d| {
+                d.get_temp::<bool>(egui::Id::new("synthetic-images"))
+                    .unwrap_or(false)
+            });
+        self.state.pip_bridge.sync(
+            &self.state,
+            self.player.as_ref().map(Mpv::status),
+            demo_synthetic,
+        )
     }
 
     /// Each frame: the countdown to the next video, SponsorBlock's skips,
@@ -1442,5 +1642,44 @@ mod tests {
             ..mpv::Status::default()
         };
         assert!(!at_live_edge(true, &behind_status));
+    }
+
+    #[test]
+    fn pip_window_size_matches_landscape_portrait_and_invalid_aspects() {
+        assert_eq!(pip_window_size(16.0 / 9.0), [384.0, 216.0]);
+        assert_eq!(pip_window_size(0.0), [384.0, 216.0]);
+        assert_eq!(pip_window_size(f64::NAN), [384.0, 216.0]);
+        let portrait = pip_window_size(9.0 / 16.0);
+        assert_eq!(portrait[1], 384.0);
+        assert!((portrait[0] - 240.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn pip_bridge_syncs_state_and_drains_actions() {
+        let bridge = PipBridge::default();
+        let state = State {
+            watching: Some(video("aaaaaaaaaaa")),
+            audio_only: true,
+            ..State::default()
+        };
+        let status = mpv::Status {
+            paused: true,
+            position: 12.0,
+            duration: 60.0,
+            ..mpv::Status::default()
+        };
+        assert!(bridge.sync(&state, Some(&status), false));
+        assert!(!bridge.sync(&state, Some(&status), false));
+        let snap = bridge.snapshot();
+        assert!(snap.audio_only);
+        assert_eq!(snap.status.as_ref().map(|s| s.position), Some(12.0));
+
+        bridge.push_action(Action::TogglePause);
+        bridge.push_action(Action::ReturnFromPip);
+        assert_eq!(
+            bridge.take_actions(),
+            vec![Action::TogglePause, Action::ReturnFromPip]
+        );
+        assert!(bridge.take_actions().is_empty());
     }
 }

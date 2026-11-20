@@ -46,7 +46,7 @@ cargo run --locked --release -- "rust egui"                      # or search
 | ↑, ↓; M | Scorrimento verticale della pagina fuori dal player; volume ±5% nel player; disattiva l'audio (negli Shorts ↑/↓ cambiano video) |
 | C; <, >; virgola, punto | Sottotitoli; velocità; fotogramma precedente / successivo in pausa |
 | Shift+N, Shift+P | Successivo / precedente nella sorgente di riproduzione |
-| I; T; Shift+A | Miniplayer; modalità cinema; modalità Solo audio |
+| I; P; T; Shift+A | Miniplayer; finestra picture-in-picture; modalità cinema; modalità Solo audio |
 | F, doppio clic | Schermo intero |
 | /; ? | Attiva la ricerca; apri l'aiuto delle scorciatoie |
 | Alt+← / →; pulsanti indietro / avanti del mouse | Naviga indietro / avanti (tasti Alt su Linux/Windows) |
@@ -79,7 +79,9 @@ Le schede hanno link al canale, un menu e azioni rapide per Guarda più tardi e 
 la coda. La coda si può riordinare o accorciare; il miniplayer è un riquadro video
 compatto 16:9 senza bordi nell'angolo in basso a destra (fai clic per tornare alla
 pagina del video, o passaci sopra con il mouse per i controlli di riproduzione/pausa
-e chiusura). La riproduzione delle playlist continua oltre la pagina caricata
+e chiusura), mentre la finestra mobile picture-in-picture (`P` o il controllo del
+player) apre una finestra di sistema separata, senza bordi e sempre in primo
+piano, con controlli di riproduzione/pausa, chiusura e ritorno all'app. La riproduzione delle playlist continua oltre la pagina caricata
 inizialmente. La cronologia del dispositivo permette di filtrare e rimuovere singole voci.
 
 In una finestra larga, Impostazioni elenca i suoi gruppi in un indice accanto a

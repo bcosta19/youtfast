@@ -242,6 +242,12 @@ pub enum Action {
     ReturnToWatch,
     /// The mini player's close: pauses and hides it.
     CloseMiniPlayer,
+    /// Open or return from the pop-out picture-in-picture OS window.
+    TogglePip,
+    /// Close the pop-out picture-in-picture window and pause playback.
+    ClosePip,
+    /// Close the pop-out picture-in-picture window and return to the app.
+    ReturnFromPip,
     /// Check GitHub Releases for a newer version of YouTFast.
     CheckForUpdates,
     /// Download, verify and install the available update.

@@ -112,8 +112,11 @@ pub fn show(
         }
     });
     // The video goes on in the corner while other pages show.
-    if state.view != View::Watch && !state.mini_closed {
+    if state.view != View::Watch && !state.mini_closed && !state.pip_open {
         player::mini(ui.ctx(), state, status, surface, actions);
+    }
+    if state.pip_open && state.watching.is_some() {
+        player::pip(ui.ctx(), state, surface);
     }
     notice_toast(ui.ctx(), state, actions);
     if state.keys_open {
@@ -972,6 +975,7 @@ fn keys_overlay(ctx: &egui::Context, state: &mut State) {
                 ("c", "Captions"),
                 ("Shift+N / P", "Next / previous"),
                 ("i", "Miniplayer"),
+                ("p", "Picture-in-picture"),
                 ("Home / End", "Start / end"),
                 ("Ctrl+← / →", "Chapters (Option on Mac)"),
                 ("↑ / ↓", "Volume: 5%; switch Shorts"),

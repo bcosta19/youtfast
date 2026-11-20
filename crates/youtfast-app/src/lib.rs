@@ -355,6 +355,12 @@ pub struct State {
     pub suggestion_cursor: Option<usize>,
     /// The mini player was closed: the video stays paused until reopened.
     pub mini_closed: bool,
+    /// Whether the pop-out picture-in-picture OS window is open.
+    pub pip_open: bool,
+    /// Initial logical dimensions captured when opening the PiP window.
+    pub pip_size: [f32; 2],
+    /// State and action bridge for the deferred PiP viewport.
+    pub pip_bridge: player::PipBridge,
     /// A return from the mini player reveals the inline video again.
     pub watch_scroll_to_video: bool,
     pub playback_loop: bool,
@@ -1673,6 +1679,9 @@ impl App {
             Action::SetCaptionScale(scale) => self.set_caption_scale(scale),
             Action::SetCaptionBackground(on) => self.set_caption_background(on),
             Action::ToggleMiniPlayer => {
+                if self.state.pip_open {
+                    self.close_pip(ctx, false);
+                }
                 if self.state.view == View::Watch && self.back.is_empty() {
                     self.apply(ctx, Action::Navigate(View::Home));
                 } else if self.state.view == View::Watch {
@@ -2170,6 +2179,15 @@ impl App {
             Action::SkipSegment => self.skip_segment(),
             Action::ReturnToWatch => self.return_to_watch(),
             Action::CloseMiniPlayer => self.close_mini_player(),
+            Action::TogglePip => {
+                if self.state.pip_open {
+                    self.return_from_pip(ctx);
+                } else {
+                    self.open_pip(ctx);
+                }
+            }
+            Action::ClosePip => self.close_pip(ctx, true),
+            Action::ReturnFromPip => self.return_from_pip(ctx),
             Action::CheckForUpdates => {
                 if !matches!(
                     self.state.update,
@@ -2404,7 +2422,13 @@ impl eframe::App for App {
                 self.state.font_families = families.to_vec();
             }
         }
+        for action in self.state.pip_bridge.take_actions() {
+            self.apply(ctx, action);
+        }
         self.poll();
+        if self.state.pip_open && self.sync_pip_bridge(ctx) {
+            ctx.request_repaint_of(player::pip_viewport_id());
+        }
         self.poll_cast(ctx);
         images::forget_unseen(ctx);
         for (url, manual) in images::drain_expired() {
@@ -2460,6 +2484,9 @@ impl eframe::App for App {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.update_theme(ui.ctx());
+        if self.state.pip_open {
+            self.sync_pip_bridge(ui.ctx());
+        }
         let mut actions = Vec::new();
         self.state.can_go_back = !self.back.is_empty();
         self.state.can_go_forward = !self.forward.is_empty();

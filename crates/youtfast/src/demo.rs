@@ -299,7 +299,16 @@ impl eframe::App for Demo {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.frames += 1;
-        let mut actions = Vec::new();
+        let mut actions = self.state.pip_bridge.take_actions();
+        if self.state.pip_open {
+            let synthetic = ui.ctx().data(|d| {
+                d.get_temp::<bool>(egui::Id::new("synthetic-images"))
+                    .unwrap_or(false)
+            });
+            self.state
+                .pip_bridge
+                .sync(&self.state, Some(&self.status), synthetic);
+        }
         ui::show(ui, &mut self.state, Some(&self.status), None, &mut actions);
         ui::release_speed_hold(ui.ctx(), &self.state, &mut actions);
         for action in actions {
@@ -416,6 +425,25 @@ impl eframe::App for Demo {
                 }
                 Action::ReturnToWatch => self.state.view = View::Watch,
                 Action::CloseMiniPlayer => self.state.mini_closed = true,
+                Action::TogglePip => {
+                    if self.state.pip_open {
+                        self.state.pip_open = false;
+                        self.state.view = View::Watch;
+                    } else if self.state.watching.is_some() {
+                        self.state.pip_size =
+                            youtfast_app::player::pip_window_size(self.status.video_aspect);
+                        self.state.pip_open = true;
+                        self.state.fullscreen = false;
+                    }
+                }
+                Action::ClosePip => {
+                    self.state.pip_open = false;
+                    self.status.paused = true;
+                }
+                Action::ReturnFromPip => {
+                    self.state.pip_open = false;
+                    self.state.view = View::Watch;
+                }
                 Action::ToggleSidebar => {
                     apply_sidebar_action(
                         &mut self.state,
