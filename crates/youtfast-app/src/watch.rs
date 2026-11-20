@@ -726,6 +726,11 @@ impl App {
     }
 
     pub(super) fn set_fullscreen(&mut self, ctx: &egui::Context, fullscreen: bool) {
+        if fullscreen {
+            // Fullscreen draws only in the root viewport. Reclaim the video
+            // surface before the next frame, without changing playback.
+            self.close_pip(ctx, false);
+        }
         if self.state.fullscreen != fullscreen {
             self.state.fullscreen = fullscreen;
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(fullscreen));

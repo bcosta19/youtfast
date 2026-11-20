@@ -483,7 +483,12 @@ impl eframe::App for Demo {
                     self.state.audio_only = !self.state.audio_only;
                 }
                 Action::ToggleTheater => self.state.settings.theater = !self.state.settings.theater,
-                Action::ToggleFullscreen => self.state.fullscreen = !self.state.fullscreen,
+                Action::ToggleFullscreen => {
+                    self.state.fullscreen = !self.state.fullscreen;
+                    if self.state.fullscreen {
+                        self.state.pip_open = false;
+                    }
+                }
                 Action::ExitFullscreen => self.state.fullscreen = false,
                 Action::SetSearchOptions(v) => self.state.search_options = v,
                 Action::SetChannelOrder(v) => self.state.channel_order = v,
@@ -696,6 +701,68 @@ impl eframe::App for Demo {
         }
         if self.capture.is_some() {
             ui.ctx().request_repaint();
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use eframe::App as _;
+
+    #[test]
+    fn pip_to_fullscreen_preserves_playing_and_paused_states() {
+        for paused in [false, true] {
+            let ctx = egui::Context::default();
+            ctx.set_embed_viewports(false);
+            ctx.data_mut(|data| data.insert_temp(egui::Id::new("synthetic-images"), true));
+            theme::install_fonts(&ctx);
+            fastframe_icons::install::<youtfast_appearance::icons::Icon>(&ctx);
+            let mut frame = eframe::Frame::_new_kittest();
+            let mut demo = Demo {
+                state: fixture("watch"),
+                status: Status {
+                    paused,
+                    position: 10.0,
+                    duration: 60.0,
+                    has_video: true,
+                    ..Status::default()
+                },
+                capture: None,
+                frames: 0,
+                hover_first: false,
+            };
+            let mut run = |key: Option<egui::Key>| {
+                let events = key
+                    .map(|key| egui::Event::Key {
+                        key,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: egui::Modifiers::NONE,
+                    })
+                    .into_iter()
+                    .collect();
+                ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1200.0, 800.0),
+                        )),
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| demo.ui(ui, &mut frame),
+                )
+            };
+            let pip = youtfast_app::player::pip_viewport_id();
+            let _ = run(Some(egui::Key::P));
+            assert!(run(None).viewport_output.contains_key(&pip));
+            let _ = run(Some(egui::Key::F));
+            assert!(!run(None).viewport_output.contains_key(&pip));
+            assert!(demo.state.fullscreen);
+            assert!(!demo.state.pip_open);
+            assert_eq!(demo.status.paused, paused);
         }
     }
 }
