@@ -379,12 +379,23 @@ pub fn from_short(short: &Value) -> Option<Video> {
                 .and_then(Value::as_str)
                 .and_then(parse_accessibility_views)
         });
+    let channel_id = short
+        .get("channelId")
+        .and_then(Value::as_str)
+        .filter(|id| id.starts_with("UC"))
+        .or_else(|| {
+            short
+                .pointer("/onTap/innertubeCommand/reelWatchEndpoint/channelId")
+                .and_then(Value::as_str)
+                .filter(|id| id.starts_with("UC"))
+        })
+        .map(str::to_owned);
     Some(Video {
         id,
         title,
         channel: None,
         channel_avatar: None,
-        channel_id: None,
+        channel_id,
         duration: None,
         views,
         live: false,
@@ -440,7 +451,10 @@ pub fn collect_videos_and_ctoken(page: &Value) -> (Vec<Video>, Option<String>) {
     collect_listed(page, &mut |value, listed| {
         unknown.note(value, listed);
         if let Some(video) = video_from_value(value) {
-            if !videos.iter().any(|known| known.id == video.id) {
+            if let Some(known) = videos.iter_mut().find(|known| known.id == video.id) {
+                known.complete_from(&video);
+                known.short |= video.short;
+            } else {
                 videos.push(video);
             }
         } else if ctoken.is_none() {

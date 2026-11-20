@@ -267,6 +267,52 @@ fn yt2_a_short_with_the_older_thumbnail_is_still_kept() {
     assert!(items[0].short);
 }
 
+#[test]
+fn account_feed_shorts_preserve_known_owners_for_channel_blocks() {
+    use youtfast_core::model::Channel;
+    use youtfast_storage::library::Library;
+    use youtfast_youtube::innertube::items::collect_videos_and_ctoken;
+
+    let page = serde_json::json!({
+        "contents": [{"richShelfRenderer": {"contents": [
+            {"shortsLockupViewModel": {
+                "entityId": "shorts-shelf-item-aaaaaaaaaaa",
+                "channelId": "UC_blocked",
+                "thumbnail": {"sources": [{}]}
+            }},
+            {"shortsLockupViewModel": {
+                "entityId": "shorts-shelf-item-bbbbbbbbbbb",
+                "thumbnail": {"sources": [{}]}
+            }},
+            {"shortsLockupViewModel": {
+                "entityId": "shorts-shelf-item-ccccccccccc",
+                "thumbnail": {"sources": [{}]}
+            }},
+            {"shortsLockupViewModel": {
+                "onTap": {"innertubeCommand": {"reelWatchEndpoint": {
+                    "videoId": "bbbbbbbbbbb",
+                    "channelId": "UC_blocked"
+                }}},
+                "thumbnail": {"sources": [{}]}
+            }}
+        ]}}]
+    });
+    let (videos, _) = collect_videos_and_ctoken(&page);
+    assert_eq!(videos.len(), 3);
+    let mut library = Library::default();
+    assert!(library.block_channel(Channel {
+        id: "UC_blocked".into(),
+        name: "Blocked".into(),
+        avatar: None,
+    }));
+    let visible_shorts: Vec<_> = videos
+        .iter()
+        .filter(|video| video.short && !library.is_hidden(video))
+        .map(|video| video.id.as_str())
+        .collect();
+    assert_eq!(visible_shorts, ["ccccccccccc"]);
+}
+
 // ---------------------------------------------------------------------------
 // YT-3: the Playlists tab's params
 // ---------------------------------------------------------------------------

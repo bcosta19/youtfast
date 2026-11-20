@@ -637,25 +637,23 @@ impl App {
             (Slot::Shorts, Ok(Payload::Videos(videos))) => {
                 // RSS shorts leave the list and join the shelf, after the
                 // account's, deduped.
-                let known: HashSet<String> = state
+                merge_shelf(state.shorts.items_mut(), videos);
+                let on_shelf: HashMap<_, _> = state
                     .shorts
-                    .items()
-                    .iter()
-                    .map(|video| video.id.clone())
-                    .collect();
-                state.shorts.items_mut().extend(
-                    videos
-                        .into_iter()
-                        .filter(|video| !known.contains(&video.id)),
-                );
-                let on_shelf: HashSet<String> = state
-                    .shorts
-                    .items()
-                    .iter()
-                    .map(|video| video.id.clone())
+                    .items_mut()
+                    .iter_mut()
+                    .map(|video| (video.id.clone(), video))
                     .collect();
                 if let Listing::Ready(rows) = &mut state.feed {
-                    rows.retain(|video| !on_shelf.contains(&video.id));
+                    let mut on_shelf = on_shelf;
+                    rows.retain(|video| {
+                        if let Some(short) = on_shelf.get_mut(&video.id) {
+                            short.complete_from(video);
+                            false
+                        } else {
+                            true
+                        }
+                    });
                 }
             }
             (Slot::WatchLater, Ok(Payload::VideoList { items, more })) => {
@@ -991,12 +989,7 @@ impl App {
 /// without repeats. Returns how many rows landed in the feed.
 fn merge_feed_page(feed: &mut Vec<Video>, shorts: &mut Vec<Video>, page: Vec<Video>) -> usize {
     let (shelf, rest): (Vec<Video>, Vec<Video>) = page.into_iter().partition(|video| video.short);
-    let on_shelf: HashSet<String> = shorts.iter().map(|video| video.id.clone()).collect();
-    shorts.extend(
-        shelf
-            .into_iter()
-            .filter(|video| !on_shelf.contains(&video.id)),
-    );
+    merge_shelf(shorts, shelf);
     let known: HashSet<String> = feed.iter().map(|video| video.id.clone()).collect();
     let fresh: Vec<Video> = rest
         .into_iter()
@@ -1005,6 +998,23 @@ fn merge_feed_page(feed: &mut Vec<Video>, shorts: &mut Vec<Video>, page: Vec<Vid
     let landed = fresh.len();
     feed.extend(fresh);
     landed
+}
+
+/// Keeps the first shelf card and fills in details from later copies.
+fn merge_shelf(shorts: &mut Vec<Video>, incoming: Vec<Video>) {
+    let mut positions: HashMap<_, _> = shorts
+        .iter()
+        .enumerate()
+        .map(|(index, short)| (short.id.clone(), index))
+        .collect();
+    for short in incoming {
+        if let Some(&index) = positions.get(&short.id) {
+            shorts[index].complete_from(&short);
+        } else {
+            positions.insert(short.id.clone(), shorts.len());
+            shorts.push(short);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1405,6 +1415,33 @@ mod tests {
                 "Imported 2 new subscriptions, 3 new videos of history, and 1 Watch later videos."
             )
         );
+    }
+
+    #[test]
+    fn a_second_shelf_copy_supplies_the_owner_for_channel_blocks() {
+        let mut state = State::default();
+        assert!(state.library.block_channel(Channel {
+            id: "UC_blocked".into(),
+            name: "Blocked".into(),
+            avatar: None,
+        }));
+        let short = Video {
+            short: true,
+            ..Video::from_id("bbbbbbbbbbb".into())
+        };
+        merge_feed_page(&mut Vec::new(), state.shorts.items_mut(), vec![short]);
+        assert!(state.shows_feed_video(&state.shorts.items()[0]));
+        let shorts = state.shorts.items_mut();
+        merge_shelf(
+            shorts,
+            vec![Video {
+                channel_id: Some("UC_blocked".into()),
+                short: true,
+                ..Video::from_id("bbbbbbbbbbb".into())
+            }],
+        );
+        assert_eq!(shorts.len(), 1);
+        assert!(!state.shows_feed_video(&state.shorts.items()[0]));
     }
 
     #[test]

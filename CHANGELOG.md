@@ -23,6 +23,7 @@ are the distribution record.
 
 - Keep account subscriptions pageable when all channels on the loaded pages are blocked.
 - Keep hidden, blocked and filtered watched Shorts out of the Home shelf's Up next list.
+- Apply channel blocks to signed-in Shorts when YouTube supplies an owner ID for the Short or another copy of it. Shorts without an identifiable owner can still be hidden individually.
 - SponsorBlock restores local audio even if its segment list refreshes during auto-mute.
 - Unmuting or changing volume overrides SponsorBlock auto-mute for all overlapping segments.
 - SponsorBlock mutes the full duration of a mute segment, including segments shorter than 300 ms.
