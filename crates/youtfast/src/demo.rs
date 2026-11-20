@@ -438,6 +438,9 @@ impl eframe::App for Demo {
                     self.state
                         .set_remember_channel_speed(remember, self.status.speed);
                 }
+                Action::ClearChannelSpeeds => {
+                    self.state.settings.channel_speeds.clear();
+                }
                 Action::SetVolume(v) => self.status.volume = v,
                 Action::SeekTo { seconds, .. } => self.status.position = seconds,
                 Action::SeekBy(v) => {

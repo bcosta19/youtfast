@@ -73,6 +73,10 @@ pub(super) fn menu(
                     match state.player_menu {
                         PlayerMenu::Closed => {}
                         PlayerMenu::Main => main_menu(ui, state, status, live, actions),
+                        PlayerMenu::Speed if at_live_edge(live, status) => {
+                            state.player_menu = PlayerMenu::Main;
+                            main_menu(ui, state, status, live, actions);
+                        }
                         PlayerMenu::Speed => {
                             if back_row(ui, &tr(locale, "Playback speed")) {
                                 state.player_menu = PlayerMenu::Main;
@@ -416,33 +420,32 @@ fn menu_switch_row(
         pill_size,
     );
     let text_left = rect.left() + 16.0;
-    let text_room = (pill.left() - 10.0 - text_left).max(0.0);
-    let painter = ui.painter();
-    let galley = painter.layout(
-        label.to_owned(),
-        theme::regular(13.0),
-        Color32::WHITE,
-        text_room,
+    let text_room = (pill.left() - 10.0 - text_left).max(10.0);
+    let mut job = egui::text::LayoutJob::default();
+    job.append(
+        label,
+        0.0,
+        egui::TextFormat::simple(theme::regular(13.0), Color32::WHITE),
     );
-    let galley = if galley.rows.len() > 1 {
-        let short: String = label.chars().take(20).collect();
-        painter.layout_no_wrap(format!("{short}…"), theme::regular(13.0), Color32::WHITE)
-    } else {
-        galley
-    };
+    job.wrap.max_width = text_room;
+    job.wrap.max_rows = 1;
+    job.wrap.overflow_character = Some('…');
+    let painter = ui.painter();
+    let galley = painter.layout_job(job);
     painter.galley(
         pos2(text_left, rect.center().y - galley.size().y / 2.0),
         galley,
         Color32::WHITE,
     );
-    let t = ui
-        .ctx()
-        .animate_bool_with_easing(response.id, on, egui::emath::easing::cubic_out);
-    let fill = crate::widgets::mix(Color32::from_white_alpha(70), palette.accent, t);
-    painter.rect_filled(pill, CornerRadius::same(9), fill);
-    let knob_x = egui::lerp(pill.left() + 9.0..=pill.right() - 9.0, t);
-    painter.circle_filled(pos2(knob_x, pill.center().y), 6.5, Color32::WHITE);
-    painter.line_segment(
+    crate::widgets::paint_switch(
+        ui,
+        pill,
+        &response,
+        on,
+        Color32::from_white_alpha(70),
+        palette.accent,
+    );
+    ui.painter().line_segment(
         [
             pos2(rect.left() + 12.0, rect.bottom() - 0.5),
             pos2(rect.right() - 12.0, rect.bottom() - 0.5),
@@ -618,6 +621,11 @@ mod tests {
         let mut video = Video::from_id("aaaaaaaaaaa".into());
         video.channel_id = Some("UC_channel".into());
         video.live = true;
+        let behind_live = Status {
+            duration: 1000.0,
+            position: 100.0,
+            ..Status::default()
+        };
         let mut live = State {
             watching: Some(video),
             player_menu: PlayerMenu::Speed,
@@ -625,7 +633,7 @@ mod tests {
         };
         let mut texts = Vec::new();
         for _ in 0..2 {
-            texts = draw_speed_menu(&ctx, &mut live, &status, true, Vec::new()).1;
+            texts = draw_speed_menu(&ctx, &mut live, &behind_live, true, Vec::new()).1;
         }
         assert!(texts.iter().any(|(text, _)| text == "Playback speed"));
         assert!(
@@ -633,5 +641,16 @@ mod tests {
                 .iter()
                 .any(|(text, _)| text == "Remember for this channel")
         );
+
+        let at_edge = Status {
+            duration: 1000.0,
+            position: 990.0,
+            ..Status::default()
+        };
+        for _ in 0..2 {
+            texts = draw_speed_menu(&ctx, &mut live, &at_edge, true, Vec::new()).1;
+        }
+        assert_eq!(live.player_menu, PlayerMenu::Main);
+        assert!(!texts.iter().any(|(text, _)| text == "Playback speed"));
     }
 }

@@ -62,10 +62,14 @@ precedente senza modificare la velocità salvata. La velocità scelta tramite
 `<`/`>` o nel menu **Velocità di riproduzione** del player viene ricordata tra
 un video e l'altro e dopo il riavvio; attiva **Ricorda per questo canale** in
 quel menu per salvare una velocità per il canale attuale (la velocità del canale
-prevale su quella globale, fino a 500 canali). Le dirette al bordo dal vivo
-restano a 1× senza sovrascrivere le velocità salvate. Il menu del player offre
-anche la ripetizione, dimensione/sfondo dei sottotitoli, la copia di un link con
-il minutaggio e l'apertura del video nel browser.
+prevale su quella globale, fino a 500 canali, e può essere cancellata in
+**Impostazioni → Riproduzione → Velocità di riproduzione per canale**). Le
+dirette restano a 1× al bordo dal vivo; se una diretta è indietro rispetto al
+bordo, i controlli della velocità e la pressione prolungata 2× restano
+disponibili per recuperare e tornano a 1× raggiunto il bordo, senza sovrascrivere
+le velocità salvate. Il menu del player offre anche la ripetizione,
+dimensione/sfondo dei sottotitoli, la copia di un link con il minutaggio e
+l'apertura del video nel browser.
 
 La ricerca usa direttamente l'interfaccia InnerTube di YouTube, con risultati
 separati per video, canali e playlist. I filtri dei video includono data, durata,

@@ -1,7 +1,7 @@
 //! Interactive controls: buttons, chips, sidebar navigation items, and search fields.
 
 use egui::text::LayoutJob;
-use egui::{CornerRadius, CursorIcon, Rect, Response, Sense, Stroke, Ui, pos2, vec2};
+use egui::{Color32, CornerRadius, CursorIcon, Rect, Response, Sense, Stroke, Ui, pos2, vec2};
 use youtfast_i18n::{Locale, gettext as tr};
 
 use super::{focus_outline, hover_fade, mix, press_fade};
@@ -407,6 +407,51 @@ pub fn search_field(
         }
     }
     response
+}
+
+/// Paints an animated pill switch inside `rect`, blending between `off` and
+/// `accent` and stretching the knob while pressed.
+pub fn paint_switch(
+    ui: &Ui,
+    rect: Rect,
+    response: &Response,
+    on: bool,
+    off: Color32,
+    accent: Color32,
+) {
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
+    let enabled = ui.is_enabled();
+    let t = ui
+        .ctx()
+        .animate_bool_with_easing(response.id, on, egui::emath::easing::cubic_out);
+    let press = press_fade(ui, response);
+    let fill = mix(off, accent, t);
+    let (fill, knob) = if enabled {
+        (fill, Color32::WHITE)
+    } else {
+        (fill.gamma_multiply(0.5), Color32::WHITE.gamma_multiply(0.6))
+    };
+    let radius = CornerRadius::same((rect.height() / 2.0).round() as u8);
+    ui.painter().rect_filled(rect, radius, fill);
+    focus_outline(ui, response, radius);
+    // The knob stretches towards the other side while held, so the press is
+    // felt before the switch moves.
+    let knob_d = (rect.height() - 6.0).max(8.0);
+    let inset = rect.height() / 2.0;
+    let stretch = rect.height() * 0.22 * press;
+    let x = egui::lerp(
+        rect.left() + inset + stretch / 2.0..=rect.right() - inset - stretch / 2.0,
+        t,
+    );
+    let knob_rect =
+        Rect::from_center_size(pos2(x, rect.center().y), vec2(knob_d + stretch, knob_d));
+    ui.painter().rect_filled(
+        knob_rect,
+        CornerRadius::same((knob_d / 2.0).round() as u8),
+        knob,
+    );
 }
 
 #[cfg(test)]

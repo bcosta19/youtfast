@@ -61,10 +61,14 @@ ao soltar, a velocidade anterior volta sem alterar a velocidade salva. A
 velocidade escolhida com `<`/`>` ou no menu **Velocidade de reprodução** do
 player é lembrada entre vídeos e reinicializações; ative **Lembrar para este
 canal** nesse menu para salvar uma velocidade para o canal atual (a velocidade
-do canal tem precedência sobre a global, até 500 canais). Transmissões ao vivo
-no tempo real permanecem em 1× sem sobrescrever as velocidades salvas. O menu
-do player também oferece repetição, tamanho/fundo das legendas, cópia de um
-link com o instante atual e abertura do vídeo no navegador.
+do canal tem precedência sobre a global, até 500 canais, e pode ser limpa em
+**Configurações → Reprodução → Velocidades de reprodução por canal**).
+Transmissões ao vivo permanecem em 1× no tempo real; se uma transmissão estiver
+atrasada em relação ao tempo real, os controles de velocidade e o toque longo de
+2× ficam disponíveis para alcançar o ao vivo e voltam a 1× ao chegar lá, sem
+sobrescrever as velocidades salvas. O menu do player também oferece repetição,
+tamanho/fundo das legendas, cópia de um link com o instante atual e abertura do
+vídeo no navegador.
 
 A pesquisa usa diretamente a interface InnerTube do YouTube, com resultados
 separados de vídeos, canais e playlists. Os filtros de vídeo incluem data,

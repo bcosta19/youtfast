@@ -58,7 +58,10 @@ previous speed without changing the saved speed. Playback speed chosen via
 `<`/`>` or the player's **Playback speed** menu is remembered across videos and
 restarts; toggle **Remember for this channel** in that menu to save a speed for
 the current channel instead (channel speed takes precedence over the global
-speed, up to 500 channels). Live streams at the live edge stay at 1× without
+speed, up to 500 channels, and can be cleared under **Settings → Playback →
+Per-channel playback speeds**). Live streams stay at 1× at the live edge; if a
+live stream is rewound behind the edge, speed controls and 2× hold remain
+available to catch up and reset to 1× once back at the edge, without
 overwriting saved speeds. The player menu also offers repeat, caption
 size/background, copying a timestamped link, and opening the video in a browser.
 

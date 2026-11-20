@@ -64,10 +64,14 @@ wieder die vorherige Geschwindigkeit, ohne die gespeicherte Geschwindigkeit zu
 gewählte Geschwindigkeit wird über Videos und Neustarts hinweg gespeichert;
 aktivieren Sie dort **Für diesen Kanal merken**, um eine Geschwindigkeit für den
 aktuellen Kanal zu speichern (die Kanalgeschwindigkeit hat Vorrang vor der
-globalen Geschwindigkeit, bis zu 500 Kanäle). Livestreams am Live-Rand bleiben
-bei 1×, ohne gespeicherte Geschwindigkeiten zu überschreiben. Das Player-Menü
-bietet außerdem Wiederholen, Untertitelgröße/-hintergrund, das Kopieren eines
-Links mit Zeitstempel und das Öffnen des Videos im Browser.
+globalen Geschwindigkeit, bis zu 500 Kanäle, und lässt sich unter
+**Einstellungen → Wiedergabe → Kanal-Wiedergabegeschwindigkeiten** löschen).
+Livestreams bleiben am Live-Rand bei 1×; liegt ein Livestream hinter dem
+Live-Rand zurück, bleiben Geschwindigkeitssteuerung und 2×-Gedrückthalten zum
+Aufholen verfügbar und springen am Live-Rand wieder auf 1× zurück, ohne
+gespeicherte Geschwindigkeiten zu überschreiben. Das Player-Menü bietet außerdem
+Wiederholen, Untertitelgröße/-hintergrund, das Kopieren eines Links mit
+Zeitstempel und das Öffnen des Videos im Browser.
 
 Die Suche nutzt direkt die InnerTube-Schnittstelle von YouTube, mit getrennten
 Ergebnissen für Videos, Kanäle und Playlists. Videofilter umfassen Datum, Dauer,

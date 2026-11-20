@@ -1821,6 +1821,12 @@ impl App {
             Action::SetSpeed(speed) => self.set_speed(speed),
             Action::SetTemporarySpeed(speed) => self.set_temporary_speed(speed),
             Action::SetRememberChannelSpeed(remember) => self.set_remember_channel_speed(remember),
+            Action::ClearChannelSpeeds => {
+                if !self.state.settings.channel_speeds.is_empty() {
+                    self.state.settings.channel_speeds.clear();
+                    self.save_settings();
+                }
+            }
             Action::ToggleMute => self.toggle_mute(),
             Action::FrameStep(forward) => self.with_player(|player| player.frame_step(forward)),
             Action::SeekFraction(fraction) => self.seek_fraction(fraction),

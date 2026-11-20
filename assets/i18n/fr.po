@@ -563,6 +563,9 @@ msgstr "Aucun compte"
 msgid "No captions"
 msgstr "Aucun sous-titre"
 
+msgid "No channel speeds saved."
+msgstr "Aucune vitesse enregistrée par chaîne."
+
 msgid "No channels found"
 msgstr "Aucune chaîne trouvée"
 
@@ -706,6 +709,9 @@ msgstr "Lire/pause dans le mini-lecteur"
 
 msgid "Playback"
 msgstr "Lecture"
+
+msgid "Per-channel playback speeds"
+msgstr "Vitesses de lecture par chaîne"
 
 msgid "Playback speed"
 msgstr "Vitesse de lecture"
@@ -1391,6 +1397,11 @@ msgstr[1] "{count} abonnés"
 
 msgid "{count} subscribers"
 msgstr "{count} abonnés"
+
+msgid "{count} channel saved."
+msgid_plural "{count} channels saved."
+msgstr[0] "{count} chaîne enregistrée."
+msgstr[1] "{count} chaînes enregistrées."
 
 msgid "{count} video"
 msgid_plural "{count} videos"

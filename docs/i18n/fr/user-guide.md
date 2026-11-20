@@ -65,10 +65,13 @@ vitesse choisie avec `<`/`>` ou dans le menu **Vitesse de lecture** du lecteur
 est mémorisée entre les vidéos et les redémarrages ; activez **Mémoriser pour
 cette chaîne** dans ce menu pour enregistrer une vitesse pour la chaîne en
 cours (la vitesse de la chaîne prévaut sur la vitesse globale, jusqu'à 500
-chaînes). Les directs au bord du direct restent à 1× sans écraser les vitesses
-enregistrées. Le menu du lecteur propose aussi la lecture en boucle, la taille
-et l'arrière-plan des sous-titres, la copie d'un lien avec le minutage et
-l'ouverture de la vidéo dans un navigateur.
+chaînes, et peut être effacée dans **Paramètres → Lecture → Vitesses de lecture
+par chaîne**). Les directs au bord du direct restent à 1× ; si un direct est en
+retrait par rapport au bord, les commandes de vitesse et l'appui long 2× restent
+disponibles pour le rattraper et reviennent à 1× au bord du direct, sans écraser
+les vitesses enregistrées. Le menu du lecteur propose aussi la lecture en
+boucle, la taille et l'arrière-plan des sous-titres, la copie d'un lien avec le
+minutage et l'ouverture de la vidéo dans un navigateur.
 
 La recherche utilise directement l'interface InnerTube de YouTube, avec des
 résultats séparés pour les vidéos, les chaînes et les playlists. Les filtres

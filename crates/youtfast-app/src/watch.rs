@@ -358,7 +358,9 @@ impl App {
                 self.state.settings.caption_scale,
                 self.state.settings.caption_background,
             );
-            let _ = player.set_speed(initial_speed);
+            if let Err(error) = player.set_speed(initial_speed) {
+                log::warn!("mpv: {error}");
+            }
             self.state.player_error = player
                 .load(&video.url(), start)
                 .err()

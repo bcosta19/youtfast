@@ -64,10 +64,14 @@ velocidad anterior sin cambiar la velocidad guardada. La velocidad elegida con
 `<`/`>` o en el menú **Velocidad de reproducción** del reproductor se recuerda
 entre vídeos y reinicios; activa **Recordar para este canal** en ese menú para
 guardar una velocidad para el canal actual (la velocidad del canal tiene
-prioridad sobre la global, hasta 500 canales). Los directos en el borde en vivo
-se mantienen a 1× sin sobrescribir las velocidades guardadas. El menú del
-reproductor también ofrece repetición, tamaño/fondo de los subtítulos, copiar un
-enlace con marca de tiempo y abrir el vídeo en un navegador.
+prioridad sobre la global, hasta 500 canales, y se puede borrar en
+**Configuración → Reproducción → Velocidades de reproducción por canal**). Los
+directos en el borde en vivo se mantienen a 1×; si un directo se ha rebobinado
+por detrás del borde, los controles de velocidad y la pulsación larga de 2×
+siguen disponibles para alcanzar el directo y vuelven a 1× al llegar al borde,
+sin sobrescribir las velocidades guardadas. El menú del reproductor también
+ofrece repetición, tamaño/fondo de los subtítulos, copiar un enlace con marca de
+tiempo y abrir el vídeo en un navegador.
 
 La búsqueda usa directamente la interfaz InnerTube de YouTube, con resultados
 separados de vídeos, canales y listas de reproducción. Los filtros de vídeo incluyen

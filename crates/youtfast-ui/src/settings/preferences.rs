@@ -1,7 +1,7 @@
 //! Playback, History sync, and Notifications settings groups.
 
 use egui::{RichText, Ui};
-use youtfast_i18n::{format as trf, gettext as tr};
+use youtfast_i18n::{format as trf, gettext as tr, interpolate, ngettext};
 
 use super::{CONTROL_WIDTH, combo_width, setting_row, switch, switch_row};
 use crate::widgets;
@@ -116,6 +116,41 @@ pub(super) fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             ) {
                 actions.push(Action::SetSponsorBlock(!sponsorblock));
             }
+            ui.add_space(12.0);
+            let channel_count = state.settings.channel_speeds.len();
+            let card = widgets::on_card(palette);
+            let count_text = if channel_count == 0 {
+                tr(locale, "No channel speeds saved.").into_owned()
+            } else {
+                let template = ngettext(
+                    locale,
+                    "{count} channel saved.",
+                    "{count} channels saved.",
+                    channel_count.min(u32::MAX as usize) as u32,
+                );
+                interpolate(&template, &[("count", channel_count.to_string())])
+            };
+            setting_row(
+                ui,
+                palette,
+                &tr(locale, "Per-channel playback speeds"),
+                &count_text,
+                CONTROL_WIDTH,
+                |ui| {
+                    ui.add_enabled_ui(channel_count > 0, |ui| {
+                        if widgets::button(
+                            ui,
+                            &card,
+                            &tr(locale, "Clear"),
+                            widgets::ButtonStyle::Normal,
+                        )
+                        .clicked()
+                        {
+                            actions.push(Action::ClearChannelSpeeds);
+                        }
+                    });
+                },
+            );
         });
     });
 }
@@ -347,5 +382,93 @@ mod tests {
             assert!(actions.is_empty());
             output.textures_delta.clear();
         }
+    }
+
+    #[test]
+    fn playback_channel_speeds_row_shows_count_and_clears() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+
+        let empty_state = State::default();
+        let mut actions = Vec::new();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(900.0, 800.0),
+                )),
+                ..Default::default()
+            },
+            |ui| playback(ui, &empty_state, &mut actions),
+        );
+        let labels: Vec<_> = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                _ => None,
+            })
+            .collect();
+        output.textures_delta.clear();
+        assert!(labels.iter().any(|l| l == "Per-channel playback speeds"));
+        assert!(labels.iter().any(|l| l == "No channel speeds saved."));
+        assert!(actions.is_empty());
+
+        let mut filled_state = State::default();
+        filled_state
+            .settings
+            .set_channel_speed("UC_one".into(), 1.5);
+        filled_state
+            .settings
+            .set_channel_speed("UC_two".into(), 1.25);
+        let mut actions = Vec::new();
+        let mut clear_pos = None;
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(900.0, 800.0),
+                )),
+                ..Default::default()
+            },
+            |ui| playback(ui, &filled_state, &mut actions),
+        );
+        let mut labels = Vec::new();
+        for shape in &output.shapes {
+            if let egui::Shape::Text(text) = &shape.shape {
+                labels.push(text.galley.text().to_owned());
+                if text.galley.text() == "Clear" {
+                    clear_pos =
+                        Some(egui::Rect::from_min_size(text.pos, text.galley.size()).center());
+                }
+            }
+        }
+        output.textures_delta.clear();
+        assert!(labels.iter().any(|l| l == "2 channels saved."));
+        let pos = clear_pos.expect("Clear button should be drawn");
+
+        for pressed in [true, false] {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        vec2(900.0, 800.0),
+                    )),
+                    events: vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| playback(ui, &filled_state, &mut actions),
+            );
+            output.textures_delta.clear();
+        }
+        assert_eq!(actions, [Action::ClearChannelSpeeds]);
     }
 }

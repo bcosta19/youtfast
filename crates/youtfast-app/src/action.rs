@@ -174,6 +174,8 @@ pub enum Action {
     SetTemporarySpeed(f64),
     /// Remember or forget the current playback speed for the current channel.
     SetRememberChannelSpeed(bool),
+    /// Remove all remembered per-channel playback speeds.
+    ClearChannelSpeeds,
     ToggleMute,
     /// One frame ahead (`true`) or back, paused.
     FrameStep(bool),
