@@ -18,20 +18,8 @@ pub const THUMBNAIL_BASE: &str = "https://dearrow-thumb.ajay.app";
 /// Selected community thumbnail metadata from a DeArrow branding response.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Thumbnail {
-    /// A community-voted thumbnail without an explicit timestamp.
-    Default,
     /// A community-voted frame at `timestamp` seconds.
     Timestamp(f64),
-}
-
-impl Thumbnail {
-    /// The timestamp in seconds when one was selected.
-    pub fn timestamp(self) -> Option<f64> {
-        match self {
-            Self::Default => None,
-            Self::Timestamp(seconds) => Some(seconds),
-        }
-    }
 }
 
 /// Community branding picked for a single video ID.
@@ -44,8 +32,9 @@ pub struct Branding {
 impl Branding {
     /// Builds the DeArrow thumbnail URL when a community thumbnail exists.
     pub fn thumbnail_url(&self, video_id: &str) -> Option<String> {
-        self.thumbnail
-            .map(|thumb| thumbnail_url(video_id, thumb.timestamp()))
+        self.thumbnail.and_then(|Thumbnail::Timestamp(seconds)| {
+            (seconds.is_finite() && seconds >= 0.0).then(|| thumbnail_url(video_id, seconds))
+        })
     }
 }
 
@@ -58,18 +47,12 @@ pub fn hash_prefix(video_id: &str) -> String {
         .collect()
 }
 
-/// Builds the DeArrow thumbnail request URL for `video_id` and an optional
-/// `timestamp` in seconds.
-pub fn thumbnail_url(video_id: &str, timestamp: Option<f64>) -> String {
+fn thumbnail_url(video_id: &str, timestamp: f64) -> String {
     let mut url = url::Url::parse(&format!("{THUMBNAIL_BASE}/api/v1/getThumbnail"))
         .expect("THUMBNAIL_BASE is a valid URL");
-    {
-        let mut pairs = url.query_pairs_mut();
-        pairs.append_pair("videoID", video_id);
-        if let Some(seconds) = timestamp.filter(|seconds| seconds.is_finite() && *seconds >= 0.0) {
-            pairs.append_pair("time", &seconds.to_string());
-        }
-    }
+    url.query_pairs_mut()
+        .append_pair("videoID", video_id)
+        .append_pair("time", &timestamp.to_string());
     url.into()
 }
 
@@ -108,16 +91,17 @@ pub fn parse(json: &str, video_id: &str) -> Branding {
     };
     let title = entry["titles"]
         .as_array()
-        .and_then(|titles| titles.iter().find_map(select_title));
+        .and_then(|titles| titles.first())
+        .and_then(select_title);
     let thumbnail = entry["thumbnails"]
         .as_array()
-        .and_then(|thumbs| thumbs.iter().find_map(select_thumbnail));
+        .and_then(|thumbs| thumbs.first())
+        .and_then(select_thumbnail);
     Branding { title, thumbnail }
 }
 
 fn entry_accepted(item: &serde_json::Value) -> bool {
-    let original = item["original"].as_bool().unwrap_or(false);
-    if original {
+    if item["original"].as_bool() != Some(false) {
         return false;
     }
     let votes = item["votes"].as_i64().unwrap_or(0);
@@ -138,13 +122,10 @@ fn select_thumbnail(item: &serde_json::Value) -> Option<Thumbnail> {
     if !entry_accepted(item) {
         return None;
     }
-    let timestamp = item["timestamp"]
+    item["timestamp"]
         .as_f64()
-        .filter(|seconds| seconds.is_finite() && *seconds >= 0.0);
-    Some(match timestamp {
-        Some(seconds) => Thumbnail::Timestamp(seconds),
-        None => Thumbnail::Default,
-    })
+        .filter(|seconds| seconds.is_finite() && *seconds >= 0.0)
+        .map(Thumbnail::Timestamp)
 }
 
 /// Strips DeArrow's `>` word-case escape marker and trims outer whitespace.
@@ -208,7 +189,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_filters_bucket_for_target_video_and_votes_and_original() {
+    fn parse_filters_bucket_and_uses_only_first_ranked_entries() {
         let json = r#"{
             "otherVideo": {
                 "titles": [{"title": "Wrong Video Title", "original": false, "votes": 100}],
@@ -216,16 +197,12 @@ mod tests {
             },
             "targetVideo": {
                 "titles": [
-                    {"title": "Original Clickbait", "original": true, "votes": 10},
-                    {"title": "Downvoted Title", "original": false, "votes": -2, "locked": false},
-                    {"title": "   ", "original": false, "votes": 3},
                     {"title": "  >How >iOS 19 >Works (5 > 3)  ", "original": false, "votes": 4},
-                    {"title": "Runner Up", "original": false, "votes": 1}
+                    {"title": "Runner Up", "original": false, "votes": 100}
                 ],
                 "thumbnails": [
-                    {"timestamp": 1.0, "original": true, "votes": 10},
-                    {"timestamp": 2.0, "original": false, "votes": -1, "locked": false},
-                    {"timestamp": 42.5, "original": false, "votes": 2}
+                    {"timestamp": 42.5, "original": false, "votes": 2},
+                    {"timestamp": 1.0, "original": true, "votes": 100}
                 ]
             }
         }"#;
@@ -245,24 +222,20 @@ mod tests {
     }
 
     #[test]
-    fn thumbnail_url_handles_default_and_timestamped_entries() {
-        assert_eq!(
-            thumbnail_url("dQw4w9WgXcQ", None),
-            "https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=dQw4w9WgXcQ"
-        );
-        assert_eq!(
-            thumbnail_url("dQw4w9WgXcQ", Some(12.75)),
-            "https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=dQw4w9WgXcQ&time=12.75"
-        );
-        // Invalid or negative timestamps omit the time parameter.
-        assert_eq!(
-            thumbnail_url("dQw4w9WgXcQ", Some(-1.0)),
-            "https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=dQw4w9WgXcQ"
-        );
-        assert_eq!(
-            thumbnail_url("dQw4w9WgXcQ", Some(f64::NAN)),
-            "https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=dQw4w9WgXcQ"
-        );
+    fn original_or_invalid_winner_keeps_youtube_branding() {
+        for winner in [
+            r#"{"original": true, "locked": true, "votes": 0, "title": "Original", "timestamp": 5}"#,
+            r#"{"original": false, "votes": -1, "title": "Downvoted", "timestamp": 5}"#,
+            r#"{"original": false, "votes": 5, "title": "   ", "timestamp": -1}"#,
+            r#"{"original": false, "votes": 5}"#,
+        ] {
+            let json = format!(
+                r#"{{"v":{{"titles":[{winner},{{"original":false,"title":"Runner up"}}],"thumbnails":[{winner},{{"original":false,"timestamp":8}}]}}}}"#
+            );
+            let branding = parse(&json, "v");
+            assert_eq!(branding, Branding::default(), "{winner}");
+            assert!(branding.thumbnail_url("v").is_none());
+        }
     }
 
     #[test]
@@ -272,11 +245,7 @@ mod tests {
         let got = fetch_from(&base, "dQw4w9WgXcQ").unwrap();
         assert_eq!(handle.join().unwrap(), "/api/branding/5f6b");
         assert_eq!(got.title.as_deref(), Some("Clear Title"));
-        assert_eq!(got.thumbnail, Some(Thumbnail::Default));
-        assert_eq!(
-            got.thumbnail_url("dQw4w9WgXcQ").as_deref(),
-            Some("https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=dQw4w9WgXcQ")
-        );
+        assert!(got.thumbnail_url("dQw4w9WgXcQ").is_none());
 
         let (base_404, handle_404) = server(404, "");
         let got_404 = fetch_from(&base_404, "dQw4w9WgXcQ").unwrap();
