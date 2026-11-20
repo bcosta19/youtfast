@@ -483,14 +483,16 @@ mod tests {
 
     #[test]
     fn import_counts_only_new_rows_that_stay_in_a_full_history() {
-        let mut library = Library::default();
-        library.history = (0..HISTORY_LIMIT)
-            .map(|index| Watched {
-                video: video(&format!("{index:011}")),
-                at: index as i64,
-                position: 0.0,
-            })
-            .collect();
+        let mut library = Library {
+            history: (0..HISTORY_LIMIT)
+                .map(|index| Watched {
+                    video: video(&format!("{index:011}")),
+                    at: index as i64,
+                    position: 0.0,
+                })
+                .collect(),
+            ..Default::default()
+        };
         let old = ImportedWatch {
             video: video("older000001"),
             at: -1,
