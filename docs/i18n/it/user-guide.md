@@ -298,6 +298,17 @@ fondo e ne arrivano altre. Gli Shorts stanno su uno scaffale sopra l'elenco: que
 dell'account sono indicati da YouTube, quelli dei canali del dispositivo provengono
 dalle loro schede Shorts.
 
+Il **filtro del feed** in **Home** e **Iscrizioni** viene eseguito localmente su
+questo dispositivo: il pulsante persistente **Nascondi visti** nasconde i video
+visti nella Home (incluso lo scaffale Shorts) e dall'attività e dalle anteprime
+delle schede in Iscrizioni; i menu delle schede offrono anche **Non mi
+interessa** (nasconde fino a 5.000 video, rimuovendo i più vecchi) e **Non
+consigliare il canale** (blocca fino a 1.000 canali, rimuovendo i più vecchi),
+escludendoli da Home, Iscrizioni e consigli locali. I risultati di ricerca e la
+pagina del singolo canale non vengono mai filtrati. Controlla o annulla i video
+nascosti (**Cancella**) e i canali bloccati (**Sblocca**) in **Impostazioni →
+Cronologia**.
+
 **Senza un account**, YouTFast conserva iscrizioni, cronologia delle visualizzazioni
 (con il punto in cui hai lasciato ogni video, per riprenderlo) e Guarda più tardi su
 questo computer, in `~/.local/share/youtfast/library.json`, e le sue impostazioni

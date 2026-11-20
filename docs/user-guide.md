@@ -265,6 +265,16 @@ device's RSS channels — day-grouped and paged: scroll to the end and more
 arrives. Shorts sit on a shelf above the list: the account's are marked
 by YouTube, the device channels' come from their Shorts tabs.
 
+**Feed filtering** on **Home** and **Subscriptions** runs locally on this device:
+a persistent **Hide watched** chip hides watched videos on Home (including the
+Shorts shelf) and from Subscriptions feed activity and card previews; card menus
+also offer **Not interested** (hides up to 5,000 videos, dropping the oldest)
+and **Don't recommend channel** (blocks up to 1,000 channels, dropping the
+oldest), excluding them from Home, Subscriptions, and local recommendations.
+Search results and a channel's own page are never filtered. Review or undo
+hidden videos (**Clear**) and blocked channels (**Unblock**) under **Settings →
+History**.
+
 **Without an account**, YouTFast keeps subscriptions, watch history (with
 where each video was left, to resume it) and Watch later on this computer,
 in `~/.local/share/youtfast/library.json`, and its settings (video quality,

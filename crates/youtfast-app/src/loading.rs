@@ -370,13 +370,12 @@ impl App {
     fn load_for_you(&mut self) {
         let state = &self.state;
         let signed_in = state.signed_in();
-        let seeds = youtfast_logic::recommend::seeds(&state.library.history);
+        let seeds = youtfast_logic::recommend::seeds_for_library(&state.library);
         if seeds.is_empty() && !signed_in {
             self.state.for_you = Listing::Ready(Vec::new());
             return;
         }
-        let taste =
-            youtfast_logic::recommend::taste(&state.library.history, &state.library.subscriptions);
+        let taste = youtfast_logic::recommend::taste_for_library(&state.library);
         self.request(
             Slot::ForYou,
             Request::ForYou {

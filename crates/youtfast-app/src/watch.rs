@@ -597,10 +597,20 @@ impl App {
     fn visible_videos(&self) -> Vec<Video> {
         let state = &self.state;
         match state.view {
-            View::Home if state.feed_filter == youtfast_core::model::FeedFilter::ForYou => {
-                state.for_you.items().to_vec()
-            }
-            View::Home => state.feed.items().to_vec(),
+            View::Home if state.feed_filter == youtfast_core::model::FeedFilter::ForYou => state
+                .for_you
+                .items()
+                .iter()
+                .filter(|video| state.shows_feed_video(video))
+                .cloned()
+                .collect(),
+            View::Home => state
+                .feed
+                .items()
+                .iter()
+                .filter(|video| state.shows_feed_video(video))
+                .cloned()
+                .collect(),
             View::Results => state.results.items().to_vec(),
             View::Liked => state.visible_liked().into_iter().cloned().collect(),
             View::Channel | View::Playlist => state.page_videos.items().to_vec(),

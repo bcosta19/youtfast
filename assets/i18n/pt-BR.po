@@ -2018,3 +2018,36 @@ msgstr "Digressão silenciada"
 
 msgid "Segment muted"
 msgstr "Trecho silenciado"
+msgid "Hide watched"
+msgstr "Ocultar assistidos"
+
+msgid "Not interested"
+msgstr "Não tenho interesse"
+
+msgid "Don't recommend channel"
+msgstr "Não recomendar este canal"
+
+msgid "Hidden videos"
+msgstr "Vídeos ocultos"
+
+msgid "No hidden videos."
+msgstr "Nenhum vídeo oculto."
+
+msgid "{count} video hidden."
+msgid_plural "{count} videos hidden."
+msgstr[0] "{count} vídeo oculto."
+msgstr[1] "{count} vídeos ocultos."
+
+msgid "Blocked channels"
+msgstr "Canais bloqueados"
+
+msgid "No blocked channels."
+msgstr "Nenhum canal bloqueado."
+
+msgid "{count} channel blocked."
+msgid_plural "{count} channels blocked."
+msgstr[0] "{count} canal bloqueado."
+msgstr[1] "{count} canais bloqueados."
+
+msgid "Unblock"
+msgstr "Desbloquear"

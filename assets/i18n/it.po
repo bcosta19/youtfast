@@ -1980,3 +1980,36 @@ msgstr "Riempitivo silenziato"
 
 msgid "Segment muted"
 msgstr "Segmento silenziato"
+msgid "Hide watched"
+msgstr "Nascondi visti"
+
+msgid "Not interested"
+msgstr "Non mi interessa"
+
+msgid "Don't recommend channel"
+msgstr "Non consigliare il canale"
+
+msgid "Hidden videos"
+msgstr "Video nascosti"
+
+msgid "No hidden videos."
+msgstr "Nessun video nascosto."
+
+msgid "{count} video hidden."
+msgid_plural "{count} videos hidden."
+msgstr[0] "{count} video nascosto."
+msgstr[1] "{count} video nascosti."
+
+msgid "Blocked channels"
+msgstr "Canali bloccati"
+
+msgid "No blocked channels."
+msgstr "Nessun canale bloccato."
+
+msgid "{count} channel blocked."
+msgid_plural "{count} channels blocked."
+msgstr[0] "{count} canale bloccato."
+msgstr[1] "{count} canali bloccati."
+
+msgid "Unblock"
+msgstr "Sblocca"

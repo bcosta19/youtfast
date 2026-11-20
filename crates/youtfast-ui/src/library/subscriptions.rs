@@ -92,9 +92,10 @@ fn subscription_toolbar(
         .subscription_list()
         .iter()
         .filter(|channel| {
-            activity
-                .get(channel.id.as_str())
-                .is_some_and(|act| act.recent_count > 0)
+            !state.library.is_channel_blocked(&channel.id)
+                && activity
+                    .get(channel.id.as_str())
+                    .is_some_and(|act| act.recent_count > 0)
         })
         .count();
 
@@ -131,6 +132,17 @@ fn subscription_toolbar(
             {
                 actions.push(Action::SetSubscriptionsSort(sort));
             }
+        }
+        ui.add_space(4.0);
+        if widgets::chip(
+            ui,
+            palette,
+            tr(locale, "Hide watched").as_ref(),
+            state.settings.hide_watched,
+        )
+        .clicked()
+        {
+            actions.push(Action::SetHideWatched(!state.settings.hide_watched));
         }
 
         let summary = if !state.subscriptions_query.trim().is_empty() {
@@ -435,7 +447,12 @@ fn channel_card(
     let preview = activity
         .latest_video
         .map(|video| (video, true))
-        .or_else(|| activity.last_watched.map(|video| (video, false)));
+        .or_else(|| {
+            (!state.settings.hide_watched)
+                .then_some(activity.last_watched)
+                .flatten()
+                .map(|video| (video, false))
+        });
     let preview_clicked =
         paint_card_preview_strip(ui, state, strip_rect, response.id, preview, actions);
 
@@ -819,5 +836,76 @@ mod tests {
         );
         assert!(texts.iter().any(|t| t == "Inside Modern Compilers"));
         assert!(texts.iter().any(|t| t.starts_with("Latest ·")));
+    }
+
+    #[test]
+    fn hide_watched_chip_emits_toggle_and_suppresses_last_watched_preview() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let mut state = State {
+            view: View::Subscriptions,
+            library: youtfast_storage::library::Library::default(),
+            ..State::default()
+        };
+        state.library.subscriptions = vec![Channel {
+            id: "UC_ok".into(),
+            name: "OK Channel".into(),
+            avatar: None,
+        }];
+        let mut watched_vid = Video::from_id("wat00000001".into());
+        watched_vid.title = "Already Watched Video".into();
+        watched_vid.channel = Some("OK Channel".into());
+        watched_vid.channel_id = Some("UC_ok".into());
+        state.library.record_watch(watched_vid.clone(), 10);
+        state.feed = Listing::Ready(vec![watched_vid]);
+        state.settings.hide_watched = true;
+
+        let mut chip_pos = None;
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(1200.0, 800.0))),
+                ..Default::default()
+            },
+            |ui| subscriptions(ui, &state, &mut Vec::new()),
+        );
+        let texts: Vec<String> = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => {
+                    if text.galley.text() == "Hide watched" {
+                        chip_pos = Some(Rect::from_min_size(text.pos, text.galley.size()).center());
+                    }
+                    Some(text.galley.text().to_owned())
+                }
+                _ => None,
+            })
+            .collect();
+        output.textures_delta.clear();
+        assert!(!texts.iter().any(|t| t == "Already Watched Video"));
+        assert!(!texts.iter().any(|t| t == "Last watched"));
+
+        let pos = chip_pos.expect("Hide watched chip");
+        let mut actions = Vec::new();
+        for pressed in [true, false] {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(1200.0, 800.0))),
+                    events: vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| subscriptions(ui, &state, &mut actions),
+            );
+            out.textures_delta.clear();
+        }
+        assert_eq!(actions, [Action::SetHideWatched(false)]);
     }
 }

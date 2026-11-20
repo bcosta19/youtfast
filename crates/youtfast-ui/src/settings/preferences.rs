@@ -306,6 +306,85 @@ pub(super) fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     }
                 },
             );
+            ui.add_space(12.0);
+            let card = widgets::on_card(palette);
+            let hidden_count = state.library.hidden_videos.len();
+            let hidden_text = if hidden_count == 0 {
+                tr(locale, "No hidden videos.").into_owned()
+            } else {
+                let template = ngettext(
+                    locale,
+                    "{count} video hidden.",
+                    "{count} videos hidden.",
+                    hidden_count.min(u32::MAX as usize) as u32,
+                );
+                interpolate(&template, &[("count", hidden_count.to_string())])
+            };
+            setting_row(
+                ui,
+                palette,
+                &tr(locale, "Hidden videos"),
+                &hidden_text,
+                CONTROL_WIDTH,
+                |ui| {
+                    ui.add_enabled_ui(hidden_count > 0, |ui| {
+                        if widgets::button(
+                            ui,
+                            &card,
+                            &tr(locale, "Clear"),
+                            widgets::ButtonStyle::Normal,
+                        )
+                        .clicked()
+                        {
+                            actions.push(Action::ClearHiddenVideos);
+                        }
+                    });
+                },
+            );
+            ui.add_space(12.0);
+            let blocked = &state.library.blocked_channels;
+            if blocked.is_empty() {
+                setting_row(
+                    ui,
+                    palette,
+                    &tr(locale, "Blocked channels"),
+                    &tr(locale, "No blocked channels."),
+                    CONTROL_WIDTH,
+                    |_| {},
+                );
+            } else {
+                let template = ngettext(
+                    locale,
+                    "{count} channel blocked.",
+                    "{count} channels blocked.",
+                    blocked.len().min(u32::MAX as usize) as u32,
+                );
+                let blocked_text = interpolate(&template, &[("count", blocked.len().to_string())]);
+                super::row_text(ui, palette, &tr(locale, "Blocked channels"), &blocked_text);
+                ui.add_space(8.0);
+                for channel in blocked.iter().rev() {
+                    let name = if channel.name.is_empty() {
+                        channel.id.as_str()
+                    } else {
+                        channel.name.as_str()
+                    };
+                    ui.push_id(&channel.id, |ui| {
+                        setting_row(ui, palette, name, "", CONTROL_WIDTH, |ui| {
+                            if widgets::button(
+                                ui,
+                                &card,
+                                &tr(locale, "Unblock"),
+                                widgets::ButtonStyle::Normal,
+                            )
+                            .clicked()
+                            {
+                                actions.push(Action::UnblockChannel(channel.id.clone()));
+                            }
+                        });
+                    });
+                    ui.add_space(4.0);
+                }
+            }
         });
     });
 }
@@ -725,5 +804,108 @@ mod tests {
         assert!(labels.iter().any(|l| l == "Skip automatically"));
         assert!(labels.iter().any(|l| l == "Show skip button"));
         assert!(labels.iter().any(|l| l == "Ignore"));
+    }
+
+    #[test]
+    fn history_filters_rows_show_counts_and_emit_clear_and_unblock() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+
+        let empty_state = State::default();
+        let mut actions = Vec::new();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(900.0, 900.0),
+                )),
+                ..Default::default()
+            },
+            |ui| history(ui, &empty_state, &mut actions),
+        );
+        let labels: Vec<_> = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                _ => None,
+            })
+            .collect();
+        output.textures_delta.clear();
+        assert!(labels.iter().any(|l| l == "Hidden videos"));
+        assert!(labels.iter().any(|l| l == "No hidden videos."));
+        assert!(labels.iter().any(|l| l == "Blocked channels"));
+        assert!(labels.iter().any(|l| l == "No blocked channels."));
+
+        let mut filled = State::default();
+        filled.library.hide_video("vid00000001".into());
+        filled.library.hide_video("vid00000002".into());
+        filled.library.block_channel(youtfast_core::model::Channel {
+            id: "UC_blocked1".into(),
+            name: "Blocked One".into(),
+            avatar: None,
+        });
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(900.0, 900.0),
+                )),
+                ..Default::default()
+            },
+            |ui| history(ui, &filled, &mut Vec::new()),
+        );
+        let mut clear_pos = None;
+        let mut unblock_pos = None;
+        let mut labels = Vec::new();
+        for shape in &output.shapes {
+            if let egui::Shape::Text(text) = &shape.shape {
+                labels.push(text.galley.text().to_owned());
+                if text.galley.text() == "Clear" {
+                    clear_pos =
+                        Some(egui::Rect::from_min_size(text.pos, text.galley.size()).center());
+                } else if text.galley.text() == "Unblock" {
+                    unblock_pos =
+                        Some(egui::Rect::from_min_size(text.pos, text.galley.size()).center());
+                }
+            }
+        }
+        output.textures_delta.clear();
+        assert!(labels.iter().any(|l| l == "2 videos hidden."));
+        assert!(labels.iter().any(|l| l == "1 channel blocked."));
+        assert!(labels.iter().any(|l| l == "Blocked One"));
+
+        for (pos, expected) in [
+            (clear_pos.expect("Clear button"), Action::ClearHiddenVideos),
+            (
+                unblock_pos.expect("Unblock button"),
+                Action::UnblockChannel("UC_blocked1".into()),
+            ),
+        ] {
+            let mut actions = Vec::new();
+            for pressed in [true, false] {
+                let mut out = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            vec2(900.0, 900.0),
+                        )),
+                        events: vec![
+                            egui::Event::PointerMoved(pos),
+                            egui::Event::PointerButton {
+                                pos,
+                                button: egui::PointerButton::Primary,
+                                pressed,
+                                modifiers: egui::Modifiers::NONE,
+                            },
+                        ],
+                        ..Default::default()
+                    },
+                    |ui| history(ui, &filled, &mut actions),
+                );
+                out.textures_delta.clear();
+            }
+            assert_eq!(actions, [expected]);
+        }
     }
 }

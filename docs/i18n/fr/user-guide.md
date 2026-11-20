@@ -321,6 +321,18 @@ jusqu'à la fin pour en charger davantage. Les Shorts se trouvent sur une étag�
 au-dessus de la liste : ceux du compte sont marqués par YouTube, ceux des
 chaînes de l'appareil proviennent de leurs onglets Shorts.
 
+Le **filtrage du flux** dans **Accueil** et **Abonnements** s'exécute
+localement sur cet appareil : une puce persistante **Masquer les vidéos vues**
+masque les vidéos vues dans Accueil (y compris l'étagère Shorts) ainsi que dans
+l'activité et les aperçus des cartes d'Abonnements ; les menus des cartes
+proposent aussi **Pas intéressé** (masque jusqu'à 5 000 vidéos en retirant les
+plus anciennes) et **Ne pas recommander cette chaîne** (bloque jusqu'à 1 000
+chaînes en retirant les plus anciennes), les excluant d'Accueil, d'Abonnements et
+des recommandations locales. Les résultats de recherche et la page propre d'une
+chaîne ne sont jamais filtrés. Consultez ou annulez les vidéos masquées
+(**Effacer**) et les chaînes bloquées (**Débloquer**) dans **Paramètres →
+Historique**.
+
 **Sans compte**, YouTFast conserve les abonnements, l'historique de visionnage
 (avec l'endroit où chaque vidéo a été laissée, pour la reprendre) et À regarder
 plus tard sur cet ordinateur, dans `~/.local/share/youtfast/library.json`, et

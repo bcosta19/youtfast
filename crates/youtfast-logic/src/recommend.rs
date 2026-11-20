@@ -11,7 +11,7 @@
 use std::collections::{HashMap, HashSet};
 
 use youtfast_core::model::{Channel, Video};
-use youtfast_storage::library::Watched;
+use youtfast_storage::library::{Library, Watched};
 
 /// How many watched videos seed the list: each costs a details request.
 pub const SEEDS: usize = 12;
@@ -35,16 +35,29 @@ pub struct Taste {
     pub watched: HashSet<String>,
     /// How much each channel is liked (subscribed, watched often), 0 to 1.
     pub channels: HashMap<String, f64>,
+    /// Hidden video ids not to recommend.
+    pub hidden_videos: HashSet<String>,
+    /// Blocked channel ids not to recommend.
+    pub blocked_channels: HashSet<String>,
 }
 
 /// The seeds: the latest distinct videos of the history, not Shorts or
 /// live streams (their related lists are about the moment), weighed by
 /// how recent they are and how much of them was watched.
 pub fn seeds(history: &[Watched]) -> Vec<Seed> {
+    seeds_filtered(history, |_| false)
+}
+
+/// Like [`seeds`], skipping videos hidden or from channels blocked in `library`.
+pub fn seeds_for_library(library: &Library) -> Vec<Seed> {
+    seeds_filtered(&library.history, |video| library.is_hidden(video))
+}
+
+fn seeds_filtered(history: &[Watched], is_hidden: impl Fn(&Video) -> bool) -> Vec<Seed> {
     let mut seen = HashSet::new();
     history
         .iter()
-        .filter(|watched| !watched.video.short && !watched.video.live)
+        .filter(|watched| !watched.video.short && !watched.video.live && !is_hidden(&watched.video))
         .filter(|watched| seen.insert(watched.video.id.clone()))
         .take(SEEDS)
         .enumerate()
@@ -89,7 +102,23 @@ pub fn taste(history: &[Watched], subscriptions: &[Channel]) -> Taste {
             .map(|watched| watched.video.id.clone())
             .collect(),
         channels,
+        hidden_videos: HashSet::new(),
+        blocked_channels: HashSet::new(),
     }
+}
+
+/// Like [`taste`], populated with `library`'s hidden videos and blocked channels.
+pub fn taste_for_library(library: &Library) -> Taste {
+    let mut t = taste(&library.history, &library.subscriptions);
+    t.hidden_videos = library.hidden_videos.iter().cloned().collect();
+    t.blocked_channels = library
+        .blocked_channels
+        .iter()
+        .map(|channel| channel.id.clone())
+        .collect();
+    t.channels
+        .retain(|channel_id, _| !t.blocked_channels.contains(channel_id));
+    t
 }
 
 /// The ranked list from each seed's weight and its related videos, in
@@ -98,7 +127,14 @@ pub fn rank(related: &[(f64, Vec<Video>)], taste: &Taste) -> Vec<Video> {
     let mut scores: HashMap<String, (f64, Video)> = HashMap::new();
     for (weight, videos) in related {
         for (place, video) in videos.iter().enumerate() {
-            if video.short || taste.watched.contains(&video.id) {
+            if video.short
+                || taste.watched.contains(&video.id)
+                || taste.hidden_videos.contains(&video.id)
+                || video
+                    .channel_id
+                    .as_deref()
+                    .is_some_and(|id| taste.blocked_channels.contains(id))
+            {
                 continue;
             }
             let score = weight / (1.0 + place as f64 * 0.15);
@@ -188,6 +224,7 @@ mod tests {
         let taste = Taste {
             watched: HashSet::from(["seen".to_owned()]),
             channels: HashMap::from([("UCliked".to_owned(), 1.0)]),
+            ..Taste::default()
         };
         let related = [
             (
@@ -256,5 +293,43 @@ mod tests {
         assert_eq!(taste.channels["UCc"], 0.5);
         assert_eq!(taste.channels["UCs"], 1.0);
         assert!(taste.watched.contains("b"));
+    }
+
+    #[test]
+    fn hidden_videos_and_blocked_channels_are_excluded_from_seeds_and_rank() {
+        let mut library = Library::default();
+        let v_hidden = video("hidden00001", "UCok");
+        let v_blocked = video("from_block1", "UCbad");
+        let v_ok = video("ok000000001", "UCok");
+        library.record_watch(v_ok.clone(), 1);
+        library.record_watch(v_blocked.clone(), 2);
+        library.record_watch(v_hidden.clone(), 3);
+        library.hide_video("hidden00001".into());
+        library.block_channel(Channel {
+            id: "UCbad".into(),
+            name: "Bad Channel".into(),
+            avatar: None,
+        });
+
+        let seeds = seeds_for_library(&library);
+        let seed_ids: Vec<&str> = seeds.iter().map(|seed| seed.id.as_str()).collect();
+        assert_eq!(seed_ids, ["ok000000001"]);
+
+        let taste = taste_for_library(&library);
+        assert!(!taste.channels.contains_key("UCbad"));
+        let related = [(
+            1.0,
+            vec![
+                video("hidden00001", "UCok"),
+                video("from_block1", "UCbad"),
+                video("other_bad01", "UCbad"),
+                video("fresh_good1", "UCgood"),
+            ],
+        )];
+        let ranked: Vec<String> = rank(&related, &taste)
+            .into_iter()
+            .map(|video| video.id)
+            .collect();
+        assert_eq!(ranked, ["fresh_good1"]);
     }
 }

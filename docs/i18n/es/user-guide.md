@@ -305,6 +305,17 @@ canales RSS del dispositivo — agrupado por días y paginado: desplázate hasta
 y llega más. Los Shorts están en un estante encima de la lista: los de la cuenta los
 marca YouTube, los de los canales del dispositivo vienen de sus pestañas de Shorts.
 
+El **filtrado del feed** en **Inicio** y **Suscripciones** se ejecuta
+localmente en este dispositivo: el botón persistente **Ocultar vistos** oculta
+los vídeos vistos en Inicio (incluido el estante de Shorts) y de la actividad y
+vistas previas de las tarjetas en Suscripciones; los menús de las tarjetas
+también ofrecen **No me interesa** (oculta hasta 5.000 vídeos, descartando los
+más antiguos) y **No recomendar este canal** (bloquea hasta 1.000 canales,
+descartando los más antiguos), excluyéndolos de Inicio, Suscripciones y las
+recomendaciones locales. Los resultados de búsqueda y la página propia de un
+canal nunca se filtran. Revisa o deshaz vídeos ocultos (**Borrar**) y canales
+bloqueados (**Desbloquear**) en **Configuración → Historial**.
+
 **Sin cuenta**, YouTFast guarda las suscripciones, el historial de reproducciones
 (con el punto donde se dejó cada vídeo, para reanudarlo) y Ver más tarde en este
 equipo, en `~/.local/share/youtfast/library.json`, y su configuración (calidad de
