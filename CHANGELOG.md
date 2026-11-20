@@ -21,6 +21,7 @@ are the distribution record.
 ### Fixed
 
 - SponsorBlock restores local audio even if its segment list refreshes during auto-mute.
+- Unmuting or changing volume overrides SponsorBlock auto-mute for all overlapping segments.
 
 ## [0.9.1] - 2026-11-17
 

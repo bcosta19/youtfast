@@ -1664,14 +1664,9 @@ impl App {
             }
             Action::SetVolume(volume) => {
                 self.state.settings.volume = volume;
-                if self
-                    .player
-                    .as_ref()
-                    .is_some_and(|player| player.status().muted)
+                if let Some(status) = self.player.as_ref().map(|player| player.status())
+                    && self.state.prepare_manual_unmute(status.position, status.muted)
                 {
-                    if let Some(index) = self.state.sponsor_muted.take() {
-                        self.state.skipped.insert(index);
-                    }
                     self.with_player(|player| player.set_muted(false));
                 }
                 self.with_player(|player| player.set_volume(volume));

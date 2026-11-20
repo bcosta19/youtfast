@@ -240,14 +240,12 @@ impl App {
     }
 
     pub(super) fn toggle_mute(&mut self) {
-        let Some(muted) = self.player.as_ref().map(|player| player.status().muted) else {
+        let Some(status) = self.player.as_ref().map(|player| player.status()) else {
             return;
         };
-        if let Some(index) = self.state.sponsor_muted.take() {
-            self.state.skipped.insert(index);
-        }
-        self.with_player(|player| player.set_muted(!muted));
-        self.show_osd(if muted { "Unmuted" } else { "Muted" }.to_owned());
+        let unmute = self.state.prepare_manual_unmute(status.position, status.muted);
+        self.with_player(|player| player.set_muted(!unmute));
+        self.show_osd(if unmute { "Unmuted" } else { "Muted" }.to_owned());
     }
 
     pub(super) fn seek_fraction(&mut self, fraction: f64) {
@@ -707,6 +705,33 @@ impl State {
             .map(|video| (video, deadline));
     }
 
+    /// Returns whether a mute toggle or volume change should explicitly unmute mpv.
+    pub(super) fn prepare_manual_unmute(&mut self, position: f64, polled_muted: bool) -> bool {
+        // The mpv status snapshot may not yet reflect this frame's SponsorBlock mute.
+        let owned_mute = self.sponsor_muted.take();
+        if owned_mute.is_none() && !polled_muted {
+            return false;
+        }
+        self.skipped.extend(owned_mute);
+        if self.settings.sponsorblock {
+            let categories = self.settings.sponsorblock_categories;
+            self.skipped.extend(
+                self.segments
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, segment)| {
+                        segment.action == SegmentAction::Mute
+                            && categories.behavior_for(&segment.category)
+                                == SponsorBehavior::AutoSkip
+                            && position >= segment.start
+                            && position < segment.end - 0.3
+                    })
+                    .map(|(index, _)| index),
+            );
+        }
+        true
+    }
+
     /// Replaces the segments for this video; returns whether mpv needs to be unmuted.
     pub(super) fn accept_segments(&mut self, id: &str, segments: Vec<Segment>) -> bool {
         if !self.settings.sponsorblock
@@ -1078,7 +1103,7 @@ mod tests {
     }
 
     #[test]
-    fn sponsorblock_auto_mute_lifecycle_handles_entry_exit_user_mute_and_toggle() {
+    fn sponsorblock_auto_mute_lifecycle_handles_entry_exit_and_user_mute() {
         let mut state = State::default();
         state.settings.sponsorblock = true;
         state.segments = vec![
@@ -1136,24 +1161,57 @@ mod tests {
             state.tick_sponsorblock(false, true, true, 41.0),
             SponsorTick::default()
         );
+    }
 
-        // Manual unmute inside an active sponsor-muted segment prevents re-muting
-        // on subsequent frames.
-        state.skipped.clear();
+    #[test]
+    fn sponsorblock_manual_unmute_overrides_stale_status_and_all_overlapping_mutes() {
+        let mut state = State {
+            segments: vec![
+                Segment {
+                    category: "sponsor".into(),
+                    start: 10.0,
+                    end: 20.0,
+                    action: SegmentAction::Mute,
+                },
+                Segment {
+                    category: "selfpromo".into(),
+                    start: 15.0,
+                    end: 25.0,
+                    action: SegmentAction::Mute,
+                },
+            ],
+            ..Default::default()
+        };
+        state.settings.sponsorblock = true;
         assert_eq!(
-            state.tick_sponsorblock(false, true, false, 12.0).set_muted,
+            state.tick_sponsorblock(false, true, false, 16.0).set_muted,
             Some(true)
         );
-        if let Some(index) = state.sponsor_muted.take() {
-            state.skipped.insert(index);
-        }
+        // The toggle and volume action both use this decision before writing to mpv.
+        assert!(state.prepare_manual_unmute(16.0, false));
         assert_eq!(
-            state.tick_sponsorblock(false, true, false, 13.0),
+            state.tick_sponsorblock(false, true, false, 17.0),
             SponsorTick::default()
         );
+        assert_eq!(
+            state.tick_sponsorblock(false, true, false, 21.0),
+            SponsorTick::default()
+        );
+    }
 
-        // Disabling SponsorBlock while paused inside a sponsor-muted segment unmutes.
-        state.skipped.clear();
+    #[test]
+    fn sponsorblock_disabling_while_paused_restores_audio() {
+        let mut state = State {
+            segments: vec![Segment {
+                category: "sponsor".into(),
+                start: 10.0,
+                end: 20.0,
+                action: SegmentAction::Mute,
+            }],
+            ..Default::default()
+        };
+        state.settings.sponsorblock = true;
+
         assert_eq!(
             state.tick_sponsorblock(false, true, false, 12.0).set_muted,
             Some(true)
