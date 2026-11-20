@@ -734,13 +734,14 @@ mod tests {
             (Listing::Ready(Vec::new()), "No playlists found"),
         ] {
             state.playlists = listing;
-            let output = ctx.run_ui(
+            let mut output = ctx.run_ui(
                 egui::RawInput {
                     screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(1280.0, 800.0))),
                     ..Default::default()
                 },
                 |ui| playlists(ui, &state, &mut Vec::new()),
             );
+            output.textures_delta.clear();
             let has_text = |wanted: &str| {
                 output.shapes.iter().any(|shape| {
                     matches!(&shape.shape, egui::Shape::Text(text) if text.galley.text() == wanted)
