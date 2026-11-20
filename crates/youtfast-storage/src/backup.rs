@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 use serde::de::{self, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::library::{HISTORY_LIMIT, Import, Library, Watched};
+use crate::library::{HISTORY_LIMIT, Import, ImportedWatch, Library, Watched};
 use crate::takeout::{Limited, read_bom_prefix};
 use youtfast_core::model::{Channel, Video};
 
@@ -23,15 +23,15 @@ pub const SUBSCRIPTIONS_LIMIT: usize = 20_000;
 const MAX_BACKUP_BYTES: u64 = 64 * 1024 * 1024;
 const TOO_MANY_SUBSCRIPTIONS: &str = "This backup file exceeds 20,000 subscriptions.";
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Backup {
-    pub version: u32,
+#[derive(Deserialize)]
+struct Backup {
+    version: u32,
     #[serde(default, deserialize_with = "decode_subscriptions")]
-    pub subscriptions: Vec<Channel>,
+    subscriptions: Vec<Channel>,
     #[serde(default, deserialize_with = "decode_history")]
-    pub history: Vec<Watched>,
+    history: Vec<ImportedWatch>,
     #[serde(default, deserialize_with = "decode_watch_later")]
-    pub watch_later: Vec<Video>,
+    watch_later: Vec<Video>,
 }
 
 // Keep network locations out of the portable representation without changing
@@ -316,17 +316,17 @@ fn decode_subscriptions<'de, D: Deserializer<'de>>(decoder: D) -> Result<Vec<Cha
     Ok(subscriptions)
 }
 
-fn decode_history<'de, D: Deserializer<'de>>(decoder: D) -> Result<Vec<Watched>, D::Error> {
-    let mut history: Vec<Watched> = Vec::new();
+fn decode_history<'de, D: Deserializer<'de>>(decoder: D) -> Result<Vec<ImportedWatch>, D::Error> {
+    let mut history: Vec<ImportedWatch> = Vec::new();
     let mut seen: HashMap<String, usize> = HashMap::new();
-    visit_rows(decoder, |mut row: Watched| {
+    visit_rows(decoder, |mut row: ImportedWatch| {
         if row.video.id.trim().is_empty() {
             return Ok(());
         }
         row.video.channel_avatar = None;
-        if !row.position.is_finite() || row.position < 0.0 {
-            row.position = 0.0;
-        }
+        row.position = row
+            .position
+            .filter(|position| position.is_finite() && *position >= 0.0);
         if let Some(&index) = seen.get(&row.video.id) {
             if row.at > history[index].at {
                 history[index] = row;
@@ -377,6 +377,14 @@ mod tests {
     use crate::library::Account;
     use youtfast_core::model::AccountSource;
 
+    #[derive(Serialize)]
+    struct LegacyBackup {
+        version: u32,
+        subscriptions: Vec<Channel>,
+        history: Vec<Watched>,
+        watch_later: Vec<Video>,
+    }
+
     fn sample_channel(id: &str, name: &str) -> Channel {
         Channel {
             id: id.to_owned(),
@@ -422,14 +430,35 @@ mod tests {
 
         let import = parse_reader(json.as_bytes()).unwrap();
         assert_eq!(import.subscriptions, library.subscriptions);
-        assert_eq!(import.history, library.history);
-        assert_eq!(import.history[0].position, 123.5);
+        assert_eq!(import.history[0].video, library.history[0].video);
+        assert_eq!(import.history[0].at, library.history[0].at);
+        assert_eq!(import.history[0].position, Some(123.5));
         assert_eq!(import.watch_later, library.watch_later);
 
         // Takeout reader also accepts a YouTFast JSON backup.
         let via_takeout =
             crate::takeout::parse_reader(std::io::BufReader::new(json.as_bytes())).unwrap();
         assert_eq!(via_takeout, import);
+    }
+
+    #[test]
+    fn a_newer_finished_backup_row_clears_resume_but_missing_or_invalid_data_does_not() {
+        let id = "VID00000001";
+        let mut library = Library::default();
+        library.record_watch(sample_video(id, "Video"), 100);
+        library.set_position(id, 123.5, 600.0);
+        for (at, position, expected) in [
+            (101, "", Some(123.5)),
+            (102, r#","position":-5"#, Some(123.5)),
+            (103, r#","position":0"#, None),
+        ] {
+            let json = format!(
+                r#"{{"version":1,"history":[{{"video":{{"id":"{id}","title":"Video"}},"at":{at}{position}}}]}}"#
+            );
+            library.merge(parse_reader(json.as_bytes()).unwrap());
+            assert_eq!(library.history[0].at, at);
+            assert_eq!(library.resume_position(id), expected);
+        }
     }
 
     #[test]
@@ -448,7 +477,7 @@ mod tests {
         assert!(exported["history"][0]["video"].get("channel_avatar").is_none());
         assert!(exported["watch_later"][0].get("channel_avatar").is_none());
 
-        let legacy = serde_json::to_vec(&Backup {
+        let legacy = serde_json::to_vec(&LegacyBackup {
             version: BACKUP_VERSION,
             subscriptions: library.subscriptions,
             history: library.history,
@@ -549,7 +578,7 @@ mod tests {
         let too_many_subs: Vec<Channel> = (0..=SUBSCRIPTIONS_LIMIT)
             .map(|i| sample_channel(&format!("UC{i:022}"), &format!("Channel {i}")))
             .collect();
-        let json = serde_json::to_string(&Backup {
+        let json = serde_json::to_string(&LegacyBackup {
             version: BACKUP_VERSION,
             subscriptions: too_many_subs,
             history: Vec::new(),
@@ -578,7 +607,7 @@ mod tests {
             .map(|i| sample_video(&format!("W{i:010}"), &format!("WL {i}")))
             .chain(std::iter::once(sample_video("W0000000000", "Dup")))
             .collect();
-        let json = serde_json::to_string(&Backup {
+        let json = serde_json::to_string(&LegacyBackup {
             version: BACKUP_VERSION,
             subscriptions: vec![
                 sample_channel("", "Empty"),
@@ -594,9 +623,9 @@ mod tests {
         assert_eq!(import.history.len(), HISTORY_LIMIT);
         assert_eq!(import.history[0].video.id, "V0000001198");
         assert_eq!(import.history[0].at, 5_000);
-        assert_eq!(import.history[0].position, 77.0);
+        assert_eq!(import.history[0].position, Some(77.0));
         assert_eq!(import.history[1].video.id, "V0000003199");
-        assert_eq!(import.history[1].position, 0.0);
+        assert_eq!(import.history[1].position, None);
         assert_eq!(import.watch_later.len(), WATCH_LATER_LIMIT);
         assert_eq!(import.watch_later[0].id, "W0000000000");
 

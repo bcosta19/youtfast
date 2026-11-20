@@ -11,7 +11,7 @@ use std::io::{BufRead, Read};
 
 use serde::Deserialize;
 
-use crate::library::{Import, Watched};
+use crate::library::{Import, ImportedWatch};
 use youtfast_core::model::{Channel, Video};
 
 const MAX_SUBSCRIPTION_ROW_BYTES: usize = 1024 * 1024;
@@ -247,10 +247,10 @@ const WATCHED_PREFIXES: [&str; 6] = [
     "Vous avez regardé ",
 ];
 
-fn history<R: Read>(reader: R) -> Result<Vec<Watched>, String> {
+fn history<R: Read>(reader: R) -> Result<Vec<ImportedWatch>, String> {
     struct History;
     impl<'de> serde::de::Visitor<'de> for History {
-        type Value = Vec<Watched>;
+        type Value = Vec<ImportedWatch>;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
             formatter.write_str("a Takeout history array")
@@ -260,7 +260,7 @@ fn history<R: Read>(reader: R) -> Result<Vec<Watched>, String> {
             self,
             mut seq: A,
         ) -> Result<Self::Value, A::Error> {
-            let mut rows: Vec<Watched> = Vec::new();
+            let mut rows: Vec<ImportedWatch> = Vec::new();
             let mut known: HashMap<String, usize> = HashMap::new();
             let limit = crate::library::HISTORY_LIMIT;
             while let Some(entry) = seq.next_element::<Entry>()? {
@@ -299,7 +299,7 @@ fn history<R: Read>(reader: R) -> Result<Vec<Watched>, String> {
     Ok(rows)
 }
 
-fn watched(entry: Entry) -> Option<Watched> {
+fn watched(entry: Entry) -> Option<ImportedWatch> {
     // Ads and removed videos have no link to a video.
     let id = youtfast_core::links::video_id_from_link(entry.title_url.as_deref()?)?;
     let at = entry
@@ -321,7 +321,7 @@ fn watched(entry: Entry) -> Option<Watched> {
         .and_then(|url| url.rsplit("/channel/").next())
         .filter(|id| id.starts_with("UC"))
         .map(str::to_owned);
-    Some(Watched {
+    Some(ImportedWatch {
         video: Video {
             title,
             channel: channel.and_then(|channel| channel.name),
@@ -329,7 +329,7 @@ fn watched(entry: Entry) -> Option<Watched> {
             ..Video::from_id(id)
         },
         at,
-        position: 0.0,
+        position: None,
     })
 }
 
@@ -465,6 +465,7 @@ mod tests {
             Some("UCuAXFkgsw1L7xaCfnd5JJOw")
         );
         assert_eq!(first.at, 1_714_566_896);
+        assert_eq!(first.position, None);
         assert_eq!(import.history[1].video.title, "Um vídeo");
     }
 

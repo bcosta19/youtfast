@@ -73,11 +73,21 @@ pub struct Watched {
     pub position: f64,
 }
 
+/// An imported watch entry, whose source may not supply resume data.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct ImportedWatch {
+    pub video: Video,
+    pub at: i64,
+    /// `Some(0.0)` means finished; `None` means no resume data was provided.
+    #[serde(default)]
+    pub position: Option<f64>,
+}
+
 /// What a Google Takeout or library backup file brought.
 #[derive(Debug, Default, PartialEq)]
 pub struct Import {
     pub subscriptions: Vec<Channel>,
-    pub history: Vec<Watched>,
+    pub history: Vec<ImportedWatch>,
     pub watch_later: Vec<Video>,
 }
 
@@ -325,20 +335,26 @@ impl Library {
             if watched.video.id.trim().is_empty() {
                 continue;
             }
+            let position = watched
+                .position
+                .filter(|position| position.is_finite() && *position >= 0.0);
             match known_videos.entry(watched.video.id.clone()) {
                 std::collections::hash_map::Entry::Occupied(entry) => {
                     let known = &mut self.history[*entry.get()];
                     if watched.at > known.at
-                        && watched.position.is_finite()
-                        && watched.position > 0.0
+                        && let Some(position) = position
                     {
-                        known.position = watched.position;
+                        known.position = position;
                     }
                     known.at = known.at.max(watched.at);
                 }
                 std::collections::hash_map::Entry::Vacant(entry) => {
                     entry.insert(self.history.len());
-                    self.history.push(watched);
+                    self.history.push(Watched {
+                        video: watched.video,
+                        at: watched.at,
+                        position: position.unwrap_or_default(),
+                    });
                     new_history += 1;
                 }
             }
@@ -432,10 +448,10 @@ mod tests {
         });
         let history = (0..20_000)
             .flat_map(|index| {
-                let watched = Watched {
+                let watched = ImportedWatch {
                     video: Video::from_id(format!("{index:011}")),
                     at: index,
-                    position: 0.0,
+                    position: None,
                 };
                 [watched.clone(), watched]
             })
@@ -579,15 +595,15 @@ mod tests {
         let import = Import {
             subscriptions: vec![channel("UC1", "Alpha"), channel("UC2", "Beta")],
             history: vec![
-                Watched {
+                ImportedWatch {
                     video: video("aaaaaaaaaaa"),
                     at: 5,
-                    position: 0.0,
+                    position: None,
                 },
-                Watched {
+                ImportedWatch {
                     video: video("bbbbbbbbbbb"),
                     at: 20,
-                    position: 0.0,
+                    position: None,
                 },
             ],
             ..Import::default()
@@ -612,10 +628,10 @@ mod tests {
         // A Takeout merge and a reload see it too.
         library.merge(Import {
             subscriptions: Vec::new(),
-            history: vec![Watched {
+            history: vec![ImportedWatch {
                 video: video("bbbbbbbbbbb"),
                 at: 2,
-                position: 30.0,
+                position: Some(30.0),
             }],
             ..Import::default()
         });
