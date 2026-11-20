@@ -9,6 +9,9 @@
 
 use sha2::{Digest, Sha256};
 
+/// Cap the decoded bucket before parsing; the service can return many video IDs.
+const MAX_BRANDING_BYTES: u64 = 1024 * 1024;
+
 /// Default base URL for the DeArrow branding API.
 pub const DEFAULT_API_BASE: &str = "https://sponsor.ajay.app";
 
@@ -56,6 +59,15 @@ fn thumbnail_url(video_id: &str, timestamp: f64) -> String {
     url.into()
 }
 
+static AGENT: std::sync::LazyLock<ureq::Agent> = std::sync::LazyLock::new(|| {
+    ureq::Agent::config_builder()
+        .timeout_global(Some(std::time::Duration::from_secs(10)))
+        .http_status_as_error(false)
+        .max_redirects(0)
+        .build()
+        .into()
+});
+
 /// Queries DeArrow's default branding endpoint for `video_id` using only its
 /// 4-hex-character SHA-256 prefix.
 pub fn branding(video_id: &str) -> Result<Branding, String> {
@@ -71,21 +83,30 @@ pub fn fetch_from(base: &str, video_id: &str) -> Result<Branding, String> {
         base.trim_end_matches('/'),
         hash_prefix(video_id),
     );
-    let response = ehttp::fetch_blocking(&ehttp::Request::get(url))
+    let mut response = AGENT
+        .get(url)
+        .call()
         .map_err(|_| "DeArrow could not be reached".to_owned())?;
-    match response.status {
-        200 => Ok(parse(response.text().unwrap_or_default(), video_id)),
+    match response.status().as_u16() {
+        200 => {
+            let body = response
+                .body_mut()
+                .with_config()
+                .limit(MAX_BRANDING_BYTES)
+                .read_to_vec()
+                .map_err(|_| {
+                    "DeArrow branding response exceeds limits or could not be read".to_owned()
+                })?;
+            let bucket = serde_json::from_slice(&body)
+                .map_err(|_| "DeArrow returned an invalid branding bucket".to_owned())?;
+            Ok(select(&bucket, video_id))
+        }
         404 => Ok(Branding::default()),
         status => Err(format!("DeArrow answered {status}")),
     }
 }
 
-/// Parses a DeArrow `/api/branding/{prefix}` bucket JSON object and selects
-/// the best community title and thumbnail for `video_id`.
-pub fn parse(json: &str, video_id: &str) -> Branding {
-    let Ok(serde_json::Value::Object(bucket)) = serde_json::from_str(json) else {
-        return Branding::default();
-    };
+fn select(bucket: &serde_json::Map<String, serde_json::Value>, video_id: &str) -> Branding {
     let Some(entry) = bucket.get(video_id) else {
         return Branding::default();
     };
@@ -152,6 +173,10 @@ fn clean_title(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn parse(json: &str, video_id: &str) -> Branding {
+        select(&serde_json::from_str(json).unwrap(), video_id)
+    }
 
     fn server(status: u16, body: &str) -> (String, std::thread::JoinHandle<String>) {
         use std::io::{Read, Write};
@@ -251,5 +276,20 @@ mod tests {
         let got_404 = fetch_from(&base_404, "dQw4w9WgXcQ").unwrap();
         assert_eq!(handle_404.join().unwrap(), "/api/branding/5f6b");
         assert_eq!(got_404, Branding::default());
+    }
+
+    #[test]
+    fn oversized_branding_bucket_is_rejected_before_parsing() {
+        let body = format!("{{}}{}", " ".repeat(MAX_BRANDING_BYTES as usize));
+        let (base, worker) = server(200, &body);
+        assert!(fetch_from(&base, "video").is_err());
+        worker.join().unwrap();
+    }
+
+    #[test]
+    fn invalid_branding_response_is_not_a_miss() {
+        let (base, worker) = server(200, "[]");
+        assert!(fetch_from(&base, "video").is_err());
+        worker.join().unwrap();
     }
 }
