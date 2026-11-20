@@ -318,6 +318,30 @@ pub fn chip(ui: &mut Ui, palette: &Palette, label: &str, on: bool) -> Response {
     response
 }
 
+pub struct SearchField {
+    id: egui::Id,
+    width: f32,
+    return_key: Option<egui::KeyboardShortcut>,
+}
+
+impl SearchField {
+    pub fn new(id: egui::Id, width: f32) -> Self {
+        Self {
+            id,
+            width,
+            return_key: Some(egui::KeyboardShortcut::new(
+                egui::Modifiers::NONE,
+                egui::Key::Enter,
+            )),
+        }
+    }
+
+    pub fn keep_focus_on_enter(mut self) -> Self {
+        self.return_key = None;
+        self
+    }
+}
+
 /// The search field, the siblings' way: a rounded field with the search
 /// icon at its left and a clear button at its right while it has text.
 /// Returns the text edit's response (Enter is the caller's to read).
@@ -327,8 +351,11 @@ pub fn search_field(
     text: &mut String,
     hint: &str,
     locale: Locale,
-    id: egui::Id,
-    width: f32,
+    SearchField {
+        id,
+        width,
+        return_key,
+    }: SearchField,
 ) -> Response {
     let height = 36.0;
     let (rect, hover_response) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
@@ -366,6 +393,7 @@ pub fn search_field(
         field_rect.size(),
         egui::TextEdit::singleline(text)
             .id(id)
+            .return_key(return_key)
             .frame(egui::Frame::NONE)
             .hint_text(egui::RichText::new(hint).color(palette.dim))
             .font(theme::regular(14.0))
@@ -472,8 +500,7 @@ mod tests {
                 &mut query,
                 "Pesquisar",
                 Locale::PortugueseBrazil,
-                Id::new("search"),
-                240.0,
+                SearchField::new(Id::new("search"), 240.0),
             );
         });
         output.textures_delta.clear();

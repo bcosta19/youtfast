@@ -120,8 +120,10 @@ pub(super) fn library_video_toolbar(
         &mut query,
         tr(locale, "Filter videos").as_ref(),
         locale,
-        egui::Id::new(search_salt),
-        220.0_f32.min(ui.available_width()),
+        widgets::SearchField::new(
+            egui::Id::new(search_salt),
+            220.0_f32.min(ui.available_width()),
+        ),
     );
     if query != current_query {
         actions.push(set_query(query));

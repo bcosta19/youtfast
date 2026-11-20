@@ -46,8 +46,10 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 &mut query,
                 tr(locale, hint).as_ref(),
                 locale,
-                egui::Id::new("history search"),
-                220.0_f32.min(ui.available_width()),
+                widgets::SearchField::new(
+                    egui::Id::new("history search"),
+                    220.0_f32.min(ui.available_width()),
+                ),
             );
             if query != state.history_query {
                 actions.push(Action::SetHistoryQuery(query));

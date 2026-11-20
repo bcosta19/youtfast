@@ -94,6 +94,9 @@ impl State {
         self.alerts.clear();
         self.alerts_visit.clear();
         self.notifications_popup_open = false;
+        self.palette_open = false;
+        self.palette_query.clear();
+        self.palette_cursor = 0;
         self.alerts_checking = false;
         self.last_checked = None;
         self.channel_info.clear();

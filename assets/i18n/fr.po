@@ -2077,3 +2077,41 @@ msgstr "Lecture en incrustation vidéo"
 
 msgid "Return video to main window"
 msgstr "Renvoyer la vidéo vers la fenêtre principale"
+msgid "Command palette"
+msgstr "Palette de commandes"
+
+msgid "Type a command or search…"
+msgstr "Saisissez une commande ou recherchez…"
+
+msgid "No matching commands"
+msgstr "Aucune commande correspondante"
+
+msgid "View"
+msgstr "Vue"
+
+msgid "Action"
+msgstr "Action"
+
+msgid "Recent searches"
+msgstr "Recherches récentes"
+
+msgid "Toggle sidebar"
+msgstr "Afficher ou masquer le volet latéral"
+
+msgid "Back"
+msgstr "Précédent"
+
+msgid "Forward"
+msgstr "Suivant"
+
+msgid "New video tab"
+msgstr "Nouvel onglet vidéo"
+
+msgid "Mini player"
+msgstr "Mini-lecteur"
+
+msgid "Transcript"
+msgstr "Transcription"
+
+msgid "Loop"
+msgstr "Boucle"

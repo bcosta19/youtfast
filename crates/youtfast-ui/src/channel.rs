@@ -282,8 +282,10 @@ fn channel_search(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         &mut query,
         tr(locale, "Search this channel").as_ref(),
         locale,
-        egui::Id::new("channel search"),
-        240.0_f32.min(ui.available_width()),
+        widgets::SearchField::new(
+            egui::Id::new("channel search"),
+            240.0_f32.min(ui.available_width()),
+        ),
     );
     // The clear button edits the text without the field's `changed`.
     if query != state.channel_query {

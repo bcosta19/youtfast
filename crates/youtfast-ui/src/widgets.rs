@@ -9,8 +9,8 @@ mod rich_text;
 mod video;
 
 pub use controls::{
-    ButtonStyle, button, chip, icon_button, icon_text_button, nav_item, paint_switch, search_field,
-    subscribe,
+    ButtonStyle, SearchField, button, chip, icon_button, icon_text_button, nav_item, paint_switch,
+    search_field, subscribe,
 };
 pub use playlist::{playlist_card, playlist_card_height, playlist_row};
 pub use rich_text::{rich_text, spans_truncated};

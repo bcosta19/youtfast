@@ -274,8 +274,10 @@ fn playlists_toolbar(
                 &mut query,
                 tr(locale, "Filter playlists").as_ref(),
                 locale,
-                egui::Id::new("playlists search"),
-                220.0_f32.min(ui.available_width()),
+                widgets::SearchField::new(
+                    egui::Id::new("playlists search"),
+                    220.0_f32.min(ui.available_width()),
+                ),
             );
             if query != state.playlists_query {
                 actions.push(Action::SetPlaylistsQuery(query));

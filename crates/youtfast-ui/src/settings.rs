@@ -81,6 +81,17 @@ pub(crate) fn column<R>(
     .inner
 }
 
+/// Scroll the Settings page to `group` on the next frame.
+pub(super) fn jump_to(ctx: &egui::Context, group: youtfast_core::model::SettingsGroup) {
+    let id = egui::Id::new("settings-index");
+    let chosen = group.index();
+    let mut index: IndexState = ctx.data(|d| d.get_temp(id)).unwrap_or_default();
+    index.jump = Some(chosen);
+    index.chosen = Some(chosen);
+    index.current = chosen;
+    ctx.data_mut(|d| d.insert_temp(id, index));
+}
+
 pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
     results::panel(ui, |ui| {
@@ -99,6 +110,14 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 
         let id = egui::Id::new("settings-index");
         let mut index: IndexState = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_default();
+        if let Some(group) = state.settings_group {
+            let chosen = group.index();
+            if index.chosen != Some(chosen) {
+                index.jump = Some(chosen);
+                index.chosen = Some(chosen);
+                index.current = chosen;
+            }
+        }
         if ui.input(|i| i.smooth_scroll_delta.y != 0.0 || i.pointer.is_decidedly_dragging()) {
             index.chosen = None;
         }
@@ -116,13 +135,11 @@ pub fn show(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                         results::title(ui, state, &tr(locale, "Settings"), None);
                     }
                     for (group, (_, draw)) in GROUPS.iter().enumerate() {
-                        if indexed {
-                            if jump == Some(group) {
-                                ui.scroll_to_cursor(Some(Align::TOP));
-                            }
-                            if ui.cursor().top() <= top + INDEX_REACH {
-                                current = group;
-                            }
+                        if jump == Some(group) {
+                            ui.scroll_to_cursor(Some(Align::TOP));
+                        }
+                        if indexed && ui.cursor().top() <= top + INDEX_REACH {
+                            current = group;
                         }
                         draw(ui, state, actions);
                         ui.add_space(24.0);
