@@ -22,7 +22,6 @@ pub(super) fn handle(
         return;
     }
     if state.palette_open {
-        palette::handle_keys(ctx, state, status, actions, true);
         return;
     }
     if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Extra1)) {

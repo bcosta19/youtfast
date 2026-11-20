@@ -44,6 +44,7 @@ are the distribution record.
 - The command palette blocks the mouse Back and Forward buttons while it is open.
 - The command palette offers video full screen only on the watch page.
 - Dismissing the command palette returns keyboard focus to the previous control when it is still available.
+- Enter runs the highlighted command for the updated palette query, not the search behind it, and keeps an unmatched query editable.
 
 ## [0.9.1] - 2026-11-17
 

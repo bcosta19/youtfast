@@ -110,8 +110,10 @@ fn subscription_toolbar(
             &mut query,
             tr(locale, "Filter channels").as_ref(),
             locale,
-            egui::Id::new("subscriptions search"),
-            260.0_f32.min(ui.available_width()),
+            widgets::SearchField::new(
+                egui::Id::new("subscriptions search"),
+                260.0_f32.min(ui.available_width()),
+            ),
         );
         if query != state.subscriptions_query {
             actions.push(Action::SetSubscriptionsQuery(query));

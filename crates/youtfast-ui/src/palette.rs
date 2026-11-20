@@ -676,85 +676,69 @@ pub fn matching_items(state: &State, status: Option<&Status>) -> Vec<PaletteItem
 fn execute_item(
     ctx: &egui::Context,
     state: &mut State,
-    item: &PaletteItem,
+    item: PaletteItem,
     actions: &mut Vec<Action>,
 ) {
-    if let Some(query) = &item.search_query {
-        state.query.clone_from(query);
+    if let Some(query) = item.search_query {
+        state.query = query;
     }
-    actions.extend(item.actions.iter().cloned());
+    actions.extend(item.actions);
     close(ctx, state);
 }
 
-/// Processes keyboard navigation while the command palette is open.
-///
-/// Called from `keys::handle` (`before_text_edit = true`) so background shortcuts
-/// never fire while the palette is open, and again after the search field in
-/// [`show`] (`before_text_edit = false`) so text events and key presses in the
-/// same frame are handled in order.
-pub(super) fn handle_keys(
-    ctx: &egui::Context,
-    state: &mut State,
-    status: Option<&Status>,
-    actions: &mut Vec<Action>,
-    before_text_edit: bool,
-) {
+#[derive(Default)]
+pub(super) struct Keys {
+    down: usize,
+    up: usize,
+    enter: bool,
+}
+
+fn take_enter(input: &mut egui::InputState) -> bool {
+    let mut activate = false;
+    input.events.retain(|event| {
+        if let egui::Event::Key {
+            key: Key::Enter,
+            pressed: true,
+            modifiers,
+            ..
+        } = event
+        {
+            activate |= modifiers.matches_logically(egui::Modifiers::NONE);
+            false
+        } else {
+            true
+        }
+    });
+    activate
+}
+
+/// Reserve palette command keys before any background widgets are drawn. Apply
+/// them to the results only after the editor has processed the rest of the input.
+pub(super) fn take_keys(ctx: &egui::Context, state: &mut State) -> Keys {
     if !state.palette_open {
-        return;
+        return Keys::default();
     }
-    let escaped = ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Escape));
-    if escaped {
-        cancel(ctx, state);
-        return;
-    }
-    // If there is pending text input in this frame, let the search field update
-    // `state.palette_query` first before evaluating cursor movement or Enter.
-    if before_text_edit
-        && ctx.input(|input| {
-            input
-                .events
-                .iter()
-                .any(|event| matches!(event, egui::Event::Text(_)))
-        })
-    {
-        return;
-    }
-    let (down, up, enter) = ctx.input_mut(|input| {
+    let (escaped, keys) = ctx.input_mut(|input| {
+        let escaped = input.consume_key(egui::Modifiers::NONE, Key::Escape);
         let down = input.count_and_consume_key(egui::Modifiers::NONE, Key::ArrowDown)
             + input.count_and_consume_key(egui::Modifiers::NONE, Key::Tab);
         let up = input.count_and_consume_key(egui::Modifiers::NONE, Key::ArrowUp)
             + input.count_and_consume_key(egui::Modifiers::SHIFT, Key::Tab);
-        let enter = input.consume_key(egui::Modifiers::NONE, Key::Enter);
-        (down, up, enter)
+        let enter = take_enter(input);
+        (escaped, Keys { down, up, enter })
     });
-    if down == 0 && up == 0 && !enter {
-        return;
+    if escaped {
+        cancel(ctx, state);
     }
-    let items = matching_items(state, status);
-    let count = items.len();
-    if count == 0 {
-        state.palette_cursor = 0;
-        return;
-    }
-    state.palette_cursor = state.palette_cursor.min(count - 1);
-    if down > 0 {
-        state.palette_cursor = (state.palette_cursor + down).min(count - 1);
-        mark_cursor_moved(ctx);
-    }
-    if up > 0 {
-        state.palette_cursor = state.palette_cursor.saturating_sub(up);
-        mark_cursor_moved(ctx);
-    }
-    if enter {
-        execute_item(ctx, state, &items[state.palette_cursor], actions);
-    }
+    keys
 }
 
 /// Renders the command palette modal overlay when `state.palette_open` is `true`.
-pub fn show(
+pub(super) fn show(
     ctx: &egui::Context,
     state: &mut State,
     status: Option<&Status>,
+    keys: Keys,
     actions: &mut Vec<Action>,
 ) {
     if !state.palette_open {
@@ -796,8 +780,7 @@ pub fn show(
                 &mut state.palette_query,
                 tr(locale, "Type a command or search…").as_ref(),
                 locale,
-                input_id(),
-                width,
+                widgets::SearchField::new(input_id(), width).keep_focus_on_enter(),
             );
             if focus_input {
                 field.request_focus();
@@ -805,10 +788,6 @@ pub fn show(
             if field.changed() {
                 state.palette_cursor = 0;
                 mark_cursor_moved(ui.ctx());
-            }
-            handle_keys(ui.ctx(), state, status, actions, false);
-            if !state.palette_open {
-                return;
             }
             let items = matching_items(state, status);
             if items.is_empty() {
@@ -825,6 +804,16 @@ pub fn show(
                 return;
             }
             state.palette_cursor = state.palette_cursor.min(items.len() - 1);
+            if keys.down != 0 || keys.up != 0 {
+                state.palette_cursor = (state.palette_cursor + keys.down)
+                    .min(items.len() - 1)
+                    .saturating_sub(keys.up);
+                mark_cursor_moved(ui.ctx());
+            }
+            if keys.enter {
+                chosen = items.into_iter().nth(state.palette_cursor);
+                return;
+            }
             let cursor_moved = take_cursor_moved(ui.ctx());
             ui.add_space(8.0);
             egui::ScrollArea::vertical()
@@ -834,22 +823,22 @@ pub fn show(
                 .show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
                     let row_width = ui.available_width().max(120.0);
-                    for (index, item) in items.iter().enumerate() {
+                    for (index, item) in items.into_iter().enumerate() {
                         let selected = index == state.palette_cursor;
-                        let response = draw_row(ui, &palette, &raised, item, selected, row_width);
+                        let response = draw_row(ui, &palette, &raised, &item, selected, row_width);
                         if selected && cursor_moved {
                             response.scroll_to_me(None);
                         }
                         if response.clicked() {
                             state.palette_cursor = index;
-                            chosen = Some(item.clone());
+                            chosen = Some(item);
                         }
                     }
                 });
         });
 
     if let Some(item) = chosen {
-        execute_item(ctx, state, &item, actions);
+        execute_item(ctx, state, item, actions);
     } else if state.palette_open && response.should_close() {
         cancel(ctx, state);
     }
@@ -1239,19 +1228,8 @@ mod tests {
         assert!(state.palette_open);
         assert_eq!(state.palette_cursor, 0);
 
-        let run_frame = |state: &mut State, events: Vec<egui::Event>| {
-            let mut actions = Vec::new();
-            let mut output = ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1280.0, 800.0))),
-                    events,
-                    ..Default::default()
-                },
-                |ui| show(ui.ctx(), state, None, &mut actions),
-            );
-            output.textures_delta.clear();
-            actions
-        };
+        // Use the real frame so command keys are reserved before the editor runs.
+        let run_frame = |state: &mut State, events| run_frame(&ctx, state, events);
 
         // Initial render focuses the input.
         assert!(run_frame(&mut state, Vec::new()).is_empty());
@@ -1307,6 +1285,78 @@ mod tests {
     }
 
     #[test]
+    fn paste_and_enter_runs_the_command_for_the_pasted_query() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let mut state = sample_state();
+        open(&ctx, &mut state);
+        run_frame(&ctx, &mut state, vec![]);
+        let actions = run_frame(
+            &ctx,
+            &mut state,
+            vec![
+                egui::Event::Paste("History".into()),
+                key_press(Key::Enter, egui::Modifiers::NONE),
+            ],
+        );
+        assert_eq!(actions, [Action::Navigate(View::History)]);
+        assert!(!state.palette_open);
+    }
+
+    #[test]
+    fn opening_with_text_and_enter_does_not_submit_the_background_search() {
+        for (modifiers, expected_actions) in [
+            (egui::Modifiers::NONE, vec![Action::Navigate(View::History)]),
+            (egui::Modifiers::CTRL, vec![]),
+        ] {
+            let ctx = egui::Context::default();
+            theme::install_fonts(&ctx);
+            let mut state = State {
+                query: "previous search".into(),
+                ..State::default()
+            };
+            let search = super::super::command_line_id();
+            ctx.memory_mut(|memory| memory.request_focus(search));
+            run_frame(&ctx, &mut state, vec![]);
+            let actions = run_frame(
+                &ctx,
+                &mut state,
+                vec![
+                    key_press(Key::K, egui::Modifiers::COMMAND),
+                    egui::Event::Text("History".into()),
+                    key_press(Key::Enter, modifiers),
+                ],
+            );
+            assert_eq!(actions, expected_actions);
+            assert_eq!(state.palette_open, expected_actions.is_empty());
+            assert!(!ctx.memory(|memory| memory.has_focus(search)));
+            assert_eq!(state.query, "previous search");
+        }
+    }
+
+    #[test]
+    fn enter_with_no_matching_command_leaves_the_editor_focused() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let mut state = sample_state();
+        open(&ctx, &mut state);
+        run_frame(&ctx, &mut state, vec![]);
+        let actions = run_frame(
+            &ctx,
+            &mut state,
+            vec![
+                egui::Event::Text("zzzz".into()),
+                key_press(Key::Enter, egui::Modifiers::NONE),
+            ],
+        );
+        assert!(actions.is_empty());
+        assert!(state.palette_open);
+        assert!(ctx.memory(|memory| memory.has_focus(input_id())));
+        run_frame(&ctx, &mut state, vec![egui::Event::Text("z".into())]);
+        assert_eq!(state.palette_query, "zzzzz");
+    }
+
+    #[test]
     fn command_palette_renders_localized_labels_and_empty_state_in_every_locale() {
         for &locale in Locale::ALL {
             let ctx = egui::Context::default();
@@ -1324,7 +1374,7 @@ mod tests {
                         screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1280.0, 800.0))),
                         ..Default::default()
                     },
-                    |ui| show(ui.ctx(), &mut state, None, &mut Vec::new()),
+                    |ui| show(ui.ctx(), &mut state, None, Keys::default(), &mut Vec::new()),
                 );
                 for shape in &output.shapes {
                     if let egui::Shape::Text(text) = &shape.shape {
@@ -1381,7 +1431,7 @@ mod tests {
                     screen_rect: Some(screen),
                     ..Default::default()
                 },
-                |ui| show(ui.ctx(), &mut state, None, &mut Vec::new()),
+                |ui| show(ui.ctx(), &mut state, None, Keys::default(), &mut Vec::new()),
             );
             row_pos = output.shapes.iter().find_map(|shape| match &shape.shape {
                 egui::Shape::Text(text) if text.galley.text() == "Theater mode" => {
@@ -1408,7 +1458,7 @@ mod tests {
                     ],
                     ..Default::default()
                 },
-                |ui| show(ui.ctx(), &mut state, None, &mut actions),
+                |ui| show(ui.ctx(), &mut state, None, Keys::default(), &mut actions),
             );
             output.textures_delta.clear();
         }

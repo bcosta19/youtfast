@@ -71,6 +71,7 @@ pub fn show(
     if !state.cast.open {
         keys::handle(ui.ctx(), state, status, actions);
     }
+    let palette_keys = palette::take_keys(ui.ctx(), state);
     if let Some(group) = state.settings_group.take() {
         settings::jump_to(ui.ctx(), group);
     }
@@ -80,7 +81,7 @@ pub fn show(
             keys_overlay(ui.ctx(), state);
         }
         if state.palette_open {
-            palette::show(ui.ctx(), state, status, actions);
+            palette::show(ui.ctx(), state, status, palette_keys, actions);
         }
         cast::show(ui.ctx(), state, actions);
         return;
@@ -131,7 +132,7 @@ pub fn show(
         keys_overlay(ui.ctx(), state);
     }
     if state.palette_open {
-        palette::show(ui.ctx(), state, status, actions);
+        palette::show(ui.ctx(), state, status, palette_keys, actions);
     }
     cast::show(ui.ctx(), state, actions);
 }
@@ -304,8 +305,7 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                         &mut state.query,
                         tr(locale, "Search or paste a link").as_ref(),
                         locale,
-                        command_line_id(),
-                        width,
+                        widgets::SearchField::new(command_line_id(), width),
                     );
                     if field.has_focus() && ui.input(|i| i.key_pressed(Key::Escape)) {
                         field.surrender_focus();
