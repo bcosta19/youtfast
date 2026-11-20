@@ -718,15 +718,39 @@ pub(super) fn take_keys(ctx: &egui::Context, state: &mut State) -> Keys {
     if !state.palette_open {
         return Keys::default();
     }
-    let (escaped, keys) = ctx.input_mut(|input| {
+    let (escaped, tab, keys) = ctx.input_mut(|input| {
         let escaped = input.consume_key(egui::Modifiers::NONE, Key::Escape);
-        let down = input.count_and_consume_key(egui::Modifiers::NONE, Key::ArrowDown)
-            + input.count_and_consume_key(egui::Modifiers::NONE, Key::Tab);
-        let up = input.count_and_consume_key(egui::Modifiers::NONE, Key::ArrowUp)
-            + input.count_and_consume_key(egui::Modifiers::SHIFT, Key::Tab);
+        let mut down = input.count_and_consume_key(egui::Modifiers::NONE, Key::ArrowDown);
+        let mut up = input.count_and_consume_key(egui::Modifiers::NONE, Key::ArrowUp);
+        let mut tab = false;
+        // Shortcut matching treats Shift as optional. Tab and Shift+Tab are
+        // distinct commands here, so inspect the modifiers on the event.
+        input.events.retain(|event| {
+            let egui::Event::Key {
+                key: Key::Tab,
+                pressed: true,
+                modifiers,
+                ..
+            } = event
+            else {
+                return true;
+            };
+            tab = true;
+            match *modifiers {
+                egui::Modifiers::NONE => down += 1,
+                egui::Modifiers::SHIFT => up += 1,
+                _ => {}
+            }
+            false
+        });
         let enter = take_enter(input);
-        (escaped, Keys { down, up, enter })
+        (escaped, tab, Keys { down, up, enter })
     });
+    if tab || keys.down != 0 || keys.up != 0 {
+        // Egui schedules focus traversal from raw input before widgets run.
+        // Consuming the events alone does not cancel that pending traversal.
+        ctx.memory_mut(|memory| memory.move_focus(egui::FocusDirection::None));
+    }
     if escaped {
         cancel(ctx, state);
     }
@@ -1354,6 +1378,30 @@ mod tests {
         assert!(ctx.memory(|memory| memory.has_focus(input_id())));
         run_frame(&ctx, &mut state, vec![egui::Event::Text("z".into())]);
         assert_eq!(state.palette_query, "zzzzz");
+    }
+
+    #[test]
+    fn tab_and_shift_tab_move_the_highlight_without_stealing_editor_focus() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let mut state = sample_state();
+        open(&ctx, &mut state);
+        run_frame(&ctx, &mut state, vec![egui::Event::Text("e".into())]);
+        assert!(matching_items(&state, None).len() > 2);
+
+        for (modifiers, expected_cursor) in [
+            (egui::Modifiers::NONE, 1),
+            (egui::Modifiers::SHIFT, 0),
+            (egui::Modifiers::CTRL | egui::Modifiers::SHIFT, 0),
+        ] {
+            let actions = run_frame(&ctx, &mut state, vec![key_press(Key::Tab, modifiers)]);
+            assert!(actions.is_empty());
+            assert_eq!(state.palette_cursor, expected_cursor);
+            assert!(ctx.memory(|memory| memory.has_focus(input_id())));
+        }
+
+        run_frame(&ctx, &mut state, vec![egui::Event::Text("x".into())]);
+        assert_eq!(state.palette_query, "ex");
     }
 
     #[test]
