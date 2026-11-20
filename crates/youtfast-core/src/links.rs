@@ -10,7 +10,8 @@ pub fn is_video_id(id: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
 }
 
-fn is_channel_id(id: &str) -> bool {
+/// Whether `id` is a canonical YouTube channel identifier.
+pub fn is_channel_id(id: &str) -> bool {
     id.len() == 24
         && id.starts_with("UC")
         && id

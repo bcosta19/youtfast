@@ -223,7 +223,16 @@ pub enum Command {
         token: String,
         visitor_data: Option<String>,
     },
-    ImportTakeout(Picked),
+    ImportTakeout {
+        picked: Picked,
+        revision: u64,
+    },
+    ExportLibrary(Picked, Box<Library>),
+    ExportOpml(Picked, Vec<Channel>),
+    ImportBackup {
+        picked: Picked,
+        revision: u64,
+    },
     MergeImport {
         library: Box<Library>,
         import: Import,
@@ -324,10 +333,13 @@ pub enum Event {
         token: String,
         result: Result<(Vec<youtfast_core::model::CommentRow>, Option<String>), String>,
     },
-    Imported(Result<Import, String>),
+    Imported {
+        result: Result<Import, String>,
+        revision: u64,
+    },
     ImportMerged {
         library: Box<Library>,
-        counts: (usize, usize),
+        counts: (usize, usize, usize),
         revision: u64,
     },
     Rating {
@@ -484,7 +496,7 @@ impl Event {
         epoch == current
             || matches!(
                 self,
-                Self::Imported(_)
+                Self::Imported { .. }
                     | Self::ImportMerged { .. }
                     | Self::Notice(_)
                     | Self::CheckAlerts

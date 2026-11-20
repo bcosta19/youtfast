@@ -47,6 +47,39 @@ impl Dirs {
     pub fn settings(&self) -> PathBuf {
         self.config.join("settings.json")
     }
+
+    /// Resolves the selected parent without following the final entry for writes,
+    /// and rejects any export that would replace a managed save file.
+    pub fn export_path(&self, selected: &Path) -> Result<PathBuf, &'static str> {
+        const UNRESOLVED: &str = "Could not resolve the export destination.";
+        const MANAGED: &str =
+            "Choose an export destination other than YouTFast’s library or settings file.";
+
+        fn canonical_entry(path: &Path) -> Result<PathBuf, &'static str> {
+            let name = path.file_name().ok_or(UNRESOLVED)?;
+            let parent = path
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."));
+            Ok(parent.canonicalize().map_err(|_| UNRESOLVED)?.join(name))
+        }
+
+        let target = canonical_entry(selected)?;
+        let existing = target.canonicalize().ok();
+        for managed in [self.library(), self.settings()] {
+            let managed = canonical_entry(&managed)?;
+            if target == managed
+                || (cfg!(any(target_os = "macos", windows))
+                    && target.as_os_str().eq_ignore_ascii_case(managed.as_os_str()))
+                || existing
+                    .as_ref()
+                    .is_some_and(|target| managed.canonicalize().is_ok_and(|path| path == *target))
+            {
+                return Err(MANAGED);
+            }
+        }
+        Ok(target)
+    }
 }
 
 /// Restricts `dir` to its owner; the library and settings behind it are
@@ -196,6 +229,43 @@ mod tests {
                 std::process::id(),
                 NEXT.fetch_add(1, Ordering::Relaxed)
             ))
+    }
+
+    #[test]
+    fn export_rejects_managed_paths_even_before_the_first_save() {
+        let root = test_path("export");
+        let dirs = Dirs {
+            data: root.join("data"),
+            config: root.join("config"),
+            cache: root.join("cache"),
+        };
+        std::fs::create_dir_all(&dirs.data).unwrap();
+        std::fs::create_dir_all(&dirs.config).unwrap();
+
+        assert!(dirs.export_path(&dirs.library()).is_err());
+        assert!(dirs.export_path(&dirs.settings()).is_err());
+        assert!(
+            dirs.export_path(&dirs.data.join("../config/settings.json"))
+                .is_err()
+        );
+        std::fs::write(dirs.library(), b"original").unwrap();
+        assert!(dirs.export_path(&dirs.library()).is_err());
+
+        #[cfg(unix)]
+        {
+            let alias = root.join("alias");
+            std::os::unix::fs::symlink(&dirs.data, &alias).unwrap();
+            assert!(dirs.export_path(&alias.join("library.json")).is_err());
+            assert_eq!(
+                dirs.export_path(&alias.join("backup.json")).unwrap(),
+                dirs.data.canonicalize().unwrap().join("backup.json")
+            );
+        }
+        let export = dirs.export_path(&dirs.data.join("backup.json")).unwrap();
+        write_atomic(&export, b"backup").unwrap();
+        assert_eq!(std::fs::read(export).unwrap(), b"backup");
+        assert_eq!(std::fs::read(dirs.library()).unwrap(), b"original");
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

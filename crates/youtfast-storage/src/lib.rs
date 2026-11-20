@@ -1,7 +1,9 @@
 //! What stays on this computer: the library, the settings, the signed-in
-//! sessions, Takeout imports, and where and how their files are written.
+//! sessions, Takeout imports, library backups/exports, and where and how their
+//! files are written.
 
 pub mod account;
+pub mod backup;
 pub mod library;
 pub mod paths;
 pub mod settings;

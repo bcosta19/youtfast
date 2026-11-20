@@ -1837,3 +1837,69 @@ msgstr "Copia comando di aggiornamento"
 
 msgid "Open release page"
 msgstr "Apri pagina della versione"
+
+msgid "Back up library"
+msgstr "Backup della raccolta"
+
+msgid "Export your device subscriptions, watch history with resume positions, and Watch later as JSON, or merge a backup file. Accounts and sessions are never exported."
+msgstr "Esporta le iscrizioni del dispositivo, la cronologia con le posizioni di ripresa e Guarda più tardi in JSON, oppure unisci un file di backup. Account e sessioni non vengono mai esportati."
+
+msgid "Export library (JSON)"
+msgstr "Esporta raccolta (JSON)"
+
+msgid "Import backup"
+msgstr "Importa backup"
+
+msgid "Export subscriptions"
+msgstr "Esporta iscrizioni"
+
+msgid "Export your device subscriptions as an OPML file for RSS readers and other apps."
+msgstr "Esporta le iscrizioni del dispositivo come file OPML per lettori RSS e altre app."
+
+msgid "Export OPML"
+msgstr "Esporta OPML"
+
+msgid "Export library"
+msgstr "Esporta raccolta"
+
+msgid "YouTFast library backup"
+msgstr "Backup raccolta YouTFast"
+
+msgid "OPML subscriptions"
+msgstr "Iscrizioni OPML"
+
+msgid "Library exported."
+msgstr "Raccolta esportata."
+
+msgid "Could not export the library."
+msgstr "Impossibile esportare la raccolta."
+
+msgid "Subscriptions exported as OPML."
+msgstr "Iscrizioni esportate come OPML."
+
+msgid "Could not export subscriptions as OPML."
+msgstr "Impossibile esportare le iscrizioni come OPML."
+
+msgid "Could not open this backup file."
+msgstr "Impossibile aprire questo file di backup."
+
+msgid "Could not import this backup file."
+msgstr "Impossibile importare questo file di backup."
+
+msgid "Could not read this backup file. Check its JSON format and the 64 MiB size limit."
+msgstr "Impossibile leggere questo file di backup. Controlla il formato JSON e il limite di 64 MiB."
+
+msgid "This backup file exceeds the 64 MiB size limit."
+msgstr "Questo file di backup supera il limite di 64 MiB."
+
+msgid "The backup file has invalid or oversized trailing data."
+msgstr "Il file di backup contiene dati finali non validi o troppo grandi."
+
+msgid "This backup version is not supported. Update YouTFast to import it."
+msgstr "Questa versione di backup non è supportata. Aggiorna YouTFast per importarla."
+
+msgid "This backup file exceeds 20,000 subscriptions."
+msgstr "Questo file di backup supera le 20.000 iscrizioni."
+
+msgid "Imported {subscriptions} new subscriptions, {history} new videos of history, and {watch_later} Watch later videos."
+msgstr "Importate {subscriptions} nuove iscrizioni, {history} nuovi video della cronologia e {watch_later} video di Guarda più tardi."

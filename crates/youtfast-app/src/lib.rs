@@ -1335,8 +1335,7 @@ impl App {
                 token,
                 result,
             } => self.on_comments(generation, key, token, result),
-            Event::Imported(Ok(import)) => self.on_imported(import),
-            Event::Imported(Err(error)) => self.state.notice = Some(error),
+            Event::Imported { result, revision } => self.on_imported(result, revision),
             Event::ImportMerged {
                 library,
                 counts,
@@ -1732,6 +1731,7 @@ impl App {
                 self.save_library();
             }
             Action::ImportTakeout => {
+                let revision = self.library_revision.get();
                 let picked = rfd::AsyncFileDialog::new()
                     .set_title(youtfast_i18n::gettext(
                         self.state.settings.language,
@@ -1745,7 +1745,67 @@ impl App {
                         &["csv", "json"],
                     )
                     .pick_file();
-                self.backend.send(Command::ImportTakeout(Box::pin(picked)));
+                self.backend.send(Command::ImportTakeout {
+                    picked: Box::pin(picked),
+                    revision,
+                });
+            }
+            Action::ExportLibrary => {
+                let picked = rfd::AsyncFileDialog::new()
+                    .set_title(youtfast_i18n::gettext(
+                        self.state.settings.language,
+                        "Export library",
+                    ))
+                    .set_file_name("youtfast-library.json")
+                    .add_filter(
+                        youtfast_i18n::gettext(
+                            self.state.settings.language,
+                            "YouTFast library backup",
+                        ),
+                        &["json"],
+                    )
+                    .save_file();
+                self.backend.send(Command::ExportLibrary(
+                    Box::pin(picked),
+                    Box::new(self.state.library.clone()),
+                ));
+            }
+            Action::ExportOpml => {
+                let picked = rfd::AsyncFileDialog::new()
+                    .set_title(youtfast_i18n::gettext(
+                        self.state.settings.language,
+                        "Export subscriptions",
+                    ))
+                    .set_file_name("youtfast-subscriptions.opml")
+                    .add_filter(
+                        youtfast_i18n::gettext(self.state.settings.language, "OPML subscriptions"),
+                        &["opml", "xml"],
+                    )
+                    .save_file();
+                self.backend.send(Command::ExportOpml(
+                    Box::pin(picked),
+                    self.state.library.subscriptions.clone(),
+                ));
+            }
+            Action::ImportBackup => {
+                let revision = self.library_revision.get();
+                let picked = rfd::AsyncFileDialog::new()
+                    .set_title(youtfast_i18n::gettext(
+                        self.state.settings.language,
+                        "Import backup",
+                    ))
+                    .add_filter(
+                        youtfast_i18n::gettext(
+                            self.state.settings.language,
+                            "YouTFast library backup",
+                        ),
+                        &["json"],
+                    )
+                    .pick_file();
+                self.backend.send(Command::ImportBackup {
+                    picked: Box::pin(picked),
+                    revision,
+                });
             }
             Action::AddAccountFile => self.add_account_file(),
             Action::AddAccountBrowser => self.add_account_browser(),

@@ -322,6 +322,18 @@ Si la bibliothèque change pendant la fusion, relancez l'import ; ces
 modifications plus récentes ne sont jamais remplacées par un instantané
 d'import plus ancien.
 
+Dans **Paramètres → Historique**, **Sauvegarder la bibliothèque** exporte vos
+abonnements de l'appareil, l'historique de visionnage (avec les positions de
+reprise) et À regarder plus tard dans un fichier JSON versionné
+(`youtfast-library.json`) via **Exporter la bibliothèque (JSON)**, ou fusionne
+une sauvegarde via **Importer une sauvegarde** selon les mêmes règles de fusion
+en arrière-plan (limite de 64 Mio, jusqu'à 20 000 abonnements uniques, les
+1 000 entrées d'historique les plus récentes et 5 000 vidéos À regarder plus
+tard). Les comptes et sessions ne sont jamais exportés. **Exporter les
+abonnements** enregistre vos abonnements de l'appareil au format OPML 2.0
+(`youtfast-subscriptions.opml`) avec l'URL du flux RSS YouTube de chaque chaîne
+via **Exporter en OPML**.
+
 **History sync** (synchronisation de l'historique) dans Paramètres → Historique
 s'applique lorsque vous êtes connecté :
 

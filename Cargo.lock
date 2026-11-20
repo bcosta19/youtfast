@@ -6252,6 +6252,7 @@ dependencies = [
  "jiff",
  "keyring-core",
  "log",
+ "roxmltree",
  "serde",
  "serde_json",
  "tokio",
