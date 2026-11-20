@@ -15,6 +15,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::library::{HISTORY_LIMIT, Import, ImportedWatch, Library, Watched};
 use crate::takeout::{Limited, read_bom_prefix};
+use youtfast_core::links::is_channel_id;
 use youtfast_core::model::{Channel, Video};
 
 pub const BACKUP_VERSION: u32 = 1;
@@ -157,8 +158,7 @@ fn export_json(library: &Library, max_bytes: usize) -> Result<String, String> {
     String::from_utf8(output.bytes).map_err(|_| "Could not serialize the library backup.".to_owned())
 }
 
-/// Renders an OPML 2.0 XML document containing each subscribed channel's
-/// YouTube Atom feed and channel page URLs.
+/// Renders an OPML 2.0 XML document with feeds for canonical YouTube channel IDs.
 pub fn to_opml(subscriptions: &[Channel]) -> String {
     let mut xml = String::from(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
@@ -170,22 +170,17 @@ pub fn to_opml(subscriptions: &[Channel]) -> String {
          <outline text=\"YouTube Subscriptions\" title=\"YouTube Subscriptions\">\n",
     );
     for channel in subscriptions {
-        let id = channel.id.trim();
-        if id.is_empty() {
+        let id = channel.id.as_str();
+        if !is_channel_id(id) {
             continue;
         }
-        let name = if channel.name.is_empty() {
-            id
-        } else {
-            &channel.name
-        };
-        let label = escape_xml(name);
-        let escaped_id = escape_xml(id);
+        let label = escape_xml(&channel.name);
+        let label = if label.is_empty() { id } else { &label };
         let _ = writeln!(
             xml,
             "      <outline type=\"rss\" text=\"{label}\" title=\"{label}\" \
-             xmlUrl=\"https://www.youtube.com/feeds/videos.xml?channel_id={escaped_id}\" \
-             htmlUrl=\"https://www.youtube.com/channel/{escaped_id}\"/>"
+             xmlUrl=\"https://www.youtube.com/feeds/videos.xml?channel_id={id}\" \
+             htmlUrl=\"https://www.youtube.com/channel/{id}\"/>"
         );
     }
     xml.push_str(
@@ -205,7 +200,13 @@ fn escape_xml(input: &str) -> String {
             '>' => out.push_str("&gt;"),
             '"' => out.push_str("&quot;"),
             '\'' => out.push_str("&apos;"),
-            _ => out.push(ch),
+            '\t' => out.push_str("&#9;"),
+            '\n' => out.push_str("&#10;"),
+            '\r' => out.push_str("&#13;"),
+            '\u{20}'..='\u{d7ff}' | '\u{e000}'..='\u{fffd}' | '\u{10000}'..='\u{10ffff}' => {
+                out.push(ch);
+            }
+            _ => {}
         }
     }
     out
@@ -520,26 +521,37 @@ mod tests {
 
     #[test]
     fn opml_export_escapes_xml_characters_and_renders_youtube_feeds() {
-        let channels = vec![
-            sample_channel("UC1234567890123456789012", "Tom & Jerry <\"Shorts\"> '1'"),
-            sample_channel("", "Skipped Empty"),
+        let id = "UC1234567890123456789012";
+        let channels = [
+            sample_channel(id, "Tom & \0Jerry <\"Shorts\"> '1'\r\n☃\u{fffe}"),
+            sample_channel("UC1234567890123456789&/?", "Skipped invalid ID"),
+            sample_channel("", "Skipped empty ID"),
+            sample_channel("UC0000000000000000000000", "\0"),
         ];
         let opml = to_opml(&channels);
-        assert!(
-            opml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<opml version=\"2.0\">")
+        let document = roxmltree::Document::parse(&opml).unwrap();
+        assert_eq!(document.root_element().tag_name().name(), "opml");
+        assert_eq!(document.root_element().attribute("version"), Some("2.0"));
+        let mut feeds = document
+            .descendants()
+            .filter(|node| node.has_tag_name("outline") && node.attribute("type") == Some("rss"));
+        let feed = feeds.next().unwrap();
+        let label = "Tom & Jerry <\"Shorts\"> '1'\r\n☃";
+        assert_eq!(feed.attribute("text"), Some(label));
+        assert_eq!(feed.attribute("title"), Some(label));
+        assert_eq!(
+            feed.attribute("xmlUrl"),
+            Some("https://www.youtube.com/feeds/videos.xml?channel_id=UC1234567890123456789012")
         );
-        assert!(
-            opml.contains(
-                "<outline text=\"YouTube Subscriptions\" title=\"YouTube Subscriptions\">"
-            )
+        assert_eq!(
+            feed.attribute("htmlUrl"),
+            Some("https://www.youtube.com/channel/UC1234567890123456789012")
         );
-        assert!(opml.contains(
-            "<outline type=\"rss\" text=\"Tom &amp; Jerry &lt;&quot;Shorts&quot;&gt; &apos;1&apos;\" \
-             title=\"Tom &amp; Jerry &lt;&quot;Shorts&quot;&gt; &apos;1&apos;\" \
-             xmlUrl=\"https://www.youtube.com/feeds/videos.xml?channel_id=UC1234567890123456789012\" \
-             htmlUrl=\"https://www.youtube.com/channel/UC1234567890123456789012\"/>"
-        ));
-        assert!(!opml.contains("Skipped Empty"));
+        assert_eq!(
+            feeds.next().unwrap().attribute("text"),
+            Some("UC0000000000000000000000")
+        );
+        assert!(feeds.next().is_none());
     }
 
     #[test]

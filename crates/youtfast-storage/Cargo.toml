@@ -33,6 +33,7 @@ windows-native-keyring-store.workspace = true
 
 [dev-dependencies]
 egui.workspace = true
+roxmltree.workspace = true
 
 [lints]
 workspace = true
