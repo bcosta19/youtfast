@@ -21,7 +21,7 @@ fn pip_control(response: egui::Response, id: egui::Id) -> bool {
     response.clicked()
 }
 
-/// Shows the separate, always-on-top, frameless OS picture-in-picture window.
+/// Shows the separate OS picture-in-picture window.
 pub fn pip(ctx: &egui::Context, state: &State, surface: Option<&VideoSurface>) {
     let locale = state.settings.language;
     let initial_size = if state.pip_size[0] > 0.0 && state.pip_size[1] > 0.0 {
@@ -31,7 +31,7 @@ pub fn pip(ctx: &egui::Context, state: &State, surface: Option<&VideoSurface>) {
     };
     let builder = egui::ViewportBuilder::default()
         .with_title(tr(locale, "Picture-in-picture").into_owned())
-        .with_app_id("youtfast")
+        .with_app_id("youtfast-pip")
         .with_decorations(false)
         .with_always_on_top()
         .with_resizable(true)
@@ -189,7 +189,7 @@ pub(crate) fn show_pip_contents(
                         ui,
                         Icon::MiniPlayer,
                         18.0,
-                        &tr(locale, "Return to app"),
+                        &tr(locale, "Return video to main window"),
                     ),
                     pip_controls,
                 )

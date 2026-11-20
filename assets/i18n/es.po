@@ -2075,5 +2075,5 @@ msgstr "Imagen en imagen (p)"
 msgid "Playing in picture-in-picture"
 msgstr "Reproduciendo en imagen en imagen"
 
-msgid "Return to app"
-msgstr "Volver a la aplicación"
+msgid "Return video to main window"
+msgstr "Devolver el vídeo a la ventana principal"

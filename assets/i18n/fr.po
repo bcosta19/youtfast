@@ -2075,5 +2075,5 @@ msgstr "Incrustation vidéo (p)"
 msgid "Playing in picture-in-picture"
 msgstr "Lecture en incrustation vidéo"
 
-msgid "Return to app"
-msgstr "Revenir à l'application"
+msgid "Return video to main window"
+msgstr "Renvoyer la vidéo vers la fenêtre principale"

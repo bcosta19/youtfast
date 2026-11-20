@@ -83,11 +83,16 @@ d'attente peut être réordonnée ou réduite ; le mini-lecteur est une petite
 fenêtre vidéo 16:9 sans bordure dans le coin inférieur droit (cliquez pour
 revenir à la page de la vidéo, ou survolez-la pour afficher les commandes
 lecture/pause et fermer), tandis que la fenêtre flottante d'incrustation vidéo (`P`
-ou le bouton du lecteur) ouvre une fenêtre système séparée, sans bordure et
-toujours au premier plan, avec des commandes de lecture/pause, de fermeture et de
-retour à l'application. La lecture d'une playlist continue au-delà de la page
-chargée initialement. L'historique de l'appareil permet de filtrer et de
-supprimer des entrées individuelles.
+ou le bouton du lecteur) ouvre une fenêtre séparée avec des commandes de
+lecture/pause, de fermeture et **Renvoyer la vidéo vers la fenêtre principale**.
+Cette commande renvoie la lecture sans la mettre en pause ; si la fenêtre
+principale reste réduite, restaurez-la manuellement. Sous Wayland, l'application
+ne peut ni maintenir l'incrustation au-dessus des autres fenêtres ni remettre au
+premier plan ou restaurer la fenêtre principale. Si votre compositeur accepte
+les règles de fenêtres, utilisez l'identifiant `youtfast-pip` pour garder
+l'incrustation au-dessus des autres fenêtres. La lecture d'une playlist continue
+au-delà de la page chargée initialement. L'historique de l'appareil permet de
+filtrer et de supprimer des entrées individuelles.
 
 Dans une fenêtre large, Paramètres affiche ses groupes dans un index à côté
 d'eux : cliquez sur un groupe pour y faire défiler la page. Une ligne avec un

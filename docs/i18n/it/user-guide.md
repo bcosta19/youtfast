@@ -80,9 +80,15 @@ la coda. La coda si può riordinare o accorciare; il miniplayer è un riquadro v
 compatto 16:9 senza bordi nell'angolo in basso a destra (fai clic per tornare alla
 pagina del video, o passaci sopra con il mouse per i controlli di riproduzione/pausa
 e chiusura), mentre la finestra mobile picture-in-picture (`P` o il controllo del
-player) apre una finestra di sistema separata, senza bordi e sempre in primo
-piano, con controlli di riproduzione/pausa, chiusura e ritorno all'app. La riproduzione delle playlist continua oltre la pagina caricata
-inizialmente. La cronologia del dispositivo permette di filtrare e rimuovere singole voci.
+player) apre una finestra separata con i controlli di riproduzione/pausa,
+chiusura e **Riporta il video nella finestra principale**. Questo comando
+sposta la riproduzione senza metterla in pausa; se la finestra principale
+rimane ridotta a icona, ripristinala manualmente. Su Wayland, l'app non può
+tenere la finestra picture-in-picture sopra le altre né portare in primo piano
+o ripristinare la finestra principale. Se il compositore supporta regole per
+le finestre, usa l'ID `youtfast-pip` per tenerla sopra le altre. La riproduzione
+delle playlist continua oltre la pagina caricata inizialmente. La cronologia
+del dispositivo permette di filtrare e rimuovere singole voci.
 
 In una finestra larga, Impostazioni elenca i suoi gruppi in un indice accanto a
 essi: fai clic su un gruppo per scorrere fino a esso. Una riga con un interruttore

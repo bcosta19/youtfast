@@ -79,9 +79,14 @@ mais tarde/fila. A fila pode ser reordenada ou enxugada; o miniplayer é uma cai
 de vídeo compacta 16:9, sem moldura, no canto inferior direito (clique para voltar
 à página do vídeo, ou passe o mouse para ver os controles de reproduzir/pausar e
 fechar), e a janela flutuante picture-in-picture (`P` ou o botão no player) abre
-uma janela do sistema separada, sem moldura e sempre no topo, com controles de
-reproduzir/pausar, fechar e voltar ao aplicativo. A reprodução de playlists continua além da primeira página carregada. O
-histórico do dispositivo permite filtrar e remover entradas individuais.
+uma janela separada com controles de reproduzir/pausar, fechar e **Voltar com o
+vídeo para a janela principal**. Essa ação transfere a reprodução sem pausar;
+se a janela principal continuar minimizada, restaure-a manualmente. No Wayland,
+o aplicativo não consegue manter a janela picture-in-picture acima das outras
+nem trazer a janela principal à frente ou restaurá-la. Se o compositor aceitar
+regras de janelas, use o ID `youtfast-pip` para mantê-la acima das demais.
+A reprodução de playlists continua além da primeira página carregada. O histórico
+do dispositivo permite filtrar e remover entradas individuais.
 
 Em uma janela larga, Configurações lista seus grupos em um índice ao lado deles:
 clique em um grupo para rolar até ele. Uma linha com um interruptor pode ser

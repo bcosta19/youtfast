@@ -226,7 +226,7 @@ pub fn player(
             if crate::widgets::button(
                 ui,
                 &palette,
-                tr(locale, "Return to app").as_ref(),
+                tr(locale, "Return video to main window").as_ref(),
                 crate::widgets::ButtonStyle::Primary,
             )
             .clicked()

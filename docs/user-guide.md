@@ -72,9 +72,14 @@ Cards have channel links, a menu and quick Watch later/queue actions. The queue
 can be reordered or trimmed; the mini player is a compact frameless 16:9 video
 box in the bottom-right corner (click to return to the watch page, or hover for
 play/pause and close controls), and the pop-out picture-in-picture window (`P`
-or the player control) opens a separate, always-on-top, frameless OS window with
-play/pause, close, and return-to-app controls. Playlist playback continues beyond the initially
-loaded page. Device history supports filtering and removing individual entries.
+or the player control) opens a separate window with play/pause, close, and
+**Return video to main window** controls. That action moves playback back
+without pausing; if the main window stays minimized, restore it manually.
+On Wayland, the app cannot keep PiP above other windows or raise or restore
+the main window. If your compositor supports window rules, match the PiP app
+ID `youtfast-pip` to keep it above other windows. Playlist playback continues
+beyond the initially loaded page. Device history supports filtering and
+removing individual entries.
 
 In a wide window, Settings lists its groups in an index beside them: click a
 group to scroll to it. A row with a switch can be clicked anywhere, not only

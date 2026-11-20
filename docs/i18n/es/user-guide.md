@@ -82,11 +82,15 @@ rápidas de Ver más tarde/cola. La cola se puede reordenar o recortar; el
 minirreproductor es un recuadro de vídeo 16:9 compacto y sin marco en la esquina
 inferior derecha (haz clic para volver a la página del vídeo, o pasa el ratón por
 encima para ver los controles de reproducir/pausar y cerrar), y la ventana flotante
-de imagen en imagen (`P` o el control del reproductor) abre una ventana del
-sistema separada, sin marco y siempre visible encima, con controles de
-reproducir/pausar, cerrar y volver a la aplicación. La reproducción de
-listas continúa más allá de la página cargada inicialmente. El historial del
-dispositivo permite filtrar y quitar entradas individuales.
+de imagen en imagen (`P` o el control del reproductor) abre una ventana separada
+con controles de reproducir/pausar, cerrar y **Devolver el vídeo a la ventana
+principal**. Esto devuelve la reproducción sin pausarla; si la ventana principal
+sigue minimizada, restáurala manualmente. En Wayland, la aplicación no puede
+mantener esa ventana encima ni traer al frente o restaurar la ventana principal.
+Si tu compositor permite reglas de ventanas, usa el ID `youtfast-pip` para
+mantenerla encima. La reproducción de listas continúa más allá de la página
+cargada inicialmente. El historial del dispositivo permite filtrar y quitar
+entradas individuales.
 
 En una ventana ancha, Configuración muestra sus grupos en un índice a su lado: haz
 clic en un grupo para desplazarte hasta él. Una fila con un interruptor se puede

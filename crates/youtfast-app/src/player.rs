@@ -695,6 +695,7 @@ impl App {
     pub(super) fn return_from_pip(&mut self, ctx: &egui::Context) {
         self.close_pip(ctx, false);
         self.return_to_watch();
+        // Raising or restoring root is best effort; Wayland does not support it.
         focus(ctx);
     }
 
