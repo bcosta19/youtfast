@@ -308,7 +308,7 @@ pub(super) fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             );
             ui.add_space(12.0);
             let card = widgets::on_card(palette);
-            let hidden_count = state.library.hidden_videos.len();
+            let hidden_count = state.library.hidden_videos().len();
             let hidden_text = if hidden_count == 0 {
                 tr(locale, "No hidden videos.").into_owned()
             } else {
@@ -342,7 +342,7 @@ pub(super) fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 },
             );
             ui.add_space(12.0);
-            let blocked = &state.library.blocked_channels;
+            let blocked = state.library.blocked_channels();
             if blocked.is_empty() {
                 setting_row(
                     ui,

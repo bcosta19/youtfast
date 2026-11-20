@@ -245,6 +245,7 @@ sequenceDiagram
 | Stored data | Location and guarantees |
 |---|---|
 | Library | `paths::Dirs::library`: device subscriptions, history/resume positions, Watch later, hidden videos and blocked channels |
+| Feed filter persistence | Rebuild indexes on deserialization, keeping the newest 5,000 unique hidden video IDs and 1,000 unique blocked channels. |
 | Settings | `paths::Dirs::settings`: playback, appearance and other preferences; new persisted fields need `#[serde(default)]` |
 | Invalid input | Preserve invalid JSON/UTF-8 before defaults become writable; read failures or failed backups stop startup |
 | Atomic writes | Reject non-regular targets; synchronize the parent directory on Unix |

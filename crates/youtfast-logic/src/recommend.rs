@@ -131,9 +131,9 @@ pub fn taste_for_library(library: &Library) -> Taste {
         |video| library.is_hidden(video),
         |id| library.is_channel_blocked(id),
     );
-    t.hidden_videos = library.hidden_videos.iter().cloned().collect();
+    t.hidden_videos = library.hidden_videos().iter().cloned().collect();
     t.blocked_channels = library
-        .blocked_channels
+        .blocked_channels()
         .iter()
         .map(|channel| channel.id.clone())
         .collect();
