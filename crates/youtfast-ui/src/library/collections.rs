@@ -198,6 +198,20 @@ pub fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 });
             return;
         }
+        if state.signed_in() {
+            match &state.playlists {
+                Listing::Idle => return,
+                Listing::Loading => {
+                    results::loading(ui, state, "playlists");
+                    return;
+                }
+                Listing::Failed(error) => {
+                    results::failed(ui, state, error, actions);
+                    return;
+                }
+                Listing::Ready(_) => {}
+            }
+        }
         if !state.playlists_query.trim().is_empty() && total > 0 {
             filtered_empty_state(
                 ui,
@@ -209,20 +223,15 @@ pub fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             return;
         }
         if state.signed_in() {
-            match &state.playlists {
-                Listing::Idle => {}
-                Listing::Loading => results::loading(ui, state, "playlists"),
-                Listing::Failed(error) => results::failed(ui, state, error, actions),
-                Listing::Ready(_) => results::nothing(
-                    ui,
-                    state,
-                    tr(
-                        locale,
-                        "Create a playlist on this device or save one on your account",
-                    )
-                    .as_ref(),
-                ),
-            }
+            results::nothing(
+                ui,
+                state,
+                tr(
+                    locale,
+                    "Create a playlist on this device or save one on your account",
+                )
+                .as_ref(),
+            );
         } else {
             results::nothing(
                 ui,
@@ -696,6 +705,45 @@ mod tests {
     use egui::Rect;
     use youtfast_app::AccountState;
     use youtfast_core::model::{Video, View};
+
+    #[test]
+    fn filtered_device_playlists_do_not_hide_the_account_load_or_retry() {
+        let mut state = State {
+            view: View::Playlists,
+            account: AccountState::SignedIn(1),
+            source: Source::Account,
+            playlists_query: "no match".into(),
+            ..State::default()
+        };
+        state.library.create_playlist("Device").unwrap();
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+
+        for (listing, expected) in [
+            (Listing::Loading, "Loading playlists…"),
+            (Listing::Failed("Account unavailable".into()), "Retry"),
+            (Listing::Ready(Vec::new()), "No playlists found"),
+        ] {
+            state.playlists = listing;
+            let output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(1280.0, 800.0))),
+                    ..Default::default()
+                },
+                |ui| playlists(ui, &state, &mut Vec::new()),
+            );
+            let has_text = |wanted: &str| {
+                output.shapes.iter().any(|shape| {
+                    matches!(&shape.shape, egui::Shape::Text(text) if text.galley.text() == wanted)
+                })
+            };
+            assert!(has_text(expected), "missing {expected}");
+            assert_eq!(
+                has_text("No playlists found"),
+                expected == "No playlists found"
+            );
+        }
+    }
 
     #[test]
     fn library_views_render_filter_play_all_and_playlist_cards() {
