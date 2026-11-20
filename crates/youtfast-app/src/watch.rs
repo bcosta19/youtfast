@@ -195,6 +195,7 @@ impl App {
                 self.state.video_tabs.update(&watching);
                 self.state.library.update_video(&watching);
                 self.save_library();
+                self.sync_started_video_speed();
             }
         }
     }
@@ -344,6 +345,10 @@ impl App {
         if let Some(surface) = &self.surface {
             surface.forget();
         }
+        let initial_speed = self.state.target_speed_for(&video);
+        self.speed_manual = false;
+        self.applied_speed_live = video.live;
+        self.speed_channel_applied = !video.live && video.channel_id.is_some();
         if let Some(player) = &mut self.player {
             if let Err(error) = player.set_looping(video.short) {
                 log::warn!("mpv: {error}");
@@ -353,6 +358,9 @@ impl App {
                 self.state.settings.caption_scale,
                 self.state.settings.caption_background,
             );
+            if let Err(error) = player.set_speed(initial_speed) {
+                log::warn!("mpv: {error}");
+            }
             self.state.player_error = player
                 .load(&video.url(), start)
                 .err()
@@ -564,6 +572,7 @@ impl App {
             self.state.video_tabs.update(&watching);
             self.state.library.update_video(&watching);
             self.save_library();
+            self.sync_started_video_speed();
         }
         // The first comments page comes right behind it.
         if let Some(token) = details.comments_token.clone() {
@@ -748,6 +757,33 @@ impl App {
             && let Err(error) = command(player)
         {
             log::warn!("mpv: {error}");
+        }
+    }
+
+    /// Re-evaluates the starting speed once `details` or `ytdl_loaded` reveals
+    /// a video's `channel_id` or `live` status.
+    fn sync_started_video_speed(&mut self) {
+        let Some(video) = &self.state.watching else {
+            return;
+        };
+        if video.live {
+            self.applied_speed_live = true;
+            if let Some(player) = &self.player
+                && crate::player::at_live_edge(true, player.status())
+                && (player.status().speed - 1.0).abs() >= 0.01
+            {
+                self.with_player(|player| player.set_speed(1.0));
+            }
+            return;
+        }
+        if !self.speed_manual
+            && (self.applied_speed_live
+                || (!self.speed_channel_applied && video.channel_id.is_some()))
+        {
+            self.applied_speed_live = false;
+            self.speed_channel_applied = video.channel_id.is_some();
+            let speed = self.state.target_speed_for(video);
+            self.with_player(|player| player.set_speed(speed));
         }
     }
 }

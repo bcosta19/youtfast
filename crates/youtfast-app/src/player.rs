@@ -87,6 +87,15 @@ pub fn speed_label(speed: f64) -> String {
     format!("{text}×")
 }
 
+/// Whether `status` is currently at the live edge of a live stream.
+pub fn at_live_edge(watching_live: bool, status: &mpv::Status) -> bool {
+    if !watching_live {
+        return false;
+    }
+    let edge = status.duration.max(status.cached_until);
+    edge <= 0.0 || edge - status.position <= LIVE_BEHIND
+}
+
 /// What plays after `watching`: the queue's first, else the video after it
 /// in Up next (or Up next's first when it is not there), else the first
 /// related video.
@@ -189,8 +198,45 @@ impl App {
     }
 
     pub(super) fn set_speed(&mut self, speed: f64) {
+        let live_edge = match &self.player {
+            Some(player) => at_live_edge(self.state.watching_live(), player.status()),
+            None => self.state.watching_live(),
+        };
+        let (applied, save) = self.state.record_speed(speed, live_edge);
+        self.speed_manual = true;
+        self.with_player(|player| player.set_speed(applied));
+        self.show_osd(speed_label(applied));
+        if save {
+            self.save_settings();
+        }
+    }
+
+    pub(super) fn set_temporary_speed(&mut self, speed: f64) {
+        let live_edge = self
+            .player
+            .as_ref()
+            .is_some_and(|player| at_live_edge(self.state.watching_live(), player.status()));
+        let speed = if live_edge {
+            1.0
+        } else {
+            youtfast_storage::settings::sanitize_speed(speed)
+        };
         self.with_player(|player| player.set_speed(speed));
-        self.show_osd(speed_label(speed));
+    }
+
+    pub(super) fn set_remember_channel_speed(&mut self, remember: bool) {
+        let current_speed = self
+            .player
+            .as_ref()
+            .map_or(self.state.settings.playback_speed, |player| {
+                player.status().speed
+            });
+        if self
+            .state
+            .set_remember_channel_speed(remember, current_speed)
+        {
+            self.save_settings();
+        }
     }
 
     pub(super) fn toggle_mute(&mut self) {
@@ -289,7 +335,11 @@ impl App {
         // mpv's duration of a live stream is its edge, as far as loaded.
         let edge = status.duration.max(status.cached_until);
         if edge > 0.0 {
+            let reset_speed = (status.speed - 1.0).abs() >= 0.01;
             self.with_player(|player| player.seek_to((edge - 3.0).max(0.0), false));
+            if reset_speed {
+                self.with_player(|player| player.set_speed(1.0));
+            }
             self.with_player(|player| player.set_paused(false));
             self.show_osd("Live".to_owned());
         }
@@ -441,12 +491,23 @@ impl App {
         }
         // Only what the checks below read: this runs every frame, and the
         // status carries strings and the captions' list.
-        let Some((paused, seekable, position)) = self.player.as_ref().map(|player| {
-            let status = player.status();
-            (status.paused, status.seekable, status.position)
-        }) else {
+        let Some((paused, seekable, position, speed, live_edge)) =
+            self.player.as_ref().map(|player| {
+                let status = player.status();
+                (
+                    status.paused,
+                    status.seekable,
+                    status.position,
+                    status.speed,
+                    at_live_edge(self.state.watching_live(), status),
+                )
+            })
+        else {
             return;
         };
+        if live_edge && (speed - 1.0).abs() >= 0.01 {
+            self.with_player(|player| player.set_speed(1.0));
+        }
         if self.captions_pending
             && let Some(subtitles) = self
                 .player
@@ -523,6 +584,79 @@ impl App {
 }
 
 impl State {
+    /// The playback speed a newly started `video` should use:
+    /// live streams stay at 1×; otherwise channel speed -> global speed -> 1.0.
+    pub fn target_speed_for(&self, video: &Video) -> f64 {
+        if video.live {
+            return 1.0;
+        }
+        if let Some(channel_id) = video.channel_id.as_deref()
+            && !channel_id.is_empty()
+            && let Some(speed) = self.settings.channel_speed(channel_id)
+        {
+            return speed;
+        }
+        youtfast_storage::settings::sanitize_speed(self.settings.playback_speed)
+    }
+
+    /// Whether the currently watching video's channel has a remembered speed.
+    pub fn remembering_channel_speed(&self) -> bool {
+        self.watching
+            .as_ref()
+            .and_then(|video| video.channel_id.as_deref())
+            .filter(|id| !id.is_empty())
+            .is_some_and(|channel_id| self.settings.channel_speed(channel_id).is_some())
+    }
+
+    /// Records a user-chosen speed change (`<`/`>` or the speed menu) and
+    /// returns `(speed_to_apply, settings_changed)`. Live streams do not
+    /// overwrite stored speeds, and at the live edge they stay at 1×.
+    pub fn record_speed(&mut self, speed: f64, live_edge: bool) -> (f64, bool) {
+        if live_edge {
+            return (1.0, false);
+        }
+        let speed = youtfast_storage::settings::sanitize_speed(speed);
+        if self.watching_live() {
+            return (speed, false);
+        }
+        if let Some(channel_id) = self
+            .watching
+            .as_ref()
+            .and_then(|video| video.channel_id.as_deref())
+            .filter(|id| !id.is_empty())
+            && self.settings.channel_speed(channel_id).is_some()
+        {
+            self.settings
+                .set_channel_speed(channel_id.to_owned(), speed);
+            return (speed, true);
+        }
+        self.settings.playback_speed = speed;
+        (speed, true)
+    }
+
+    /// Enables or disables remembering `current_speed` for the playing video's
+    /// channel. Returns whether `Settings` changed.
+    pub fn set_remember_channel_speed(&mut self, remember: bool, current_speed: f64) -> bool {
+        if self.watching_live() {
+            return false;
+        }
+        let Some(channel_id) = self
+            .watching
+            .as_ref()
+            .and_then(|video| video.channel_id.as_deref())
+            .filter(|id| !id.is_empty())
+            .map(str::to_owned)
+        else {
+            return false;
+        };
+        if remember {
+            self.settings.set_channel_speed(channel_id, current_speed);
+            true
+        } else {
+            self.settings.remove_channel_speed(&channel_id)
+        }
+    }
+
     /// Keep an active countdown in sync with the queue and current sources.
     /// Changes to the choice do not restart the countdown.
     pub(super) fn refresh_autoplay(&mut self) {
@@ -743,5 +877,101 @@ mod tests {
         assert_eq!(speed_label(1.0), "1×");
         assert_eq!(speed_label(1.25), "1.25×");
         assert_eq!(speed_label(0.5), "0.5×");
+    }
+
+    #[test]
+    fn target_speed_follows_channel_then_global_then_normal_and_keeps_live_at_normal() {
+        let mut state = State::default();
+        let mut ch_a = video("vid_a000001");
+        ch_a.channel_id = Some("UC_a".into());
+        let mut ch_b = video("vid_b000001");
+        ch_b.channel_id = Some("UC_b".into());
+        let no_ch = video("vid_c000001");
+
+        // Default is 1.0.
+        assert_eq!(state.target_speed_for(&ch_a), 1.0);
+        assert_eq!(state.target_speed_for(&no_ch), 1.0);
+
+        // Global speed applies when channel has no override.
+        state.settings.playback_speed = 1.5;
+        assert_eq!(state.target_speed_for(&ch_a), 1.5);
+        assert_eq!(state.target_speed_for(&no_ch), 1.5);
+
+        // Per-channel speed overrides global speed (even back down to 1.0).
+        state.settings.set_channel_speed("UC_a".into(), 1.0);
+        assert_eq!(state.target_speed_for(&ch_a), 1.0);
+        assert_eq!(state.target_speed_for(&ch_b), 1.5);
+
+        // Live streams always start at 1.0 even with global and channel speeds.
+        let mut live_a = ch_a.clone();
+        live_a.live = true;
+        assert_eq!(state.target_speed_for(&live_a), 1.0);
+    }
+
+    #[test]
+    fn recording_speed_updates_channel_or_global_and_ignores_live_edge() {
+        let mut state = State::default();
+        let mut ch_a = video("vid_a000001");
+        ch_a.channel_id = Some("UC_a".into());
+        let mut ch_b = video("vid_b000001");
+        ch_b.channel_id = Some("UC_b".into());
+
+        // Without per-channel remember, setting speed persists globally.
+        state.watching = Some(ch_a.clone());
+        assert!(!state.remembering_channel_speed());
+        assert_eq!(state.record_speed(1.5, false), (1.5, true));
+        assert_eq!(state.settings.playback_speed, 1.5);
+        assert_eq!(state.settings.channel_speed("UC_a"), None);
+
+        // Enabling remember stores the current speed for the channel.
+        assert!(state.set_remember_channel_speed(true, 1.5));
+        assert!(state.remembering_channel_speed());
+        assert_eq!(state.settings.channel_speed("UC_a"), Some(1.5));
+
+        // Changing speed while remembered updates the channel only, leaving global intact.
+        assert_eq!(state.record_speed(1.75, false), (1.75, true));
+        assert_eq!(state.settings.channel_speed("UC_a"), Some(1.75));
+        assert_eq!(state.settings.playback_speed, 1.5);
+
+        // Switching to another channel keeps global speed; changing it updates global only.
+        state.watching = Some(ch_b.clone());
+        assert!(!state.remembering_channel_speed());
+        assert_eq!(state.target_speed_for(&ch_b), 1.5);
+        assert_eq!(state.record_speed(1.25, false), (1.25, true));
+        assert_eq!(state.settings.playback_speed, 1.25);
+        assert_eq!(state.settings.channel_speed("UC_a"), Some(1.75));
+
+        // Turning off per-channel remember removes the entry.
+        state.watching = Some(ch_a.clone());
+        assert!(state.set_remember_channel_speed(false, 1.75));
+        assert!(!state.remembering_channel_speed());
+        assert_eq!(state.settings.channel_speed("UC_a"), None);
+        assert_eq!(state.target_speed_for(&ch_a), 1.25);
+
+        // Live stream at the live edge stays at 1.0 and never overwrites stored speed.
+        let mut live = ch_a.clone();
+        live.live = true;
+        state.watching = Some(live);
+        assert_eq!(state.record_speed(1.75, true), (1.0, false));
+        assert_eq!(state.settings.playback_speed, 1.25);
+        assert!(!state.set_remember_channel_speed(true, 1.0));
+
+        // Behind the live edge allows temporary speed-up without overwriting stored speed.
+        assert_eq!(state.record_speed(1.5, false), (1.5, false));
+        assert_eq!(state.settings.playback_speed, 1.25);
+
+        let edge_status = mpv::Status {
+            duration: 1000.0,
+            position: 980.0,
+            ..mpv::Status::default()
+        };
+        assert!(at_live_edge(true, &edge_status));
+        assert!(!at_live_edge(false, &edge_status));
+        let behind_status = mpv::Status {
+            duration: 1000.0,
+            position: 900.0,
+            ..mpv::Status::default()
+        };
+        assert!(!at_live_edge(true, &behind_status));
     }
 }

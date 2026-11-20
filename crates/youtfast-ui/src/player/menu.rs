@@ -8,7 +8,7 @@ use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 use super::STRIP;
 use super::surface::on_video_style;
-use youtfast_app::player::{SPEEDS, speed_label};
+use youtfast_app::player::{SPEEDS, at_live_edge, speed_label};
 use youtfast_app::{Action, PlayerMenu, State};
 use youtfast_appearance::icons::Icon;
 use youtfast_appearance::theme;
@@ -73,9 +73,24 @@ pub(super) fn menu(
                     match state.player_menu {
                         PlayerMenu::Closed => {}
                         PlayerMenu::Main => main_menu(ui, state, status, live, actions),
+                        PlayerMenu::Speed if at_live_edge(live, status) => {
+                            state.player_menu = PlayerMenu::Main;
+                            main_menu(ui, state, status, live, actions);
+                        }
                         PlayerMenu::Speed => {
                             if back_row(ui, &tr(locale, "Playback speed")) {
                                 state.player_menu = PlayerMenu::Main;
+                            }
+                            if !live && has_channel_id(state) {
+                                let remembered = state.remembering_channel_speed();
+                                if menu_switch_row(
+                                    ui,
+                                    &state.palette,
+                                    &tr(locale, "Remember for this channel"),
+                                    remembered,
+                                ) {
+                                    actions.push(Action::SetRememberChannelSpeed(!remembered));
+                                }
                             }
                             for speed in SPEEDS {
                                 let label = if speed == 1.0 {
@@ -164,12 +179,22 @@ pub(super) fn menu(
         });
 }
 
+fn has_channel_id(state: &State) -> bool {
+    state
+        .watching
+        .as_ref()
+        .and_then(|video| video.channel_id.as_deref())
+        .is_some_and(|id| !id.is_empty())
+}
+
 /// How many rows the open page of the menu has.
 fn menu_rows(state: &State, status: &Status, live: bool) -> usize {
     match state.player_menu {
         PlayerMenu::Closed => 0,
-        PlayerMenu::Main => 4 + usize::from(!live) + usize::from(!status.subtitles.is_empty()),
-        PlayerMenu::Speed => 1 + SPEEDS.len(),
+        PlayerMenu::Main => {
+            4 + usize::from(!at_live_edge(live, status)) + usize::from(!status.subtitles.is_empty())
+        }
+        PlayerMenu::Speed => 1 + usize::from(!live && has_channel_id(state)) + SPEEDS.len(),
         PlayerMenu::Quality => 2 + offered(state).len(),
         PlayerMenu::Captions => 3 + status.subtitles.len(),
         PlayerMenu::CaptionStyle => 4,
@@ -250,7 +275,7 @@ fn main_menu(
             state.player_menu = PlayerMenu::Captions;
         }
     }
-    if !live {
+    if !at_live_edge(live, status) {
         let speed = if status.speed == 1.0 {
             tr(locale, "Normal").into_owned()
         } else {
@@ -379,6 +404,57 @@ fn pick_row(ui: &mut Ui, label: &str, picked: bool) -> bool {
     response.clicked()
 }
 
+/// `Label            [pill]`; true when clicked.
+fn menu_switch_row(
+    ui: &mut Ui,
+    palette: &youtfast_appearance::theme::Palette,
+    label: &str,
+    on: bool,
+) -> bool {
+    let (rect, response) = menu_row(ui);
+    response
+        .widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, on, label));
+    let pill_size = vec2(34.0, 18.0);
+    let pill = Rect::from_center_size(
+        pos2(rect.right() - 16.0 - pill_size.x / 2.0, rect.center().y),
+        pill_size,
+    );
+    let text_left = rect.left() + 16.0;
+    let text_room = (pill.left() - 10.0 - text_left).max(10.0);
+    let mut job = egui::text::LayoutJob::default();
+    job.append(
+        label,
+        0.0,
+        egui::TextFormat::simple(theme::regular(13.0), Color32::WHITE),
+    );
+    job.wrap.max_width = text_room;
+    job.wrap.max_rows = 1;
+    job.wrap.overflow_character = Some('…');
+    let painter = ui.painter();
+    let galley = painter.layout_job(job);
+    painter.galley(
+        pos2(text_left, rect.center().y - galley.size().y / 2.0),
+        galley,
+        Color32::WHITE,
+    );
+    crate::widgets::paint_switch(
+        ui,
+        pill,
+        &response,
+        on,
+        Color32::from_white_alpha(70),
+        palette.accent,
+    );
+    ui.painter().line_segment(
+        [
+            pos2(rect.left() + 12.0, rect.bottom() - 0.5),
+            pos2(rect.right() - 12.0, rect.bottom() - 0.5),
+        ],
+        egui::Stroke::new(1.0, Color32::from_white_alpha(24)),
+    );
+    response.clicked()
+}
+
 /// "1920×1080 · 60 fps · vp9 · hardware decoding (vaapi)".
 fn playback_details(status: &Status, locale: Locale) -> String {
     if status.video_width <= 0 || status.video_height <= 0 {
@@ -400,4 +476,181 @@ fn playback_details(status: &Status, locale: Locale) -> String {
         None => tr(locale, "software decoding").into_owned(),
     });
     parts.join(" · ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use youtfast_core::model::Video;
+
+    fn collect_texts(shape: &egui::Shape, out: &mut Vec<(String, Rect)>) {
+        match shape {
+            egui::Shape::Text(text) => {
+                out.push((
+                    text.galley.text().to_owned(),
+                    Rect::from_min_size(text.pos, text.galley.size()),
+                ));
+            }
+            egui::Shape::Vec(shapes) => {
+                for child in shapes {
+                    collect_texts(child, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn draw_speed_menu(
+        ctx: &egui::Context,
+        state: &mut State,
+        status: &Status,
+        live: bool,
+        events: Vec<egui::Event>,
+    ) -> (Vec<Action>, Vec<(String, Rect)>) {
+        let video = Rect::from_min_size(pos2(0.0, 0.0), vec2(900.0, 600.0));
+        let mut actions = Vec::new();
+        let mut texts = Vec::new();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(video),
+                events,
+                ..Default::default()
+            },
+            |ui| {
+                menu(ui, video, state, status, live, &mut actions);
+            },
+        );
+        for shape in &output.shapes {
+            collect_texts(&shape.shape, &mut texts);
+        }
+        output.textures_delta.clear();
+        (actions, texts)
+    }
+
+    fn click_speed_menu(
+        ctx: &egui::Context,
+        state: &mut State,
+        status: &Status,
+        pos: egui::Pos2,
+    ) -> Vec<Action> {
+        let mut all_actions = Vec::new();
+        for pressed in [true, false] {
+            let (actions, _) = draw_speed_menu(
+                ctx,
+                state,
+                status,
+                false,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+            all_actions.extend(actions);
+        }
+        all_actions
+    }
+
+    #[test]
+    fn speed_menu_toggles_remember_for_channel_and_picks_speed() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let mut video = Video::from_id("aaaaaaaaaaa".into());
+        video.channel_id = Some("UC_channel".into());
+        let mut state = State {
+            watching: Some(video),
+            player_menu: PlayerMenu::Speed,
+            ..State::default()
+        };
+        let status = Status {
+            speed: 1.5,
+            ..Status::default()
+        };
+
+        // Run two frames so egui's foreground Area settles its size and paints.
+        let mut texts = Vec::new();
+        for _ in 0..2 {
+            texts = draw_speed_menu(&ctx, &mut state, &status, false, Vec::new()).1;
+        }
+        let switch_rect = texts
+            .iter()
+            .find(|(text, _)| text == "Remember for this channel")
+            .unwrap_or_else(|| panic!("channel remember switch should be drawn; got: {texts:?}"))
+            .1;
+        let actions = click_speed_menu(&ctx, &mut state, &status, switch_rect.center());
+        assert_eq!(actions, [Action::SetRememberChannelSpeed(true)]);
+        // Toggling the switch keeps the speed menu open so a preset can be picked next.
+        assert_eq!(state.player_menu, PlayerMenu::Speed);
+
+        let speed_rect = texts
+            .iter()
+            .find(|(text, _)| text == "1.75×")
+            .expect("1.75x option should be drawn")
+            .1;
+        let actions = click_speed_menu(&ctx, &mut state, &status, speed_rect.center());
+        assert_eq!(actions, [Action::SetSpeed(1.75)]);
+        assert_eq!(state.player_menu, PlayerMenu::Closed);
+    }
+
+    #[test]
+    fn speed_menu_hides_channel_switch_without_channel_or_when_live() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let status = Status::default();
+
+        let mut no_channel = State {
+            watching: Some(Video::from_id("aaaaaaaaaaa".into())),
+            player_menu: PlayerMenu::Speed,
+            ..State::default()
+        };
+        let mut texts = Vec::new();
+        for _ in 0..2 {
+            texts = draw_speed_menu(&ctx, &mut no_channel, &status, false, Vec::new()).1;
+        }
+        assert!(texts.iter().any(|(text, _)| text == "Playback speed"));
+        assert!(
+            !texts
+                .iter()
+                .any(|(text, _)| text == "Remember for this channel")
+        );
+
+        let mut video = Video::from_id("aaaaaaaaaaa".into());
+        video.channel_id = Some("UC_channel".into());
+        video.live = true;
+        let behind_live = Status {
+            duration: 1000.0,
+            position: 100.0,
+            ..Status::default()
+        };
+        let mut live = State {
+            watching: Some(video),
+            player_menu: PlayerMenu::Speed,
+            ..State::default()
+        };
+        let mut texts = Vec::new();
+        for _ in 0..2 {
+            texts = draw_speed_menu(&ctx, &mut live, &behind_live, true, Vec::new()).1;
+        }
+        assert!(texts.iter().any(|(text, _)| text == "Playback speed"));
+        assert!(
+            !texts
+                .iter()
+                .any(|(text, _)| text == "Remember for this channel")
+        );
+
+        let at_edge = Status {
+            duration: 1000.0,
+            position: 990.0,
+            ..Status::default()
+        };
+        for _ in 0..2 {
+            texts = draw_speed_menu(&ctx, &mut live, &at_edge, true, Vec::new()).1;
+        }
+        assert_eq!(live.player_menu, PlayerMenu::Main);
+        assert!(!texts.iter().any(|(text, _)| text == "Playback speed"));
+    }
 }

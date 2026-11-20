@@ -563,6 +563,9 @@ msgstr "Nenhuma conta"
 msgid "No captions"
 msgstr "Sem legendas"
 
+msgid "No channel speeds saved."
+msgstr "Nenhuma velocidade por canal salva."
+
 msgid "No channels found"
 msgstr "Nenhum canal encontrado"
 
@@ -707,6 +710,9 @@ msgstr "Reproduzir/pausar no miniplayer"
 msgid "Playback"
 msgstr "Reprodução"
 
+msgid "Per-channel playback speeds"
+msgstr "Velocidades de reprodução por canal"
+
 msgid "Playback speed"
 msgstr "Velocidade de reprodução"
 
@@ -763,6 +769,9 @@ msgstr "Relacionados"
 
 msgid "Relevance"
 msgstr "Relevância"
+
+msgid "Remember for this channel"
+msgstr "Lembrar para este canal"
 
 msgid "Remove"
 msgstr "Remover"
@@ -1388,6 +1397,11 @@ msgstr[1] "{count} inscritos"
 
 msgid "{count} subscribers"
 msgstr "{count} inscritos"
+
+msgid "{count} channel saved."
+msgid_plural "{count} channels saved."
+msgstr[0] "{count} canal salvo."
+msgstr[1] "{count} canais salvos."
 
 msgid "{count} video"
 msgid_plural "{count} videos"

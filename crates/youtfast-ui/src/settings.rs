@@ -8,7 +8,7 @@ mod appearance;
 mod preferences;
 mod sidebar;
 
-use egui::{Align, Color32, CornerRadius, Layout, Response, RichText, Sense, Ui, pos2, vec2};
+use egui::{Align, CornerRadius, Layout, Response, RichText, Sense, Ui, pos2, vec2};
 
 use super::{results, widgets};
 use youtfast_app::Action;
@@ -376,33 +376,9 @@ pub(super) fn switch(ui: &mut Ui, palette: &Palette, on: bool, label: &str) -> R
     if enabled && response.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
-    if ui.is_rect_visible(rect) {
-        let t = ui
-            .ctx()
-            .animate_bool_with_easing(response.id, on, egui::emath::easing::cubic_out);
-        let hover = widgets::hover_fade(ui, &response);
-        let press = widgets::press_fade(ui, &response);
-        let off = widgets::mix(palette.surface_active, palette.outline, hover);
-        let fill = widgets::mix(off, palette.accent, t);
-        let (fill, knob) = if enabled {
-            (fill, Color32::WHITE)
-        } else {
-            (fill.gamma_multiply(0.5), Color32::WHITE.gamma_multiply(0.6))
-        };
-        ui.painter().rect_filled(rect, CornerRadius::same(11), fill);
-        widgets::focus_outline(ui, &response, CornerRadius::same(11));
-        // The knob stretches towards the other side while held, so the
-        // press is felt before the switch moves.
-        let stretch = 5.0 * press;
-        let x = egui::lerp(
-            rect.left() + 11.0 + stretch / 2.0..=rect.right() - 11.0 - stretch / 2.0,
-            t,
-        );
-        let knob_rect =
-            egui::Rect::from_center_size(pos2(x, rect.center().y), vec2(16.0 + stretch, 16.0));
-        ui.painter()
-            .rect_filled(knob_rect, CornerRadius::same(8), knob);
-    }
+    let hover = widgets::hover_fade(ui, &response);
+    let off = widgets::mix(palette.surface_active, palette.outline, hover);
+    widgets::paint_switch(ui, rect, &response, on, off, palette.accent);
     response
 }
 

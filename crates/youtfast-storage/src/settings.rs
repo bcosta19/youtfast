@@ -20,6 +20,33 @@ fn default_caption_scale() -> f64 {
     1.0
 }
 
+/// Maximum number of per-channel playback speeds remembered.
+pub const MAX_CHANNEL_SPEEDS: usize = 500;
+/// Minimum and maximum supported playback speeds.
+pub const MIN_SPEED: f64 = 0.25;
+pub const MAX_SPEED: f64 = 2.0;
+
+fn default_playback_speed() -> f64 {
+    1.0
+}
+
+/// Clamps finite playback speeds to mpv's supported range; non-finite
+/// values fall back to normal speed.
+pub fn sanitize_speed(speed: f64) -> f64 {
+    if speed.is_finite() {
+        speed.clamp(MIN_SPEED, MAX_SPEED)
+    } else {
+        1.0
+    }
+}
+
+/// A remembered playback speed for one channel, serialized in recency order.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ChannelSpeed {
+    pub channel_id: String,
+    pub speed: f64,
+}
+
 /// Which colours the interface draws with.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -88,6 +115,19 @@ pub struct Settings {
     /// mpv's volume, 0 to 100.
     #[serde(default = "default_volume")]
     pub volume: f64,
+    /// Global playback speed, 0.25 to 2.0; older settings start at 1.0.
+    #[serde(
+        default = "default_playback_speed",
+        deserialize_with = "read_playback_speed"
+    )]
+    pub playback_speed: f64,
+    /// Per-channel playback speeds, oldest first, bounded to [`MAX_CHANNEL_SPEEDS`].
+    #[serde(
+        default,
+        deserialize_with = "read_channel_speeds",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub channel_speeds: Vec<ChannelSpeed>,
     #[serde(default)]
     pub theme: ThemeChoice,
     /// The last palette the selected file gave, so start-up draws it before
@@ -262,6 +302,35 @@ fn read_sidebar<'de, D: serde::Deserializer<'de>>(
     ))
 }
 
+fn read_playback_speed<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<f64, D::Error> {
+    let speed = f64::deserialize(deserializer)?;
+    Ok(sanitize_speed(speed))
+}
+
+fn read_channel_speeds<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<ChannelSpeed>, D::Error> {
+    let values = Vec::<serde_json::Value>::deserialize(deserializer)?;
+    let mut clean: Vec<ChannelSpeed> = Vec::new();
+    for value in values {
+        if let Ok(entry) = serde_json::from_value::<ChannelSpeed>(value)
+            && !entry.channel_id.is_empty()
+        {
+            let speed = sanitize_speed(entry.speed);
+            clean.retain(|existing| existing.channel_id != entry.channel_id);
+            clean.push(ChannelSpeed {
+                channel_id: entry.channel_id,
+                speed,
+            });
+        }
+    }
+    if clean.len() > MAX_CHANNEL_SPEEDS {
+        let excess = clean.len() - MAX_CHANNEL_SPEEDS;
+        clean.drain(..excess);
+    }
+    Ok(clean)
+}
+
 fn default_alerts_every() -> u32 {
     15
 }
@@ -285,6 +354,8 @@ impl Default for Settings {
             playback_buffer: PlaybackBuffer::default(),
             quality: Quality::default(),
             volume: default_volume(),
+            playback_speed: default_playback_speed(),
+            channel_speeds: Vec::new(),
             theme: ThemeChoice::default(),
             custom_theme_cache: None,
             system_theme_cache: None,
@@ -318,6 +389,40 @@ impl Settings {
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         crate::paths::save_json(path, self)
+    }
+
+    /// The remembered speed for `channel_id`, if any.
+    pub fn channel_speed(&self, channel_id: &str) -> Option<f64> {
+        self.channel_speeds
+            .iter()
+            .rev()
+            .find(|entry| entry.channel_id == channel_id)
+            .map(|entry| sanitize_speed(entry.speed))
+    }
+
+    /// Stores `speed` for `channel_id`, moving it to most recent and keeping
+    /// at most [`MAX_CHANNEL_SPEEDS`] entries (dropping the oldest).
+    pub fn set_channel_speed(&mut self, channel_id: String, speed: f64) {
+        if channel_id.is_empty() {
+            return;
+        }
+        let speed = sanitize_speed(speed);
+        self.channel_speeds
+            .retain(|entry| entry.channel_id != channel_id);
+        self.channel_speeds.push(ChannelSpeed { channel_id, speed });
+        if self.channel_speeds.len() > MAX_CHANNEL_SPEEDS {
+            let excess = self.channel_speeds.len() - MAX_CHANNEL_SPEEDS;
+            self.channel_speeds.drain(..excess);
+        }
+    }
+
+    /// Removes any remembered speed for `channel_id`. Returns whether an entry
+    /// was removed.
+    pub fn remove_channel_speed(&mut self, channel_id: &str) -> bool {
+        let before = self.channel_speeds.len();
+        self.channel_speeds
+            .retain(|entry| entry.channel_id != channel_id);
+        self.channel_speeds.len() != before
     }
 
     /// The colours the interface draws with now: the selected palette's
@@ -649,5 +754,61 @@ mod tests {
         assert!(!SidebarButton::Account.can_hide());
         assert!(!SidebarButton::Settings.can_hide());
         assert!(SidebarButton::Home.can_hide());
+    }
+
+    #[test]
+    fn playback_speed_defaults_for_old_files_and_round_trips() {
+        let old: Settings = serde_json::from_str(r#"{"volume": 40.0}"#).unwrap();
+        assert_eq!(old.playback_speed, 1.0);
+        assert!(old.channel_speeds.is_empty());
+
+        let mut settings = Settings {
+            playback_speed: 1.5,
+            ..Settings::default()
+        };
+        settings.set_channel_speed("UC_one".into(), 1.75);
+        settings.set_channel_speed("UC_two".into(), 0.75);
+        let path = path("speed-roundtrip");
+        settings.save(&path).unwrap();
+        assert_eq!(Settings::load(&path).unwrap(), settings);
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn channel_speeds_stay_bounded_dropping_oldest_and_sanitize_damaged_entries() {
+        let mut settings = Settings::default();
+        for i in 0..(MAX_CHANNEL_SPEEDS + 5) {
+            settings.set_channel_speed(format!("UC_{i}"), 1.25);
+        }
+        assert_eq!(settings.channel_speeds.len(), MAX_CHANNEL_SPEEDS);
+        // Oldest 5 (0..5) were dropped; refreshing an existing one moves it to newest.
+        for i in 0..5 {
+            assert_eq!(settings.channel_speed(&format!("UC_{i}")), None);
+        }
+        assert_eq!(settings.channel_speed("UC_5"), Some(1.25));
+        settings.set_channel_speed("UC_5".into(), 1.5);
+        settings.set_channel_speed("UC_extra".into(), 2.0);
+        assert_eq!(settings.channel_speeds.len(), MAX_CHANNEL_SPEEDS);
+        assert_eq!(settings.channel_speed("UC_5"), Some(1.5));
+        assert_eq!(settings.channel_speed("UC_6"), None);
+        assert!(settings.remove_channel_speed("UC_5"));
+        assert!(!settings.remove_channel_speed("UC_5"));
+        assert_eq!(settings.channel_speed("UC_5"), None);
+
+        let damaged = r#"{
+            "playback_speed": 99.0,
+            "channel_speeds": [
+                {"channel_id": "", "speed": 1.5},
+                {"channel_id": "UC_a", "speed": 0.1},
+                {"channel_id": "UC_a", "speed": 1.5},
+                "invalid",
+                {"channel_id": "UC_b", "speed": 5.0}
+            ]
+        }"#;
+        let parsed: Settings = serde_json::from_str(damaged).unwrap();
+        assert_eq!(parsed.playback_speed, 2.0);
+        assert_eq!(parsed.channel_speed("UC_a"), Some(1.5));
+        assert_eq!(parsed.channel_speed("UC_b"), Some(2.0));
+        assert_eq!(parsed.channel_speeds.len(), 2);
     }
 }

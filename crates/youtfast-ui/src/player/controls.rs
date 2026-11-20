@@ -8,7 +8,7 @@ use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 use super::overlays::bubble;
 use super::{Mode, control_button, remember_control_focus};
-use youtfast_app::player::{LIVE_BEHIND, next_video, speed_label};
+use youtfast_app::player::{LIVE_BEHIND, at_live_edge, next_video, speed_label};
 use youtfast_app::{Action, PlayerMenu, State};
 use youtfast_appearance::icons::Icon;
 use youtfast_appearance::theme;
@@ -45,8 +45,8 @@ pub(super) fn buttons(
         + usize::from(page_controls) * 2
         + usize::from(captions_button)
         + usize::from(audio_only_button) * 2;
-    let speed =
-        (!live && status.speed != 1.0 && row.width() >= 900.0).then(|| speed_label(status.speed));
+    let speed = (!at_live_edge(live, status) && status.speed != 1.0 && row.width() >= 900.0)
+        .then(|| speed_label(status.speed));
     let speed_width = speed.as_ref().map_or(0.0, |label| {
         ui.painter()
             .layout_no_wrap(label.clone(), theme::medium(13.0), Color32::WHITE)

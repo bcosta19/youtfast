@@ -741,4 +741,30 @@ mod tests {
             vec![Action::Navigate(View::Liked)]
         );
     }
+
+    #[test]
+    fn speed_shortcuts_emit_set_speed() {
+        let ctx = egui::Context::default();
+        let mut state = State {
+            view: View::Watch,
+            watching: Some(youtfast_core::model::Video::from_id("aaaaaaaaaaa".into())),
+            ..State::default()
+        };
+        let status = Status {
+            speed: 1.25,
+            ..Status::default()
+        };
+        for (ch, expected) in [("<", 1.0), (">", 1.5)] {
+            let mut actions = Vec::new();
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    events: vec![egui::Event::Text(ch.to_owned())],
+                    ..Default::default()
+                },
+                |ui| handle(ui.ctx(), &mut state, Some(&status), &mut actions),
+            );
+            output.textures_delta.clear();
+            assert_eq!(actions, [Action::SetSpeed(expected)]);
+        }
+    }
 }

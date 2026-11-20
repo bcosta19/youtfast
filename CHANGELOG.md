@@ -8,6 +8,10 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Added
+
+- Remember playback speed globally across videos and restarts, with a **Remember for this channel** switch in the player's speed menu for per-channel overrides (channel speed takes precedence over global speed; temporary 2× hold-to-speed-up never overwrites stored speeds), plus **Settings → Playback → Per-channel playback speeds** to clear saved channel entries. Live streams stay at 1× at the live edge, while rewound live streams keep speed controls and 2× hold available to catch up and reset to 1× once back at the edge without overwriting saved speeds.
+
 ### Changed
 
 - Stop submitting releases to the official Winget catalog; the maintainer has not accepted Microsoft's Contributor License Agreement. Windows setup and portable downloads, Homebrew updates and website deployment remain available.

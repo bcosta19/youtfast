@@ -60,9 +60,18 @@ se quedan con el Espacio, y un control de volumen enfocado conserva sus teclas d
 flecha. Fuera del reproductor, ↑/↓ desplazan verticalmente la página activa y J/K
 mueven la selección de elementos (`g`/`G` saltan al principio o al final). Mantén
 pulsado el vídeo para reproducirlo temporalmente a 2×; al soltarlo se restablece la
-velocidad anterior. El menú del reproductor también ofrece repetición, tamaño/fondo
-de los subtítulos, copiar un enlace con marca de tiempo y abrir el vídeo en un
-navegador.
+velocidad anterior sin cambiar la velocidad guardada. La velocidad elegida con
+`<`/`>` o en el menú **Velocidad de reproducción** del reproductor se recuerda
+entre vídeos y reinicios; activa **Recordar para este canal** en ese menú para
+guardar una velocidad para el canal actual (la velocidad del canal tiene
+prioridad sobre la global, hasta 500 canales, y se puede borrar en
+**Configuración → Reproducción → Velocidades de reproducción por canal**). Los
+directos en el borde en vivo se mantienen a 1×; si un directo se ha rebobinado
+por detrás del borde, los controles de velocidad y la pulsación larga de 2×
+siguen disponibles para alcanzar el directo y vuelven a 1× al llegar al borde,
+sin sobrescribir las velocidades guardadas. El menú del reproductor también
+ofrece repetición, tamaño/fondo de los subtítulos, copiar un enlace con marca de
+tiempo y abrir el vídeo en un navegador.
 
 La búsqueda usa directamente la interfaz InnerTube de YouTube, con resultados
 separados de vídeos, canales y listas de reproducción. Los filtros de vídeo incluyen
@@ -284,7 +293,7 @@ marca YouTube, los de los canales del dispositivo vienen de sus pestañas de Sho
 **Sin cuenta**, YouTFast guarda las suscripciones, el historial de reproducciones
 (con el punto donde se dejó cada vídeo, para reanudarlo) y Ver más tarde en este
 equipo, en `~/.local/share/youtfast/library.json`, y su configuración (calidad de
-vídeo, volumen) en `~/.config/youtfast/settings.json`. El feed de inicio viene del RSS
+vídeo, volumen, velocidad de reproducción) en `~/.config/youtfast/settings.json`. El feed de inicio viene del RSS
 de cada canal suscrito. Trae una biblioteca existente desde
 [Google Takeout](https://takeout.google.com): selecciona YouTube y YouTube
 Music, con JSON como formato del historial, e importa `subscriptions.csv` y
