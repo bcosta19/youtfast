@@ -169,8 +169,7 @@ pub(super) fn picture_content(
         if let Some(surface) = surface {
             surface.paint(ui, rect);
         }
-        #[cfg(feature = "demo")]
-        if surface.is_none() && content.demo_synthetic_images {
+        if cfg!(feature = "demo") && surface.is_none() && content.demo_synthetic_images {
             youtfast_app::images::remote(ui, "demo")
                 .fit_to_exact_size(rect.size())
                 .corner_radius(radius)
