@@ -62,6 +62,8 @@ All paths below are relative to [`crates/`](../crates/).
 | `youtfast-mpv` | `ffi`: client API 2.x; `Mpv`: player ownership/status; `render`: OpenGL video surface |
 | `youtfast-appearance` | `theme`, `icons`, `desktop_font`, `coverage`: palette, transitions, installed fonts, the bundled emoji and fallback faces, colour emoji, and desktop integration |
 
+Large modules split into feature submodules under `crates/youtfast-ui/src/` (`widgets/`, `player/`, `library/`, `settings/`) and `crates/youtfast-desktop/src/updater/` and re-export their public interfaces from the parent module.
+
 ## Startup and one frame
 
 ```mermaid
