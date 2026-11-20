@@ -165,7 +165,7 @@ pub(super) fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 &tr(locale, "Community titles (DeArrow)"),
                 &tr(
                     locale,
-                    "Replaces clickbait video titles with community titles from DeArrow. Requests to sponsor.ajay.app use a hash prefix matching thousands of videos; hover a replaced title to see the original.",
+                    "Replaces clickbait video titles with community titles from DeArrow. Requests to sponsor.ajay.app send only the first four hex digits of a hash of the video ID, not the full ID; hover a replaced title to see the original.",
                 ),
                 dearrow_titles,
                 &tr(locale, "Community titles (DeArrow)"),

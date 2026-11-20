@@ -2,9 +2,8 @@
 //! and thumbnails for YouTube videos.
 //!
 //! Branding lookups send only the first four hex digits of the video ID's
-//! SHA-256, so the service learns a bucket of thousands of videos, not which
-//! video is shown; the bucket response is filtered locally and kept only in
-//! memory. Community thumbnails, when separately enabled, fetch from
+//! SHA-256, not the full ID. The bucket response is filtered locally and kept
+//! only in memory. Community thumbnails, when separately enabled, fetch from
 //! `dearrow-thumb.ajay.app` with the video ID and are likewise never written
 //! to disk.
 
