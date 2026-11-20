@@ -39,6 +39,10 @@ impl DevicePlaylist {
     pub fn is_local_id(id: &str) -> bool {
         id.starts_with(LOCAL_PLAYLIST_PREFIX)
     }
+
+    fn number(id: &str) -> Option<u64> {
+        id.strip_prefix(LOCAL_PLAYLIST_PREFIX)?.parse().ok()
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -52,6 +56,8 @@ pub struct Library {
     /// Device-only playlists kept on this computer.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub playlists: Vec<DevicePlaylist>,
+    /// Greatest numeric playlist ID allocated, including deleted playlists.
+    playlist_high_water: u64,
     /// The YouTube accounts signed in here, named. The sessions
     /// themselves are in the credential store, one entry per id.
     pub accounts: Vec<Account>,
@@ -416,36 +422,23 @@ impl Library {
         if name.is_empty() || self.playlists.len() >= PLAYLISTS_LIMIT {
             return None;
         }
-        let mut next = self
-            .playlists
-            .iter()
-            .filter_map(|playlist| {
-                playlist
-                    .id
-                    .strip_prefix(LOCAL_PLAYLIST_PREFIX)?
-                    .parse::<u64>()
-                    .ok()
-            })
-            .max()
-            .unwrap_or(0)
-            + 1;
-        let id = loop {
-            let candidate = format!("{LOCAL_PLAYLIST_PREFIX}{next}");
-            if !self
-                .playlists
-                .iter()
-                .any(|playlist| playlist.id == candidate)
-            {
-                break candidate;
-            }
-            next += 1;
-        };
+        let next = self.next_playlist_number()?;
+        let id = format!("{LOCAL_PLAYLIST_PREFIX}{next}");
+        self.playlist_high_water = next;
         self.playlists.push(DevicePlaylist {
             id: id.clone(),
             name: name.to_owned(),
             videos: Vec::new(),
         });
         Some(id)
+    }
+
+    fn next_playlist_number(&self) -> Option<u64> {
+        self.playlists
+            .iter()
+            .filter_map(|playlist| DevicePlaylist::number(&playlist.id))
+            .fold(self.playlist_high_water, u64::max)
+            .checked_add(1)
     }
 
     /// Renames a device-local playlist. Returns `false` if missing or blank.
@@ -465,7 +458,14 @@ impl Library {
     pub fn delete_playlist(&mut self, id: &str) -> bool {
         let before = self.playlists.len();
         self.playlists.retain(|playlist| playlist.id != id);
-        self.playlists.len() != before
+        if self.playlists.len() == before {
+            return false;
+        }
+        // Legacy libraries may not yet have a high-water mark.
+        if let Some(number) = DevicePlaylist::number(id) {
+            self.playlist_high_water = self.playlist_high_water.max(number);
+        }
+        true
     }
 
     /// Returns a device-local playlist by ID.
@@ -1327,6 +1327,33 @@ mod tests {
         // New IDs remain unique even after deleting an earlier playlist.
         let third = library.create_playlist("After delete").unwrap();
         assert_ne!(third, second);
+    }
+
+    #[test]
+    fn deleted_playlist_ids_are_not_reused_even_after_reload() {
+        let mut library: Library =
+            serde_json::from_str(r#"{"playlists":[{"id":"local-12","name":"Legacy"}]}"#).unwrap();
+        assert!(library.delete_playlist("local-12"));
+        let created = library.create_playlist("New").unwrap();
+        assert_eq!(created, "local-13");
+        assert!(library.delete_playlist(&created));
+
+        let mut restored: Library =
+            serde_json::from_slice(&serde_json::to_vec(&library).unwrap()).unwrap();
+        assert_eq!(
+            restored.create_playlist("After reload").as_deref(),
+            Some("local-14")
+        );
+        assert!(restored.playlist(&created).is_none());
+    }
+
+    #[test]
+    fn playlist_id_exhaustion_does_not_wrap() {
+        let mut library = Library {
+            playlist_high_water: u64::MAX,
+            ..Library::default()
+        };
+        assert_eq!(library.create_playlist("No available ID"), None);
     }
 
     #[test]
