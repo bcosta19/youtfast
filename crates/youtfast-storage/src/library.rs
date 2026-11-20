@@ -330,7 +330,7 @@ impl Library {
             .enumerate()
             .map(|(index, watched)| (watched.video.id.clone(), index))
             .collect();
-        let mut new_history = 0;
+        let original_len = self.history.len();
         for watched in import.history {
             if watched.video.id.trim().is_empty() {
                 continue;
@@ -355,12 +355,16 @@ impl Library {
                         at: watched.at,
                         position: position.unwrap_or_default(),
                     });
-                    new_history += 1;
                 }
             }
         }
         self.history.sort_by_key(|watched| Reverse(watched.at));
         self.history.truncate(HISTORY_LIMIT);
+        let new_history = self
+            .history
+            .iter()
+            .filter(|watched| known_videos[&watched.video.id] >= original_len)
+            .count();
         self.reindex_watched();
 
         let mut known_watch_later: HashSet<String> = self
@@ -467,7 +471,7 @@ mod tests {
                 history,
                 ..Import::default()
             }),
-            (1, 19_999)
+            (1, HISTORY_LIMIT - 1)
         );
         assert_eq!(library.history.len(), HISTORY_LIMIT);
         assert_eq!(library.history[0].at, 19_999);
@@ -475,6 +479,45 @@ mod tests {
         assert_eq!(library.history.last().unwrap().at, 19_000);
         assert!(library.watched("00000019999"));
         assert!(!library.watched("00000000000"));
+    }
+
+    #[test]
+    fn import_counts_only_new_rows_that_stay_in_a_full_history() {
+        let mut library = Library::default();
+        library.history = (0..HISTORY_LIMIT)
+            .map(|index| Watched {
+                video: video(&format!("{index:011}")),
+                at: index as i64,
+                position: 0.0,
+            })
+            .collect();
+        let old = ImportedWatch {
+            video: video("older000001"),
+            at: -1,
+            position: None,
+        };
+        assert_eq!(
+            library.merge(Import {
+                history: vec![old.clone()],
+                ..Import::default()
+            }),
+            (0, 0)
+        );
+        let recent = ImportedWatch {
+            video: video("newer000001"),
+            at: HISTORY_LIMIT as i64,
+            position: None,
+        };
+        assert_eq!(
+            library.merge(Import {
+                history: vec![old, recent],
+                ..Import::default()
+            }),
+            (0, 1)
+        );
+        assert_eq!(library.history.len(), HISTORY_LIMIT);
+        assert!(library.watched("newer000001"));
+        assert!(!library.watched("older000001"));
     }
 
     fn video(id: &str) -> Video {

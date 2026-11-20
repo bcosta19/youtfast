@@ -155,7 +155,8 @@ fn export_json(library: &Library, max_bytes: usize) -> Result<String, String> {
             "Could not serialize the library backup.".to_owned()
         }
     })?;
-    String::from_utf8(output.bytes).map_err(|_| "Could not serialize the library backup.".to_owned())
+    String::from_utf8(output.bytes)
+        .map_err(|_| "Could not serialize the library backup.".to_owned())
 }
 
 /// Renders an OPML 2.0 XML document with feeds for canonical YouTube channel IDs.
@@ -473,9 +474,14 @@ mod tests {
         library.record_watch(video.clone(), 123);
         library.watch_later.push(video);
 
-        let exported: serde_json::Value = serde_json::from_str(&to_json(&library).unwrap()).unwrap();
+        let exported: serde_json::Value =
+            serde_json::from_str(&to_json(&library).unwrap()).unwrap();
         assert!(exported["subscriptions"][0].get("avatar").is_none());
-        assert!(exported["history"][0]["video"].get("channel_avatar").is_none());
+        assert!(
+            exported["history"][0]["video"]
+                .get("channel_avatar")
+                .is_none()
+        );
         assert!(exported["watch_later"][0].get("channel_avatar").is_none());
 
         let legacy = serde_json::to_vec(&LegacyBackup {
@@ -511,7 +517,9 @@ mod tests {
                 .contains("64 MiB")
         );
 
-        library.watch_later.push(sample_video("W9999999999", "Overflow"));
+        library
+            .watch_later
+            .push(sample_video("W9999999999", "Overflow"));
         assert!(to_json(&library).unwrap_err().contains("Watch later"));
         library
             .subscriptions

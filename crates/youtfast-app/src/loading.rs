@@ -166,7 +166,10 @@ impl State {
         if revision == current {
             return true;
         }
-        self.notice = Some("The library changed while importing. Retry the import to keep your latest changes.".into());
+        self.notice = Some(
+            "The library changed while importing. Retry the import to keep your latest changes."
+                .into(),
+        );
         false
     }
 
@@ -561,9 +564,9 @@ impl App {
 
     /// Queues a parsed import only if the library has not changed since it was requested.
     pub(super) fn on_imported(&mut self, result: Result<Import, String>, revision: u64) {
-        if let Some(command) = self
-            .state
-            .prepare_import(result, revision, self.library_revision.get())
+        if let Some(command) =
+            self.state
+                .prepare_import(result, revision, self.library_revision.get())
         {
             self.backend.send(command);
         }
@@ -1361,9 +1364,12 @@ mod tests {
     #[test]
     fn an_import_cannot_restore_history_cleared_while_it_was_parsing() {
         let mut state = State::default();
-        let json = br#"{"version":1,"history":[{"video":{"id":"aaaaaaaaaaa","title":"Old"},"at":1}]}"#;
+        let json =
+            br#"{"version":1,"history":[{"video":{"id":"aaaaaaaaaaa","title":"Old"},"at":1}]}"#;
         let started = 1;
-        state.library.record_watch(Video::from_id("aaaaaaaaaaa".into()), 1);
+        state
+            .library
+            .record_watch(Video::from_id("aaaaaaaaaaa".into()), 1);
         state.library.clear_history();
         let current = 2;
 

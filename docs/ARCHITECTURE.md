@@ -248,8 +248,8 @@ sequenceDiagram
 | Invalid input | Preserve invalid JSON/UTF-8 before defaults become writable; read failures or failed backups stop startup |
 | Atomic writes | Reject non-regular targets; synchronize the parent directory on Unix |
 | Takeout | Parse/merge off the UI thread; subscriptions CSV uses column positions because headings are localized; history comes from `watch-history.json` |
-| Import bounds | 64 MiB; 20,000 unique subscriptions; latest 1,000 unique history entries; 5,000 Watch later entries; merge only if `App::library_revision` still matches |
-| Library backup | Versioned JSON backup (`subscriptions`, `history` with resume positions, `watch_later`; never accounts or sessions) and OPML 2.0 subscription export, written atomically off the UI thread |
+| Import bounds | 64 MiB; 20,000 unique subscriptions; latest 1,000 unique history entries; 5,000 Watch later entries. Bounds apply during parsing. Check `App::library_revision` from the import action before merging and again before applying results. Success counts include only rows retained by the merge. |
+| Library backup | Versioned JSON backup (subscriptions, history with resume positions and Watch later; never accounts, sessions or avatar URLs) and OPML 2.0 feeds for canonical YouTube channels. JSON exports must fit restore limits; both exports are written atomically off the UI thread outside managed save paths. |
 | Image cache | One download shared by display/persistence; 4 MiB response, 4096 px per side, four million pixels; disk: 2,000 files / 128 MiB |
 | Image lifetime | `images::remote` forgets undrawn images after one minute; downloads are bounded by `thumbs::DOWNLOADS`, retry with backoff, and cannot recreate forgotten retry entries |
 | Kept thumbnails | `thumbs::cached` answers without waiting for a download turn |
