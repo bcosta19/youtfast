@@ -336,20 +336,8 @@ fn shorts(
             .layout(Layout::top_down(Align::Center)),
     );
     rail.set_clip_rect(rail_rect.intersect(ui.clip_rect()));
-    let previous =
-        youtfast_app::player::previous_video(state.watching.as_ref(), &state.up_next).is_some();
-    let related = state
-        .details
-        .ready()
-        .map_or(&[][..], |details| details.related.as_slice());
-    let next = youtfast_app::player::next_video(
-        state.watching.as_ref(),
-        &state.queue,
-        &state.up_next,
-        related,
-    )
-    .is_some()
-        || state.playing_more.is_some();
+    let previous = state.previous_video().is_some();
+    let next = state.next_video().is_some() || state.playing_more.is_some();
     egui::ScrollArea::vertical()
         .id_salt("short-actions")
         .max_height(height)

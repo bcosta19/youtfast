@@ -178,11 +178,7 @@ impl State {
             self.up_next
                 .iter()
                 .position(|v| v.id == watching.id)
-                .is_some_and(|i| {
-                    !self.up_next[i + 1..]
-                        .iter()
-                        .any(|v| !watching.short || v.short)
-                })
+                .is_some_and(|i| i + 1 == self.up_next.len())
         }) && self.queue.is_empty()
             && self.playing_more.is_some()
     }
@@ -435,8 +431,8 @@ mod tests {
         s.up_next
             .extend((0..5).map(|i| Video::from_id(format!("long{i}"))));
         assert!(
-            s.needs_playlist_page(),
-            "Shorts must continue past long videos in a mixed playlist"
+            !s.needs_playlist_page(),
+            "regular videos follow Shorts in playlists"
         );
         s.playing_more = None;
         assert!(!s.needs_playlist_page());

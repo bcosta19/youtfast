@@ -8,7 +8,6 @@ use fastframe_now_playing as np;
 
 use crate::Action;
 use crate::State;
-use crate::player::{next_video, previous_video};
 use youtfast_mpv::Status;
 
 /// A desktop command mapped onto what the app does with it.
@@ -193,18 +192,8 @@ fn media_state(state: &State, status: Option<&Status>) -> np::State {
         position: Duration::from_secs_f64(status.position.max(0.0)),
         volume: Some(status.volume.clamp(0.0, 100.0) / 100.0),
         controls: np::Controls {
-            next: next_video(
-                state.watching.as_ref(),
-                &state.queue,
-                &state.up_next,
-                state
-                    .details
-                    .ready()
-                    .map_or(&[], |details| details.related.as_slice()),
-            )
-            .is_some()
-                || state.playing_more.is_some(),
-            previous: previous_video(state.watching.as_ref(), &state.up_next).is_some(),
+            next: state.next_video().is_some() || state.playing_more.is_some(),
+            previous: state.previous_video().is_some(),
             seek: status.duration > 0.0,
             ..np::Controls::default()
         },

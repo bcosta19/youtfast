@@ -96,45 +96,55 @@ pub fn at_live_edge(watching_live: bool, status: &mpv::Status) -> bool {
     edge <= 0.0 || edge - status.position <= LIVE_BEHIND
 }
 
-/// What plays after `watching`: the queue's first, else the video after it
-/// in Up next (or Up next's first when it is not there), else the first
-/// related video.
-pub fn next_video<'a>(
-    watching: Option<&Video>,
-    queue: &'a [Video],
-    up_next: &'a [Video],
-    related: &'a [Video],
-) -> Option<&'a Video> {
-    if let Some(first) = queue.first() {
-        return Some(first);
+impl State {
+    /// Shorts loop by default only outside playlist playback.
+    pub(super) fn loops_short(&self, video: &Video) -> bool {
+        video.short && self.playing_playlist.is_none()
     }
-    let id = watching.map(|video| video.id.as_str());
-    let shorts = watching.is_some_and(|video| video.short);
-    let suitable = |video: &&Video| !shorts || video.short;
-    let after = match up_next
-        .iter()
-        .position(|video| Some(video.id.as_str()) == id)
-    {
-        Some(index) => up_next.iter().skip(index + 1).find(suitable),
-        None => up_next.iter().find(suitable),
-    };
-    after.or_else(|| {
-        related
-            .iter()
-            .find(|video| Some(video.id.as_str()) != id && (!shorts || video.short))
-    })
-}
 
-/// The item before the current video in its source list. All controls use
-/// this same lookup, including the desktop's media controls.
-pub fn previous_video<'a>(watching: Option<&Video>, up_next: &'a [Video]) -> Option<&'a Video> {
-    let watching = watching?;
-    let id = &watching.id;
-    let index = up_next.iter().position(|video| &video.id == id)?;
-    up_next[..index]
-        .iter()
-        .rev()
-        .find(|video| !watching.short || video.short)
+    fn autoplay_allowed(&self) -> bool {
+        !self.watching_live()
+            && !self.watching.as_ref().is_some_and(|v| self.loops_short(v))
+            && !self.playback_loop
+            && (self.settings.autoplay || !self.queue.is_empty())
+    }
+
+    /// Picks the queue's first video, then the next source row, then a related video.
+    pub fn next_video(&self) -> Option<&Video> {
+        if let Some(first) = self.queue.first() {
+            return Some(first);
+        }
+        let id = self.watching.as_ref().map(|video| video.id.as_str());
+        let shorts = self.watching.as_ref().is_some_and(|v| self.loops_short(v));
+        let start = self
+            .up_next
+            .iter()
+            .position(|video| Some(video.id.as_str()) == id)
+            .map_or(0, |index| index + 1);
+        self.up_next[start..]
+            .iter()
+            .find(|video| !shorts || video.short)
+            .or_else(|| {
+                self.details
+                    .ready()?
+                    .related
+                    .iter()
+                    .find(|video| Some(video.id.as_str()) != id && (!shorts || video.short))
+            })
+    }
+
+    /// Picks the previous row in the current video's source list.
+    pub fn previous_video(&self) -> Option<&Video> {
+        let watching = self.watching.as_ref()?;
+        let index = self
+            .up_next
+            .iter()
+            .position(|video| video.id == watching.id)?;
+        self.up_next[..index]
+            .iter()
+            .rev()
+            .find(|video| !self.loops_short(watching) || video.short)
+    }
 }
 
 /// Move one queued item without duplicating or dropping any other item.
@@ -172,7 +182,12 @@ impl App {
 
     pub(super) fn toggle_loop(&mut self) {
         self.state.playback_loop = !self.state.playback_loop;
-        let looping = self.state.playback_loop || self.state.watching_short();
+        let looping = self.state.playback_loop
+            || self
+                .state
+                .watching
+                .as_ref()
+                .is_some_and(|v| self.state.loops_short(v));
         self.with_player(|player| player.set_looping(looping));
     }
 
@@ -348,22 +363,8 @@ impl App {
         }
     }
 
-    /// The related videos of the watch page, when they are here.
-    fn related_videos(&self) -> &[Video] {
-        self.state
-            .details
-            .ready()
-            .map_or(&[], |details| details.related.as_slice())
-    }
-
     pub(super) fn play_next(&mut self) {
-        let next = next_video(
-            self.state.watching.as_ref(),
-            &self.state.queue,
-            &self.state.up_next,
-            self.related_videos(),
-        )
-        .cloned();
+        let next = self.state.next_video().cloned();
         match next {
             Some(video) => self.advance(video),
             None => self.show_osd("No video up next".to_owned()),
@@ -371,7 +372,7 @@ impl App {
     }
 
     pub(super) fn play_previous(&mut self) {
-        let previous = previous_video(self.state.watching.as_ref(), &self.state.up_next).cloned();
+        let previous = self.state.previous_video().cloned();
         if let Some(video) = previous {
             self.advance(video);
         }
@@ -388,19 +389,10 @@ impl App {
         {
             return;
         }
-        if self.state.watching_live() || self.state.watching_short() || self.state.playback_loop {
+        if !self.state.autoplay_allowed() {
             return;
         }
-        if !self.state.settings.autoplay && self.state.queue.is_empty() {
-            return;
-        }
-        let next = next_video(
-            self.state.watching.as_ref(),
-            &self.state.queue,
-            &self.state.up_next,
-            self.related_videos(),
-        )
-        .cloned();
+        let next = self.state.next_video().cloned();
         if let Some(video) = next {
             self.state.autoplay = Some((video, Instant::now() + AUTOPLAY_AFTER));
         }
@@ -697,18 +689,11 @@ impl State {
         let Some((_, deadline)) = self.autoplay.take() else {
             return;
         };
-        if self.watching_live()
-            || self.watching_short()
-            || self.playback_loop
-            || (!self.settings.autoplay && self.queue.is_empty())
-        {
+        if !self.autoplay_allowed() {
             return;
         }
-        let related = self
-            .details
-            .ready()
-            .map_or(&[][..], |details| details.related.as_slice());
-        self.autoplay = next_video(self.watching.as_ref(), &self.queue, &self.up_next, related)
+        self.autoplay = self
+            .next_video()
             .cloned()
             .map(|video| (video, deadline));
     }
@@ -884,11 +869,16 @@ mod tests {
 
     #[test]
     fn previous_stays_inside_the_source_list() {
-        let source = [video("a"), video("b"), video("c")];
-        assert_eq!(previous_video(Some(&source[1]), &source), Some(&source[0]));
-        assert_eq!(previous_video(Some(&source[0]), &source), None);
-        assert_eq!(previous_video(Some(&video("elsewhere")), &source), None);
-        assert_eq!(previous_video(None, &source), None);
+        let mut state = State {
+            watching: Some(video("b")),
+            up_next: vec![video("a"), video("b"), video("c")],
+            ..State::default()
+        };
+        assert_eq!(state.previous_video(), Some(&state.up_next[0]));
+        for watching in [Some(video("a")), Some(video("elsewhere")), None] {
+            state.watching = watching;
+            assert_eq!(state.previous_video(), None);
+        }
     }
 
     #[test]
@@ -898,17 +888,28 @@ mod tests {
         let mut b = video("short-b");
         b.short = true;
         let long = video("long");
-        let source = [a.clone(), long.clone(), b.clone()];
-        assert_eq!(next_video(Some(&a), &[], &source, &[]), Some(&source[2]));
-        assert_eq!(previous_video(Some(&b), &source), Some(&source[0]));
-        assert_eq!(
-            next_video(Some(&b), &[], &source, std::slice::from_ref(&long)),
-            None
-        );
-        assert_eq!(
-            next_video(Some(&a), std::slice::from_ref(&long), &source, &[]),
-            Some(&long)
-        );
+        let mut state = State {
+            watching: Some(a.clone()),
+            up_next: vec![a.clone(), long.clone(), b.clone()],
+            ..State::default()
+        };
+        state.settings.autoplay = true;
+        assert_eq!(state.next_video(), Some(&b));
+        assert!(!state.autoplay_allowed());
+        state.watching = Some(b.clone());
+        assert_eq!(state.previous_video(), Some(&a));
+        assert_eq!(state.next_video(), None);
+
+        state.playing_playlist = Some("local-1".into());
+        assert_eq!(state.previous_video(), Some(&long));
+        state.watching = Some(a.clone());
+        assert!(!state.loops_short(&a));
+        assert!(state.autoplay_allowed());
+        assert_eq!(state.next_video(), Some(&long));
+
+        state.playing_playlist = None;
+        state.queue.push(long.clone());
+        assert_eq!(state.next_video(), Some(&long));
     }
 
     #[test]
@@ -1288,7 +1289,18 @@ mod tests {
         let up_next = [a.clone(), b.clone(), c.clone()];
         let related = [b.clone(), r.clone()];
         let pick = |watching: &Video, queue: &[Video], up_next: &[Video], related: &[Video]| {
-            next_video(Some(watching), queue, up_next, related).map(|video| video.id.clone())
+            State {
+                watching: Some(watching.clone()),
+                queue: queue.to_vec(),
+                up_next: up_next.to_vec(),
+                details: Fetch::Ready(youtfast_core::model::Details {
+                    related: related.to_vec(),
+                    ..Default::default()
+                }),
+                ..State::default()
+            }
+            .next_video()
+            .map(|video| video.id.clone())
         };
         assert_eq!(
             pick(&b, std::slice::from_ref(&r), &up_next, &related),

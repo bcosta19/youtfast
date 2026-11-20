@@ -8,7 +8,7 @@ use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 use super::overlays::bubble;
 use super::{Mode, control_button, remember_control_focus};
-use youtfast_app::player::{LIVE_BEHIND, at_live_edge, next_video, speed_label};
+use youtfast_app::player::{LIVE_BEHIND, at_live_edge, speed_label};
 use youtfast_app::{Action, PlayerMenu, State};
 use youtfast_appearance::icons::Icon;
 use youtfast_appearance::theme;
@@ -85,16 +85,7 @@ pub(super) fn buttons(
     if control_button(ui, icon, 20.0, &hint).clicked() {
         actions.push(Action::TogglePause);
     }
-    let related = state
-        .details
-        .ready()
-        .map_or(&[][..], |details| details.related.as_slice());
-    let next = next_video(
-        state.watching.as_ref(),
-        &state.queue,
-        &state.up_next,
-        related,
-    );
+    let next = state.next_video();
     if !live && mode != Mode::Short && (next.is_some() || state.playing_more.is_some()) {
         let hint = next
             .map(|video| next_hint(video, locale))
