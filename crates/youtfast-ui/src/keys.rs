@@ -433,7 +433,7 @@ mod tests {
                 if palette_open {
                     assert!(actions.is_empty());
                 } else {
-                    assert_eq!(actions, [expected.clone()]);
+                    assert_eq!(actions, std::slice::from_ref(&expected));
                 }
             }
         }
