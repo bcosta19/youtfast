@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::io::{self, Read, Write};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 
 use crate::library::{HISTORY_LIMIT, Import, Library, Watched};
 use crate::takeout::{Limited, read_bom_prefix};
@@ -29,6 +29,59 @@ pub struct Backup {
     pub history: Vec<Watched>,
     #[serde(default)]
     pub watch_later: Vec<Video>,
+}
+
+// Keep network locations out of the portable representation without changing
+// the live library schema or cloning its metadata.
+#[derive(Serialize)]
+#[serde(remote = "Video")]
+struct PortableVideo {
+    id: String,
+    title: String,
+    channel: Option<String>,
+    channel_id: Option<String>,
+    duration: Option<f64>,
+    views: Option<u64>,
+    live: bool,
+    published_at: Option<i64>,
+    published: Option<String>,
+    short: bool,
+}
+
+fn export_subscriptions<S: Serializer>(rows: &[Channel], serializer: S) -> Result<S::Ok, S::Error> {
+    #[derive(Serialize)]
+    struct Row<'a> {
+        id: &'a str,
+        name: &'a str,
+    }
+
+    serializer.collect_seq(rows.iter().map(|row| Row {
+        id: &row.id,
+        name: &row.name,
+    }))
+}
+
+fn export_history<S: Serializer>(rows: &[Watched], serializer: S) -> Result<S::Ok, S::Error> {
+    #[derive(Serialize)]
+    struct Row<'a> {
+        #[serde(with = "PortableVideo")]
+        video: &'a Video,
+        at: i64,
+        position: f64,
+    }
+
+    serializer.collect_seq(rows.iter().map(|row| Row {
+        video: &row.video,
+        at: row.at,
+        position: row.position,
+    }))
+}
+
+fn export_watch_later<S: Serializer>(rows: &[Video], serializer: S) -> Result<S::Ok, S::Error> {
+    #[derive(Serialize)]
+    struct Row<'a>(#[serde(with = "PortableVideo")] &'a Video);
+
+    serializer.collect_seq(rows.iter().map(Row))
 }
 
 /// Serializes the device library (subscriptions, history with resume positions,
@@ -51,8 +104,11 @@ fn export_json(library: &Library, max_bytes: usize) -> Result<String, String> {
     #[derive(Serialize)]
     struct Export<'a> {
         version: u32,
+        #[serde(serialize_with = "export_subscriptions")]
         subscriptions: &'a [Channel],
+        #[serde(serialize_with = "export_history")]
         history: &'a [Watched],
+        #[serde(serialize_with = "export_watch_later")]
         watch_later: &'a [Video],
     }
 
@@ -205,7 +261,7 @@ fn parse_limited<R: Read>(reader: R, limit: u64) -> Result<Import, String> {
 
     let mut subscriptions = Vec::new();
     let mut seen_channels = HashSet::new();
-    for channel in backup.subscriptions {
+    for mut channel in backup.subscriptions {
         if channel.id.trim().is_empty() {
             continue;
         }
@@ -213,6 +269,7 @@ fn parse_limited<R: Read>(reader: R, limit: u64) -> Result<Import, String> {
             if subscriptions.len() == SUBSCRIPTIONS_LIMIT {
                 return Err("This backup file exceeds 20,000 subscriptions.".to_owned());
             }
+            channel.avatar = None;
             subscriptions.push(channel);
         }
     }
@@ -223,6 +280,7 @@ fn parse_limited<R: Read>(reader: R, limit: u64) -> Result<Import, String> {
         if row.video.id.trim().is_empty() {
             continue;
         }
+        row.video.channel_avatar = None;
         if !row.position.is_finite() || row.position < 0.0 {
             row.position = 0.0;
         }
@@ -240,7 +298,7 @@ fn parse_limited<R: Read>(reader: R, limit: u64) -> Result<Import, String> {
 
     let mut watch_later = Vec::new();
     let mut seen_watch_later = HashSet::new();
-    for video in backup.watch_later {
+    for mut video in backup.watch_later {
         if video.id.trim().is_empty() {
             continue;
         }
@@ -248,6 +306,7 @@ fn parse_limited<R: Read>(reader: R, limit: u64) -> Result<Import, String> {
             break;
         }
         if seen_watch_later.insert(video.id.clone()) {
+            video.channel_avatar = None;
             watch_later.push(video);
         }
     }
@@ -318,6 +377,35 @@ mod tests {
         let via_takeout =
             crate::takeout::parse_reader(std::io::BufReader::new(json.as_bytes())).unwrap();
         assert_eq!(via_takeout, import);
+    }
+
+    #[test]
+    fn portable_backups_omit_avatars_and_ignore_legacy_avatar_metadata() {
+        let mut library = Library::default();
+        let mut channel = sample_channel("UC1234567890123456789012", "Channel");
+        channel.avatar = Some("https://example.invalid/avatar".to_owned());
+        let mut video = sample_video("VID00000001", "Video");
+        video.channel_avatar = channel.avatar.clone();
+        library.subscriptions.push(channel);
+        library.record_watch(video.clone(), 123);
+        library.watch_later.push(video);
+
+        let exported: serde_json::Value = serde_json::from_str(&to_json(&library).unwrap()).unwrap();
+        assert!(exported["subscriptions"][0].get("avatar").is_none());
+        assert!(exported["history"][0]["video"].get("channel_avatar").is_none());
+        assert!(exported["watch_later"][0].get("channel_avatar").is_none());
+
+        let legacy = serde_json::to_vec(&Backup {
+            version: BACKUP_VERSION,
+            subscriptions: library.subscriptions,
+            history: library.history,
+            watch_later: library.watch_later,
+        })
+        .unwrap();
+        let restored = parse_reader(legacy.as_slice()).unwrap();
+        assert_eq!(restored.subscriptions[0].avatar, None);
+        assert_eq!(restored.history[0].video.channel_avatar, None);
+        assert_eq!(restored.watch_later[0].channel_avatar, None);
     }
 
     #[test]
