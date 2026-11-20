@@ -149,15 +149,6 @@ pub fn is_loaded(url: &str) -> bool {
         .is_some_and(|c| c.loaded.contains(url))
 }
 
-/// Whether `url` has failed to download (used to fall back to the original YouTube thumbnail).
-pub fn has_failed(url: &str) -> bool {
-    CACHE
-        .lock()
-        .unwrap()
-        .as_ref()
-        .is_some_and(|c| c.failed.contains_key(url))
-}
-
 /// Drops every in-memory image entry whose URL starts with `prefix`.
 pub fn evict_prefix(ctx: &Context, prefix: &str) {
     ctx.data_mut(|data| {
@@ -507,9 +498,7 @@ mod tests {
 
         evict_prefix(&ctx, "https://dearrow-thumb.ajay.app/");
         assert!(!is_loaded(dearrow_url));
-        assert!(!has_failed(
-            "https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=def"
-        ));
+        assert!(CACHE.lock().unwrap().as_ref().unwrap().failed.is_empty());
         assert!(is_loaded(yt_url));
         assert!(drain_wanted().is_empty());
     }

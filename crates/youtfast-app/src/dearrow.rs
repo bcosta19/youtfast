@@ -11,6 +11,7 @@ use super::*;
 
 /// Maximum number of DeArrow branding results retained in memory.
 pub const DEARROW_CACHE_LIMIT: usize = 1_000;
+const RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// Bounded in-memory cache of DeArrow branding results (`DEARROW_CACHE_LIMIT` entries).
 #[derive(Default)]
@@ -19,6 +20,7 @@ pub struct DeArrowCache {
     order: VecDeque<String>,
     pending: HashSet<String>,
     wanted: RefCell<Vec<String>>,
+    retry_at: Option<std::time::Instant>,
 }
 
 impl DeArrowCache {
@@ -61,6 +63,9 @@ impl DeArrowCache {
         if video_id.is_empty()
             || self.entries.contains_key(video_id)
             || self.pending.contains(video_id)
+            || self
+                .retry_at
+                .is_some_and(|retry| retry > std::time::Instant::now())
         {
             return;
         }
@@ -79,12 +84,19 @@ impl DeArrowCache {
             .collect()
     }
 
+    /// Releases a failed lookup without caching it as a miss.
+    fn failed(&mut self, video_id: &str) {
+        self.pending.remove(video_id);
+        self.retry_at = Some(std::time::Instant::now() + RETRY_DELAY);
+    }
+
     /// Drops every cached, pending, and queued entry.
     pub fn clear(&mut self) {
         self.entries.clear();
         self.order.clear();
         self.pending.clear();
         self.wanted.borrow_mut().clear();
+        self.retry_at = None;
     }
 }
 
@@ -187,6 +199,18 @@ impl App {
         ctx.request_repaint();
     }
 
+    pub(super) fn complete_dearrow(&mut self, video_id: String, branding: Option<Branding>) {
+        if !self.state.dearrow_enabled() {
+            return;
+        }
+        if let Some(branding) = branding {
+            self.state.accept_dearrow(video_id, branding);
+        } else {
+            self.state.dearrow.failed(&video_id);
+            self.backend.context().request_repaint_after(RETRY_DELAY);
+        }
+    }
+
     pub(super) fn drain_dearrow(&mut self) {
         if !self.state.dearrow_enabled() {
             self.state.dearrow.clear();
@@ -223,6 +247,20 @@ mod tests {
             cache.get("vid_0000005").and_then(|b| b.title.as_deref()),
             Some("Title 5")
         );
+    }
+
+    #[test]
+    fn failed_branding_lookup_can_be_queued_again_after_backoff() {
+        let mut cache = DeArrowCache::default();
+        cache.queue("video");
+        assert_eq!(cache.take_wanted(), ["video"]);
+        cache.failed("video");
+        assert!(cache.get("video").is_none());
+        cache.queue("video");
+        assert!(cache.take_wanted().is_empty());
+        cache.retry_at = Some(std::time::Instant::now());
+        cache.queue("video");
+        assert_eq!(cache.take_wanted(), ["video"]);
     }
 
     #[test]

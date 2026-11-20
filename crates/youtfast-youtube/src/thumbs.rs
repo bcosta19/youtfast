@@ -28,6 +28,7 @@ pub enum Failure {
     Access,
     Unavailable,
     RateLimited(u64),
+    Pending,
     Server,
     TooLarge,
     Invalid,
@@ -39,6 +40,7 @@ impl Failure {
             Self::Access => "image: HTTP access denied",
             Self::Unavailable => "image: unavailable",
             Self::RateLimited(_) => "image: rate limited",
+            Self::Pending => "image: not generated yet",
             Self::Server => "image: server error",
             Self::TooLarge => "image: response too large",
             Self::Invalid => "image: invalid data",
@@ -49,7 +51,7 @@ impl Failure {
             return None;
         }
         match self {
-            Self::Network | Self::Server => Some(2.0_f64.powi(attempt as i32) * 5.0),
+            Self::Network | Self::Pending | Self::Server => Some(2.0_f64.powi(attempt as i32) * 5.0),
             Self::RateLimited(seconds) => Some(seconds.max(30) as f64),
             _ => None,
         }
@@ -163,6 +165,9 @@ fn download(url: &str) -> Result<(Vec<u8>, bool), Failure> {
     use std::io::Read;
     let mut response = agent().get(url).call().map_err(|_| Failure::Network)?;
     let status = response.status().as_u16();
+    if status == 204 {
+        return Err(Failure::Pending);
+    }
     if !(200..300).contains(&status) {
         return Err(match status {
             401 | 403 | 410 => Failure::Access,
@@ -333,6 +338,16 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), image);
         assert_eq!(worker.join().unwrap(), 2);
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn a_thumbnail_still_being_generated_can_be_retried() {
+        let (url, worker) = server(vec![(204, Vec::new()), (200, png())]);
+        let failure = fetch_in_memory(&url).unwrap_err();
+        assert_eq!(failure, Failure::Pending);
+        assert!(failure.retry_delay(0).is_some());
+        assert_eq!(fetch_in_memory(&url).unwrap().as_ref(), png());
+        assert_eq!(worker.join().unwrap(), 2);
     }
 
     #[test]

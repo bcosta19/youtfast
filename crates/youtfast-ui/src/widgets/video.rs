@@ -82,9 +82,7 @@ fn badge(ui: &Ui, thumbnail: Rect, video: &Video, palette: &Palette, locale: Loc
 
 /// Uses a community thumbnail only after egui has decoded and uploaded it.
 pub(crate) fn video_thumbnail(ui: &Ui, state: &State, video: &Video) -> egui::Image<'static> {
-    if let Some(url) = state.dearrow_thumbnail_url(video)
-        && !youtfast_app::images::has_failed(&url)
-    {
+    if let Some(url) = state.dearrow_thumbnail_url(video) {
         let dearrow = youtfast_app::images::remote(ui, &url);
         if youtfast_app::images::is_loaded(&url)
             && matches!(

@@ -1563,7 +1563,7 @@ impl App {
                 }
             }
             Event::DeArrow { video_id, branding } => {
-                self.state.accept_dearrow(video_id, branding);
+                self.complete_dearrow(video_id, branding);
             }
             Event::Notice(notice) => self.state.notice = Some(notice),
             Event::CheckUpdates => {

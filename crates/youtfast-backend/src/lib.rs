@@ -534,14 +534,14 @@ async fn handle(command: Command, context: Context) {
                 })
                 .await
                 {
-                    Ok(Ok(branding)) => branding,
+                    Ok(Ok(branding)) => Some(branding),
                     Ok(Err(error)) => {
                         log::warn!("{error}");
-                        youtfast_youtube::dearrow::Branding::default()
+                        None
                     }
                     Err(error) => {
                         log::warn!("the DeArrow lookup stopped: {error}");
-                        youtfast_youtube::dearrow::Branding::default()
+                        None
                     }
                 };
                 context.dearrow_pending.lock().unwrap().remove(&video_id);

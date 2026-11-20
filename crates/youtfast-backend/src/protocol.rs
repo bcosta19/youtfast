@@ -414,7 +414,7 @@ pub enum Event {
     },
     DeArrow {
         video_id: String,
-        branding: youtfast_youtube::dearrow::Branding,
+        branding: Option<youtfast_youtube::dearrow::Branding>,
     },
     /// The update timer fired; the app triggers a background check if idle.
     CheckUpdates,
