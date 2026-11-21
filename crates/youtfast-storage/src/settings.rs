@@ -94,8 +94,126 @@ impl PlaybackBuffer {
     }
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Recommendations {
+    pub prefer_local: bool,
+    pub duration: RecommendationDuration,
+    pub channels: RecommendationChannels,
+    pub priority: RecommendationPriority,
+    pub interests: String,
+    pub muted: String,
+    pub search_interests: bool,
+}
+
+macro_rules! recommendation_choices {
+    ($name:ident { $default:ident, $($choice:ident),+ }) => {
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+        #[serde(rename_all = "snake_case")]
+        pub enum $name {
+            #[default]
+            $default,
+            $($choice),+
+        }
+    };
+}
+
+recommendation_choices!(RecommendationDuration {
+    Any,
+    Short,
+    Medium,
+    Long
+});
+recommendation_choices!(RecommendationChannels {
+    Balanced,
+    Discover,
+    Familiar
+});
+recommendation_choices!(RecommendationPriority {
+    Balanced,
+    Recent,
+    FewerViews
+});
+
+impl Recommendations {
+    /// Maximum Unicode scalar values per text field, as in the editor.
+    pub const MAX_TEXT_CHARS: usize = 300;
+
+    /// Clamps user-edited text fields to [`Self::MAX_TEXT_CHARS`].
+    pub fn sanitized(mut self) -> Self {
+        for value in [&mut self.interests, &mut self.muted] {
+            value.truncate(bounded_recommendation_text(value).len());
+        }
+        self
+    }
+
+    /// Only explicit, bounded topic searches may be sent to YouTube.
+    pub fn initial_queries(&self) -> impl Iterator<Item = &str> {
+        recommendation_terms(&self.interests).take(if self.search_interests { 3 } else { 0 })
+    }
+}
+
+fn bounded_recommendation_text(input: &str) -> &str {
+    input
+        .char_indices()
+        .nth(Recommendations::MAX_TEXT_CHARS)
+        .map_or(input, |(end, _)| &input[..end])
+}
+
+/// Reads the nonempty, comma-separated terms within the editor's text limit.
+pub fn recommendation_terms(input: &str) -> impl Iterator<Item = &str> {
+    bounded_recommendation_text(input)
+        .split(',')
+        .map(str::trim)
+        .filter(|term| !term.is_empty())
+        .take(12)
+}
+
+#[cfg(test)]
+#[test]
+fn topic_search_is_opt_in_bounded_and_never_uses_muted_terms() {
+    let mut preferences = Recommendations {
+        interests: " , ciência, rust, filmes, história ".into(),
+        muted: "private".into(),
+        ..Recommendations::default()
+    };
+    assert_eq!(preferences.initial_queries().next(), None);
+    preferences.search_interests = true;
+    assert_eq!(
+        preferences.initial_queries().collect::<Vec<_>>(),
+        ["ciência", "rust", "filmes"]
+    );
+    assert_eq!(
+        serde_json::from_str::<Recommendations>("{}").unwrap(),
+        Recommendations::default()
+    );
+}
+
+#[cfg(test)]
+#[test]
+fn recommendation_text_keeps_multibyte_characters_up_to_the_editor_limit() {
+    let text = format!("{}ciência", "🦀".repeat(293));
+    let oversized = format!("{text}x");
+    let preferences = Recommendations {
+        interests: oversized.clone(),
+        muted: oversized,
+        search_interests: true,
+        ..Recommendations::default()
+    };
+    assert_eq!(preferences.initial_queries().next(), Some(text.as_str()));
+    assert_eq!(
+        recommendation_terms(&preferences.muted).next(),
+        Some(text.as_str())
+    );
+    let sanitized = preferences.sanitized();
+    assert_eq!(sanitized.interests, text);
+    assert_eq!(sanitized.muted, text);
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
+    #[serde(default)]
+    pub recommendations: Recommendations,
     /// The interface language; older settings start in English too.
     #[serde(default)]
     pub language: youtfast_i18n::Locale,
@@ -364,6 +482,7 @@ pub fn clamp_alerts_every(minutes: u32) -> u32 {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            recommendations: Recommendations::default(),
             language: youtfast_i18n::Locale::default(),
             interface_font: youtfast_appearance::theme::InterfaceFont::default(),
             history_sync: HistorySync::default(),

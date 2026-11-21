@@ -482,6 +482,24 @@ decodifica dopo un fotogramma riuscito mantengono quel fotogramma come anteprima
 Blocchi esterni, contenuti rimossi o una sorgente inutilizzabile possono comunque
 impedire un'anteprima o la riproduzione.
 
+## Consigli locali
+
+In **Home → Per te**, apri **Impostazioni dei consigli locali** e seleziona
+**Applica** per salvare e ricaricare. Scegli una durata, privilegia i canali
+conosciuti o scoprine di nuovi, oppure dai priorità ai video recenti o con
+meno visualizzazioni. Separa con virgole gli interessi e i termini silenziati,
+fino a 300 caratteri per campo. Maiuscole e minuscole sono equivalenti: gli interessi favoriscono i titoli o
+i nomi dei canali corrispondenti e i termini silenziati nascondono i titoli
+corrispondenti. Il filtro per durata esclude i video di durata sconosciuta.
+
+Dopo l’accesso, i consigli di YouTube rimangono la scelta predefinita. Attiva
+**Usa la classifica locale invece dei consigli di YouTube** per applicare le
+impostazioni al feed. Se sul dispositivo non c’è una cronologia idonea, puoi
+autorizzare l’invio di un massimo di tre interessi a YouTube con ricerche
+senza accesso. Dopo aver guardato il primo video idoneo, tornando alla Home
+i consigli locali si aggiornano in base alla cronologia. I termini silenziati
+non lasciano mai il dispositivo.
+
 ## Avvisi di nuovi caricamenti
 
 Le notifiche di YouTube non hanno un'API, quindi YouTFast controlla invece le tue
