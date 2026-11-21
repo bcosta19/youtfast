@@ -282,6 +282,11 @@ with `winget upgrade --id yt-dlp.yt-dlp` when videos stop loading.
 **Remove:** Use Windows **Settings → Apps → Installed apps → YouTFast** (or run
 `Uninstall.exe`) if installed via `.exe`, or delete the extracted folder if
 using the portable `.zip`.
+**Google Cast (optional):** casting uses the TV's YouTube app and needs no
+extra tool. To also find Chromecast devices, install catt with
+`pip install --user catt` (or `pipx install catt`): YouTFast checks the
+folders pip and pipx use, so no `PATH` change is needed, and a running
+YouTFast finds it at the next search.
 
 ## macOS
 

@@ -5,6 +5,8 @@
 use std::collections::BTreeMap;
 use std::net::IpAddr;
 use std::path::Path;
+#[cfg(any(windows, test))]
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::mpsc;
 use std::time::Duration;
@@ -132,6 +134,12 @@ pub enum Reply {
     SponsorChecked(Result<Sponsor, Error>),
     Disconnected,
     Devices(Result<Vec<Device>, Error>),
+    /// A search's merged list, with whether the Google Cast helper was
+    /// missing: guidance beside the results, never the search's error.
+    Scanned {
+        devices: Result<Vec<Device>, Error>,
+        helper_missing: bool,
+    },
     Started {
         device: Device,
         video: String,
@@ -310,8 +318,8 @@ async fn execute_with_session(
             *lounge = None;
             Reply::Disconnected
         }
-        Request::Scan => Reply::Devices(
-            tokio::time::timeout(DEADLINE, async {
+        Request::Scan => {
+            let merged = tokio::time::timeout(DEADLINE, async {
                 let (cast, native) = tokio::join!(
                     async {
                         tokio::time::timeout(Duration::from_secs(20), async {
@@ -330,9 +338,15 @@ async fn execute_with_session(
                 );
                 merge_discovery(cast, native)
             })
-            .await
-            .unwrap_or(Err(Error::TimedOut)),
-        ),
+            .await;
+            // A search that ran out of time never learned whether the
+            // helper exists.
+            let (devices, helper_missing) = merged.unwrap_or((Err(Error::TimedOut), false));
+            Reply::Scanned {
+                devices,
+                helper_missing,
+            }
+        }
         Request::FindYouTube(host) => {
             Reply::Devices(dial::find(host).await.map(|device| vec![device]))
         }
@@ -529,12 +543,17 @@ pub(crate) fn sponsor_target(
 
 /// Keep both routes when a TV advertises DIAL and Cast: either service can
 /// fail independently, and the user must be able to try the other one.
+/// A missing Google Cast helper is never the search's error: it explains
+/// the missing Cast devices as guidance beside the list, and a native
+/// discovery failure stays visible instead of being blamed on the helper.
+/// Returns the merged list and whether the helper was missing.
 fn merge_discovery(
     cast: Result<Vec<Device>, Error>,
     native: Result<Vec<Device>, Error>,
-) -> Result<Vec<Device>, Error> {
+) -> (Result<Vec<Device>, Error>, bool) {
     let cast_error = cast.as_ref().err().copied();
     let native_error = native.as_ref().err().copied();
+    let helper_missing = cast_error == Some(Error::MissingHelper);
     let mut found = native.unwrap_or_default();
     for device in cast.unwrap_or_default() {
         if !found
@@ -563,15 +582,26 @@ fn merge_discovery(
         }
     }
     found.sort_by(|a, b| a.name.cmp(&b.name).then(a.host.cmp(&b.host)));
-    if found.is_empty()
-        && let Some(error) = cast_error.or(native_error)
-    {
-        return Err(error);
-    }
-    Ok(found)
+    let error = if found.is_empty() {
+        if helper_missing {
+            native_error
+        } else {
+            cast_error.or(native_error)
+        }
+    } else {
+        None
+    };
+    let devices = match error {
+        Some(error) => Err(error),
+        None => Ok(found),
+    };
+    (devices, helper_missing)
 }
 
 async fn run(program: &Path, args: &[String]) -> Result<Vec<u8>, Error> {
+    // Windows also looks in the pip and pipx folders; see `resolve`.
+    #[cfg(windows)]
+    let program = &resolve(program);
     let mut command = tokio::process::Command::new(program);
     command
         .args(args)
@@ -605,6 +635,62 @@ async fn run(program: &Path, args: &[String]) -> Result<Vec<u8>, Error> {
         return Err(Error::Failed);
     }
     Ok(output)
+}
+
+/// Folders where pip (`pip install --user`) and pipx put console scripts on
+/// Windows. The `PATH` a desktop application inherits usually lacks them, so
+/// a catt the user installed looked missing to a GUI YouTFast. Pure so the
+/// layout is testable on every platform.
+#[cfg(any(windows, test))]
+fn helper_candidates(appdata: &Path, home: &Path) -> Vec<PathBuf> {
+    // pip user installs keep one Scripts folder per Python version.
+    let mut folders: Vec<PathBuf> = std::fs::read_dir(appdata.join("Python"))
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .filter(|path| {
+                    path.file_name()
+                        .is_some_and(|name| name.to_string_lossy().starts_with("Python3"))
+                })
+                .map(|path| path.join("Scripts"))
+                .collect()
+        })
+        .unwrap_or_default();
+    // A newer Python wins: it is the one the user runs now.
+    folders.sort_by(|a, b| b.cmp(a));
+    // pipx puts its shims where shells find them, not Windows programs.
+    folders.push(home.join(".local").join("bin"));
+    folders
+}
+
+/// `catt` stays a bare name and is resolved at every use, so installing it
+/// needs no restart. On Windows the pip and pipx folders above are checked
+/// before the `PATH`, which stays CreateProcess's job; a miss stays a miss,
+/// the fixed MissingHelper message. An explicit path is always taken as-is.
+#[cfg(windows)]
+fn resolve(program: &Path) -> PathBuf {
+    let bare = program.components().count() == 1
+        && matches!(
+            program.components().next(),
+            Some(std::path::Component::Normal(_))
+        );
+    if !bare {
+        return program.to_path_buf();
+    }
+    let (appdata, home) = match (
+        std::env::var_os("APPDATA").map(PathBuf::from),
+        std::env::var_os("USERPROFILE").map(PathBuf::from),
+    ) {
+        (Some(appdata), Some(home)) => (appdata, home),
+        _ => return program.to_path_buf(),
+    };
+    let exe = format!("{}.exe", program.to_string_lossy());
+    helper_candidates(&appdata, &home)
+        .into_iter()
+        .map(|folder| folder.join(&exe))
+        .find(|candidate| candidate.is_file())
+        .unwrap_or_else(|| program.to_path_buf())
 }
 
 /// Linked TVs are reached through YouTube; every other target must be local.
@@ -871,8 +957,10 @@ mod tests {
         };
         let mut other = device();
         other.host = "192.168.1.30".parse().unwrap();
-        let found =
-            merge_discovery(Ok(vec![device(), other.clone()]), Ok(vec![native.clone()])).unwrap();
+        let (devices, helper_missing) =
+            merge_discovery(Ok(vec![device(), other.clone()]), Ok(vec![native.clone()]));
+        assert!(!helper_missing);
+        let found = devices.unwrap();
         assert_eq!(found.len(), 3);
         assert!(found.contains(&other));
         assert!(found.iter().any(|device| device.host == native.host
@@ -883,7 +971,7 @@ mod tests {
             && device.name.ends_with(" (Google Cast)")));
         assert_eq!(
             merge_discovery(Err(Error::MissingHelper), Ok(vec![native.clone()])),
-            Ok(vec![native])
+            (Ok(vec![native]), true)
         );
     }
 
@@ -891,16 +979,54 @@ mod tests {
     fn failed_native_discovery_is_not_reported_as_an_empty_success() {
         assert_eq!(
             merge_discovery(Ok(Vec::new()), Err(Error::Unavailable)),
-            Err(Error::Unavailable)
+            (Err(Error::Unavailable), false)
         );
         assert_eq!(
             merge_discovery(Ok(vec![device()]), Err(Error::Unavailable)),
-            Ok(vec![device()])
+            (Ok(vec![device()]), false)
         );
         assert_eq!(
             merge_discovery(Ok(Vec::new()), Ok(Vec::new())),
-            Ok(Vec::new())
+            (Ok(Vec::new()), false)
         );
+    }
+
+    #[test]
+    fn a_missing_helper_is_guidance_not_the_search_error() {
+        // The search still succeeds, so the picker keeps its other routes.
+        assert_eq!(
+            merge_discovery(Err(Error::MissingHelper), Ok(Vec::new())),
+            (Ok(Vec::new()), true)
+        );
+        // A native discovery failure is never blamed on the missing helper.
+        assert_eq!(
+            merge_discovery(Err(Error::MissingHelper), Err(Error::Unavailable)),
+            (Err(Error::Unavailable), true)
+        );
+    }
+
+    #[test]
+    fn helper_candidates_follow_pip_and_pipx_layout_newest_python_first() {
+        let dir = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+            .join(format!("target/cast-candidates-{}", std::process::id()));
+        let appdata = dir.join("appdata");
+        for version in ["Python312", "Python313", "Python27"] {
+            std::fs::create_dir_all(appdata.join("Python").join(version).join("Scripts")).unwrap();
+        }
+        let home = dir.join("home");
+        assert_eq!(
+            helper_candidates(&appdata, &home),
+            [
+                appdata.join("Python").join("Python313").join("Scripts"),
+                appdata.join("Python").join("Python312").join("Scripts"),
+                home.join(".local").join("bin"),
+            ]
+        );
+        assert_eq!(
+            helper_candidates(&dir.join("missing"), &home),
+            [home.join(".local").join("bin")]
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -1002,6 +1128,24 @@ mod tests {
         assert!(Error::MissingHelper.message().contains("Install catt"));
     }
 
+    #[tokio::test]
+    async fn a_search_without_the_helper_still_succeeds_with_guidance() {
+        let reply = execute(
+            Path::new("target/nonexistent-catt-test/catt"),
+            Request::Scan,
+        )
+        .await;
+        let Reply::Scanned {
+            devices,
+            helper_missing,
+        } = reply
+        else {
+            panic!("search reply missing")
+        };
+        assert_eq!(devices, Ok(Vec::new()));
+        assert!(helper_missing);
+    }
+
     #[cfg(unix)]
     mod process {
         use super::*;
@@ -1065,7 +1209,11 @@ else:
         assert args[2:] == ['pause']
 "#,
             );
-            let Reply::Devices(Ok(found)) = execute(&fixture.helper(), Request::Scan).await else {
+            let Reply::Scanned {
+                devices: Ok(found),
+                helper_missing: false,
+            } = execute(&fixture.helper(), Request::Scan).await
+            else {
                 panic!("discovery failed")
             };
             assert_eq!(found.len(), 1);

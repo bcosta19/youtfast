@@ -215,7 +215,15 @@ Wenn Sie zum Beispiel bereits pipx verwenden, installieren Sie es mit
 `pipx install catt`. Folgen Sie den Installationsanweisungen von catt für Ihr
 Betriebssystem, prüfen Sie `catt --version` in der Umgebung, aus der YouTFast
 gestartet wird, und starten Sie YouTFast neu, falls Sie den `PATH` geändert
-haben. YouTFast installiert das Hilfsprogramm nie automatisch. Das Hilfsprogramm
+haben. Auf Windows findet YouTFast catt auch dort, wo pip
+(`pip install --user catt`) und pipx (`pipx install catt`) es ablegen —
+`%APPDATA%\Python\Python3*\Scripts` und `%USERPROFILE%\.local\bin`, Ordner, die
+nicht im `PATH` einer Desktop-Anwendung liegen —, deshalb genügt einer der
+beiden Befehle, und ein laufendes YouTFast findet es bei der nächsten Suche.
+Solange catt fehlt, zeigt der Auswahldialog das als Hinweis neben den
+Ergebnissen an, statt eine fehlgeschlagene Suche zu melden; die Wege über
+IP-Adresse und TV-Code brauchen kein Hilfsprogramm. YouTFast installiert das
+Hilfsprogramm nie automatisch. Das Hilfsprogramm
 und seine Python-Abhängigkeiten sind nicht in den Release-Archiven enthalten.
 Flatpak kann kein beliebiges Hilfsprogramm des Host-Systems nutzen; diese
 Integration ist für das Flatpak-Paket noch nicht freigegeben.

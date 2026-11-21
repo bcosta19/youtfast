@@ -249,18 +249,21 @@ pub(crate) fn fixture(page: &str) -> State {
         state.mini_closed = false;
     }
     if matches!(page, "cast" | "cast-connected" | "cast-missing") {
-        use youtfast_cast::{Action, Device, Error, Reply};
+        use youtfast_cast::{Action, Device, Reply};
         let device = Device {
             protocol: youtfast_cast::Protocol::GoogleCast,
             host: "192.168.1.20".parse().unwrap(),
             name: "Demo TV — Google Cast".into(),
         };
         state.cast.prepare(Action::Open, None, 0.0, 0);
-        state.cast.finish(Reply::Devices(if page == "cast-missing" {
-            Err(Error::MissingHelper)
-        } else {
-            Ok(vec![device.clone()])
-        }));
+        state.cast.finish(Reply::Scanned {
+            devices: Ok(if page == "cast-missing" {
+                Vec::new()
+            } else {
+                vec![device.clone()]
+            }),
+            helper_missing: page == "cast-missing",
+        });
         if page == "cast-connected" {
             state.cast.prepare(
                 Action::Start(device.clone()),
@@ -347,11 +350,14 @@ impl eframe::App for Demo {
                                 host: std::net::Ipv4Addr::UNSPECIFIED.into(),
                                 name: "Demo TV — linked with a code".into(),
                             }])),
-                            Request::Scan => Reply::Devices(Ok(vec![Device {
-                                protocol: youtfast_cast::Protocol::GoogleCast,
-                                host: "192.168.1.20".parse().unwrap(),
-                                name: "Demo TV — Google Cast".into(),
-                            }])),
+                            Request::Scan => Reply::Scanned {
+                                devices: Ok(vec![Device {
+                                    protocol: youtfast_cast::Protocol::GoogleCast,
+                                    host: "192.168.1.20".parse().unwrap(),
+                                    name: "Demo TV — Google Cast".into(),
+                                }]),
+                                helper_missing: false,
+                            },
                             Request::Start { device, video, .. } => Reply::Started {
                                 device,
                                 video,

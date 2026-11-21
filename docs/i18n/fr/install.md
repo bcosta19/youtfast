@@ -300,6 +300,12 @@ les vidéos ne se chargent plus.
 installées → YouTFast** de Windows (ou lancez `Uninstall.exe`) si vous l'avez
 installé via le `.exe`, ou supprimez le dossier extrait si vous utilisez le
 `.zip` portable.
+**Google Cast (facultatif) :** la transmission utilise l'application YouTube de
+la TV et ne nécessite aucun outil supplémentaire. Pour trouver aussi les
+appareils Chromecast, installez catt avec `pip install --user catt` (ou
+`pipx install catt`) : YouTFast vérifie les dossiers qu'utilisent pip et pipx,
+donc aucune modification du `PATH` n'est nécessaire, et un YouTFast en cours
+d'exécution le trouve à la recherche suivante.
 
 ## macOS
 

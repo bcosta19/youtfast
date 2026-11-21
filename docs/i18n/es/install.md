@@ -290,6 +290,12 @@ cargar.
 **Desinstalar:** usa **Configuración → Aplicaciones → Aplicaciones instaladas →
 YouTFast** de Windows (o ejecuta `Uninstall.exe`) si lo instalaste con el `.exe`, o
 elimina la carpeta extraída si usas el `.zip` portátil.
+**Google Cast (opcional):** la transmisión usa la aplicación de YouTube de la TV y
+no necesita ninguna herramienta extra. Para encontrar también dispositivos
+Chromecast, instala catt con `pip install --user catt` (o `pipx install catt`):
+YouTFast comprueba las carpetas que usan pip y pipx, así que no hace falta
+cambiar el `PATH`, y un YouTFast en ejecución lo encuentra en la siguiente
+búsqueda.
 
 ## macOS
 

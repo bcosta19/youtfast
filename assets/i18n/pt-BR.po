@@ -1684,6 +1684,9 @@ msgstr "A TV usa seu próprio aplicativo e conta do YouTube. A reprodução loca
 msgid "Install catt to use Google Cast, then search again."
 msgstr "Instale o catt para usar o Google Cast e busque novamente."
 
+msgid "Google Cast is optional: without the catt tool, only TVs with the YouTube app are found."
+msgstr "O Google Cast é opcional: sem a ferramenta catt, apenas TVs com o aplicativo do YouTube são encontradas."
+
 msgid "Could not start the TV connection. Try again."
 msgstr "Não foi possível iniciar a conexão com a TV. Tente novamente."
 

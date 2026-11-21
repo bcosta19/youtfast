@@ -17,6 +17,9 @@ pub struct State {
     pub address: String,
     pub code: String,
     pub error: Option<Error>,
+    /// The Google Cast helper was missing at the last search: guidance for
+    /// the picker, never a search error on its own.
+    pub helper_missing: bool,
     pub session: Option<Session>,
     pub command_sent: bool,
     pending: Option<Pending>,
@@ -257,9 +260,16 @@ impl State {
                 }
                 Err(error) => self.error = Some(error),
             },
-            (Some(Pending::Scan), Reply::Devices(result)) => {
+            (
+                Some(Pending::Scan),
+                Reply::Scanned {
+                    devices,
+                    helper_missing,
+                },
+            ) => {
                 self.searched = true;
-                match result {
+                self.helper_missing = helper_missing;
+                match devices {
                     Ok(devices) => self.devices = devices,
                     Err(error) => {
                         self.devices.clear();
@@ -653,13 +663,41 @@ mod tests {
         ));
         assert!(state.open && state.scanning());
         assert!(state.prepare(Action::Scan, None, 0.0, 1).is_none());
-        state.finish(Reply::Devices(Ok(vec![device()])));
+        state.finish(Reply::Scanned {
+            devices: Ok(vec![device()]),
+            helper_missing: false,
+        });
         assert!(!state.busy());
         assert!(state.prepare(Action::Open, None, 0.0, 1).is_none());
         assert!(matches!(
             state.prepare(Action::Scan, None, 0.0, 1),
             Some(Request::Scan)
         ));
+    }
+
+    #[test]
+    fn a_missing_cast_helper_is_recorded_as_guidance_and_cleared_when_found() {
+        let mut state = State::default();
+        assert!(matches!(
+            state.prepare(Action::Scan, None, 0.0, 0),
+            Some(Request::Scan)
+        ));
+        state.finish(Reply::Scanned {
+            devices: Ok(Vec::new()),
+            helper_missing: true,
+        });
+        assert!(state.searched);
+        assert!(state.helper_missing);
+        assert_eq!(state.error, None);
+        assert!(matches!(
+            state.prepare(Action::Scan, None, 0.0, 0),
+            Some(Request::Scan)
+        ));
+        state.finish(Reply::Scanned {
+            devices: Ok(vec![device()]),
+            helper_missing: false,
+        });
+        assert!(!state.helper_missing);
     }
 
     #[test]
