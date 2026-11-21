@@ -279,13 +279,25 @@ pub fn candidate_items(state: &State, status: Option<&Status>) -> Vec<PaletteIte
     }
     if state.watching.is_some() || state.video_tabs.videos().next().is_some() {
         items.push(PaletteItem {
-            category: action_category,
+            category: action_category.clone(),
             label: tr(locale, "New video tab").into_owned(),
             detail: None,
             keywords: Some(tr(locale, "New tab").into_owned()),
             shortcut: None,
             icon: Icon::Plus,
             actions: vec![Action::NewVideoTab],
+            search_query: None,
+        });
+    }
+    if state.settings.device_sync.enabled {
+        items.push(PaletteItem {
+            category: action_category,
+            label: tr(locale, "Sync devices now").into_owned(),
+            detail: None,
+            keywords: Some(tr(locale, "Device sync").into_owned()),
+            shortcut: None,
+            icon: Icon::Refresh,
+            actions: vec![Action::SyncDevicesNow],
             search_query: None,
         });
     }
@@ -1513,5 +1525,23 @@ mod tests {
         }
         assert!(!state.palette_open);
         assert_eq!(actions, [Action::ToggleTheater]);
+    }
+
+    #[test]
+    fn sync_devices_now_appears_only_when_device_sync_is_enabled() {
+        let off = State::default();
+        assert!(
+            !candidate_items(&off, None)
+                .into_iter()
+                .any(|item| item.actions == [Action::SyncDevicesNow])
+        );
+
+        let mut on = State::default();
+        on.settings.device_sync.enabled = true;
+        let sync_item = candidate_items(&on, None)
+            .into_iter()
+            .find(|item| item.actions == [Action::SyncDevicesNow])
+            .expect("Sync devices now palette item missing when enabled");
+        assert_eq!(sync_item.label, "Sync devices now");
     }
 }

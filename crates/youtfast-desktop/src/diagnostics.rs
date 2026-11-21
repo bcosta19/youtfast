@@ -100,6 +100,8 @@ pub fn redact_log(
             "updated youtfast",
             "pending update helper failed",
             "relaunch helper failed",
+            "device sync listener failed",
+            "device sync failed",
         ]
         .into_iter()
         .find(|prefix| message.starts_with(prefix))

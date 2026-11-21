@@ -50,12 +50,12 @@ All paths below are relative to [`crates/`](../crates/).
 |---|---|
 | `youtfast` | `src/main.rs`: CLI/startup; `src/demo.rs`: offline harness behind `demo`; `build.rs`: Windows icon embedding |
 | `youtfast-ui` | `frame`: views; `palette`: command palette modal; `player`, `watch`, `widgets`, `settings`, `account`: presentation; `bench`: frame-cost harness |
-| `youtfast-app` | `App`, `State`, `Action`; `loading`, `watch`, `accounts`, `notifications`, `player`, `images`, `dearrow`, `now_playing` |
-| `youtfast-backend` | `src/lib.rs`: runtime, request scheduling and persistence writers; `protocol`: `Command`, `Event`, `Slot` |
+| `youtfast-app` | `App`, `State`, `Action`; `loading`, `watch`, `accounts`, `notifications`, `player`, `images`, `dearrow`, `device_sync`, `now_playing` |
+| `youtfast-backend` | `src/lib.rs`: runtime, request scheduling and persistence writers; `protocol`: `Command`, `Event`, `Slot`; `sync`: direct peer-to-peer device library listener and client |
 | `youtfast-cast` | `src/lib.rs`: Google Cast adapter; `dial`: discovery/app lifecycle; `lounge`: YouTube on TV transport |
 | `youtfast-youtube` | `innertube`: data/account API; `ytdlp`: extraction JSON; `extras`: captions/storyboards; `thumbs`: bounded image cache; `sponsorblock`: segments; `dearrow`: community titles/thumbnails |
 | `youtfast-logic` | `alerts`, `history`, `recommend`, `video_tabs`: pure decisions over application data |
-| `youtfast-storage` | `library`, `settings`, `account`, `takeout`, `backup`, `paths`: persistence, credentials, imports and exports |
+| `youtfast-storage` | `library`, `settings`, `account`, `takeout`, `backup`, `sync`, `paths`: persistence, credentials, imports, exports and device sync |
 | `youtfast-desktop` | `instance`: single instance; `diagnostics`: redacted logs; `updater`: verified release installation |
 | `youtfast-core` | `model`, `util`, `links`, `privacy`: shared types, formatting, URL parsing and controlled errors; no IO or drawing |
 | `youtfast-i18n` | Build script compiles catalogs from `assets/i18n` |
@@ -269,8 +269,9 @@ sequenceDiagram
 
 | Stored data | Location and guarantees |
 |---|---|
-| Library | `paths::Dirs::library`: device subscriptions, history/resume positions, Watch later, hidden videos and blocked channels, and device-only playlists (`local-` prefix, up to 200 playlists × 5,000 videos) |
+| Library | `paths::Dirs::library`: device subscriptions, history/resume positions, Watch later, hidden videos and blocked channels, and device-only playlists (`local-` prefix, up to 200 playlists × 5,000 videos). Resume timestamps are pruned with history. Legacy device-scoped playlist IDs are replaced with randomly generated IDs and atomically saved at startup before syncing. |
 | Feed filter persistence | Rebuild indexes on deserialization, keeping the newest 5,000 unique hidden video IDs and 1,000 unique blocked channels. |
+| Device sync | Optional peer-to-peer sync over Tailscale, NetBird, or private LAN addresses. `youtfast-backend::sync::transport` completes a Noise `NNpsk0` handshake with a generated 256-bit pairing key before either endpoint sends an encrypted library snapshot. Snapshots are capped at 64 MiB and tombstone maps at 2,000 entries each. Accounts, sessions, alert timestamps, and settings stay local. Reconfiguration cancels active exchanges and the app discards stale device-sync events using a generation independent of the YouTube session. |
 | Settings | `paths::Dirs::settings`: playback, appearance and other preferences; new persisted fields need `#[serde(default)]` |
 | Invalid input | Preserve invalid JSON/UTF-8 before defaults become writable; read failures or failed backups stop startup |
 | Atomic writes | Reject non-regular targets; synchronize the parent directory on Unix |

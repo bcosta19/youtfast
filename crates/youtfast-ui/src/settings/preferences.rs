@@ -5,10 +5,15 @@ use youtfast_i18n::{format as trf, gettext as tr, interpolate, ngettext};
 
 use super::{CONTROL_WIDTH, combo_width, setting_row, switch, switch_row};
 use crate::widgets;
-use youtfast_app::{Action, State};
+use youtfast_app::{Action, State, SyncStatus};
 use youtfast_appearance::theme;
 use youtfast_core::model::{SponsorBehavior, SponsorCategory};
+use youtfast_core::util;
 use youtfast_storage::settings::{HistorySync, PlaybackBuffer};
+use youtfast_storage::sync::{
+    ERR_PAIRING_KEY_INVALID, MAX_PAIRING_KEY_CHARS, MAX_PEER_ADDRESS_CHARS, MIN_SYNC_PORT,
+    normalize_pairing_key,
+};
 
 /// How often the checks may run, in minutes.
 const INTERVALS: [u32; 4] = [5, 15, 30, 60];
@@ -416,6 +421,240 @@ pub(super) fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 }
             }
         });
+        ui.add_space(12.0);
+        device_sync_card(ui, state, actions);
+    });
+}
+
+fn device_sync_card(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+    let palette = &state.palette;
+    widgets::card(ui, palette, |ui| {
+        let sync = &state.settings.device_sync;
+        let enabled = sync.enabled;
+        if switch_row(
+            ui,
+            palette,
+            &tr(locale, "Device sync"),
+            &tr(
+                locale,
+                "Sync your device subscriptions, watch history with resume positions, Watch later, device playlists, hidden videos, and blocked channels directly between your computers over Tailscale, NetBird, or your local network. Accounts and sessions are never shared.",
+            ),
+            enabled,
+            &tr(locale, "Device sync"),
+        ) {
+            actions.push(Action::SetDeviceSyncEnabled(!enabled));
+        }
+        if !enabled {
+            return;
+        }
+
+        let card = widgets::on_card(palette);
+        ui.add_space(12.0);
+        let addresses_text = if state.sync_addresses.is_empty() {
+            tr(
+                locale,
+                "No active Tailscale, NetBird, or local network address found.",
+            )
+            .into_owned()
+        } else {
+            state.sync_addresses.join(", ")
+        };
+        let copy_address = tr(locale, "Copy address");
+        let copy_addr_width = button_row_width(ui, &[copy_address.as_ref()]).max(CONTROL_WIDTH);
+        setting_row(
+            ui,
+            palette,
+            &tr(locale, "This device"),
+            &addresses_text,
+            copy_addr_width,
+            |ui| {
+                ui.add_enabled_ui(!state.sync_addresses.is_empty(), |ui| {
+                    if widgets::button(
+                        ui,
+                        &card,
+                        copy_address.as_ref(),
+                        widgets::ButtonStyle::Normal,
+                    )
+                    .clicked()
+                        && let Some(first) = state.sync_addresses.first()
+                    {
+                        actions.push(Action::CopySyncAddress(first.clone()));
+                    }
+                });
+            },
+        );
+
+        ui.add_space(12.0);
+        let new_key = tr(locale, "New key");
+        let copy_key = tr(locale, "Copy key");
+        let mut pairing_key = sync.pairing_key.clone();
+        let valid_key = normalize_pairing_key(&pairing_key).is_some();
+        let key_width =
+            (button_row_width(ui, &[copy_key.as_ref(), new_key.as_ref()]) + 8.0 + 180.0)
+                .max(CONTROL_WIDTH);
+        setting_row(
+            ui,
+            palette,
+            &tr(locale, "Pairing key"),
+            &tr(
+                locale,
+                "Generate a key on one device and copy it to the other.",
+            ),
+            key_width,
+            |ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                if widgets::button(ui, &card, new_key.as_ref(), widgets::ButtonStyle::Normal)
+                    .clicked()
+                {
+                    actions.push(Action::GenerateDeviceSyncKey);
+                }
+                ui.add_enabled_ui(valid_key, |ui| {
+                    if widgets::button(ui, &card, copy_key.as_ref(), widgets::ButtonStyle::Normal)
+                        .clicked()
+                    {
+                        actions.push(Action::CopySyncKey);
+                    }
+                });
+                let response = ui.add(
+                    egui::TextEdit::singleline(&mut pairing_key)
+                        .password(true)
+                        .id(egui::Id::new("device-sync-pairing-key"))
+                        .desired_width(180.0)
+                        .char_limit(MAX_PAIRING_KEY_CHARS),
+                );
+                if response.changed() {
+                    actions.push(Action::SetDeviceSyncKey(pairing_key));
+                }
+            },
+        );
+
+        ui.add_space(12.0);
+        let mut peer = sync.peer_address.clone();
+        setting_row(
+            ui,
+            palette,
+            &tr(locale, "Other device address"),
+            &tr(
+                locale,
+                "Enter the other computer's Tailscale, NetBird, or local IP address (for example, 100.64.0.2:38452).",
+            ),
+            CONTROL_WIDTH,
+            |ui| {
+                let response = ui.add(
+                    egui::TextEdit::singleline(&mut peer)
+                        .id(egui::Id::new("device-sync-peer"))
+                        .desired_width(220.0)
+                        .hint_text("100.64.0.2:38452")
+                        .char_limit(MAX_PEER_ADDRESS_CHARS),
+                );
+                if response.changed() {
+                    actions.push(Action::SetDeviceSyncPeer(peer));
+                }
+            },
+        );
+
+        ui.add_space(12.0);
+        let port_id = egui::Id::new("device-sync-port");
+        let (mut port_text, mut port_synced) = ui.data_mut(|data| {
+            data.get_temp::<(String, String)>(port_id)
+                .unwrap_or_else(|| (state.sync_port_draft.clone(), state.sync_port_draft.clone()))
+        });
+        if port_synced != state.sync_port_draft {
+            port_text = state.sync_port_draft.clone();
+            port_synced = state.sync_port_draft.clone();
+        }
+        setting_row(
+            ui,
+            palette,
+            &tr(locale, "Listen port"),
+            &tr(
+                locale,
+                "TCP port on this computer for incoming device sync requests (1024–65535).",
+            ),
+            CONTROL_WIDTH,
+            |ui| {
+                let response = ui.add(
+                    egui::TextEdit::singleline(&mut port_text)
+                        .id(port_id)
+                        .desired_width(84.0)
+                        .char_limit(5),
+                );
+                let enter_pressed =
+                    response.has_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
+                if response.lost_focus() || enter_pressed {
+                    if let Ok(port) = port_text.trim().parse::<u16>()
+                        && port >= MIN_SYNC_PORT
+                    {
+                        port_text = port.to_string();
+                        actions.push(Action::SetDeviceSyncPort(port));
+                    } else {
+                        port_text = state.sync_port_draft.clone();
+                    }
+                }
+            },
+        );
+        ui.data_mut(|data| data.insert_temp(port_id, (port_text, port_synced)));
+
+        ui.add_space(12.0);
+        let chips = 4.0 * 72.0 + 3.0 * 8.0;
+        setting_row(
+            ui,
+            palette,
+            &tr(locale, "Sync every"),
+            &tr(locale, "Time between automatic sync checks."),
+            chips,
+            |ui| {
+                // Right to left: the longest interval goes in first.
+                for minutes in INTERVALS.into_iter().rev() {
+                    let picked = sync.every_minutes == minutes;
+                    if widgets::chip(
+                        ui,
+                        &card,
+                        &trf(locale, "{minutes} min", &[("minutes", minutes.to_string())]),
+                        picked,
+                    )
+                    .clicked()
+                    {
+                        actions.push(Action::SetDeviceSyncEvery(minutes));
+                    }
+                }
+            },
+        );
+
+        ui.add_space(12.0);
+        let status_text = match &state.sync_status {
+            SyncStatus::Idle if !valid_key => {
+                youtfast_i18n::message(locale, ERR_PAIRING_KEY_INVALID).into_owned()
+            }
+            SyncStatus::Idle => tr(locale, "Ready to sync.").into_owned(),
+            SyncStatus::Syncing => tr(locale, "Syncing…").into_owned(),
+            SyncStatus::Synced(at) => trf(
+                locale,
+                "Last synced {ago}",
+                &[("ago", util::ago(*at, util::now(), locale))],
+            ),
+            SyncStatus::Failed(err) => youtfast_i18n::message(locale, err).into_owned(),
+        };
+        let sync_now = tr(locale, "Sync now");
+        let syncing = matches!(state.sync_status, SyncStatus::Syncing);
+        let status_width = button_row_width(ui, &[sync_now.as_ref()]).max(CONTROL_WIDTH);
+        setting_row(
+            ui,
+            palette,
+            &tr(locale, "Sync status"),
+            &status_text,
+            status_width,
+            |ui| {
+                ui.add_enabled_ui(!syncing, |ui| {
+                    if widgets::button(ui, &card, sync_now.as_ref(), widgets::ButtonStyle::Normal)
+                        .clicked()
+                    {
+                        actions.push(Action::SyncDevicesNow);
+                    }
+                });
+            },
+        );
     });
 }
 
@@ -1023,6 +1262,167 @@ mod tests {
             [
                 Action::SetDeArrowTitles(true),
                 Action::SetDeArrowThumbnails(true),
+            ]
+        );
+    }
+
+    #[test]
+    fn device_sync_switch_hides_controls_when_off_and_emits_enable() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let state = State::default();
+        let mut actions = Vec::new();
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 1400.0));
+        let mut labels = Vec::new();
+        let mut switch_pos = None;
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(screen),
+                ..Default::default()
+            },
+            |ui| history(ui, &state, &mut actions),
+        );
+        for shape in &output.shapes {
+            if let egui::Shape::Text(text) = &shape.shape {
+                let label = text.galley.text().to_owned();
+                if label == "Device sync" {
+                    switch_pos =
+                        Some(egui::Rect::from_min_size(text.pos, text.galley.size()).center());
+                }
+                labels.push(label);
+            }
+        }
+        output.textures_delta.clear();
+
+        assert!(labels.iter().any(|l| l == "Device sync"));
+        assert!(!labels.iter().any(|l| l == "Pairing key"));
+        assert!(!labels.iter().any(|l| l == "Other device address"));
+        assert!(actions.is_empty());
+
+        let pos = switch_pos.expect("Device sync switch label rendered");
+        let mut run = |events: Vec<egui::Event>| {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    events,
+                    ..Default::default()
+                },
+                |ui| history(ui, &state, &mut actions),
+            );
+            out.textures_delta.clear();
+        };
+        run(vec![egui::Event::PointerMoved(pos)]);
+        for pressed in [true, false] {
+            run(vec![
+                egui::Event::PointerMoved(pos),
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ]);
+        }
+        assert_eq!(actions, [Action::SetDeviceSyncEnabled(true)]);
+    }
+
+    #[test]
+    fn device_sync_enabled_renders_controls_and_emits_actions() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let mut state = State {
+            sync_port_draft: "38452".to_owned(),
+            sync_addresses: vec!["100.64.0.10:38452".to_owned()],
+            sync_status: SyncStatus::Idle,
+            ..Default::default()
+        };
+        state.settings.device_sync.enabled = true;
+        state.settings.device_sync.pairing_key = youtfast_storage::sync::generate_pairing_key();
+        state.settings.device_sync.every_minutes = 15;
+
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 1500.0));
+        let mut actions = Vec::new();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(screen),
+                ..Default::default()
+            },
+            |ui| history(ui, &state, &mut actions),
+        );
+        let mut positions = std::collections::HashMap::new();
+        let mut labels = Vec::new();
+        for shape in &output.shapes {
+            if let egui::Shape::Text(text) = &shape.shape {
+                let label = text.galley.text().to_owned();
+                let center = egui::Rect::from_min_size(text.pos, text.galley.size()).center();
+                positions.entry(label.clone()).or_insert(center);
+                labels.push(label);
+            }
+        }
+        output.textures_delta.clear();
+
+        assert!(
+            !labels
+                .iter()
+                .any(|label| label.contains(&state.settings.device_sync.pairing_key))
+        );
+        for expected in [
+            "Device sync",
+            "This device",
+            "100.64.0.10:38452",
+            "Copy address",
+            "Pairing key",
+            "Copy key",
+            "New key",
+            "Other device address",
+            "Listen port",
+            "Sync every",
+            "Sync status",
+            "Ready to sync.",
+            "Sync now",
+        ] {
+            assert!(
+                labels.iter().any(|l| l == expected),
+                "missing label {expected:?}; got {labels:?}"
+            );
+        }
+
+        for target in ["Copy address", "New key", "Copy key", "30 min", "Sync now"] {
+            let pos = *positions
+                .get(target)
+                .unwrap_or_else(|| panic!("missing clickable text {target:?}"));
+            let mut run = |events: Vec<egui::Event>| {
+                let mut out = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(screen),
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| history(ui, &state, &mut actions),
+                );
+                out.textures_delta.clear();
+            };
+            run(vec![egui::Event::PointerMoved(pos)]);
+            for pressed in [true, false] {
+                run(vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ]);
+            }
+        }
+        assert_eq!(
+            actions,
+            [
+                Action::CopySyncAddress("100.64.0.10:38452".to_owned()),
+                Action::GenerateDeviceSyncKey,
+                Action::CopySyncKey,
+                Action::SetDeviceSyncEvery(30),
+                Action::SyncDevicesNow,
             ]
         );
     }

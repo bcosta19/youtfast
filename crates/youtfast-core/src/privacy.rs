@@ -30,6 +30,15 @@ pub fn safe_error(error: &str) -> String {
         "Update authentication was cancelled or unavailable.",
         "The downloaded update is incompatible with this system.",
         "The installation directory is not writable.",
+        "Generate a new pairing key and copy it to both devices.",
+        "Enter the other device's Tailscale, NetBird, or local network address.",
+        "Device sync only connects to private network, Tailscale, or NetBird addresses.",
+        "Could not reach the other device. Check that YouTFast is open with Device sync enabled and that both devices are on the same Tailscale, NetBird, or local network.",
+        "The other device rejected the pairing key. Check that both devices use the same key.",
+        "The other device uses an incompatible sync version. Update YouTFast on both devices.",
+        "The library exceeds the 64 MiB sync limit.",
+        "Could not read the sync response from the other device.",
+        "Could not start the device sync listener on the selected port.",
     ]
     .contains(&error)
     {

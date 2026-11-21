@@ -235,7 +235,7 @@ impl State {
 
     /// Account recommendations are filtered at display time. Keep their
     /// rows and generation together so an in-flight continuation can land.
-    fn invalidate_local_for_you(&mut self, generations: &mut HashMap<Slot, u64>) {
+    pub(super) fn invalidate_local_for_you(&mut self, generations: &mut HashMap<Slot, u64>) {
         if self.for_you_from_account && matches!(self.for_you, Listing::Ready(_)) {
             return;
         }

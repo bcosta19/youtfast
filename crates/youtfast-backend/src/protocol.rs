@@ -292,7 +292,7 @@ pub enum Command {
     ResetSession,
     /// Forget an account: its keyring entry is deleted too.
     RemoveAccount(u32),
-    SaveLibrary(Library),
+    SaveLibrary(Box<Library>),
     SaveSettings(Box<Settings>),
     /// Thumbnail URLs the interface is drawing from the network, for the
     /// disk cache to keep next time.
@@ -328,6 +328,16 @@ pub enum Command {
         kind: youtfast_desktop::updater::UpdateKind,
         auto_installed: bool,
         language: youtfast_i18n::Locale,
+    },
+    /// Configure the encrypted device-sync listener and background schedule.
+    ConfigureDeviceSync {
+        settings: youtfast_storage::settings::DeviceSync,
+        generation: u64,
+    },
+    /// Run a one-shot peer library sync against the configured peer address.
+    SyncDevices {
+        generation: u64,
+        manual: bool,
     },
 }
 
@@ -462,6 +472,21 @@ pub enum Event {
         auto: bool,
         result: Result<youtfast_desktop::updater::InstallOutcome, String>,
     },
+    /// The periodic device-sync timer fired; the app starts a sync if idle.
+    CheckDeviceSync {
+        generation: u64,
+    },
+    /// An authenticated peer pushed a library snapshot to this device's listener.
+    DeviceSyncIncoming {
+        generation: u64,
+        snapshot: Box<youtfast_storage::sync::SyncSnapshot>,
+    },
+    /// Result of an outbound peer sync or listener startup failure.
+    DeviceSyncCompleted {
+        generation: u64,
+        result: Result<Box<youtfast_storage::sync::SyncSnapshot>, String>,
+        manual: bool,
+    },
 }
 
 impl Command {
@@ -489,6 +514,7 @@ impl Command {
                     | Self::SaveSettings(_)
                     | Self::SetAlertsEvery(_)
                     | Self::SetUpdateSchedule(_)
+                    | Self::ConfigureDeviceSync { .. }
             )
     }
 }
@@ -524,6 +550,9 @@ impl Event {
             }
             | Self::UpdateInstalled {
                 result: Err(error), ..
+            }
+            | Self::DeviceSyncCompleted {
+                result: Err(error), ..
             } => *error = youtfast_core::privacy::safe_error(error),
             Self::Details { result, .. } => {
                 if let Err(error) = result.as_mut() {
@@ -551,6 +580,9 @@ impl Event {
                     | Self::DeArrow { .. }
                     | Self::UpdateChecked { .. }
                     | Self::UpdateInstalled { .. }
+                    | Self::CheckDeviceSync { .. }
+                    | Self::DeviceSyncIncoming { .. }
+                    | Self::DeviceSyncCompleted { .. }
             )
     }
 }
