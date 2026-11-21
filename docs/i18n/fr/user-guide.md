@@ -393,6 +393,24 @@ abonnements** enregistre vos abonnements de l'appareil au format OPML 2.0
 (`youtfast-subscriptions.opml`) avec l'URL du flux RSS YouTube de chaque chaîne
 via **Exporter en OPML**.
 
+**Synchronisation entre appareils**, dans **Paramètres → Historique**, relie deux
+de vos ordinateurs directement via Tailscale, NetBird ou un réseau local privé
+pour fusionner les abonnements de l'appareil, l'historique de visionnage (avec
+les positions de reprise), À regarder plus tard, les playlists de l'appareil,
+les vidéos masquées et les chaînes bloquées. Sur un ordinateur, sélectionnez
+**Nouvelle clé**, puis **Copier la clé**, et collez-la dans **Clé d'appairage**
+sur l'autre. Les appareils vérifient qu'ils partagent la même clé et chiffrent
+la connexion avant tout envoi de données de la bibliothèque. Indiquez l'adresse
+de l'autre ordinateur dans **Adresse de l'autre appareil**
+(par exemple `100.64.0.2:38452`) et ajustez **Port d'écoute** (TCP
+`1024`–`65535`, par défaut `38452`) ou **Synchroniser toutes les** si besoin.
+Les adresses IP publiques sont refusées, et les comptes YouTube, sessions,
+horodatages d'alertes et paramètres restent sur chaque ordinateur. Lancez une
+synchronisation immédiate avec **Synchroniser maintenant** ou **Synchroniser les
+appareils maintenant** dans la palette de commandes. Si vous avez testé une
+version préliminaire de la synchronisation, mettez les deux ordinateurs à jour
+et générez une nouvelle clé.
+
 **History sync** (synchronisation de l'historique) dans Paramètres → Historique
 s'applique lorsque vous êtes connecté :
 

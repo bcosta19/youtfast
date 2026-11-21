@@ -22,6 +22,7 @@ use youtfast_storage::{account, backup, paths, takeout};
 use youtfast_youtube::innertube::{self, Client};
 
 mod protocol;
+mod sync;
 pub use protocol::{
     Command, CommentsKey, DeArrowConsent, Event, Payload, Request, SignInMethod, Slot,
 };
@@ -92,6 +93,8 @@ struct Context {
     thumb_disk_sem: Arc<tokio::sync::Semaphore>,
     /// At most this many DeArrow branding lookups at a time.
     dearrow_sem: Arc<tokio::sync::Semaphore>,
+    /// Peer-to-peer device library sync listener, schedule, and client lock.
+    sync: sync::SyncManager,
 }
 
 /// How many thumbnails are read from the disk cache at once.
@@ -142,6 +145,7 @@ impl Backend {
             )),
             thumb_disk_sem: Arc::new(tokio::sync::Semaphore::new(THUMB_DISK_READS)),
             dearrow_sem: Arc::new(tokio::sync::Semaphore::new(DEARROW_LOOKUPS)),
+            sync: sync::SyncManager::default(),
         };
         let backend = Self {
             commands,
@@ -255,7 +259,7 @@ impl Backend {
     pub fn send(&self, command: Command) {
         let command = match command {
             Command::SaveLibrary(library) => {
-                self.library_saves.send_replace(Some(library));
+                self.library_saves.send_replace(Some(*library));
                 return;
             }
             Command::SaveSettings(settings) => {
@@ -804,8 +808,17 @@ async fn handle(command: Command, context: Context) {
                 }
             });
         }
+        Command::ConfigureDeviceSync {
+            settings,
+            generation,
+        } => {
+            sync::configure(&context, settings, generation).await;
+        }
+        Command::SyncDevices { manual, generation } => {
+            sync::sync_now(&context, manual, generation).await;
+        }
         Command::SaveLibrary(library) => {
-            context.library_saves.send_replace(Some(library));
+            context.library_saves.send_replace(Some(*library));
         }
         Command::SaveSettings(settings) => {
             context.settings_saves.send_replace(Some(*settings));
@@ -1974,6 +1987,7 @@ mod tests {
             )),
             thumb_disk_sem: Arc::new(tokio::sync::Semaphore::new(THUMB_DISK_READS)),
             dearrow_sem: Arc::new(tokio::sync::Semaphore::new(DEARROW_LOOKUPS)),
+            sync: sync::SyncManager::default(),
         };
         // Slow downloads hold every turn.
         let _turns = context

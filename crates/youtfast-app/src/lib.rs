@@ -126,6 +126,16 @@ pub struct ChannelActivity<'a> {
     pub watch_rank: Option<usize>,
 }
 
+/// Status of peer-to-peer device library synchronization.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum SyncStatus {
+    #[default]
+    Idle,
+    Syncing,
+    Synced(i64),
+    Failed(String),
+}
+
 /// What the views draw from.
 #[derive(Default)]
 pub struct State {
@@ -388,6 +398,12 @@ pub struct State {
     pub recent_searches: Vec<String>,
     /// A Settings section requested by the command palette to scroll into view.
     pub settings_group: Option<SettingsGroup>,
+    /// Status of peer-to-peer device sync.
+    pub sync_status: SyncStatus,
+    /// Draft text for the Settings → History → Listen port field.
+    pub sync_port_draft: String,
+    /// Reachable local Tailscale, NetBird, and LAN `ip:port` addresses.
+    pub sync_addresses: Vec<String>,
 }
 
 /// Maximum number of recent searches kept in memory for the command palette.
@@ -1292,6 +1308,10 @@ pub struct App {
     relaunch_after_exit: bool,
     /// Ensures `on_exit` spawns any update/relaunch helper at most once.
     update_dispatched: bool,
+    /// When the local library last changed while device sync is enabled.
+    sync_dirty_since: Option<Instant>,
+    /// Invalidates both inbound and outbound results after reconfiguration.
+    device_sync_generation: u64,
     views: Views,
 }
 
@@ -1319,6 +1339,7 @@ impl App {
         let browsers = account::installed_browsers();
         let mut settings =
             Settings::load(&dirs.settings()).context("could not safely load the settings")?;
+        settings.device_sync = settings.device_sync.clone().sanitized();
         // The quality eframe's storage kept before the settings file
         // existed moves over once.
         if !dirs.settings().exists()
@@ -1343,12 +1364,14 @@ impl App {
             library: Library::load(&dirs.library()).context("could not safely load the library")?,
             themes_dir: dirs.config.join("themes").display().to_string(),
             palette,
+            sync_port_draft: settings.device_sync.port.to_string(),
             settings,
             browser: browsers.first().copied().unwrap_or("chromium").to_owned(),
             browser_profiles: account::browser_profiles(),
             browsers,
             ..State::default()
         };
+        state.refresh_sync_addresses();
         let (player, surface) = match Mpv::new(
             ctx,
             state.settings.quality.limit(),
@@ -1420,8 +1443,26 @@ impl App {
             pending_update: None,
             relaunch_after_exit: false,
             update_dispatched: false,
+            sync_dirty_since: None,
+            device_sync_generation: 0,
             views,
         };
+        if app.state.settings.device_sync.enabled {
+            app.backend
+                .send(Command::SaveLibrary(Box::new(app.state.library.clone())));
+        }
+        app.configure_device_sync();
+        if app.state.settings.device_sync.enabled
+            && !app
+                .state
+                .settings
+                .device_sync
+                .peer_address
+                .trim()
+                .is_empty()
+        {
+            app.sync_devices_now(false);
+        }
         app.set_alerts_timer();
         app.refresh_theme_list();
         if let (Some(version), Some(changelog)) = (
@@ -1629,6 +1670,31 @@ impl App {
                 auto,
                 result,
             } => self.on_update_installed(release, auto, result),
+            Event::CheckDeviceSync { generation } => {
+                if self.device_sync_is_current(generation) {
+                    self.sync_devices_now(false);
+                }
+            }
+            Event::DeviceSyncIncoming {
+                generation,
+                snapshot,
+            } => {
+                if self.device_sync_is_current(generation) {
+                    self.apply_sync_snapshot(*snapshot);
+                    if !matches!(self.state.sync_status, SyncStatus::Syncing) {
+                        self.state.sync_status = SyncStatus::Synced(util::now());
+                    }
+                }
+            }
+            Event::DeviceSyncCompleted {
+                generation,
+                result,
+                manual,
+            } => {
+                if self.device_sync_is_current(generation) {
+                    self.on_device_sync_completed(result, manual);
+                }
+            }
         }
     }
 
@@ -1912,12 +1978,16 @@ impl App {
                     if paused {
                         self.state.cast.resume_local_playback();
                         self.show_playing();
+                    } else {
+                        self.remember_position();
                     }
                     self.with_player(|player| player.set_paused(!paused));
                 }
             }
             Action::SetPaused(paused) => {
-                if !paused {
+                if paused {
+                    self.remember_position();
+                } else {
                     self.state.cast.resume_local_playback();
                     self.show_playing();
                 }
@@ -2342,6 +2412,24 @@ impl App {
                     self.save_settings();
                 }
             }
+            Action::SetDeviceSyncEnabled(enabled) => self.set_device_sync_enabled(enabled),
+            Action::SetDeviceSyncPeer(peer) => self.set_device_sync_peer(peer),
+            Action::SetDeviceSyncKey(key) => self.set_device_sync_key(key),
+            Action::GenerateDeviceSyncKey => self.generate_device_sync_key(),
+            Action::CopySyncKey => {
+                let key = self.state.settings.device_sync.pairing_key.trim();
+                if !key.is_empty() {
+                    ctx.copy_text(key.to_owned());
+                    self.state.notice = Some("Pairing key copied".to_owned());
+                }
+            }
+            Action::CopySyncAddress(addr) => {
+                ctx.copy_text(addr);
+                self.state.notice = Some("Address copied".to_owned());
+            }
+            Action::SetDeviceSyncPort(port) => self.set_device_sync_port(port),
+            Action::SetDeviceSyncEvery(minutes) => self.set_device_sync_every(minutes),
+            Action::SyncDevicesNow => self.sync_devices_now(true),
         }
     }
 
@@ -2443,10 +2531,16 @@ impl App {
         }
     }
 
-    fn save_library(&self) {
+    fn save_library(&mut self) {
         self.library_revision.set(self.library_revision.get() + 1);
         self.backend
-            .send(Command::SaveLibrary(self.state.library.clone()));
+            .send(Command::SaveLibrary(Box::new(self.state.library.clone())));
+        if self.state.settings.device_sync.enabled {
+            self.sync_dirty_since = Some(Instant::now());
+            self.backend
+                .context()
+                .request_repaint_after(device_sync::SYNC_DEBOUNCE);
+        }
     }
 
     fn save_settings(&self) {
@@ -2520,6 +2614,7 @@ impl eframe::App for App {
         self.playback_tick(ctx);
         self.prefetch_playlist();
         self.suggest_tick(ctx);
+        self.device_sync_tick();
         // The volume, once it has stayed still for a moment.
         if self
             .volume_changed
@@ -2610,6 +2705,7 @@ mod accounts;
 mod action;
 pub mod cast;
 pub mod dearrow;
+mod device_sync;
 mod history_sync;
 pub mod images;
 mod loading;

@@ -94,8 +94,66 @@ impl PlaybackBuffer {
     }
 }
 
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DeviceSync {
+    pub enabled: bool,
+    pub port: u16,
+    pub peer_address: String,
+    pub pairing_key: String,
+    pub every_minutes: u32,
+}
+
+impl std::fmt::Debug for DeviceSync {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeviceSync")
+            .field("enabled", &self.enabled)
+            .field("port", &self.port)
+            .field("every_minutes", &self.every_minutes)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Default for DeviceSync {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: crate::sync::DEFAULT_SYNC_PORT,
+            peer_address: String::new(),
+            pairing_key: String::new(),
+            every_minutes: 15,
+        }
+    }
+}
+
+impl DeviceSync {
+    pub fn sanitized(mut self) -> Self {
+        if self.port < crate::sync::MIN_SYNC_PORT {
+            self.port = crate::sync::DEFAULT_SYNC_PORT;
+        }
+        self.peer_address = truncate_chars(
+            self.peer_address.trim(),
+            crate::sync::MAX_PEER_ADDRESS_CHARS,
+        )
+        .to_owned();
+        self.pairing_key =
+            truncate_chars(self.pairing_key.trim(), crate::sync::MAX_PAIRING_KEY_CHARS).to_owned();
+        self.every_minutes = clamp_alerts_every(self.every_minutes);
+        self
+    }
+}
+
+fn truncate_chars(input: &str, max_chars: usize) -> &str {
+    input
+        .char_indices()
+        .nth(max_chars)
+        .map_or(input, |(end, _)| &input[..end])
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
+    #[serde(default)]
+    pub device_sync: DeviceSync,
     /// The interface language; older settings start in English too.
     #[serde(default)]
     pub language: youtfast_i18n::Locale,
@@ -364,6 +422,7 @@ pub fn clamp_alerts_every(minutes: u32) -> u32 {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            device_sync: DeviceSync::default(),
             language: youtfast_i18n::Locale::default(),
             interface_font: youtfast_appearance::theme::InterfaceFont::default(),
             history_sync: HistorySync::default(),
@@ -977,5 +1036,46 @@ mod tests {
         };
         let json = serde_json::to_string(&enabled).unwrap();
         assert_eq!(serde_json::from_str::<Settings>(&json).unwrap(), enabled);
+    }
+
+    #[test]
+    fn device_sync_defaults_for_old_files_and_sanitizes_fields() {
+        let old: Settings = serde_json::from_str(r#"{"volume": 40.0}"#).unwrap();
+        assert_eq!(old.device_sync, DeviceSync::default());
+        assert!(!old.device_sync.enabled);
+        assert_eq!(old.device_sync.port, crate::sync::DEFAULT_SYNC_PORT);
+        assert_eq!(old.device_sync.every_minutes, 15);
+
+        let sanitized = DeviceSync {
+            enabled: true,
+            port: 80,
+            peer_address: format!("  {}  ", "a".repeat(300)),
+            pairing_key: format!("  {}  ", "b".repeat(200)),
+            every_minutes: 42,
+        }
+        .sanitized();
+        assert_eq!(sanitized.port, crate::sync::DEFAULT_SYNC_PORT);
+        assert_eq!(
+            sanitized.peer_address.chars().count(),
+            crate::sync::MAX_PEER_ADDRESS_CHARS
+        );
+        assert_eq!(
+            sanitized.pairing_key.chars().count(),
+            crate::sync::MAX_PAIRING_KEY_CHARS
+        );
+        assert_eq!(sanitized.every_minutes, 30);
+
+        let settings = Settings {
+            device_sync: DeviceSync {
+                enabled: true,
+                port: 40000,
+                peer_address: "100.64.0.2:40000".into(),
+                pairing_key: crate::sync::generate_pairing_key(),
+                every_minutes: 5,
+            },
+            ..Settings::default()
+        };
+        let json = serde_json::to_string(&settings).unwrap();
+        assert_eq!(serde_json::from_str::<Settings>(&json).unwrap(), settings);
     }
 }

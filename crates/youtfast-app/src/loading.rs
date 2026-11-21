@@ -232,7 +232,7 @@ impl State {
 
     /// Account recommendations are filtered at display time; local ranking and
     /// any pending request's fallback take filters as inputs.
-    fn clear_local_for_you(&mut self) -> bool {
+    pub(super) fn clear_local_for_you(&mut self) -> bool {
         if self.for_you_from_account && matches!(self.for_you, Listing::Ready(_)) {
             return false;
         }

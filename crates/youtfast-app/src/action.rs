@@ -278,4 +278,22 @@ pub enum Action {
     UnblockChannel(String),
     /// Toggles hiding watched videos on Home and Subscriptions.
     SetHideWatched(bool),
+    /// Enables or disables direct peer-to-peer device library sync.
+    SetDeviceSyncEnabled(bool),
+    /// Updates the peer device's Tailscale, NetBird, or local network address.
+    SetDeviceSyncPeer(String),
+    /// Updates the shared pairing key for device sync.
+    SetDeviceSyncKey(String),
+    /// Generates a fresh random pairing key for device sync.
+    GenerateDeviceSyncKey,
+    /// Copies the device sync pairing key to the clipboard.
+    CopySyncKey,
+    /// Copies a detected local sync address (`ip:port`) to the clipboard.
+    CopySyncAddress(String),
+    /// Sets the local TCP port used by the device sync listener.
+    SetDeviceSyncPort(u16),
+    /// Sets the automatic device sync interval in minutes.
+    SetDeviceSyncEvery(u32),
+    /// Immediately triggers a manual peer library sync.
+    SyncDevicesNow,
 }

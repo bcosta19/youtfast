@@ -2156,3 +2156,99 @@ msgstr "Transcrição"
 
 msgid "Loop"
 msgstr "Repetir"
+
+msgid "Device sync"
+msgstr "Sincronização entre dispositivos"
+
+msgid "Sync your device subscriptions, watch history with resume positions, Watch later, device playlists, hidden videos, and blocked channels directly between your computers over Tailscale, NetBird, or your local network. Accounts and sessions are never shared."
+msgstr "Sincronize suas inscrições do dispositivo, o histórico de exibição com posições de retomada, Assistir mais tarde, playlists do dispositivo, vídeos ocultos e canais bloqueados diretamente entre seus computadores pelo Tailscale, NetBird ou rede local. Contas e sessões nunca são compartilhadas."
+
+msgid "No active Tailscale, NetBird, or local network address found."
+msgstr "Nenhum endereço ativo do Tailscale, NetBird ou rede local encontrado."
+
+msgid "Copy address"
+msgstr "Copiar endereço"
+
+msgid "Address copied"
+msgstr "Endereço copiado"
+
+msgid "Pairing key"
+msgstr "Chave de pareamento"
+
+msgid "Generate a key on one device and copy it to the other."
+msgstr "Gere uma chave em um dispositivo e copie-a para o outro."
+
+msgid "Copy key"
+msgstr "Copiar chave"
+
+msgid "Pairing key copied"
+msgstr "Chave de pareamento copiada"
+
+msgid "New key"
+msgstr "Nova chave"
+
+msgid "Other device address"
+msgstr "Endereço do outro dispositivo"
+
+msgid "Enter the other computer's Tailscale, NetBird, or local IP address (for example, 100.64.0.2:38452)."
+msgstr "Informe o endereço IP do outro computador no Tailscale, NetBird ou na rede local (por exemplo, 100.64.0.2:38452)."
+
+msgid "Listen port"
+msgstr "Porta de escuta"
+
+msgid "TCP port on this computer for incoming device sync requests (1024–65535)."
+msgstr "Porta TCP neste computador para receber solicitações de sincronização (1024–65535)."
+
+msgid "Sync every"
+msgstr "Sincronizar a cada"
+
+msgid "Time between automatic sync checks."
+msgstr "Intervalo entre verificações automáticas de sincronização."
+
+msgid "Sync status"
+msgstr "Status da sincronização"
+
+msgid "Ready to sync."
+msgstr "Pronto para sincronizar."
+
+msgid "Syncing…"
+msgstr "Sincronizando…"
+
+msgid "Devices synced."
+msgstr "Dispositivos sincronizados."
+
+msgid "Last synced {ago}"
+msgstr "Última sincronização {ago}"
+
+msgid "Sync now"
+msgstr "Sincronizar agora"
+
+msgid "Sync devices now"
+msgstr "Sincronizar dispositivos agora"
+
+msgid "Generate a new pairing key and copy it to both devices."
+msgstr "Gere uma nova chave de pareamento e copie-a para os dois dispositivos."
+
+msgid "Enter the other device's Tailscale, NetBird, or local network address."
+msgstr "Informe o endereço do outro dispositivo no Tailscale, NetBird ou rede local."
+
+msgid "Device sync only connects to private network, Tailscale, or NetBird addresses."
+msgstr "A sincronização entre dispositivos só se conecta a endereços de rede privada, Tailscale ou NetBird."
+
+msgid "Could not reach the other device. Check that YouTFast is open with Device sync enabled and that both devices are on the same Tailscale, NetBird, or local network."
+msgstr "Não foi possível alcançar o outro dispositivo. Verifique se o YouTFast está aberto com a sincronização entre dispositivos ativada e se os dois dispositivos estão na mesma rede Tailscale, NetBird ou local."
+
+msgid "The other device rejected the pairing key. Check that both devices use the same key."
+msgstr "O outro dispositivo rejeitou a chave de pareamento. Verifique se os dois dispositivos usam a mesma chave."
+
+msgid "The other device uses an incompatible sync version. Update YouTFast on both devices."
+msgstr "O outro dispositivo usa uma versão de sincronização incompatível. Atualize o YouTFast nos dois dispositivos."
+
+msgid "The library exceeds the 64 MiB sync limit."
+msgstr "A biblioteca ultrapassa o limite de sincronização de 64 MiB."
+
+msgid "Could not read the sync response from the other device."
+msgstr "Não foi possível ler a resposta de sincronização do outro dispositivo."
+
+msgid "Could not start the device sync listener on the selected port."
+msgstr "Não foi possível iniciar o servidor de sincronização na porta selecionada."

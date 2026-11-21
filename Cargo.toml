@@ -115,6 +115,8 @@ ehttp = "0.7"
 ureq = "3"
 # The window's icon, drawn from packaging/icons as in ZapFast.
 resvg = { version = "0.45", default-features = false }
+# Device sync authenticates a shared key and encrypts snapshots with Noise.
+snow = { version = "0.10", default-features = false, features = ["std", "use-chacha20poly1305", "use-curve25519", "use-getrandom", "use-sha2"] }
 # SponsorBlock's lookups name a prefix of the video id's SHA-256, not the id.
 sha2 = "0.11"
 # InnerTube's SAPISIDHASH authorization header is SHA-1 over

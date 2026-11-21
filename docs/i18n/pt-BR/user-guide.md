@@ -361,6 +361,23 @@ sessões nunca são exportadas. **Exportar inscrições** grava as inscrições 
 dispositivo como um arquivo OPML 2.0 (`youtfast-subscriptions.opml`) com a URL
 do feed RSS de cada canal no YouTube via **Exportar OPML**.
 
+**Sincronização entre dispositivos**, em **Configurações → Histórico**, conecta
+dois computadores seus diretamente pelo Tailscale, NetBird ou por uma rede local
+privada para mesclar inscrições do dispositivo, histórico de exibição (incluindo
+posições de retomada), Assistir mais tarde, playlists do dispositivo, vídeos
+ocultos e canais bloqueados. Em um computador, selecione **Nova chave**, depois
+**Copiar chave**, e cole-a em **Chave de pareamento** no outro. Os dispositivos
+verificam se usam a mesma chave e criptografam a conexão antes de enviar dados
+da biblioteca. Informe o endereço do outro computador em **Endereço do outro
+dispositivo** (como `100.64.0.2:38452`) e
+ajuste **Porta de escuta** (TCP `1024`–`65535`, padrão `38452`) ou **Sincronizar
+a cada** se necessário. Endereços IP públicos são recusados, e contas do
+YouTube, sessões, horários de alertas e configurações permanecem em cada
+computador. Inicie uma sincronização imediata com **Sincronizar agora** ou
+**Sincronizar dispositivos agora** na paleta de comandos. Se você testou uma
+versão preliminar da sincronização, atualize os dois computadores e gere uma
+nova chave.
+
 **Sincronização do histórico**, em Configurações → Histórico, vale enquanto há
 uma conta conectada:
 

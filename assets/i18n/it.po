@@ -2118,3 +2118,99 @@ msgstr "Trascrizione"
 
 msgid "Loop"
 msgstr "Ripeti"
+
+msgid "Device sync"
+msgstr "Sincronizzazione dispositivi"
+
+msgid "Sync your device subscriptions, watch history with resume positions, Watch later, device playlists, hidden videos, and blocked channels directly between your computers over Tailscale, NetBird, or your local network. Accounts and sessions are never shared."
+msgstr "Sincronizza le iscrizioni del dispositivo, la cronologia con le posizioni di ripresa, Guarda più tardi, le playlist del dispositivo, i video nascosti e i canali bloccati direttamente tra i tuoi computer tramite Tailscale, NetBird o rete locale. Account e sessioni non vengono mai condivisi."
+
+msgid "No active Tailscale, NetBird, or local network address found."
+msgstr "Nessun indirizzo Tailscale, NetBird o di rete locale attivo trovato."
+
+msgid "Copy address"
+msgstr "Copia indirizzo"
+
+msgid "Address copied"
+msgstr "Indirizzo copiato"
+
+msgid "Pairing key"
+msgstr "Chiave di abbinamento"
+
+msgid "Generate a key on one device and copy it to the other."
+msgstr "Genera una chiave su un dispositivo e copiala sull'altro."
+
+msgid "Copy key"
+msgstr "Copia chiave"
+
+msgid "Pairing key copied"
+msgstr "Chiave di abbinamento copiata"
+
+msgid "New key"
+msgstr "Nuova chiave"
+
+msgid "Other device address"
+msgstr "Indirizzo dell'altro dispositivo"
+
+msgid "Enter the other computer's Tailscale, NetBird, or local IP address (for example, 100.64.0.2:38452)."
+msgstr "Inserisci l'indirizzo IP Tailscale, NetBird o locale dell'altro computer (ad esempio, 100.64.0.2:38452)."
+
+msgid "Listen port"
+msgstr "Porta di ascolto"
+
+msgid "TCP port on this computer for incoming device sync requests (1024–65535)."
+msgstr "Porta TCP su questo computer per le richieste in ingresso di sincronizzazione dispositivi (1024–65535)."
+
+msgid "Sync every"
+msgstr "Sincronizza ogni"
+
+msgid "Time between automatic sync checks."
+msgstr "Intervallo tra i controlli automatici di sincronizzazione."
+
+msgid "Sync status"
+msgstr "Stato sincronizzazione"
+
+msgid "Ready to sync."
+msgstr "Pronto per la sincronizzazione."
+
+msgid "Syncing…"
+msgstr "Sincronizzazione in corso…"
+
+msgid "Devices synced."
+msgstr "Dispositivi sincronizzati."
+
+msgid "Last synced {ago}"
+msgstr "Ultima sincronizzazione {ago}"
+
+msgid "Sync now"
+msgstr "Sincronizza ora"
+
+msgid "Sync devices now"
+msgstr "Sincronizza dispositivi ora"
+
+msgid "Generate a new pairing key and copy it to both devices."
+msgstr "Genera una nuova chiave di abbinamento e copiala su entrambi i dispositivi."
+
+msgid "Enter the other device's Tailscale, NetBird, or local network address."
+msgstr "Inserisci l'indirizzo Tailscale, NetBird o di rete locale dell'altro dispositivo."
+
+msgid "Device sync only connects to private network, Tailscale, or NetBird addresses."
+msgstr "La sincronizzazione dispositivi si connette solo a indirizzi di rete privata, Tailscale o NetBird."
+
+msgid "Could not reach the other device. Check that YouTFast is open with Device sync enabled and that both devices are on the same Tailscale, NetBird, or local network."
+msgstr "Impossibile raggiungere l'altro dispositivo. Verifica che YouTFast sia aperto con la sincronizzazione dispositivi attiva e che entrambi i dispositivi siano sulla stessa rete Tailscale, NetBird o locale."
+
+msgid "The other device rejected the pairing key. Check that both devices use the same key."
+msgstr "L'altro dispositivo ha rifiutato la chiave di abbinamento. Verifica che entrambi i dispositivi utilizzino la stessa chiave."
+
+msgid "The other device uses an incompatible sync version. Update YouTFast on both devices."
+msgstr "L'altro dispositivo utilizza una versione di sincronizzazione incompatibile. Aggiorna YouTFast su entrambi i dispositivi."
+
+msgid "The library exceeds the 64 MiB sync limit."
+msgstr "La raccolta supera il limite di sincronizzazione di 64 MiB."
+
+msgid "Could not read the sync response from the other device."
+msgstr "Impossibile leggere la risposta di sincronizzazione dall'altro dispositivo."
+
+msgid "Could not start the device sync listener on the selected port."
+msgstr "Impossibile avviare l'ascolto della sincronizzazione dispositivi sulla porta selezionata."

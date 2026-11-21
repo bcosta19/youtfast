@@ -15,9 +15,11 @@ youtfast-i18n.workspace = true
 anyhow.workspace = true
 directories.workspace = true
 fastframe-theme.workspace = true
+if-addrs.workspace = true
 jiff.workspace = true
 keyring-core.workspace = true
 log.workspace = true
+rand.workspace = true
 serde = { workspace = true, features = ["rc"] }
 serde_json.workspace = true
 tokio.workspace = true

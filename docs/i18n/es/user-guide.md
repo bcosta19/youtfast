@@ -373,6 +373,23 @@ suscripciones del dispositivo como un archivo OPML 2.0
 (`youtfast-subscriptions.opml`) con la URL del feed RSS de cada canal en YouTube
 mediante **Exportar OPML**.
 
+**Sincronización entre dispositivos**, en **Configuración → Historial**, conecta
+dos de tus ordenadores directamente mediante Tailscale, NetBird o una red local
+privada para combinar suscripciones del dispositivo, historial de
+reproducciones (incluidas las posiciones de reanudación), Ver más tarde, listas
+del dispositivo, vídeos ocultos y canales bloqueados. En un ordenador,
+selecciona **Nueva clave**, luego **Copiar clave**, y pégala en **Clave de
+emparejamiento** en el otro. Los dispositivos verifican que comparten la clave
+y cifran la conexión antes de enviar datos de la biblioteca. Introduce la
+dirección del otro ordenador en **Dirección del otro dispositivo**
+(por ejemplo, `100.64.0.2:38452`) y ajusta **Puerto de escucha** (TCP
+`1024`–`65535`, predeterminado `38452`) o **Sincronizar cada** si hace falta. Se
+rechazan las direcciones IP públicas, y las cuentas de YouTube, sesiones, marcas
+de tiempo de alertas y ajustes permanecen en cada ordenador. Inicia una
+sincronización inmediata con **Sincronizar ahora** o **Sincronizar dispositivos
+ahora** en la paleta de comandos. Si probaste una versión preliminar de la
+sincronización, actualiza ambos ordenadores y genera una clave nueva.
+
 **History sync** (sincronización del historial), en Configuración → Historial, se aplica con la sesión iniciada:
 
 - **Separate** (separado; la opción predeterminada) mantiene separadas las listas de Cuenta y Este dispositivo.

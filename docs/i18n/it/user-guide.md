@@ -365,6 +365,23 @@ iscrizioni** salva le iscrizioni del dispositivo come file OPML 2.0
 (`youtfast-subscriptions.opml`) con l'URL del feed RSS YouTube di ogni canale
 tramite **Esporta OPML**.
 
+**Sincronizzazione dispositivi** in **Impostazioni → Cronologia** collega
+direttamente due tuoi computer tramite Tailscale, NetBird o una rete locale
+privata per unire iscrizioni del dispositivo, cronologia delle visualizzazioni
+(comprese le posizioni di ripresa), Guarda più tardi, playlist del dispositivo,
+video nascosti e canali bloccati. Su un computer seleziona **Nuova chiave**,
+poi **Copia chiave** e incollala nella **Chiave di abbinamento** dell'altro.
+I dispositivi verificano di condividere la stessa chiave e cifrano la connessione
+prima di inviare dati della raccolta. Inserisci l'indirizzo dell'altro computer
+in **Indirizzo dell'altro dispositivo** (ad esempio
+`100.64.0.2:38452`) e regola **Porta di ascolto** (TCP `1024`–`65535`,
+predefinita `38452`) o **Sincronizza ogni** se necessario. Gli indirizzi IP
+pubblici vengono rifiutati, mentre account YouTube, sessioni, orari degli avvisi
+e impostazioni restano su ciascun computer. Avvia una sincronizzazione immediata
+con **Sincronizza ora** o **Sincronizza dispositivi ora** nella palette dei
+comandi. Se hai provato una versione preliminare della sincronizzazione,
+aggiorna entrambi i computer e genera una nuova chiave.
+
 **History sync** (sincronizzazione della cronologia) in Impostazioni → Cronologia si
 applica quando hai effettuato l'accesso:
 

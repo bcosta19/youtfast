@@ -325,6 +325,20 @@ exported. **Export subscriptions** writes your device subscriptions as an OPML
 2.0 file (`youtfast-subscriptions.opml`) with each channel's YouTube RSS feed
 URL via **Export OPML**.
 
+**Device sync** under **Settings → History** connects two of your computers
+directly over Tailscale, NetBird, or a private local network to merge device
+subscriptions, watch history (including resume positions), Watch later, device
+playlists, hidden videos, and blocked channels. On one computer, select
+**New key**, then **Copy key**, and paste it into **Pairing key** on the other.
+The devices verify that they share the key and encrypt the connection before
+sending any library data. Enter the other computer's address in **Other device
+address** (such as `100.64.0.2:38452`), and adjust
+**Listen port** (TCP `1024`–`65535`, default `38452`) or **Sync every** if
+needed. Public IP addresses are refused, and YouTube accounts, sessions,
+alert timestamps, and settings stay on each computer. Trigger an immediate sync
+with **Sync now** or **Sync devices now** in the command palette. If you tested
+an earlier preview of device sync, update both computers and generate a new key.
+
 **History sync** in Settings → History applies while signed in:
 
 - **Separate** (the default) keeps the Account and This device lists separate.

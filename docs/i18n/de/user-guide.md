@@ -380,6 +380,24 @@ bis zu 20.000 eindeutige Abos, die 1.000 neuesten Verlaufseinträge und 5.000
 exportieren** schreibt Ihre Geräte-Abos über **OPML exportieren** als OPML-2.0-Datei
 (`youtfast-subscriptions.opml`) mit der YouTube-RSS-Feed-URL jedes Kanals.
 
+**Gerätesynchronisierung** unter **Einstellungen → Verlauf** verbindet zwei
+Ihrer Computer direkt über Tailscale, NetBird oder ein privates lokales Netzwerk,
+um Geräte-Abos, Wiedergabeverlauf (einschließlich Fortsetzungspositionen),
+Später ansehen, Geräte-Playlists, ausgeblendete Videos und blockierte Kanäle
+zusammenzuführen. Wählen Sie auf einem Computer **Neuer Schlüssel**, dann
+**Schlüssel kopieren** und fügen Sie ihn auf dem anderen Computer unter
+**Kopplungsschlüssel** ein. Die Geräte prüfen den gemeinsamen Schlüssel und
+verschlüsseln die Verbindung, bevor sie Bibliotheksdaten senden. Tragen Sie
+die Adresse des anderen Computers unter **Adresse des anderen Geräts** ein (zum
+Beispiel `100.64.0.2:38452`) und passen Sie bei Bedarf **Empfangsport** (TCP
+`1024`–`65535`, Standard `38452`) oder **Synchronisieren alle** an. Öffentliche
+IP-Adressen werden abgelehnt; YouTube-Konten, Sitzungen, Benachrichtigungszeiten
+und Einstellungen bleiben auf jedem Computer lokal. Mit **Jetzt
+synchronisieren** oder **Geräte jetzt synchronisieren** in der Befehlspalette
+stoßen Sie sofort einen Abgleich an. Falls Sie eine frühere Vorschau dieser
+Funktion getestet haben, aktualisieren Sie beide Computer und erstellen Sie
+einen neuen Schlüssel.
+
 **History sync** (Verlaufssynchronisierung) unter Einstellungen → Verlauf gilt, solange Sie
 angemeldet sind:
 
