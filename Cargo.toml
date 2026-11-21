@@ -124,7 +124,7 @@ sha1 = "0.10"
 # protobuf messages.
 base64 = "0.22"
 # Channel feeds are Atom XML (`innertube::rss`).
-roxmltree = "0.20"
+roxmltree = "0.21"
 # InnerTube's HTTP client checks certificates through the operating system
 # (`innertube::http`): a fresh Windows keeps few roots and fetches the rest
 # only when its own verifier asks.
