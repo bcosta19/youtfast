@@ -12,6 +12,10 @@ use std::collections::{HashMap, HashSet};
 
 use youtfast_core::model::{Channel, Video};
 use youtfast_storage::library::{Library, Watched};
+use youtfast_storage::settings::{
+    RecommendationChannels, RecommendationDuration, RecommendationPriority, Recommendations,
+    recommendation_terms,
+};
 
 /// How many watched videos seed the list: each costs a details request.
 pub const SEEDS: usize = 12;
@@ -143,17 +147,25 @@ pub fn taste_for_library(library: &Library) -> Taste {
 /// The ranked list from each seed's weight and its related videos, in
 /// YouTube's order.
 pub fn rank(related: &[(f64, Vec<Video>)], taste: &Taste) -> Vec<Video> {
+    rank_with(related, taste, &Recommendations::default(), 0)
+}
+
+pub fn rank_with(
+    related: &[(f64, Vec<Video>)],
+    taste: &Taste,
+    preferences: &Recommendations,
+    now: i64,
+) -> Vec<Video> {
+    let muted: Vec<_> = recommendation_terms(&preferences.muted)
+        .map(str::to_lowercase)
+        .collect();
+    let interests: Vec<_> = recommendation_terms(&preferences.interests)
+        .map(str::to_lowercase)
+        .collect();
     let mut scores: HashMap<String, (f64, Video)> = HashMap::new();
     for (weight, videos) in related {
         for (place, video) in videos.iter().enumerate() {
-            if video.short
-                || taste.watched.contains(&video.id)
-                || taste.hidden_videos.contains(&video.id)
-                || video
-                    .channel_id
-                    .as_deref()
-                    .is_some_and(|id| taste.blocked_channels.contains(id))
-            {
+            if !is_candidate(video, taste, preferences.duration, &muted) {
                 continue;
             }
             let score = weight / (1.0 + place as f64 * 0.15);
@@ -166,17 +178,106 @@ pub fn rank(related: &[(f64, Vec<Video>)], taste: &Taste) -> Vec<Video> {
     let mut ranked: Vec<(f64, Video)> = scores
         .into_values()
         .map(|(score, video)| {
-            let liked = video
-                .channel_id
-                .as_ref()
-                .and_then(|channel| taste.channels.get(channel))
-                .copied()
-                .unwrap_or(0.0);
-            (score * (1.0 + 0.5 * liked), video)
+            let bonus = channel_bonus(&video, taste, preferences.channels)
+                + topic_bonus(&video, &interests)
+                + priority_bonus(&video, preferences.priority, now);
+            (score * (1.0 + bonus), video)
         })
         .collect();
     ranked.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.id.cmp(&b.1.id)));
+    if preferences.channels == RecommendationChannels::Discover {
+        let mut channels = HashSet::new();
+        ranked.retain(|(_, video)| {
+            video
+                .channel_id
+                .as_ref()
+                .is_none_or(|id| channels.insert(id.clone()))
+        });
+        return ranked
+            .into_iter()
+            .take(KEPT)
+            .map(|(_, video)| video)
+            .collect();
+    }
     spread(ranked.into_iter().map(|(_, video)| video).collect())
+}
+
+fn matches_terms(text: &str, terms: &[String]) -> bool {
+    !terms.is_empty() && {
+        let lower = text.to_lowercase();
+        terms.iter().any(|term| lower.contains(term))
+    }
+}
+
+fn is_candidate(
+    video: &Video,
+    taste: &Taste,
+    duration: RecommendationDuration,
+    muted: &[String],
+) -> bool {
+    !video.short
+        && matches_duration(video, duration)
+        && !matches_terms(&video.title, muted)
+        && !taste.watched.contains(&video.id)
+        && !taste.hidden_videos.contains(&video.id)
+        && !video
+            .channel_id
+            .as_deref()
+            .is_some_and(|id| taste.blocked_channels.contains(id))
+}
+
+fn channel_bonus(video: &Video, taste: &Taste, channels: RecommendationChannels) -> f64 {
+    let liked = video
+        .channel_id
+        .as_ref()
+        .and_then(|channel| taste.channels.get(channel))
+        .copied()
+        .unwrap_or(0.0);
+    match channels {
+        RecommendationChannels::Balanced => 0.5 * liked,
+        RecommendationChannels::Discover if video.channel_id.is_some() && liked == 0.0 => 0.5,
+        RecommendationChannels::Discover => 0.0,
+        RecommendationChannels::Familiar => liked,
+    }
+}
+
+fn topic_bonus(video: &Video, interests: &[String]) -> f64 {
+    let matched = matches_terms(&video.title, interests)
+        || video
+            .channel
+            .as_deref()
+            .is_some_and(|channel| matches_terms(channel, interests));
+    if matched { 0.5 } else { 0.0 }
+}
+
+fn matches_duration(video: &Video, duration: RecommendationDuration) -> bool {
+    let Some(seconds) = video
+        .duration
+        .filter(|&seconds| !video.live && seconds.is_finite() && seconds > 0.0)
+    else {
+        return duration == RecommendationDuration::Any;
+    };
+    match duration {
+        RecommendationDuration::Any => true,
+        RecommendationDuration::Short => seconds < 300.0,
+        RecommendationDuration::Medium => (300.0..=1200.0).contains(&seconds),
+        RecommendationDuration::Long => seconds > 1200.0,
+    }
+}
+
+fn priority_bonus(video: &Video, priority: RecommendationPriority, now: i64) -> f64 {
+    match priority {
+        RecommendationPriority::Balanced => 0.0,
+        RecommendationPriority::Recent => video
+            .published_at
+            .filter(|&date| date <= now)
+            .map_or(0.0, |date| {
+                1.0 / (1.0 + now.saturating_sub(date) as f64 / (7.0 * 86_400.0))
+            }),
+        RecommendationPriority::FewerViews => video
+            .views
+            .map_or(0.0, |views| 1.0 / (1.0 + views as f64 / 10_000.0)),
+    }
 }
 
 /// The ranking with no channel taking more than [`PER_CHANNEL`] places of
@@ -293,6 +394,92 @@ mod tests {
             .map(|video| video.id)
             .collect();
         assert_eq!(ranked, ["x1", "x2", "x3"]);
+    }
+
+    #[test]
+    fn duration_and_muted_title_filter_before_ranking() {
+        let make = |id: &str, title: &str, duration| Video {
+            title: title.into(),
+            duration,
+            ..video(id, "UCa")
+        };
+        let related = [(
+            1.0,
+            vec![
+                make("muted", "ÁUDIO promocional", Some(600.0)),
+                make("unknown", "Unknown", None),
+                make("short", "Short", Some(299.0)),
+                make("five", "Five", Some(300.0)),
+                make("twenty", "Twenty", Some(1200.0)),
+                make("long", "Long", Some(1201.0)),
+            ],
+        )];
+        let preferences = Recommendations {
+            duration: RecommendationDuration::Medium,
+            muted: " , áudio , ".into(),
+            ..Recommendations::default()
+        };
+        let ids: Vec<_> = rank_with(&related, &Taste::default(), &preferences, 0)
+            .into_iter()
+            .map(|video| video.id)
+            .collect();
+        assert_eq!(ids, ["five", "twenty"]);
+    }
+
+    #[test]
+    fn discovery_and_familiarity_choose_different_channels() {
+        let related = [(
+            1.0,
+            vec![
+                video("known", "UCa"),
+                video("new1", "UCb"),
+                video("new2", "UCb"),
+            ],
+        )];
+        let taste = Taste {
+            channels: HashMap::from([("UCa".into(), 1.0)]),
+            ..Taste::default()
+        };
+        let mut preferences = Recommendations {
+            channels: RecommendationChannels::Discover,
+            ..Recommendations::default()
+        };
+        let ids: Vec<_> = rank_with(&related, &taste, &preferences, 0)
+            .into_iter()
+            .map(|video| video.id)
+            .collect();
+        assert_eq!(ids, ["new1", "known"]);
+        preferences.channels = RecommendationChannels::Familiar;
+        assert_eq!(rank_with(&related, &taste, &preferences, 0)[0].id, "known");
+    }
+
+    #[test]
+    fn interest_recency_and_low_view_bonuses_do_not_reward_missing_metadata() {
+        let now = 30 * 86_400;
+        let mut chosen = video("chosen", "UCb");
+        chosen.channel = Some("Tudo sobre CIÊNCIA".into());
+        chosen.published_at = Some(now - 86_400);
+        chosen.views = Some(200);
+        let related = [(1.0, vec![video("missing", "UCa"), chosen])];
+        for preferences in [
+            Recommendations {
+                interests: "ciência".into(),
+                ..Recommendations::default()
+            },
+            Recommendations {
+                priority: RecommendationPriority::Recent,
+                ..Recommendations::default()
+            },
+            Recommendations {
+                priority: RecommendationPriority::FewerViews,
+                ..Recommendations::default()
+            },
+        ] {
+            assert_eq!(
+                rank_with(&related, &Taste::default(), &preferences, now)[0].id,
+                "chosen"
+            );
+        }
     }
 
     #[test]

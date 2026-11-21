@@ -125,6 +125,7 @@ pub enum Request {
         account: bool,
         seeds: Vec<youtfast_logic::recommend::Seed>,
         taste: youtfast_logic::recommend::Taste,
+        preferences: youtfast_storage::settings::Recommendations,
     },
 }
 

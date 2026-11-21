@@ -2156,3 +2156,57 @@ msgstr "Transcrição"
 
 msgid "Loop"
 msgstr "Repetir"
+
+msgid "Local recommendation settings"
+msgstr "Preferências de recomendações locais"
+
+msgid "Use local ranking instead of YouTube recommendations"
+msgstr "Usar ranking local em vez das recomendações do YouTube"
+
+msgid "Duration"
+msgstr "Duração"
+
+msgid "Under 5 minutes"
+msgstr "Menos de 5 minutos"
+
+msgid "5–20 minutes"
+msgstr "5–20 minutos"
+
+msgid "Balanced"
+msgstr "Equilibrado"
+
+msgid "Discover new channels"
+msgstr "Descobrir canais novos"
+
+msgid "Favor familiar channels"
+msgstr "Priorizar canais conhecidos"
+
+msgid "Ranking priority"
+msgstr "Prioridade do ranking"
+
+msgid "Recent uploads"
+msgstr "Vídeos recentes"
+
+msgid "Fewer views"
+msgstr "Menos visualizações"
+
+msgid "Interests (comma-separated)"
+msgstr "Interesses (separados por vírgula)"
+
+msgid "Muted title terms (comma-separated)"
+msgstr "Termos silenciados no título (separados por vírgula)"
+
+msgid "Search YouTube for up to three interests when there is no eligible watch history"
+msgstr "Buscar até três interesses no YouTube quando não houver histórico elegível"
+
+msgid "Apply"
+msgstr "Aplicar"
+
+msgid "Reset to defaults"
+msgstr "Restaurar padrões"
+
+msgid "Ranked on this device"
+msgstr "Ordenado neste dispositivo"
+
+msgid "Watch a few videos or enable topic search to get recommendations"
+msgstr "Assista a alguns vídeos ou ative a busca por interesses para receber recomendações"

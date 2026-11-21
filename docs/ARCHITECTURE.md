@@ -232,6 +232,18 @@ Response-format fixtures belong in [`tests/youtube_api.rs`](../crates/youtfast-y
 and module tests; format-change records and live-check instructions live in
 [youtube-api-format.md](youtube-api-format.md).
 
+## Local recommendations
+
+Home requests account recommendations by default when signed in. The device
+feed is a fallback or an explicit choice. The app sends a settings snapshot
+with each request and invalidates the current For you generation when the
+preferences change. The backend supplies candidates and the current time;
+`youtfast-logic::recommend` filters and scores cards without I/O or metadata
+lookups. When no eligible history exists, an opt-in can send up to three
+configured interests to YouTube using a separate signed-out client. Muted terms
+are never sent. Settings and account recommendations are not synced by this
+feature.
+
 ## Persistence and account isolation
 
 ```mermaid

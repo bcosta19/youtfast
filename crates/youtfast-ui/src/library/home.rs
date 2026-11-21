@@ -11,6 +11,10 @@ use youtfast_appearance::icons::Icon;
 use youtfast_appearance::theme::{self, RADIUS};
 use youtfast_core::model::{FeedFilter, Fetch, Listing, Video, View};
 use youtfast_core::util;
+use youtfast_storage::settings::{
+    RecommendationChannels as Channels, RecommendationDuration as Duration,
+    RecommendationPriority as Priority, Recommendations,
+};
 
 pub fn home(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
@@ -21,7 +25,8 @@ pub fn home(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             && state.library.history.is_empty()
             && !state.signed_in()
             && state.account != AccountState::SigningIn;
-        if follows_nothing {
+        if follows_nothing && state.feed_filter != FeedFilter::ForYou {
+            feed_chips(ui, state, actions);
             results::centered(ui, |ui| {
                 ui.label(
                     RichText::new(tr(locale, "Your feed is empty").as_ref())
@@ -208,6 +213,7 @@ fn for_you(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
 
     feed_chips(ui, state, actions);
+    recommendation_controls(ui, state, actions);
     match &state.for_you {
         Listing::Idle => {}
         Listing::Loading => results::loading(ui, state, "recommendations"),
@@ -215,13 +221,21 @@ fn for_you(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         Listing::Ready(videos) if videos.is_empty() => results::nothing(
             ui,
             state,
-            tr(locale, "Watch a few videos to get recommendations here").as_ref(),
+            tr(
+                locale,
+                if !state.has_local_for_you_inputs() {
+                    "Watch a few videos or enable topic search to get recommendations"
+                } else {
+                    "No video matches this filter"
+                },
+            )
+            .as_ref(),
         ),
         Listing::Ready(_) => {
             let source = if state.for_you_from_account {
                 "Recommended by YouTube for your account"
             } else {
-                "Picked from videos related to what you watched"
+                "Ranked on this device"
             };
             ui.label(
                 RichText::new(tr(locale, source).as_ref())
@@ -274,6 +288,129 @@ fn for_you(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 });
         }
     }
+}
+
+fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+    egui::CollapsingHeader::new(tr(locale, "Local recommendation settings"))
+        .id_salt("local recommendation settings")
+        .show(ui, |ui| {
+            let id = ui.id().with("recommendation draft");
+            let saved = &state.settings.recommendations;
+            let mut draft = ui
+                .data_mut(|data| data.get_temp::<(Recommendations, Recommendations)>(id))
+                .filter(|(last_saved, _)| last_saved == saved)
+                .map_or_else(|| saved.clone(), |(_, draft)| draft);
+
+            if state.signed_in() {
+                ui.checkbox(
+                    &mut draft.prefer_local,
+                    tr(
+                        locale,
+                        "Use local ranking instead of YouTube recommendations",
+                    ),
+                );
+            }
+            ui.add_enabled_ui(
+                !state.signed_in() || draft.prefer_local || !state.for_you_from_account,
+                |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        recommendation_choice(
+                            ui,
+                            locale,
+                            "Duration",
+                            &mut draft.duration,
+                            &[
+                                (Duration::Any, "Any duration"),
+                                (Duration::Short, "Under 5 minutes"),
+                                (Duration::Medium, "5–20 minutes"),
+                                (Duration::Long, "Over 20 minutes"),
+                            ],
+                        );
+                        recommendation_choice(
+                            ui,
+                            locale,
+                            "Channels",
+                            &mut draft.channels,
+                            &[
+                                (Channels::Balanced, "Balanced"),
+                                (Channels::Discover, "Discover new channels"),
+                                (Channels::Familiar, "Favor familiar channels"),
+                            ],
+                        );
+                        recommendation_choice(
+                            ui,
+                            locale,
+                            "Ranking priority",
+                            &mut draft.priority,
+                            &[
+                                (Priority::Balanced, "Balanced"),
+                                (Priority::Recent, "Recent uploads"),
+                                (Priority::FewerViews, "Fewer views"),
+                            ],
+                        );
+                    });
+                    for (label, value) in [
+                        ("Interests (comma-separated)", &mut draft.interests),
+                        ("Muted title terms (comma-separated)", &mut draft.muted),
+                    ] {
+                        let label = ui.label(tr(locale, label));
+                        ui.add(
+                            egui::TextEdit::singleline(value).char_limit(Recommendations::MAX_TEXT),
+                        )
+                        .labelled_by(label.id);
+                    }
+                    ui.checkbox(
+                        &mut draft.search_interests,
+                        tr(
+                            locale,
+                            "Search YouTube for up to three interests when there is no eligible watch history",
+                        ),
+                    );
+                },
+            );
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled(draft != *saved, egui::Button::new(tr(locale, "Apply")))
+                    .clicked()
+                {
+                    actions.push(Action::SetRecommendations(draft.clone()));
+                }
+                let defaults = Recommendations::default();
+                if ui
+                    .add_enabled(
+                        draft != defaults || *saved != defaults,
+                        egui::Button::new(tr(locale, "Reset to defaults")),
+                    )
+                    .clicked()
+                {
+                    draft = defaults;
+                    actions.push(Action::SetRecommendations(draft.clone()));
+                }
+            });
+            ui.data_mut(|data| data.insert_temp(id, (saved.clone(), draft)));
+        });
+    ui.add_space(8.0);
+}
+
+fn recommendation_choice<T: Copy + PartialEq>(
+    ui: &mut Ui,
+    locale: youtfast_i18n::Locale,
+    label: &'static str,
+    current: &mut T,
+    choices: &[(T, &'static str)],
+) {
+    let selected = choices
+        .iter()
+        .find(|(value, _)| value == current)
+        .map_or("", |(_, label)| *label);
+    egui::ComboBox::new(label, tr(locale, label))
+        .selected_text(tr(locale, selected))
+        .show_ui(ui, |ui| {
+            for &(value, label) in choices {
+                ui.selectable_value(current, value, tr(locale, label));
+            }
+        });
 }
 
 /// One card of the feed's grid.

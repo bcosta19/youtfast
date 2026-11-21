@@ -428,9 +428,10 @@ impl App {
     /// computer's history as the seeds either way, in case it has none.
     fn load_for_you(&mut self) {
         let state = &self.state;
-        let signed_in = state.signed_in();
+        let preferences = state.settings.recommendations.clone();
+        let account = state.signed_in() && !preferences.prefer_local;
         let seeds = youtfast_logic::recommend::seeds_for_library(&state.library);
-        if seeds.is_empty() && !signed_in {
+        if seeds.is_empty() && !account && preferences.initial_queries().next().is_none() {
             self.state.for_you = Listing::Ready(Vec::new());
             return;
         }
@@ -438,11 +439,29 @@ impl App {
         self.request(
             Slot::ForYou,
             Request::ForYou {
-                account: signed_in,
+                account,
                 seeds,
                 taste,
+                preferences,
             },
         );
+    }
+
+    pub(super) fn set_recommendations(
+        &mut self,
+        preferences: youtfast_storage::settings::Recommendations,
+    ) {
+        let preferences = preferences.sanitized();
+        if self.state.settings.recommendations == preferences {
+            return;
+        }
+        self.state.settings.recommendations = preferences;
+        self.save_settings();
+        // A source switch must discard even a ready account feed.
+        self.state.for_you_from_account = false;
+        self.state.clear_local_for_you();
+        self.generations.remove(&Slot::ForYou);
+        self.load_visible_for_you();
     }
 
     pub(super) fn save_feed_filters(&mut self) {
@@ -661,7 +680,8 @@ impl App {
         }
         self.save_library();
         self.state.feed = Listing::Idle;
-        self.state.for_you = Listing::Idle;
+        self.state.clear_local_for_you();
+        self.generations.remove(&Slot::ForYou);
         self.load(self.state.view, false);
     }
 
@@ -1118,6 +1138,30 @@ mod tests {
         assert!(!state.clear_local_for_you());
         assert_eq!(state.for_you.items()[0].id, "account");
         assert!(state.for_you_more.is_some());
+    }
+
+    #[test]
+    fn shorts_only_history_does_not_count_as_local_for_you_input() {
+        let mut state = State::default();
+        assert!(!state.has_local_for_you_inputs());
+
+        let mut short = Video::from_id("short000001".into());
+        short.short = true;
+        state.library.record_watch(short, 1);
+        assert!(!state.has_local_for_you_inputs());
+
+        state
+            .library
+            .record_watch(Video::from_id("video000001".into()), 2);
+        assert!(state.has_local_for_you_inputs());
+
+        state.library.clear_history();
+        assert!(!state.has_local_for_you_inputs());
+
+        state.settings.recommendations.interests = "rust".into();
+        assert!(!state.has_local_for_you_inputs());
+        state.settings.recommendations.search_interests = true;
+        assert!(state.has_local_for_you_inputs());
     }
 
     #[test]
