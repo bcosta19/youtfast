@@ -61,7 +61,11 @@ pub fn parse(xml: &str, fallback_channel_id: &str) -> Result<Vec<Video>, Error> 
         let views = entry
             .descendants()
             .find(|n| n.is_element() && n.tag_name().name() == "statistics")
-            .and_then(|n| n.attribute("views"))
+            .and_then(|n| {
+                n.attributes()
+                    .find(|a| a.namespace().is_none() && a.name() == "views")
+                    .map(|a| a.value())
+            })
             .and_then(|v| v.parse::<u64>().ok())
             .filter(|&v| v > 0);
         videos.push(Video {
@@ -127,6 +131,24 @@ mod tests {
         );
         assert_eq!(videos[0].published_at, Some(1_256_453_853));
         assert_eq!(videos[0].views, Some(1_700_000_000));
+        assert_eq!(videos[1].views, None);
+    }
+
+    #[test]
+    fn view_count_ignores_namespaced_attributes() {
+        let xml = r#"<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015"
+    xmlns:media="http://search.yahoo.com/mrss/" xmlns:ext="urn:example:extension">
+  <entry>
+    <yt:videoId>aaaaaaaaaaa</yt:videoId>
+    <media:statistics ext:views="999" views="42"/>
+  </entry>
+  <entry>
+    <yt:videoId>bbbbbbbbbbb</yt:videoId>
+    <media:statistics ext:views="999"/>
+  </entry>
+</feed>"#;
+        let videos = parse(xml, "UCfallback").unwrap();
+        assert_eq!(videos[0].views, Some(42));
         assert_eq!(videos[1].views, None);
     }
 
