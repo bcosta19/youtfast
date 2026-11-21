@@ -122,7 +122,7 @@ sha2 = "0.11"
 sha1 = "0.10"
 # InnerTube's continuation tokens and search `params` are base64-encoded
 # protobuf messages.
-base64 = "0.22"
+base64 = "0.23"
 # Channel feeds are Atom XML (`innertube::rss`).
 roxmltree = "0.20"
 # InnerTube's HTTP client checks certificates through the operating system

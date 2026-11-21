@@ -6287,7 +6287,7 @@ dependencies = [
 name = "youtfast-youtube"
 version = "0.9.1"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "egui",
  "ehttp",
  "image",
