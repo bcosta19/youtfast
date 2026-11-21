@@ -202,11 +202,14 @@ impl State {
         (subscriptions, history, watch_later): (usize, usize, usize),
         revision: u64,
         current: u64,
+        generations: &mut HashMap<Slot, u64>,
     ) -> bool {
         if !self.import_is_current(revision, current) {
             return false;
         }
         self.library = library;
+        self.feed = Listing::Idle;
+        self.invalidate_local_for_you(generations);
         self.notice = Some(if watch_later > 0 {
             youtfast_i18n::format(
                 self.settings.language,
@@ -230,17 +233,33 @@ impl State {
         true
     }
 
-    /// Account recommendations are filtered at display time; local ranking and
-    /// any pending request's fallback take filters as inputs.
-    pub(super) fn clear_local_for_you(&mut self) -> bool {
+    /// Account recommendations are filtered at display time. Keep their
+    /// rows and generation together so an in-flight continuation can land.
+    pub(super) fn invalidate_local_for_you(&mut self, generations: &mut HashMap<Slot, u64>) {
         if self.for_you_from_account && matches!(self.for_you, Listing::Ready(_)) {
-            return false;
+            return;
         }
         self.for_you = Listing::Idle;
         self.for_you_more = None;
         self.for_you_more_state = Fetch::Idle;
         self.for_you_from_account = false;
-        true
+        generations.remove(&Slot::ForYou);
+    }
+
+    /// The first eligible watch supersedes an empty or topic-seeded local feed.
+    pub(super) fn record_watch_for_feed(
+        &mut self,
+        video: Video,
+        now: i64,
+        generations: &mut HashMap<Slot, u64>,
+    ) {
+        use youtfast_logic::recommend::has_eligible_history;
+
+        let had_eligible_history = has_eligible_history(&self.library);
+        self.library.record_watch(video, now);
+        if !had_eligible_history && has_eligible_history(&self.library) {
+            self.invalidate_local_for_you(generations);
+        }
     }
 
     pub(super) fn accepts_loaded_slot(&self, slot: Slot) -> bool {
@@ -428,9 +447,10 @@ impl App {
     /// computer's history as the seeds either way, in case it has none.
     fn load_for_you(&mut self) {
         let state = &self.state;
-        let signed_in = state.signed_in();
+        let preferences = state.settings.recommendations.clone();
+        let account = state.signed_in() && !preferences.prefer_local;
         let seeds = youtfast_logic::recommend::seeds_for_library(&state.library);
-        if seeds.is_empty() && !signed_in {
+        if seeds.is_empty() && !account && preferences.initial_queries().next().is_none() {
             self.state.for_you = Listing::Ready(Vec::new());
             return;
         }
@@ -438,19 +458,34 @@ impl App {
         self.request(
             Slot::ForYou,
             Request::ForYou {
-                account: signed_in,
+                account,
                 seeds,
                 taste,
+                preferences,
             },
         );
     }
 
+    pub(super) fn set_recommendations(
+        &mut self,
+        preferences: youtfast_storage::settings::Recommendations,
+    ) {
+        let preferences = preferences.sanitized();
+        if self.state.settings.recommendations == preferences {
+            return;
+        }
+        self.state.settings.recommendations = preferences;
+        self.save_settings();
+        // A source switch must discard even a ready account feed.
+        self.state.for_you_from_account = false;
+        self.state.invalidate_local_for_you(&mut self.generations);
+        self.load_visible_for_you();
+    }
+
     pub(super) fn save_feed_filters(&mut self) {
         self.save_library();
-        if self.state.clear_local_for_you() {
-            self.generations.remove(&Slot::ForYou);
-            self.load_visible_for_you();
-        }
+        self.state.invalidate_local_for_you(&mut self.generations);
+        self.load_visible_for_you();
     }
 
     pub(super) fn load_visible_for_you(&mut self) {
@@ -653,15 +688,16 @@ impl App {
         counts: (usize, usize, usize),
         revision: u64,
     ) {
-        if !self
-            .state
-            .accept_import(library, counts, revision, self.library_revision.get())
-        {
+        if !self.state.accept_import(
+            library,
+            counts,
+            revision,
+            self.library_revision.get(),
+            &mut self.generations,
+        ) {
             return;
         }
         self.save_library();
-        self.state.feed = Listing::Idle;
-        self.state.for_you = Listing::Idle;
         self.load(self.state.view, false);
     }
 
@@ -1098,26 +1134,108 @@ mod tests {
     use super::*;
 
     #[test]
-    fn filter_changes_reset_local_and_pending_for_you_but_keep_account_results() {
+    fn filter_changes_reset_local_and_pending_for_you_with_their_generation() {
         let mut state = State {
             for_you: Listing::Ready(vec![Video::from_id("old-ranking".into())]),
             ..State::default()
         };
-        assert!(state.clear_local_for_you());
+        let mut generations = HashMap::from([(Slot::ForYou, 1)]);
+        state.invalidate_local_for_you(&mut generations);
         assert!(matches!(state.for_you, Listing::Idle));
+        assert!(!generations.contains_key(&Slot::ForYou));
 
         state.for_you = Listing::Loading;
         state.for_you_from_account = true; // the previous result was from the account
-        assert!(state.clear_local_for_you());
+        generations.insert(Slot::ForYou, 2);
+        state.invalidate_local_for_you(&mut generations);
         assert!(matches!(state.for_you, Listing::Idle));
         assert!(!state.for_you_from_account);
+        assert!(!generations.contains_key(&Slot::ForYou));
+    }
 
-        state.for_you = Listing::Ready(vec![Video::from_id("account".into())]);
-        state.for_you_from_account = true;
-        state.for_you_more = Some(more("account-continuation"));
-        assert!(!state.clear_local_for_you());
+    #[test]
+    fn accepted_import_preserves_account_pagination_but_invalidates_pending_local_loads() {
+        let mut state = State {
+            for_you: Listing::Ready(vec![Video::from_id("account".into())]),
+            for_you_from_account: true,
+            for_you_more: Some(more("account-continuation")),
+            for_you_more_state: Fetch::Loading,
+            ..State::default()
+        };
+        let mut generations = HashMap::from([(Slot::ForYou, 1)]);
+        let mut imported = Library::default();
+        imported.record_watch(Video::from_id("imported".into()), 1);
+        assert!(state.accept_import(imported.clone(), (0, 1, 0), 1, 1, &mut generations));
         assert_eq!(state.for_you.items()[0].id, "account");
-        assert!(state.for_you_more.is_some());
+        assert_eq!(
+            state.for_you_more.as_ref().unwrap().ctoken,
+            "account-continuation"
+        );
+        assert!(matches!(state.for_you_more_state, Fetch::Loading));
+        assert_eq!(generations.get(&Slot::ForYou), Some(&1));
+
+        state.for_you = Listing::Loading;
+        state.for_you_from_account = false;
+        generations.insert(Slot::ForYou, 2);
+        assert!(state.accept_import(imported, (0, 1, 0), 2, 2, &mut generations));
+        assert!(matches!(state.for_you, Listing::Idle));
+        assert!(!generations.contains_key(&Slot::ForYou));
+    }
+
+    #[test]
+    fn first_eligible_watch_invalidates_empty_cached_and_pending_local_results() {
+        for listing in [
+            Listing::Ready(Vec::new()),
+            Listing::Ready(vec![Video::from_id("topic-result".into())]),
+            Listing::Loading,
+        ] {
+            let mut state = State {
+                for_you: listing,
+                ..State::default()
+            };
+            let mut generations = HashMap::from([(Slot::ForYou, 1)]);
+            let short = Video {
+                short: true,
+                ..Video::from_id("short000001".into())
+            };
+            state.record_watch_for_feed(short, 1, &mut generations);
+            assert_eq!(generations.get(&Slot::ForYou), Some(&1));
+            assert!(!matches!(state.for_you, Listing::Idle));
+
+            state.record_watch_for_feed(Video::from_id("video000001".into()), 2, &mut generations);
+            assert!(matches!(state.for_you, Listing::Idle));
+            assert!(!generations.contains_key(&Slot::ForYou));
+
+            generations.insert(Slot::ForYou, 2);
+            state.for_you = Listing::Loading;
+            state.record_watch_for_feed(Video::from_id("video000002".into()), 3, &mut generations);
+            assert!(matches!(state.for_you, Listing::Loading));
+            assert_eq!(generations.get(&Slot::ForYou), Some(&2));
+        }
+    }
+
+    #[test]
+    fn shorts_only_history_does_not_count_as_local_for_you_input() {
+        let mut state = State::default();
+        assert!(!state.has_local_for_you_inputs());
+
+        let mut short = Video::from_id("short000001".into());
+        short.short = true;
+        state.library.record_watch(short, 1);
+        assert!(!state.has_local_for_you_inputs());
+
+        state
+            .library
+            .record_watch(Video::from_id("video000001".into()), 2);
+        assert!(state.has_local_for_you_inputs());
+
+        state.library.clear_history();
+        assert!(!state.has_local_for_you_inputs());
+
+        state.settings.recommendations.interests = "rust".into();
+        assert!(!state.has_local_for_you_inputs());
+        state.settings.recommendations.search_interests = true;
+        assert!(state.has_local_for_you_inputs());
     }
 
     #[test]
@@ -1519,7 +1637,7 @@ mod tests {
         let mut state = State::default();
         let mut old = Library::default();
         old.record_watch(Video::from_id("old-history".into()), 1);
-        assert!(!state.accept_import(old, (0, 1, 0), 1, 2));
+        assert!(!state.accept_import(old, (0, 1, 0), 1, 2, &mut HashMap::new()));
         assert!(state.library.history.is_empty());
         assert!(state.notice.unwrap().contains("Retry"));
     }
@@ -1529,7 +1647,7 @@ mod tests {
         let mut state = State::default();
         let mut imported = Library::default();
         imported.toggle_watch_later(Video::from_id("wl000000001".into()));
-        assert!(state.accept_import(imported, (2, 3, 1), 4, 4));
+        assert!(state.accept_import(imported, (2, 3, 1), 4, 4, &mut HashMap::new()));
         assert_eq!(state.library.watch_later.len(), 1);
         assert_eq!(
             state.notice.as_deref(),

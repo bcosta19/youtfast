@@ -167,12 +167,11 @@ impl App {
         if outcome.subscriptions_changed {
             self.state.feed = Listing::Idle;
         }
-        if (outcome.subscriptions_changed
+        if outcome.subscriptions_changed
             || outcome.filters_changed
-            || (outcome.history_changed && !self.state.for_you_from_account))
-            && self.state.clear_local_for_you()
+            || (outcome.history_changed && !self.state.for_you_from_account)
         {
-            self.generations.remove(&Slot::ForYou);
+            self.state.invalidate_local_for_you(&mut self.generations);
             self.load_visible_for_you();
         }
         if outcome.subscriptions_changed && self.state.view == View::Home {

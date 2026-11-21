@@ -509,6 +509,26 @@ tras un fotograma correcto conservan ese fotograma como vista previa. Bloqueos
 externos, contenido eliminado o un origen inutilizable pueden seguir impidiendo una
 vista previa o la reproducción.
 
+## Recomendaciones locales
+
+En **Inicio → Para ti**, abre **Ajustes de recomendaciones locales** y pulsa
+**Aplicar** para guardar y recargar. Elige la duración, prioriza canales
+conocidos o descubre otros nuevos, o da prioridad a vídeos recientes o con
+menos visualizaciones. Separa con comas los intereses y los términos
+silenciados, con un máximo de 300 caracteres por campo. No se distingue
+entre mayúsculas y minúsculas: los intereses
+favorecen títulos o nombres de canales coincidentes y los términos
+silenciados ocultan los títulos coincidentes. El filtro de duración excluye
+los vídeos cuya duración se desconoce.
+
+Con una sesión iniciada, las recomendaciones de YouTube siguen siendo la opción
+predeterminada. Activa **Usar la clasificación local en vez de las recomendaciones de YouTube**
+para aplicar los ajustes al feed. Si no hay historial apto en el dispositivo,
+puedes autorizar el envío de hasta tres intereses a YouTube en búsquedas sin
+sesión iniciada. Tras ver el primer vídeo apto, al volver a Inicio, las
+recomendaciones locales se actualizan a partir de tu historial. Los términos
+silenciados nunca salen del dispositivo.
+
 ## Avisos de nuevas subidas
 
 Las notificaciones propias de YouTube no tienen API, así que YouTFast comprueba tus

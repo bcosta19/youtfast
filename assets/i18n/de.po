@@ -2214,3 +2214,57 @@ msgstr "Die Synchronisierungsantwort des anderen Geräts konnte nicht gelesen we
 
 msgid "Could not start the device sync listener on the selected port."
 msgstr "Der Empfangsdienst für die Gerätesynchronisierung konnte am gewählten Port nicht gestartet werden."
+
+msgid "Local recommendation settings"
+msgstr "Lokale Empfehlungseinstellungen"
+
+msgid "Use local ranking instead of YouTube recommendations"
+msgstr "Lokale Rangfolge statt YouTube-Empfehlungen verwenden"
+
+msgid "Duration"
+msgstr "Dauer"
+
+msgid "Under 5 minutes"
+msgstr "Unter 5 Minuten"
+
+msgid "5–20 minutes"
+msgstr "5–20 Minuten"
+
+msgid "Balanced"
+msgstr "Ausgewogen"
+
+msgid "Discover new channels"
+msgstr "Neue Kanäle entdecken"
+
+msgid "Favor familiar channels"
+msgstr "Bekannte Kanäle bevorzugen"
+
+msgid "Ranking priority"
+msgstr "Priorität der Rangfolge"
+
+msgid "Recent uploads"
+msgstr "Neue Uploads"
+
+msgid "Fewer views"
+msgstr "Weniger Aufrufe"
+
+msgid "Interests (comma-separated)"
+msgstr "Interessen (durch Kommas getrennt)"
+
+msgid "Muted title terms (comma-separated)"
+msgstr "Stumme Titelbegriffe (durch Kommas getrennt)"
+
+msgid "Search YouTube for up to three interests when there is no eligible watch history"
+msgstr "Ohne geeigneten Wiedergabeverlauf bis zu drei Interessen auf YouTube suchen"
+
+msgid "Apply"
+msgstr "Anwenden"
+
+msgid "Reset to defaults"
+msgstr "Auf Standardwerte zurücksetzen"
+
+msgid "Ranked on this device"
+msgstr "Auf diesem Gerät sortiert"
+
+msgid "Watch a few videos or enable topic search to get recommendations"
+msgstr "Für Empfehlungen einige Videos ansehen oder die Themensuche aktivieren"

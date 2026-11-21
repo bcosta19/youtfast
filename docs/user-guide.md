@@ -441,6 +441,23 @@ finite source loop counts are respected. Decode failures after a successful
 frame retain that frame as a preview. External blocks, removed media or an
 unusable source may still prevent a preview or playback.
 
+## Local recommendations
+
+On **Home → For you**, open **Local recommendation settings** and select
+**Apply** to save and reload. Choose a duration, favor familiar channels or
+discover new ones, or prioritize recent uploads or fewer views. Enter interests
+and muted title terms separated by commas, up to 300 characters per field.
+Matching ignores case: interests
+boost matches in titles or channel names, and muted terms hide matching
+titles. A duration filter excludes videos with unknown length.
+
+When signed in, YouTube's recommendations remain the default; enable **Use
+local ranking instead of YouTube recommendations** to apply these settings to
+your feed. If there is no eligible device watch history, you can opt in to
+send up to three interests to YouTube in signed-out searches. After your first
+eligible watch, returning to Home refreshes local recommendations from your
+history instead. Muted terms never leave the device.
+
 ## New-upload alerts
 
 YouTube's own notifications have no API, so YouTFast checks your

@@ -630,6 +630,17 @@ impl State {
             && (!self.settings.hide_watched || !self.library.watched(&video.id))
     }
 
+    /// Whether local For you has eligible watch history seeds or opted-in topic queries.
+    pub fn has_local_for_you_inputs(&self) -> bool {
+        youtfast_logic::recommend::has_eligible_history(&self.library)
+            || self
+                .settings
+                .recommendations
+                .initial_queries()
+                .next()
+                .is_some()
+    }
+
     /// The feed's videos home shows: For you's, or the first
     /// `feed_shown` of the feed through the chip.
     pub fn visible_feed(&self) -> Vec<&Video> {
@@ -2095,7 +2106,7 @@ impl App {
             }
             Action::ClearHistory => {
                 self.state.library.clear_history();
-                self.save_library();
+                self.save_feed_filters();
             }
             Action::ImportTakeout => {
                 let revision = self.library_revision.get();
@@ -2215,6 +2226,7 @@ impl App {
             Action::LoadSaveTargets => self.load_save_targets(),
             Action::SetSaved { playlist, saved } => self.set_saved(playlist, saved),
             Action::SetShareAtTime(on) => self.state.share_at_time = on,
+            Action::SetRecommendations(preferences) => self.set_recommendations(preferences),
             Action::SetFeedFilter(filter) => {
                 self.state.feed_filter = filter;
                 self.load_visible_for_you();

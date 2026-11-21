@@ -1011,33 +1011,80 @@ async fn writer<T: Clone + Send + Sync + 'static>(
 }
 
 /// The seeds' related videos, asked for together, ranked. A seed whose
-/// details fail is skipped.
+/// details fail is skipped unless every lookup fails.
 async fn local_recommendations(
     rp: &Client,
     seeds: Vec<youtfast_logic::recommend::Seed>,
     taste: &youtfast_logic::recommend::Taste,
-) -> Vec<Video> {
+    preferences: &youtfast_storage::settings::Recommendations,
+) -> Result<Vec<Video>, String> {
+    use youtfast_logic::recommend::rank_with;
+
+    let now = youtfast_core::util::now();
+    let from_topics = seeds.is_empty();
     let mut tasks = tokio::task::JoinSet::new();
-    for seed in seeds {
-        let rp = rp.clone();
-        tasks.spawn(async move {
-            let related = innertube::details(&rp, &seed.id)
+    if from_topics {
+        let mut queries = preferences.initial_queries().peekable();
+        if queries.peek().is_none() {
+            return Ok(Vec::new());
+        }
+        // The opted-in topics are public searches, even when an account is active.
+        let public =
+            Client::default_client().map_err(|_| "Could not start topic search".to_owned())?;
+        for (index, query) in queries.enumerate() {
+            let public = public.clone();
+            let query = query.to_owned();
+            let weight = 1.0 / (1.0 + index as f64 * 0.15);
+            tasks.spawn(async move {
+                let videos = innertube::search_filtered(
+                    &public,
+                    &query,
+                    innertube::SearchOptions::default(),
+                )
                 .await
-                .map(|details| details.related);
-            (seed.weight, related)
-        });
+                .map(|(items, _)| match items {
+                    PageItems::Videos(mut videos) => {
+                        videos.truncate(25);
+                        videos
+                    }
+                    _ => Vec::new(),
+                });
+                (weight, videos)
+            });
+        }
+    } else {
+        for seed in seeds {
+            let rp = rp.clone();
+            tasks.spawn(async move {
+                let related = innertube::details(&rp, &seed.id)
+                    .await
+                    .map(|details| details.related);
+                (seed.weight, related)
+            });
+        }
     }
     let mut related = Vec::new();
+    let mut failure = None;
     while let Some(done) = tasks.join_next().await {
         match done {
             Ok((weight, Ok(videos))) => related.push((weight, videos)),
-            Ok((_, Err(error))) => log::warn!("a seed's related videos failed: {error}"),
+            Ok((_, Err(error))) => {
+                if !from_topics {
+                    log::warn!("a seed's related videos failed: {error}");
+                }
+                failure = Some(error);
+            }
             Err(error) => log::warn!("a seed's lookup stopped: {error}"),
         }
     }
+    if related.is_empty()
+        && let Some(error) = failure
+    {
+        return Err(error);
+    }
     // The order the answers came in is not the seeds': keep it stable.
     related.sort_by(|a, b| b.0.total_cmp(&a.0));
-    youtfast_logic::recommend::rank(&related, taste)
+    Ok(rank_with(&related, taste, preferences, now))
 }
 
 async fn load(context: &Context, request: Request) -> Result<Payload, String> {
@@ -1082,6 +1129,7 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
             account,
             seeds,
             taste,
+            preferences,
         } => {
             if account {
                 match innertube::recommended(rp).await {
@@ -1097,7 +1145,7 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
                 }
             }
             Payload::ForYou {
-                videos: local_recommendations(rp, seeds, &taste).await,
+                videos: local_recommendations(rp, seeds, &taste, &preferences).await?,
                 more: None,
                 from_account: false,
             }

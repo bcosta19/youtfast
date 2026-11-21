@@ -192,6 +192,7 @@ pub enum Action {
     ToggleSidebar,
     /// Home's chips.
     SetFeedFilter(FeedFilter),
+    SetRecommendations(youtfast_storage::settings::Recommendations),
     /// The watch page's `[ share ]`: the link to the clipboard.
     CopyLink(String),
     /// A link in a description or comment: opens in the browser. Only
