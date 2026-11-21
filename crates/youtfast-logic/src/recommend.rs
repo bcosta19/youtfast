@@ -59,11 +59,25 @@ pub fn seeds_for_library(library: &Library) -> Vec<Seed> {
     seeds_filtered(&library.history, |video| library.is_hidden(video))
 }
 
+/// Whether the device history has any video that can seed recommendations.
+pub fn has_eligible_history(library: &Library) -> bool {
+    eligible_watches(&library.history, |video| library.is_hidden(video))
+        .next()
+        .is_some()
+}
+
+fn eligible_watches(
+    history: &[Watched],
+    is_hidden: impl Fn(&Video) -> bool,
+) -> impl Iterator<Item = &Watched> {
+    history.iter().filter(move |watched| {
+        !watched.video.short && !watched.video.live && !is_hidden(&watched.video)
+    })
+}
+
 fn seeds_filtered(history: &[Watched], is_hidden: impl Fn(&Video) -> bool) -> Vec<Seed> {
     let mut seen = HashSet::new();
-    history
-        .iter()
-        .filter(|watched| !watched.video.short && !watched.video.live && !is_hidden(&watched.video))
+    eligible_watches(history, is_hidden)
         .filter(|watched| seen.insert(watched.video.id.clone()))
         .take(SEEDS)
         .enumerate()

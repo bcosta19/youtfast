@@ -356,7 +356,7 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                     ] {
                         let label = ui.label(tr(locale, label));
                         ui.add(
-                            egui::TextEdit::singleline(value).char_limit(Recommendations::MAX_TEXT),
+                            egui::TextEdit::singleline(value).char_limit(Recommendations::MAX_TEXT_CHARS),
                         )
                         .labelled_by(label.id);
                     }

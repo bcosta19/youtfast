@@ -237,12 +237,15 @@ and module tests; format-change records and live-check instructions live in
 Home requests account recommendations by default when signed in. The device
 feed is a fallback or an explicit choice. The app sends a settings snapshot
 with each request and invalidates the current For you generation when the
-preferences change. The backend supplies candidates and the current time;
-`youtfast-logic::recommend` filters and scores cards without I/O or metadata
-lookups. When no eligible history exists, an opt-in can send up to three
-configured interests to YouTube using a separate signed-out client. Muted terms
-are never sent. Settings and account recommendations are not synced by this
-feature.
+preferences change. A device library import or the first eligible watch
+invalidates a local result or a pending first page, but preserves ready account
+recommendations and their pagination. The backend supplies candidates and the
+current time; `youtfast-logic::recommend` filters and scores cards without I/O
+or metadata lookups. The editor, settings sanitization and term parsing share
+the same character limit. When no eligible history exists, an opt-in can send
+up to three configured interests to YouTube using a separate signed-out client.
+Muted terms are never sent. Settings and account recommendations are not synced
+by this feature.
 
 ## Persistence and account isolation
 

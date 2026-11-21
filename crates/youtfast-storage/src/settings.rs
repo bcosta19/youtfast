@@ -136,12 +136,13 @@ recommendation_choices!(RecommendationPriority {
 });
 
 impl Recommendations {
-    pub const MAX_TEXT: usize = 300;
+    /// Maximum Unicode scalar values per text field, as in the editor.
+    pub const MAX_TEXT_CHARS: usize = 300;
 
-    /// Clamps user-edited text fields to [`Self::MAX_TEXT`] on a UTF-8 boundary.
+    /// Clamps user-edited text fields to [`Self::MAX_TEXT_CHARS`].
     pub fn sanitized(mut self) -> Self {
         for value in [&mut self.interests, &mut self.muted] {
-            value.truncate(value.floor_char_boundary(Self::MAX_TEXT));
+            value.truncate(bounded_recommendation_text(value).len());
         }
         self
     }
@@ -152,10 +153,16 @@ impl Recommendations {
     }
 }
 
-pub fn recommendation_terms(input: &str) -> impl Iterator<Item = &str> {
+fn bounded_recommendation_text(input: &str) -> &str {
     input
-        .get(..input.floor_char_boundary(Recommendations::MAX_TEXT))
-        .unwrap_or(input)
+        .char_indices()
+        .nth(Recommendations::MAX_TEXT_CHARS)
+        .map_or(input, |(end, _)| &input[..end])
+}
+
+/// Reads the nonempty, comma-separated terms within the editor's text limit.
+pub fn recommendation_terms(input: &str) -> impl Iterator<Item = &str> {
+    bounded_recommendation_text(input)
         .split(',')
         .map(str::trim)
         .filter(|term| !term.is_empty())
@@ -180,18 +187,27 @@ fn topic_search_is_opt_in_bounded_and_never_uses_muted_terms() {
         serde_json::from_str::<Recommendations>("{}").unwrap(),
         Recommendations::default()
     );
+}
 
-    let oversized = format!("a{}", "é".repeat(200));
-    let sanitized = Recommendations {
+#[cfg(test)]
+#[test]
+fn recommendation_text_keeps_multibyte_characters_up_to_the_editor_limit() {
+    let text = format!("{}ciência", "🦀".repeat(293));
+    let oversized = format!("{text}x");
+    let preferences = Recommendations {
         interests: oversized.clone(),
         muted: oversized,
+        search_interests: true,
         ..Recommendations::default()
-    }
-    .sanitized();
-    assert!(sanitized.interests.len() <= Recommendations::MAX_TEXT);
-    assert!(sanitized.muted.len() <= Recommendations::MAX_TEXT);
-    assert_eq!(sanitized.interests.len(), 299);
-    assert_eq!(sanitized.muted.len(), 299);
+    };
+    assert_eq!(preferences.initial_queries().next(), Some(text.as_str()));
+    assert_eq!(
+        recommendation_terms(&preferences.muted).next(),
+        Some(text.as_str())
+    );
+    let sanitized = preferences.sanitized();
+    assert_eq!(sanitized.interests, text);
+    assert_eq!(sanitized.muted, text);
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

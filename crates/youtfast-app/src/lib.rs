@@ -616,7 +616,7 @@ impl State {
 
     /// Whether local For you has eligible watch history seeds or opted-in topic queries.
     pub fn has_local_for_you_inputs(&self) -> bool {
-        !youtfast_logic::recommend::seeds_for_library(&self.library).is_empty()
+        youtfast_logic::recommend::has_eligible_history(&self.library)
             || self
                 .settings
                 .recommendations
