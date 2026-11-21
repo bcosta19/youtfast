@@ -521,6 +521,26 @@ après une image réussie conservent cette image comme aperçu. Des blocages
 externes, des médias supprimés ou une source inutilisable peuvent tout de même
 empêcher un aperçu ou la lecture.
 
+## Recommandations locales
+
+Dans **Accueil → Pour vous**, ouvrez les **Réglages des recommandations locales**
+et cliquez sur **Appliquer** pour enregistrer et recharger. Choisissez une
+durée, favorisez les chaînes connues ou découvrez-en de nouvelles, ou donnez
+la priorité aux vidéos récentes ou moins vues. Séparez les centres d’intérêt
+et les termes masqués par des virgules, dans la limite de 300 caractères par
+champ. La casse est ignorée : les centres
+d’intérêt favorisent les titres ou noms de chaînes correspondants, et les
+termes masqués cachent les titres correspondants. Le filtre de durée exclut
+les vidéos dont la durée est inconnue.
+
+Lorsque vous êtes connecté, les recommandations YouTube restent la valeur par
+défaut. Activez **Utiliser le classement local au lieu des recommandations YouTube**
+pour appliquer ces réglages au flux. Sans historique admissible sur l’appareil,
+vous pouvez autoriser l’envoi de trois centres d’intérêt au plus à YouTube
+dans des recherches sans compte. Après avoir regardé une première vidéo
+admissible, revenez à l’Accueil : les recommandations locales se mettent à jour
+à partir de votre historique. Les termes masqués ne quittent jamais l’appareil.
+
 ## Alertes de nouvelles vidéos
 
 Les notifications de YouTube n'ont pas d'API, donc YouTFast vérifie plutôt vos

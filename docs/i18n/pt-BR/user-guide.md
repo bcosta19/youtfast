@@ -477,6 +477,26 @@ depois de um quadro bem-sucedido mantêm esse quadro como prévia. Bloqueios
 externos, mídia removida ou uma origem inutilizável ainda podem impedir uma
 prévia ou a reprodução.
 
+## Recomendações locais
+
+Em **Início → Para você**, abra **Preferências de recomendações locais** e
+selecione **Aplicar** para salvar e recarregar. Escolha uma duração, priorize
+canais conhecidos ou descubra novos, ou dê preferência a vídeos recentes ou
+com menos visualizações. Separe os interesses e termos silenciados por
+vírgula, com até 300 caracteres por campo. A busca por correspondências
+ignora maiúsculas e minúsculas:
+interesses favorecem títulos ou nomes de canais correspondentes, e termos
+silenciados ocultam títulos correspondentes. O filtro de duração exclui
+vídeos de duração desconhecida.
+
+Com a conta conectada, as recomendações do YouTube continuam sendo o padrão;
+ative **Usar ranking local em vez das recomendações do YouTube** para aplicar
+essas preferências ao feed. Sem histórico elegível no dispositivo, você pode
+autorizar o envio de até três interesses ao YouTube em buscas sem login. Depois
+que você assistir ao primeiro vídeo elegível, as recomendações locais passam a
+usar seu histórico ao voltar para Início. Os termos silenciados nunca saem do
+dispositivo.
+
 ## Alertas de novos vídeos
 
 As notificações do próprio YouTube não têm API, então o YouTFast verifica suas

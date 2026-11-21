@@ -503,6 +503,26 @@ einem erfolgreichen Einzelbild behalten dieses Bild als Vorschau. Externe
 Sperren, entfernte Medien oder eine unbrauchbare Quelle können eine Vorschau
 oder Wiedergabe dennoch verhindern.
 
+## Lokale Empfehlungen
+
+Öffnen Sie unter **Startseite → Für dich** die **Lokale Empfehlungseinstellungen**
+und wählen Sie **Anwenden**, um zu speichern und neu zu laden. Wählen Sie
+eine Dauer, bevorzugen Sie bekannte Kanäle oder entdecken Sie neue, oder
+priorisieren Sie neue bzw. weniger häufig aufgerufene Videos. Trennen Sie
+Interessen und stumme Titelbegriffe durch Kommas. Pro Feld sind bis zu 300
+Zeichen möglich. Groß- und Kleinschreibung spielt keine Rolle: Interessen
+werten passende Titel oder Kanalnamen auf,
+stumme Begriffe blenden passende Titel aus. Der Dauerfilter schließt Videos
+mit unbekannter Dauer aus.
+
+Bei Anmeldung bleiben YouTube-Empfehlungen der Standard. Wählen Sie
+**Lokale Rangfolge statt YouTube-Empfehlungen verwenden**, um die Einstellungen
+auf den Feed anzuwenden. Ohne geeigneten Wiedergabeverlauf auf dem Gerät
+können Sie erlauben, bis zu drei Interessen für Suchen ohne Anmeldung an
+YouTube zu senden. Sobald Sie das erste geeignete Video angesehen haben,
+werden die lokalen Empfehlungen bei der Rückkehr zur Startseite anhand Ihres
+Verlaufs aktualisiert. Stumme Begriffe verlassen das Gerät nie.
+
 ## Benachrichtigungen über neue Uploads
 
 Die eigenen Benachrichtigungen von YouTube haben keine API, daher prüft YouTFast

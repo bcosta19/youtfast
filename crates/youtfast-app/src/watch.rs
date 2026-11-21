@@ -324,7 +324,8 @@ impl App {
         }
         self.state.video_tabs.open(video.clone());
         let start = self.state.library.resume_position(&video.id);
-        self.state.library.record_watch(video.clone(), util::now());
+        self.state
+            .record_watch_for_feed(video.clone(), util::now(), &mut self.generations);
         self.save_library();
 
         self.state.view = View::Watch;
