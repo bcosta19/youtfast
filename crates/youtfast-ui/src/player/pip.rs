@@ -50,9 +50,16 @@ pub fn pip(ctx: &egui::Context, state: &State, surface: Option<&VideoSurface>) {
             return;
         }
         let snapshot = bridge.snapshot();
+        let pip_r = snapshot.interface_style.spec().pip_radius;
+        let border = if pip_r > 0 {
+            Color32::from_white_alpha(38)
+        } else {
+            snapshot.palette.outline
+        };
         let frame = Frame::new()
             .fill(Color32::BLACK)
-            .stroke(Stroke::new(1.0, snapshot.palette.outline));
+            .corner_radius(CornerRadius::same(pip_r))
+            .stroke(Stroke::new(1.0, border));
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
             show_pip_contents(ui, &bridge, &snapshot, surface.as_ref());
         });
@@ -94,10 +101,11 @@ fn show_pip_contents(
     ui.ctx()
         .data_mut(|d| d.insert_temp(egui::Id::new("pip-video-keyboard-focus"), response.id));
 
+    let pip_r = snapshot.interface_style.spec().pip_radius;
     picture_content(
         ui,
         video_rect,
-        CornerRadius::ZERO,
+        CornerRadius::same(pip_r),
         PictureContent {
             locale,
             audio_only: snapshot.audio_only,
@@ -113,7 +121,7 @@ fn show_pip_contents(
         progress_strip(
             ui,
             rect,
-            0,
+            pip_r,
             status.position,
             status.duration,
             snapshot.watching_live,

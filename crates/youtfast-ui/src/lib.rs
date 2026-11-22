@@ -137,9 +137,6 @@ pub fn show(
     cast::show(ui.ctx(), state, actions);
 }
 
-/// The top bar's height.
-const TOP_BAR: f32 = 56.0;
-
 /// The top bar: back, forward and refresh, the search field centred (Enter
 /// searches or opens a link, Esc leaves it), and the keyboard shortcuts'
 /// button at the right.
@@ -147,8 +144,9 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
 
     let palette = state.palette;
-    egui::Panel::top("top-bar")
-        .exact_size(TOP_BAR)
+    let spec = state.applied_interface_style.spec();
+    let panel_response = egui::Panel::top("top-bar")
+        .exact_size(spec.top_bar_height)
         .resizable(false)
         .show_separator_line(false)
         .frame(
@@ -291,21 +289,31 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
             // navigation buttons.
             let left = bar.left() + if wide { 296.0 } else { 160.0 };
             let right = bar.right() - 156.0;
-            let width = (right - left - 44.0).clamp(80.0, 560.0);
-            let center = egui::pos2((left + right - 44.0) / 2.0, bar.center().y);
+            let submit_reserve = if spec.show_search_submit_button {
+                44.0
+            } else {
+                0.0
+            };
+            let width = (right - left - submit_reserve).clamp(80.0, 560.0);
+            let center = egui::pos2((left + right - submit_reserve) / 2.0, bar.center().y);
             let field_rect = egui::Rect::from_center_size(center, vec2(width, 36.0));
             ui.scope_builder(
                 UiBuilder::new()
                     .max_rect(field_rect)
                     .layout(Layout::left_to_right(Align::Center)),
                 |ui| {
-                    let field = widgets::search_field(
+                    let submit_label = tr(locale, "Search (Enter)");
+                    let mut search = widgets::SearchField::new(command_line_id(), width);
+                    if !spec.show_search_submit_button {
+                        search = search.submit_icon(submit_label.as_ref());
+                    }
+                    let (field, clicked_submit) = widgets::search_field_with_submit(
                         ui,
                         &palette,
                         &mut state.query,
                         tr(locale, "Search or paste a link").as_ref(),
                         locale,
-                        widgets::SearchField::new(command_line_id(), width),
+                        search,
                     );
                     if field.has_focus() && ui.input(|i| i.key_pressed(Key::Escape)) {
                         field.surrender_focus();
@@ -323,27 +331,39 @@ fn top_bar(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
                             state.query = text.clone();
                         }
                         actions.push(Action::Search(state.query.clone()));
+                    } else if clicked_submit {
+                        actions.push(Action::Search(state.query.clone()));
                     }
                     suggestions(ui, state, &field, field_rect, actions);
                 },
             );
-            let button = egui::Rect::from_center_size(
-                egui::pos2(field_rect.right() + 24.0, bar.center().y),
-                vec2(36.0, 36.0),
-            );
-            ui.scope_builder(
-                UiBuilder::new()
-                    .max_rect(button)
-                    .layout(Layout::left_to_right(Align::Center)),
-                |ui| {
-                    if search_submit_button(ui, &palette, tr(locale, "Search (Enter)").as_ref())
-                        .clicked()
-                    {
-                        actions.push(Action::Search(state.query.clone()));
-                    }
-                },
-            );
+            if spec.show_search_submit_button {
+                let button = egui::Rect::from_center_size(
+                    egui::pos2(field_rect.right() + 24.0, bar.center().y),
+                    vec2(36.0, 36.0),
+                );
+                ui.scope_builder(
+                    UiBuilder::new()
+                        .max_rect(button)
+                        .layout(Layout::left_to_right(Align::Center)),
+                    |ui| {
+                        if search_submit_button(ui, &palette, tr(locale, "Search (Enter)").as_ref())
+                            .clicked()
+                        {
+                            actions.push(Action::Search(state.query.clone()));
+                        }
+                    },
+                );
+            }
         });
+    if spec.hairline_dividers {
+        let rect = panel_response.response.rect;
+        ui.painter().hline(
+            rect.left()..=rect.right(),
+            rect.bottom() - 0.5,
+            Stroke::new(1.0, widgets::hairline_color(&palette)),
+        );
+    }
 }
 
 /// Brand mark in the top bar: a crisp rounded play emblem beside the wordmark.
@@ -530,10 +550,6 @@ fn suggestions(
     }
 }
 
-/// The sidebar's width, open and collapsed to its rail.
-const SIDEBAR_OPEN: f32 = 240.0;
-const SIDEBAR_RAIL: f32 = 72.0;
-
 /// The sidebar: the `YouTFast` wordmark and the collapse toggle, the
 /// views as nav items (icon and label), then the channels subscribed to.
 /// Collapsed (`b`), it is a rail of the views' icons and the channels'
@@ -545,37 +561,81 @@ fn sidebar(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) {
         youtfast_app::sidebar_uses_automatic_rail(state, ui.ctx().content_rect().width());
     let collapsed = state.settings.sidebar_collapsed || (!state.sidebar_toggled && automatic_rail);
     let palette = &state.palette;
-    egui::Panel::left("sidebar")
-        .exact_size(if collapsed {
-            SIDEBAR_RAIL
-        } else {
-            SIDEBAR_OPEN
+    let spec = state.applied_interface_style.spec();
+    let width = if spec.sidebar_animate {
+        let collapsed_t = ui.ctx().animate_bool_with_easing(
+            egui::Id::new("sidebar-collapsed-t"),
+            collapsed,
+            egui::emath::easing::cubic_out,
+        );
+        egui::lerp(spec.sidebar_open..=spec.sidebar_rail, collapsed_t)
+    } else if collapsed {
+        spec.sidebar_rail
+    } else {
+        spec.sidebar_open
+    };
+    let draw_collapsed = width < (spec.sidebar_open + spec.sidebar_rail) * 0.5;
+    let inset = spec.sidebar_inset;
+    let outer_frame = if inset > 0 {
+        Frame::new().fill(palette.window).inner_margin(Margin {
+            left: inset,
+            right: 0,
+            top: inset,
+            bottom: inset,
         })
+    } else {
+        Frame::new()
+            .fill(palette.panel)
+            .inner_margin(Margin::symmetric(12, 8))
+    };
+    let panel_response = egui::Panel::left("sidebar")
+        .exact_size(width + f32::from(inset))
         .resizable(false)
         .show_separator_line(false)
-        .frame(
-            Frame::new()
-                .fill(palette.panel)
-                .inner_margin(Margin::symmetric(12, 8)),
-        )
+        .frame(outer_frame)
         .show(ui, |ui| {
-            ui.spacing_mut().item_spacing.y = 2.0;
-            for (index, (icon, view, label, count)) in sidebar_items(state).into_iter().enumerate()
-            {
-                let selected = state.view == view
-                    || (view == View::Playlists && state.view == View::Playlist)
-                    || (view == View::Subscriptions && state.view == View::Channel);
-                if view == View::Account && index > 0 {
-                    ui.add_space(12.0);
-                }
-                if widgets::nav_item(ui, palette, icon, &label, count, selected, collapsed)
-                    .clicked()
+            let mut draw_contents = |ui: &mut egui::Ui| {
+                ui.spacing_mut().item_spacing.y = 2.0;
+                for (index, (icon, view, label, count)) in
+                    sidebar_items(state).into_iter().enumerate()
                 {
-                    actions.push(Action::Navigate(view));
+                    let selected = state.view == view
+                        || (view == View::Playlists && state.view == View::Playlist)
+                        || (view == View::Subscriptions && state.view == View::Channel);
+                    if view == View::Account && index > 0 {
+                        ui.add_space(12.0);
+                    }
+                    if widgets::nav_item(ui, palette, icon, &label, count, selected, draw_collapsed)
+                        .clicked()
+                    {
+                        actions.push(Action::Navigate(view));
+                    }
                 }
+                sidebar_channels(ui, state, draw_collapsed, actions);
+            };
+            if inset > 0 {
+                let card = Frame::new()
+                    .fill(palette.panel)
+                    .stroke(Stroke::new(1.0, widgets::hairline_color(palette)))
+                    .corner_radius(CornerRadius::same(spec.sidebar_radius))
+                    .inner_margin(Margin::symmetric(10, 10))
+                    .show(ui, |ui| {
+                        ui.set_min_size(ui.available_size());
+                        draw_contents(ui);
+                    });
+                widgets::paint_specular_top(ui, palette, card.response.rect, spec.sidebar_radius);
+            } else {
+                draw_contents(ui);
             }
-            sidebar_channels(ui, state, collapsed, actions);
         });
+    if inset == 0 && spec.hairline_dividers {
+        let rect = panel_response.response.rect;
+        ui.painter().vline(
+            rect.right() - 0.5,
+            rect.top()..=rect.bottom(),
+            Stroke::new(1.0, widgets::hairline_color(palette)),
+        );
+    }
 }
 
 /// The buttons the sidebar draws, in the order the user chose (the number
@@ -728,11 +788,16 @@ fn sidebar_channels(ui: &mut egui::Ui, state: &State, collapsed: bool, actions: 
 fn notice_toast(ctx: &egui::Context, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
 
-    let reveal = ctx.animate_bool(egui::Id::new("notice-visible"), state.notice.is_some());
+    let reveal = ctx.animate_bool_with_easing(
+        egui::Id::new("notice-visible"),
+        state.notice.is_some(),
+        egui::emath::easing::cubic_out,
+    );
     let Some(notice) = &state.notice else {
         return;
     };
     let palette = &state.palette;
+    let spec = state.applied_interface_style.spec();
     let is_error = notice.starts_with("Could not");
     let (icon, tint, border) = if is_error {
         (Icon::Alert, palette.red, palette.red.gamma_multiply(0.55))
@@ -743,13 +808,13 @@ fn notice_toast(ctx: &egui::Context, state: &State, actions: &mut Vec<Action>) {
         .order(egui::Order::Foreground)
         .anchor(
             egui::Align2::RIGHT_BOTTOM,
-            vec2(-20.0, -20.0 + 10.0 * (1.0 - reveal)),
+            vec2(-20.0, -20.0 + 12.0 * (1.0 - reveal)),
         )
         .show(ctx, |ui| {
             Frame::new()
                 .fill(palette.overlay)
                 .stroke(Stroke::new(1.0, border))
-                .corner_radius(CornerRadius::same(RADIUS + 2))
+                .corner_radius(CornerRadius::same(spec.card_radius))
                 .inner_margin(Margin::symmetric(14, 10))
                 .shadow(ui.visuals().popup_shadow)
                 .show(ui, |ui| {
@@ -1434,6 +1499,28 @@ mod tests {
                 width,
             );
         }
+    }
+
+    #[test]
+    fn the_embedded_search_button_uses_the_applied_style_and_submits_the_query() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let mut state = State {
+            query: "live music".into(),
+            ..State::default()
+        };
+        // A saved selection can differ from the current appearance while it is captured.
+        state.settings.interface_style = theme::InterfaceStyle::Classic;
+        let mut actions = Vec::new();
+        let _ = top_bar_frame(&ctx, &mut state, Vec::new(), &mut actions);
+        pointer_click(
+            &ctx,
+            &mut state,
+            egui::pos2(450.0, 25.0),
+            egui::PointerButton::Primary,
+            &mut actions,
+        );
+        assert!(matches!(actions.as_slice(), [Action::Search(query)] if query == "live music"));
     }
 
     #[test]

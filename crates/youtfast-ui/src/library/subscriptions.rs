@@ -138,7 +138,7 @@ fn subscription_toolbar(
             }
         }
         ui.add_space(4.0);
-        if widgets::chip(
+        if widgets::toggle_chip(
             ui,
             palette,
             tr(locale, "Hide watched").as_ref(),

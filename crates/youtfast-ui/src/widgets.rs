@@ -9,8 +9,9 @@ mod rich_text;
 mod video;
 
 pub use controls::{
-    ButtonStyle, SearchField, button, chip, icon_button, icon_text_button, nav_item, paint_switch,
-    search_field, subscribe,
+    ButtonStyle, SearchField, TextInputConfig, button, chip, icon_button, icon_text_button,
+    nav_item, paint_switch, search_field, search_field_with_submit, segmented_control, status_pill,
+    subscribe, text_input, toggle_chip,
 };
 pub use playlist::{playlist_card, playlist_card_height, playlist_row};
 pub use rich_text::{rich_text, spans_truncated};
@@ -53,22 +54,105 @@ pub fn focus_outline(ui: &Ui, response: &Response, radius: CornerRadius) {
     }
 }
 
+/// Active interface style metrics for the current context.
+pub fn style_spec(ui: &Ui) -> theme::StyleSpec {
+    theme::current_style(ui.ctx()).spec()
+}
+
+/// Subtle hairline colour matching the active palette.
+pub fn hairline_color(palette: &Palette) -> Color32 {
+    if palette.dark {
+        Color32::from_white_alpha(18)
+    } else {
+        Color32::from_black_alpha(18)
+    }
+}
+
+/// Draws an Apple-style 1 px inset horizontal divider between rows inside a card
+/// when the active style uses hairline dividers.
+pub fn hairline_divider(ui: &mut Ui, palette: &Palette) {
+    let spec = style_spec(ui);
+    if !spec.hairline_dividers {
+        ui.add_space(12.0);
+        return;
+    }
+    ui.add_space(7.0);
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
+    ui.painter().hline(
+        rect.left()..=rect.right(),
+        rect.center().y,
+        Stroke::new(1.0, hairline_color(palette)),
+    );
+    ui.add_space(7.0);
+}
+
+/// Paints a subtle specular top-edge highlight inside `rect` for styles with
+/// elevated glass/matte materials.
+pub fn paint_specular_top(ui: &Ui, palette: &Palette, rect: Rect, radius: u8) {
+    let spec = style_spec(ui);
+    if !spec.specular_highlight {
+        return;
+    }
+    let alpha = if palette.dark {
+        if spec.floating_chrome { 34 } else { 18 }
+    } else if spec.floating_chrome {
+        210
+    } else {
+        160
+    };
+    let inset = f32::from(radius).min(rect.width() * 0.25);
+    if rect.right() - inset > rect.left() + inset {
+        ui.painter().hline(
+            (rect.left() + inset)..=(rect.right() - inset),
+            rect.top() + 0.5,
+            Stroke::new(1.0, Color32::from_white_alpha(alpha)),
+        );
+    }
+}
+
+/// Paints a tactile 1 px top highlight and bottom shadow edge for hardware and
+/// tactile-modern interface styles.
+pub fn paint_tactile_bevel(ui: &Ui, palette: &Palette, rect: Rect, radius: u8) {
+    if !style_spec(ui).tactile_bevel {
+        return;
+    }
+    let inset = f32::from(radius).min(rect.width() * 0.25);
+    if rect.right() - inset <= rect.left() + inset {
+        return;
+    }
+    let top_alpha = if palette.dark { 24 } else { 190 };
+    let bottom_alpha = if palette.dark { 72 } else { 28 };
+    let painter = ui.painter();
+    painter.hline(
+        (rect.left() + inset)..=(rect.right() - inset),
+        rect.top() + 1.0,
+        Stroke::new(1.0, Color32::from_white_alpha(top_alpha)),
+    );
+    painter.hline(
+        (rect.left() + inset)..=(rect.right() - inset),
+        rect.bottom() - 1.0,
+        Stroke::new(1.0, Color32::from_black_alpha(bottom_alpha)),
+    );
+}
+
 /// How far the pointer's hover over `response` has faded in (0 to 1). A
 /// control's hover tint follows this instead of switching in one frame; the
 /// window is only redrawn while the fade runs.
 pub fn hover_fade(ui: &Ui, response: &Response) -> f32 {
-    ui.ctx().animate_bool(
+    ui.ctx().animate_bool_with_easing(
         response.id.with("hover"),
         response.hovered() && ui.is_enabled(),
+        egui::emath::easing::cubic_out,
     )
 }
 
 /// How far a press on `response` has sunk in (0 to 1), the way
 /// [`hover_fade`] follows the pointer.
 pub fn press_fade(ui: &Ui, response: &Response) -> f32 {
-    ui.ctx().animate_bool(
+    ui.ctx().animate_bool_with_easing(
         response.id.with("press"),
         response.is_pointer_button_down_on() && ui.is_enabled(),
+        egui::emath::easing::cubic_out,
     )
 }
 
@@ -144,10 +228,19 @@ pub fn card<R>(
     palette: &Palette,
     add_contents: impl FnOnce(&mut Ui) -> R,
 ) -> egui::InnerResponse<R> {
-    egui::Frame::new()
+    let spec = style_spec(ui);
+    let stroke = if spec.sharp_borders {
+        Stroke::new(1.0, palette.outline)
+    } else if spec.hairline_dividers {
+        Stroke::new(1.0, hairline_color(palette))
+    } else {
+        Stroke::NONE
+    };
+    let response = egui::Frame::new()
         .fill(palette.surface)
-        .corner_radius(CornerRadius::same(RADIUS))
-        .inner_margin(egui::Margin::same(12))
+        .stroke(stroke)
+        .corner_radius(CornerRadius::same(spec.card_radius))
+        .inner_margin(egui::Margin::same(spec.card_margin))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             let widgets = &mut ui.visuals_mut().widgets;
@@ -160,7 +253,10 @@ pub fn card<R>(
                 visuals.weak_bg_fill = fill;
             }
             add_contents(ui)
-        })
+        });
+    paint_specular_top(ui, palette, response.response.rect, spec.card_radius);
+    paint_tactile_bevel(ui, palette, response.response.rect, spec.card_radius);
+    response
 }
 
 /// The palette for pills and chips on a [`card`]: the card is `surface`,

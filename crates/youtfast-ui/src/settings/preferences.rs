@@ -1,7 +1,7 @@
 //! Playback, History sync, and Notifications settings groups.
 
 use egui::{RichText, Ui};
-use youtfast_i18n::{format as trf, gettext as tr, interpolate, ngettext};
+use youtfast_i18n::{Locale, format as trf, gettext as tr, interpolate, ngettext};
 
 use super::{CONTROL_WIDTH, combo_width, setting_row, switch, switch_row};
 use crate::widgets;
@@ -17,6 +17,41 @@ use youtfast_storage::sync::{
 
 /// How often the checks may run, in minutes.
 const INTERVALS: [u32; 4] = [5, 15, 30, 60];
+const INTERVAL_PICKER_WIDTH: f32 = INTERVALS.len() as f32 * 80.0 - 8.0;
+
+fn interval_picker(
+    ui: &mut Ui,
+    palette: &theme::Palette,
+    locale: Locale,
+    id_salt: &'static str,
+    minutes: u32,
+) -> Option<u32> {
+    let labels =
+        INTERVALS.map(|value| trf(locale, "{minutes} min", &[("minutes", value.to_string())]));
+    match theme::current_style(ui.ctx()).interval_picker() {
+        theme::IntervalPickerStyle::Chips => {
+            let palette = widgets::on_card(palette);
+            let mut chosen = None;
+            // Right to left: add the longest interval first.
+            for (value, label) in INTERVALS.into_iter().zip(labels.iter()).rev() {
+                if widgets::chip(ui, &palette, label, minutes == value).clicked() {
+                    chosen = Some(value);
+                }
+            }
+            chosen
+        }
+        theme::IntervalPickerStyle::Segmented => {
+            let selected = INTERVALS
+                .iter()
+                .position(|&value| value == minutes)
+                .unwrap_or(1);
+            let id = ui.make_persistent_id(id_salt);
+            let labels = labels.each_ref().map(String::as_str);
+            widgets::segmented_control(ui, palette, id, &labels, selected)
+                .map(|index| INTERVALS[index])
+        }
+    }
+}
 
 /// The Playback group: autoplay, scrolling mini player, video buffer, SponsorBlock.
 pub(super) fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
@@ -129,40 +164,77 @@ pub(super) fn playback(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                         .iter()
                         .map(|behavior| tr(locale, behavior.label())),
                 );
-                for category in SponsorCategory::ALL {
-                    ui.add_space(8.0);
-                    let current = state.settings.sponsorblock_categories.get(category);
-                    setting_row(
-                        ui,
-                        palette,
-                        &tr(locale, category.display_name()),
-                        "",
-                        behavior_width.max(CONTROL_WIDTH),
-                        |ui| {
-                            egui::ComboBox::from_id_salt(("sponsorblock-category", category))
-                                .width(behavior_width)
-                                .selected_text(tr(locale, current.label()))
-                                .show_ui(ui, |ui| {
-                                    for behavior in SponsorBehavior::ALL {
-                                        if ui
-                                            .selectable_label(
-                                                current == behavior,
-                                                tr(locale, behavior.label()),
-                                            )
-                                            .clicked()
-                                        {
-                                            actions.push(Action::SetSponsorCategory(
-                                                category, behavior,
-                                            ));
-                                            ui.close();
+                let styled = widgets::style_spec(ui).hairline_dividers;
+                let sub = ui.horizontal(|ui| {
+                    if styled {
+                        ui.add_space(12.0);
+                    }
+                    ui.vertical(|ui| {
+                        for category in SponsorCategory::ALL {
+                            ui.add_space(6.0);
+                            let current = state.settings.sponsorblock_categories.get(category);
+                            let name = tr(locale, category.display_name());
+                            super::row(
+                                ui,
+                                behavior_width.max(CONTROL_WIDTH),
+                                |ui| {
+                                    ui.horizontal(|ui| {
+                                        if styled {
+                                            let (dot_rect, _) = ui.allocate_exact_size(
+                                                egui::vec2(10.0, 18.0),
+                                                egui::Sense::hover(),
+                                            );
+                                            ui.painter().circle_filled(
+                                                dot_rect.center(),
+                                                4.5,
+                                                sponsor_category_color(category),
+                                            );
                                         }
-                                    }
-                                });
-                        },
+                                        ui.label(
+                                            RichText::new(name.as_ref())
+                                                .font(theme::medium(13.5))
+                                                .color(palette.text),
+                                        );
+                                    });
+                                },
+                                |ui| {
+                                    egui::ComboBox::from_id_salt((
+                                        "sponsorblock-category",
+                                        category,
+                                    ))
+                                    .width(behavior_width)
+                                    .selected_text(tr(locale, current.label()))
+                                    .show_ui(ui, |ui| {
+                                        for behavior in SponsorBehavior::ALL {
+                                            if ui
+                                                .selectable_label(
+                                                    current == behavior,
+                                                    tr(locale, behavior.label()),
+                                                )
+                                                .clicked()
+                                            {
+                                                actions.push(Action::SetSponsorCategory(
+                                                    category, behavior,
+                                                ));
+                                                ui.close();
+                                            }
+                                        }
+                                    });
+                                },
+                            );
+                        }
+                    });
+                });
+                if styled {
+                    let rect = sub.response.rect;
+                    ui.painter().vline(
+                        rect.left() + 4.0,
+                        (rect.top() + 4.0)..=(rect.bottom() - 4.0),
+                        egui::Stroke::new(2.0, widgets::hairline_color(palette)),
                     );
                 }
             }
-            ui.add_space(12.0);
+            widgets::hairline_divider(ui, palette);
             let dearrow_titles = state.settings.dearrow_titles;
             if switch_row(
                 ui,
@@ -450,7 +522,7 @@ fn device_sync_card(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         }
 
         let card = widgets::on_card(palette);
-        ui.add_space(12.0);
+        widgets::hairline_divider(ui, palette);
         let addresses_text = if state.sync_addresses.is_empty() {
             tr(
                 locale,
@@ -485,7 +557,7 @@ fn device_sync_card(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             },
         );
 
-        ui.add_space(12.0);
+        widgets::hairline_divider(ui, palette);
         let new_key = tr(locale, "New key");
         let copy_key = tr(locale, "Copy key");
         let mut pairing_key = sync.pairing_key.clone();
@@ -516,12 +588,18 @@ fn device_sync_card(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                         actions.push(Action::CopySyncKey);
                     }
                 });
-                let response = ui.add(
-                    egui::TextEdit::singleline(&mut pairing_key)
-                        .password(true)
-                        .id(egui::Id::new("device-sync-pairing-key"))
-                        .desired_width(180.0)
-                        .char_limit(MAX_PAIRING_KEY_CHARS),
+                let response = widgets::text_input(
+                    ui,
+                    palette,
+                    &mut pairing_key,
+                    widgets::TextInputConfig {
+                        id: egui::Id::new("device-sync-pairing-key"),
+                        width: 180.0,
+                        hint: "",
+                        password: true,
+                        monospace: true,
+                        char_limit: Some(MAX_PAIRING_KEY_CHARS),
+                    },
                 );
                 if response.changed() {
                     actions.push(Action::SetDeviceSyncKey(pairing_key));
@@ -529,7 +607,7 @@ fn device_sync_card(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             },
         );
 
-        ui.add_space(12.0);
+        widgets::hairline_divider(ui, palette);
         let mut peer = sync.peer_address.clone();
         setting_row(
             ui,
@@ -541,12 +619,18 @@ fn device_sync_card(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             ),
             CONTROL_WIDTH,
             |ui| {
-                let response = ui.add(
-                    egui::TextEdit::singleline(&mut peer)
-                        .id(egui::Id::new("device-sync-peer"))
-                        .desired_width(220.0)
-                        .hint_text("100.64.0.2:38452")
-                        .char_limit(MAX_PEER_ADDRESS_CHARS),
+                let response = widgets::text_input(
+                    ui,
+                    palette,
+                    &mut peer,
+                    widgets::TextInputConfig {
+                        id: egui::Id::new("device-sync-peer"),
+                        width: 220.0,
+                        hint: "100.64.0.2:38452",
+                        password: false,
+                        monospace: true,
+                        char_limit: Some(MAX_PEER_ADDRESS_CHARS),
+                    },
                 );
                 if response.changed() {
                     actions.push(Action::SetDeviceSyncPeer(peer));
@@ -554,7 +638,7 @@ fn device_sync_card(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             },
         );
 
-        ui.add_space(12.0);
+        widgets::hairline_divider(ui, palette);
         let port_id = egui::Id::new("device-sync-port");
         let (mut port_text, mut port_synced) = ui.data_mut(|data| {
             data.get_temp::<(String, String)>(port_id)
@@ -574,11 +658,18 @@ fn device_sync_card(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             ),
             CONTROL_WIDTH,
             |ui| {
-                let response = ui.add(
-                    egui::TextEdit::singleline(&mut port_text)
-                        .id(port_id)
-                        .desired_width(84.0)
-                        .char_limit(5),
+                let response = widgets::text_input(
+                    ui,
+                    palette,
+                    &mut port_text,
+                    widgets::TextInputConfig {
+                        id: port_id,
+                        width: 88.0,
+                        hint: "38452",
+                        password: false,
+                        monospace: true,
+                        char_limit: Some(5),
+                    },
                 );
                 let enter_pressed =
                     response.has_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
@@ -596,59 +687,88 @@ fn device_sync_card(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
         );
         ui.data_mut(|data| data.insert_temp(port_id, (port_text, port_synced)));
 
-        ui.add_space(12.0);
-        let chips = 4.0 * 72.0 + 3.0 * 8.0;
+        widgets::hairline_divider(ui, palette);
         setting_row(
             ui,
             palette,
             &tr(locale, "Sync every"),
             &tr(locale, "Time between automatic sync checks."),
-            chips,
+            INTERVAL_PICKER_WIDTH,
             |ui| {
-                // Right to left: the longest interval goes in first.
-                for minutes in INTERVALS.into_iter().rev() {
-                    let picked = sync.every_minutes == minutes;
-                    if widgets::chip(
-                        ui,
-                        &card,
-                        &trf(locale, "{minutes} min", &[("minutes", minutes.to_string())]),
-                        picked,
-                    )
-                    .clicked()
-                    {
-                        actions.push(Action::SetDeviceSyncEvery(minutes));
-                    }
+                if let Some(minutes) = interval_picker(
+                    ui,
+                    palette,
+                    locale,
+                    "device-sync-interval",
+                    sync.every_minutes,
+                ) {
+                    actions.push(Action::SetDeviceSyncEvery(minutes));
                 }
             },
         );
 
-        ui.add_space(12.0);
-        let status_text = match &state.sync_status {
-            SyncStatus::Idle if !valid_key => {
-                youtfast_i18n::message(locale, ERR_PAIRING_KEY_INVALID).into_owned()
-            }
-            SyncStatus::Idle => tr(locale, "Ready to sync.").into_owned(),
-            SyncStatus::Syncing => tr(locale, "Syncing…").into_owned(),
-            SyncStatus::Synced(at) => trf(
-                locale,
-                "Last synced {ago}",
-                &[("ago", util::ago(*at, util::now(), locale))],
+        widgets::hairline_divider(ui, palette);
+        let (status_text, status_tint) = match &state.sync_status {
+            SyncStatus::Idle if !valid_key => (
+                youtfast_i18n::message(locale, ERR_PAIRING_KEY_INVALID).into_owned(),
+                palette.warning,
             ),
-            SyncStatus::Failed(err) => youtfast_i18n::message(locale, err).into_owned(),
+            SyncStatus::Idle => (tr(locale, "Ready to sync.").into_owned(), palette.secondary),
+            SyncStatus::Syncing => (tr(locale, "Syncing…").into_owned(), palette.blue),
+            SyncStatus::Synced(at) => (
+                trf(
+                    locale,
+                    "Last synced {ago}",
+                    &[("ago", util::ago(*at, util::now(), locale))],
+                ),
+                palette.green,
+            ),
+            SyncStatus::Failed(err) => (
+                youtfast_i18n::message(locale, err).into_owned(),
+                palette.danger,
+            ),
         };
         let sync_now = tr(locale, "Sync now");
         let syncing = matches!(state.sync_status, SyncStatus::Syncing);
         let status_width = button_row_width(ui, &[sync_now.as_ref()]).max(CONTROL_WIDTH);
-        setting_row(
+        super::row(
             ui,
-            palette,
-            &tr(locale, "Sync status"),
-            &status_text,
             status_width,
             |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(
+                        RichText::new(tr(locale, "Sync status"))
+                            .font(theme::medium(14.0))
+                            .color(palette.text),
+                    );
+                    if widgets::style_spec(ui).hairline_dividers {
+                        widgets::status_pill(ui, &status_text, status_tint);
+                    }
+                });
+                if !widgets::style_spec(ui).hairline_dividers {
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(&status_text)
+                                .font(theme::regular(13.0))
+                                .color(palette.secondary),
+                        )
+                        .wrap(),
+                    );
+                }
+            },
+            |ui| {
                 ui.add_enabled_ui(!syncing, |ui| {
-                    if widgets::button(ui, &card, sync_now.as_ref(), widgets::ButtonStyle::Normal)
-                        .clicked()
+                    if widgets::button(
+                        ui,
+                        &card,
+                        sync_now.as_ref(),
+                        if widgets::style_spec(ui).hairline_dividers {
+                            widgets::ButtonStyle::Primary
+                        } else {
+                            widgets::ButtonStyle::Normal
+                        },
+                    )
+                    .clicked()
                     {
                         actions.push(Action::SyncDevicesNow);
                     }
@@ -656,6 +776,19 @@ fn device_sync_card(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             },
         );
     });
+}
+
+fn sponsor_category_color(category: SponsorCategory) -> egui::Color32 {
+    match category {
+        SponsorCategory::Sponsor => egui::Color32::from_rgb(0x30, 0xd1, 0x58),
+        SponsorCategory::Selfpromo => egui::Color32::from_rgb(0xff, 0xd6, 0x0a),
+        SponsorCategory::Interaction => egui::Color32::from_rgb(0xbf, 0x5a, 0xf2),
+        SponsorCategory::Intro => egui::Color32::from_rgb(0x5a, 0xc8, 0xfa),
+        SponsorCategory::Outro => egui::Color32::from_rgb(0x0a, 0x84, 0xff),
+        SponsorCategory::Preview => egui::Color32::from_rgb(0x64, 0xd2, 0xff),
+        SponsorCategory::MusicOfftopic => egui::Color32::from_rgb(0xff, 0x9f, 0x0a),
+        SponsorCategory::Filler => egui::Color32::from_rgb(0xac, 0x8e, 0x68),
+    }
 }
 
 fn button_row_width(ui: &Ui, labels: &[&str]) -> f32 {
@@ -723,29 +856,19 @@ pub(super) fn notifications(ui: &mut Ui, state: &State, actions: &mut Vec<Action
                     }
                 },
             );
-            ui.add_space(12.0);
-            let chips = 4.0 * 72.0 + 3.0 * 8.0;
+            widgets::hairline_divider(ui, palette);
+            let minutes = state.settings.alerts_every_minutes;
             setting_row(
                 ui,
                 palette,
                 &tr(locale, "Check every"),
                 &tr(locale, "Time between checks."),
-                chips,
+                INTERVAL_PICKER_WIDTH,
                 |ui| {
-                    let raised = widgets::on_card(palette);
-                    // Right to left: the longest interval goes in first.
-                    for minutes in INTERVALS.into_iter().rev() {
-                        let picked = state.settings.alerts_every_minutes == minutes;
-                        if widgets::chip(
-                            ui,
-                            &raised,
-                            &trf(locale, "{minutes} min", &[("minutes", minutes.to_string())]),
-                            picked,
-                        )
-                        .clicked()
-                        {
-                            actions.push(Action::SetAlertsEvery(minutes));
-                        }
+                    if let Some(chosen) =
+                        interval_picker(ui, palette, locale, "alerts-interval", minutes)
+                    {
+                        actions.push(Action::SetAlertsEvery(chosen));
                     }
                 },
             );

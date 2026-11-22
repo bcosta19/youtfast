@@ -57,19 +57,36 @@ impl App {
         self.refresh_theme_list();
     }
 
-    /// Applies the settings' palette when it differs from the one drawn,
-    /// revealing the change from the middle of the window outwards.
+    /// Picks an interface style and saves it; `update_theme` reveals the change.
+    pub(super) fn set_interface_style(
+        &mut self,
+        ctx: &egui::Context,
+        style: theme::InterfaceStyle,
+    ) {
+        if self.state.settings.interface_style == style {
+            return;
+        }
+        self.state.settings.interface_style = style;
+        self.save_settings();
+        ctx.request_repaint();
+    }
+
+    /// Applies the settings' palette and interface style when either differs
+    /// from the one drawn, revealing the change from the middle of the window
+    /// outwards.
     pub(super) fn update_theme(&mut self, ctx: &egui::Context) {
         let palette = self.state.settings.palette();
-        if palette == self.state.palette {
+        let style = self.state.settings.interface_style;
+        if palette == self.state.palette && style == self.state.applied_interface_style {
             return;
         }
         self.theme_transition.begin(ctx);
         if self.theme_transition.holding(ctx) {
             return;
         }
-        theme::apply(ctx, &palette);
+        theme::apply_style(ctx, &palette, style);
         self.state.palette = palette;
+        self.state.applied_interface_style = style;
     }
 
     /// What the settings page lists and says under the theme setting.

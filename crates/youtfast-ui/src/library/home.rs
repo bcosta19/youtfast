@@ -100,7 +100,7 @@ fn feed_chips(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                 actions.push(Action::SetFeedFilter(filter));
             }
         }
-        if widgets::chip(
+        if widgets::toggle_chip(
             ui,
             &state.palette,
             tr(locale, "Hide watched").as_ref(),

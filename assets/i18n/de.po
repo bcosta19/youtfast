@@ -2268,3 +2268,45 @@ msgstr "Auf diesem Gerät sortiert"
 
 msgid "Watch a few videos or enable topic search to get recommendations"
 msgstr "Für Empfehlungen einige Videos ansehen oder die Themensuche aktivieren"
+
+msgid "Interface style"
+msgstr "Oberflächenstil"
+
+msgid "Classic"
+msgstr "Klassisch"
+
+msgid "Quiet precision with hairline dividers, a floating player dock, and smooth transitions."
+msgstr "Ruhige Präzision mit feinen Trennlinien, schwebender Player-Leiste und sanften Übergängen."
+
+msgid "Floating sidebar and controls with specular highlights, rounded glass surfaces, and spring motion."
+msgstr "Schwebende Seitenleiste und Bedienelemente mit Lichtkanten, abgerundeten Glasflächen und federnder Bewegung."
+
+msgid "Compact chrome, crisp corners, and fast silky transitions that keep the focus on video."
+msgstr "Kompakte Oberfläche, klare Kanten und schnelle, geschmeidige Übergänge mit Fokus auf das Video."
+
+msgid "Warm graphite and alabaster tones with generous spacing, softer corners, and tactile feedback."
+msgstr "Warme Graphit- und Alabastertöne mit großzügigem Abstand, weicheren Ecken und fühlbarer Rückmeldung."
+
+msgid "The original YouTFast appearance and timing."
+msgstr "Das ursprüngliche Erscheinungsbild und Timing von YouTFast."
+
+msgid "Clean Linux desktop look with boxed cards, balanced contrast, and soft corners."
+msgstr "Aufgeräumter Linux-Desktop-Look mit gerahmten Karten, ausgewogenem Kontrast und weichen Ecken."
+
+msgid "Layered surfaces with subtle top highlights, 8 px corners, and crisp active indicators."
+msgstr "Geschichtete Flächen mit dezenten Oberkanten-Highlights, 8-px-Ecken und klaren Aktivindikatoren."
+
+msgid "Studio-hardware precision with sharp 1 px borders, tactile bevels, and high-visibility tabular readouts."
+msgstr "Studiohardware-Präzision mit scharfen 1-px-Rändern, taktilen Fasen und gut ablesbaren Tabellenziffern."
+
+msgid "Compact tiling-friendly chrome with 4 px corners, sharp outlines, and fast keyboard-first transitions."
+msgstr "Kompakter Tiling-gerechter Rahmen mit 4-px-Ecken, scharfen Konturen und schnellen Tastatur-Übergängen."
+
+msgid "Physical button feel with subtle top bevels, crisp short shadows, and responsive press depth."
+msgstr "Haptisches Tastengefühl mit dezenter oberer Fase, klaren kurzen Schatten und reaktiver Drucktiefe."
+
+msgid "Tonal surface elevation tinted by the accent colour with generous rounded containers."
+msgstr "Tonale Flächenabstufung mit Akzentfarbtönung und großzügig abgerundeten Containern."
+
+msgid "Low-stimulation warm paper and ink tones designed for comfortable long reading sessions."
+msgstr "Reizarme warme Papier- und Tintentöne für angenehme lange Lese- und Sehsitzungen."

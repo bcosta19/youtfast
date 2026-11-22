@@ -4,7 +4,7 @@ use egui::text::LayoutJob;
 use egui::{Color32, CornerRadius, CursorIcon, Rect, Response, Sense, Stroke, Ui, pos2, vec2};
 use youtfast_i18n::{Locale, gettext as tr};
 
-use super::{focus_outline, hover_fade, mix, press_fade};
+use super::{focus_outline, hairline_color, hover_fade, mix, press_fade, style_spec};
 use youtfast_app::{Action, State};
 use youtfast_appearance::icons::Icon;
 use youtfast_appearance::theme::{self, Palette, RADIUS};
@@ -103,6 +103,7 @@ pub fn icon_text_button(
     }
     let hover = hover_fade(ui, &response);
     let press = press_fade(ui, &response);
+    let spec = style_spec(ui);
     let fill = match style {
         ButtonStyle::Primary => palette
             .text
@@ -113,9 +114,30 @@ pub fn icon_text_button(
             press,
         ),
     };
+    let visual_rect = rect.shrink(spec.press_inset * press);
+    let radius_u8 = if spec.sharp_borders {
+        spec.ctrl_radius
+    } else {
+        (visual_rect.height() / 2.0) as u8
+    };
+    let radius = CornerRadius::same(radius_u8);
     let painter = ui.painter();
-    painter.rect_filled(rect, CornerRadius::same((height / 2.0) as u8), fill);
-    focus_outline(ui, &response, CornerRadius::same((height / 2.0) as u8));
+    painter.rect_filled(visual_rect, radius, fill);
+    if style != ButtonStyle::Primary && (spec.sharp_borders || spec.hairline_dividers) {
+        let stroke_color = if spec.sharp_borders {
+            palette.outline
+        } else {
+            hairline_color(palette)
+        };
+        painter.rect_stroke(
+            visual_rect,
+            radius,
+            Stroke::new(1.0, stroke_color),
+            egui::StrokeKind::Inside,
+        );
+    }
+    super::paint_tactile_bevel(ui, palette, visual_rect, radius_u8);
+    focus_outline(ui, &response, CornerRadius::same(radius_u8));
     let content = icon_width + gap + galley.size().x;
     let mut x = rect.center().x - content / 2.0;
     let tint = if enabled { color } else { palette.dim };
@@ -212,16 +234,31 @@ pub fn nav_item(
     // The fill and the label fade with the pointer and with the selection,
     // so moving between pages reads as one item handing over to the next.
     let hover = hover_fade(ui, &response);
-    let on = ui
-        .ctx()
-        .animate_bool(response.id.with("selected"), selected);
+    let on = ui.ctx().animate_bool_with_easing(
+        response.id.with("selected"),
+        selected,
+        egui::emath::easing::cubic_out,
+    );
+    let spec = style_spec(ui);
+    let item_radius = CornerRadius::same(spec.ctrl_radius.max(RADIUS));
     let lit = hover.max(on);
     if lit > 0.0 {
         let fill = mix(palette.surface_hover, palette.surface, on);
         ui.painter()
-            .rect_filled(rect, CornerRadius::same(RADIUS), fill.gamma_multiply(lit));
+            .rect_filled(rect, item_radius, fill.gamma_multiply(lit));
+        if spec.nav_accent_pill && on > 0.01 {
+            let pill = Rect::from_center_size(
+                pos2(rect.left() + 4.0, rect.center().y),
+                vec2(3.0, 18.0 * on),
+            );
+            ui.painter().rect_filled(
+                pill,
+                CornerRadius::same(2),
+                palette.accent.gamma_multiply(on),
+            );
+        }
     }
-    focus_outline(ui, &response, CornerRadius::same(RADIUS));
+    focus_outline(ui, &response, item_radius);
     let color = mix(palette.secondary, palette.text, lit);
     let icon_size = 20.0;
     let count = count.filter(|count| *count > 0);
@@ -311,20 +348,358 @@ pub fn chip(ui: &mut Ui, palette: &Palette, label: &str, on: bool) -> Response {
         )
     };
     let radius = CornerRadius::same((height / 2.0) as u8);
-    ui.painter().rect_filled(rect, radius, fill);
+    let spec = style_spec(ui);
+    let visual_rect = rect.shrink(spec.press_inset * press);
+    ui.painter().rect_filled(visual_rect, radius, fill);
+    if !on && (spec.sharp_borders || spec.hairline_dividers) {
+        let stroke_color = if spec.sharp_borders {
+            palette.outline
+        } else {
+            hairline_color(palette)
+        };
+        ui.painter().rect_stroke(
+            visual_rect,
+            radius,
+            Stroke::new(1.0, stroke_color),
+            egui::StrokeKind::Inside,
+        );
+    }
+    super::paint_tactile_bevel(ui, palette, visual_rect, (height / 2.0) as u8);
     focus_outline(ui, &response, radius);
     ui.painter()
         .galley(rect.center() - galley.size() / 2.0, galley, text_color);
     response
 }
 
-pub struct SearchField {
+/// A persistent filter toggle chip (e.g. `Hide watched`) visually distinct
+/// from mutually exclusive feed-mode chips in modern styles, while staying a
+/// classic pill in [`theme::InterfaceStyle::Classic`].
+pub fn toggle_chip(ui: &mut Ui, palette: &Palette, label: &str, on: bool) -> Response {
+    let spec = style_spec(ui);
+    if !spec.hairline_dividers {
+        return chip(ui, palette, label, on);
+    }
+    let text_color = if on {
+        palette.accent
+    } else {
+        palette.secondary
+    };
+    let galley = ui
+        .painter()
+        .layout_no_wrap(label.to_owned(), theme::medium(13.5), text_color);
+    let height = 32.0;
+    let dot_space = 13.0;
+    let size = vec2(galley.size().x + 26.0 + dot_space, height);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), on, label)
+    });
+    if response.hovered() {
+        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+    }
+    let hover = hover_fade(ui, &response);
+    let press = press_fade(ui, &response);
+    let on_t = ui.ctx().animate_bool_with_easing(
+        response.id.with("toggle-on"),
+        on,
+        egui::emath::easing::cubic_out,
+    );
+    let off_fill = mix(palette.surface, palette.surface_hover, hover);
+    let on_fill = mix(
+        palette.accent.gamma_multiply(0.16),
+        palette.accent.gamma_multiply(0.24),
+        hover,
+    );
+    let fill = mix(off_fill, on_fill, on_t);
+    let border = mix(
+        palette.outline.gamma_multiply(0.85),
+        palette.accent.gamma_multiply(0.55),
+        on_t,
+    );
+    let visual = rect.shrink(spec.press_inset * press);
+    let radius = CornerRadius::same((height / 2.0) as u8);
+    let painter = ui.painter();
+    painter.rect_filled(visual, radius, fill);
+    painter.rect_stroke(
+        visual,
+        radius,
+        Stroke::new(1.0, border),
+        egui::StrokeKind::Inside,
+    );
+    focus_outline(ui, &response, radius);
+    let fg = mix(
+        mix(palette.secondary, palette.text, hover),
+        palette.accent,
+        on_t,
+    );
+    let dot_center = pos2(visual.left() + 14.0, visual.center().y);
+    painter.circle_filled(dot_center, 3.5, fg.gamma_multiply(0.55 + 0.45 * on_t));
+    painter.galley_with_override_text_color(
+        pos2(
+            dot_center.x + 8.0,
+            visual.center().y - galley.size().y / 2.0,
+        ),
+        galley,
+        fg,
+    );
+    response
+}
+
+/// An Apple-style segmented control with a smoothly sliding active thumb.
+/// Returns the index clicked when the user picks a different segment.
+pub fn segmented_control(
+    ui: &mut Ui,
+    palette: &Palette,
+    id: egui::Id,
+    labels: &[&str],
+    selected: usize,
+) -> Option<usize> {
+    if labels.is_empty() {
+        return None;
+    }
+    let spec = style_spec(ui);
+    let pad = 3.0;
+    let height = 32.0;
+    let seg_height = height - 2.0 * pad;
+    let selected = selected.min(labels.len() - 1);
+    let mut content_width = 0.0;
+    let segments: Vec<_> = labels
+        .iter()
+        .enumerate()
+        .map(|(index, label)| {
+            let font = if index == selected {
+                theme::semibold(13.0)
+            } else {
+                theme::medium(13.0)
+            };
+            let galley =
+                ui.painter()
+                    .layout_no_wrap((*label).to_owned(), font, Color32::PLACEHOLDER);
+            let width = (galley.size().x + 20.0).max(52.0);
+            let offset = content_width;
+            content_width += width;
+            (offset, width, galley)
+        })
+        .collect();
+    let total_width = content_width + pad * 2.0;
+    let (track_rect, _) = ui.allocate_exact_size(vec2(total_width, height), Sense::hover());
+    let track_radius = CornerRadius::same(spec.ctrl_radius.saturating_add(2));
+    let thumb_radius = CornerRadius::same(spec.ctrl_radius);
+    let track_fill = if palette.dark {
+        mix(palette.window, palette.surface, 0.55)
+    } else {
+        mix(palette.panel, palette.surface_hover, 0.6)
+    };
+    let border_color = if spec.sharp_borders {
+        palette.outline
+    } else {
+        hairline_color(palette)
+    };
+    ui.painter()
+        .rect_filled(track_rect, track_radius, track_fill);
+    ui.painter().rect_stroke(
+        track_rect,
+        track_radius,
+        Stroke::new(1.0, border_color),
+        egui::StrokeKind::Inside,
+    );
+
+    let (target_x, target_w, _) = segments[selected];
+    // Animate within the track so moving or resizing it cannot leave the thumb behind.
+    let animate = |edge, fraction| {
+        ui.ctx()
+            .animate_value_with_time(id.with(edge), fraction, ui.style().animation_time)
+    };
+    let left = animate("thumb-left", target_x / content_width).clamp(0.0, 1.0);
+    let right = animate("thumb-right", (target_x + target_w) / content_width).clamp(left, 1.0);
+    let content_left = track_rect.left() + pad;
+    let content_top = track_rect.top() + pad;
+    let thumb_rect = Rect::from_min_max(
+        pos2(content_left + left * content_width, content_top),
+        pos2(
+            content_left + right * content_width,
+            content_top + seg_height,
+        ),
+    );
+    let thumb_fill = if palette.dark {
+        palette.surface_hover
+    } else {
+        palette.overlay
+    };
+    ui.painter()
+        .rect_filled(thumb_rect, thumb_radius, thumb_fill);
+    ui.painter().rect_stroke(
+        thumb_rect,
+        thumb_radius,
+        Stroke::new(1.0, border_color),
+        egui::StrokeKind::Inside,
+    );
+    super::paint_tactile_bevel(ui, palette, thumb_rect, spec.ctrl_radius);
+
+    let mut chosen = None;
+    for (index, (offset, width, galley)) in segments.into_iter().enumerate() {
+        let seg_rect = Rect::from_min_size(
+            pos2(content_left + offset, content_top),
+            vec2(width, seg_height),
+        );
+        let response = ui.interact(seg_rect, id.with(index), Sense::click());
+        response.widget_info(|| {
+            egui::WidgetInfo::selected(
+                egui::WidgetType::Button,
+                ui.is_enabled(),
+                index == selected,
+                labels[index],
+            )
+        });
+        if response.hovered() {
+            ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+        }
+        let hover = hover_fade(ui, &response);
+        if index != selected && hover > 0.0 {
+            ui.painter().rect_filled(
+                seg_rect,
+                thumb_radius,
+                palette.surface_hover.gamma_multiply(hover * 0.45),
+            );
+        }
+        focus_outline(ui, &response, thumb_radius);
+        let text_color = if index == selected {
+            palette.text
+        } else {
+            mix(palette.secondary, palette.text, hover)
+        };
+        ui.painter().galley_with_override_text_color(
+            seg_rect.center() - galley.size() / 2.0,
+            galley,
+            text_color,
+        );
+        if response.clicked() && index != selected {
+            chosen = Some(index);
+        }
+    }
+    chosen
+}
+
+/// Configuration for [`text_input`].
+pub struct TextInputConfig<'a> {
+    pub id: egui::Id,
+    pub width: f32,
+    pub hint: &'a str,
+    pub password: bool,
+    pub monospace: bool,
+    pub char_limit: Option<usize>,
+}
+
+/// A polished single-line text input matching the app's surface elevation and
+/// focus ring, replacing raw unstyled `egui::TextEdit` boxes.
+pub fn text_input(
+    ui: &mut Ui,
+    palette: &Palette,
+    text: &mut String,
+    config: TextInputConfig<'_>,
+) -> Response {
+    let spec = style_spec(ui);
+    let height = 32.0;
+    let width = config.width.min(ui.available_width()).max(60.0);
+    let (rect, hover_response) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
+    let focused = ui.memory(|m| m.has_focus(config.id));
+    let focus_t = ui.ctx().animate_bool_with_easing(
+        config.id.with("input-focus"),
+        focused,
+        egui::emath::easing::cubic_out,
+    );
+    let hover = hover_fade(ui, &hover_response);
+    let radius = CornerRadius::same(spec.ctrl_radius);
+    let base_fill = if palette.dark {
+        mix(palette.window, palette.surface, 0.72)
+    } else {
+        mix(palette.panel, palette.overlay, 0.7)
+    };
+    let fill = mix(
+        base_fill,
+        palette.surface_hover,
+        hover * 0.45 + focus_t * 0.35,
+    );
+    ui.painter().rect_filled(rect, radius, fill);
+    let unfocused_border = if spec.sharp_borders {
+        palette.outline
+    } else {
+        palette.outline.gamma_multiply(0.85)
+    };
+    let border_color = mix(
+        unfocused_border,
+        mix(palette.text.gamma_multiply(0.45), palette.accent, 0.55),
+        focus_t,
+    );
+    ui.painter().rect_stroke(
+        rect,
+        radius,
+        Stroke::new(1.0 + 0.5 * focus_t, border_color),
+        egui::StrokeKind::Inside,
+    );
+    let inner = rect.shrink2(vec2(10.0, 0.0));
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner));
+    let mut edit = egui::TextEdit::singleline(text)
+        .id(config.id)
+        .password(config.password)
+        .frame(egui::Frame::NONE)
+        .hint_text(egui::RichText::new(config.hint).color(palette.secondary))
+        .vertical_align(egui::Align::Center)
+        .desired_width(inner.width());
+    if config.monospace {
+        edit = edit.font(egui::TextStyle::Monospace);
+    } else {
+        edit = edit.font(theme::regular(13.5));
+    }
+    if let Some(limit) = config.char_limit {
+        edit = edit.char_limit(limit);
+    }
+    child.add_sized(inner.size(), edit)
+}
+
+/// Compact pill badge with a leading status dot (Device sync, Cast status, etc.).
+pub fn status_pill(ui: &mut Ui, label: &str, tint: Color32) {
+    let horizontal_padding = 26.0;
+    let galley = ui.painter().layout(
+        label.to_owned(),
+        theme::semibold(11.5),
+        tint,
+        (ui.available_width() - horizontal_padding).max(1.0),
+    );
+    let height = (galley.size().y + 6.0).max(22.0);
+    let width = galley.size().x + horizontal_padding;
+    let (rect, response) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
+    response
+        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, ui.is_enabled(), label));
+    let radius = CornerRadius::same(11);
+    let painter = ui.painter();
+    painter.rect_filled(rect, radius, tint.gamma_multiply(0.16));
+    painter.rect_stroke(
+        rect,
+        radius,
+        Stroke::new(1.0, tint.gamma_multiply(0.32)),
+        egui::StrokeKind::Inside,
+    );
+    let dot = pos2(rect.left() + 10.0, rect.center().y);
+    painter.circle_filled(dot, 3.0, tint);
+    painter.galley(
+        pos2(dot.x + 7.0, rect.center().y - galley.size().y / 2.0),
+        galley,
+        tint,
+    );
+}
+
+/// Text edit identity, sizing, and optional embedded submit button.
+#[derive(Debug)]
+pub struct SearchField<'a> {
     id: egui::Id,
     width: f32,
     return_key: Option<egui::KeyboardShortcut>,
+    submit_label: Option<&'a str>,
 }
 
-impl SearchField {
+impl<'a> SearchField<'a> {
+    /// Creates a search field with a decorative search icon.
     pub fn new(id: egui::Id, width: f32) -> Self {
         Self {
             id,
@@ -333,9 +708,17 @@ impl SearchField {
                 egui::Modifiers::NONE,
                 egui::Key::Enter,
             )),
+            submit_label: None,
         }
     }
 
+    /// Makes the leading icon a button with a localized accessible name.
+    pub fn submit_icon(mut self, label: &'a str) -> Self {
+        self.submit_label = Some(label);
+        self
+    }
+
+    /// Prevents Enter from surrendering text edit focus.
     pub fn keep_focus_on_enter(mut self) -> Self {
         self.return_key = None;
         self
@@ -351,12 +734,26 @@ pub fn search_field(
     text: &mut String,
     hint: &str,
     locale: Locale,
+    config: SearchField<'_>,
+) -> Response {
+    search_field_with_submit(ui, palette, text, hint, locale, config).0
+}
+
+/// Returns the text edit response and whether the embedded search button activated.
+pub fn search_field_with_submit(
+    ui: &mut Ui,
+    palette: &Palette,
+    text: &mut String,
+    hint: &str,
+    locale: Locale,
     SearchField {
         id,
         width,
         return_key,
-    }: SearchField,
-) -> Response {
+        submit_label,
+    }: SearchField<'_>,
+) -> (Response, bool) {
+    let spec = style_spec(ui);
     let height = 36.0;
     let (rect, hover_response) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
     let focused = ui.memory(|memory| memory.has_focus(id));
@@ -365,8 +762,13 @@ pub fn search_field(
     let fill = mix(palette.surface, palette.surface_hover, hover.max(focus_t));
     let radius = CornerRadius::same((height / 2.0) as u8);
     ui.painter().rect_filled(rect, radius, fill);
+    let unfocused_border = if spec.sharp_borders {
+        palette.outline
+    } else {
+        palette.outline.gamma_multiply(0.75)
+    };
     let border_color = mix(
-        palette.outline.gamma_multiply(0.75),
+        unfocused_border,
         mix(palette.text.gamma_multiply(0.5), palette.accent, 0.45),
         focus_t,
     );
@@ -376,10 +778,6 @@ pub fn search_field(
         Stroke::new(1.0 + 0.5 * focus_t, border_color),
         egui::StrokeKind::Inside,
     );
-    let icon = Rect::from_center_size(pos2(rect.left() + 20.0, rect.center().y), vec2(16.0, 16.0));
-    Icon::Search
-        .image(mix(palette.secondary, palette.text, focus_t), 16.0)
-        .paint_at(ui, icon);
     let clear = !text.is_empty();
     let field_rect = Rect::from_min_max(
         pos2(rect.left() + 36.0, rect.top()),
@@ -395,11 +793,26 @@ pub fn search_field(
             .id(id)
             .return_key(return_key)
             .frame(egui::Frame::NONE)
-            .hint_text(egui::RichText::new(hint).color(palette.dim))
+            .hint_text(egui::RichText::new(hint).color(palette.secondary))
             .font(theme::regular(14.0))
             .vertical_align(egui::Align::Center)
             .desired_width(field_rect.width()),
     );
+    let search_center = pos2(rect.left() + 20.0, rect.center().y);
+    let submitted = if let Some(label) = submit_label {
+        let button = Rect::from_center_size(search_center, vec2(28.0, 28.0));
+        let submit = ui.interact(button, id.with("submit"), Sense::click());
+        submit.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
+        });
+        paint_search_button(ui, palette, &submit, Icon::Search, 16.0);
+        submit.clicked()
+    } else {
+        Icon::Search
+            .image(mix(palette.secondary, palette.text, focus_t), 16.0)
+            .paint_at(ui, Rect::from_center_size(search_center, vec2(16.0, 16.0)));
+        false
+    };
     if clear {
         let button =
             Rect::from_center_size(pos2(rect.right() - 20.0, rect.center().y), vec2(24.0, 24.0));
@@ -411,30 +824,29 @@ pub fn search_field(
                 format!("{}: {hint}", tr(locale, "Clear")),
             )
         });
-        let clear_hover = hover_fade(ui, &clear_response);
-        if clear_response.hovered() {
-            ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
-        }
-        if clear_hover > 0.0 {
-            ui.painter().circle_filled(
-                button.center(),
-                12.0,
-                palette.surface_active.gamma_multiply(clear_hover),
-            );
-        }
-        focus_outline(ui, &clear_response, CornerRadius::same(12));
-        Icon::Close
-            .image(mix(palette.secondary, palette.text, clear_hover), 15.0)
-            .paint_at(
-                ui,
-                Rect::from_center_size(button.center(), vec2(15.0, 15.0)),
-            );
+        paint_search_button(ui, palette, &clear_response, Icon::Close, 15.0);
         if clear_response.clicked() {
             text.clear();
             ui.memory_mut(|memory| memory.request_focus(id));
         }
     }
-    response
+    (response, submitted)
+}
+
+fn paint_search_button(ui: &Ui, palette: &Palette, response: &Response, icon: Icon, size: f32) {
+    let hover = hover_fade(ui, response);
+    let center = response.rect.center();
+    let radius = response.rect.width() / 2.0;
+    if response.hovered() {
+        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+    }
+    if hover > 0.0 {
+        ui.painter()
+            .circle_filled(center, radius, palette.surface_active.gamma_multiply(hover));
+    }
+    focus_outline(ui, response, CornerRadius::same(radius as u8));
+    icon.image(mix(palette.secondary, palette.text, hover), size)
+        .paint_at(ui, Rect::from_center_size(center, vec2(size, size)));
 }
 
 /// Paints an animated pill switch inside `rect`, blending between `off` and
@@ -513,6 +925,133 @@ mod tests {
                 .iter()
                 .any(|(_, node)| node.label() == Some("Limpar: Pesquisar"))
         );
+        assert!(
+            !tree
+                .nodes
+                .iter()
+                .any(|(_, node)| node.role() == egui::accesskit::Role::Button
+                    && node.label().is_some_and(|label| label.contains("Enter")))
+        );
+    }
+
+    #[test]
+    fn embedded_search_button_has_a_name_and_submits_on_click_or_enter() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        theme::install_fonts(&ctx);
+        let locale = Locale::PortugueseBrazil;
+        let label = tr(locale, "Search (Enter)");
+        let id = Id::new("embedded search");
+        let mut query = "texto".to_owned();
+        let mut draw = |events| {
+            let mut result = (pos2(0.0, 0.0), false);
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    let origin = ui.next_widget_position();
+                    let (_, submitted) = search_field_with_submit(
+                        ui,
+                        &Palette::dark(),
+                        &mut query,
+                        "Pesquisar",
+                        locale,
+                        SearchField::new(id, 240.0).submit_icon(label.as_ref()),
+                    );
+                    result = (origin + vec2(20.0, 18.0), submitted);
+                },
+            );
+            output.textures_delta.clear();
+            (result, output.platform_output.accesskit_update)
+        };
+
+        let ((pos, submitted), tree) = draw(vec![]);
+        assert!(!submitted);
+        let tree = tree.expect("accessibility tree");
+        assert!(tree.nodes.iter().any(|(_, node)| {
+            node.role() == egui::accesskit::Role::Button
+                && node.label() == Some("Pesquisar (Enter)")
+        }));
+        draw(vec![egui::Event::PointerMoved(pos)]);
+        let pointer = |pressed| {
+            vec![egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            }]
+        };
+        let ((_, pressed), _) = draw(pointer(true));
+        let ((_, clicked), _) = draw(pointer(false));
+        assert!(!pressed);
+        assert!(clicked);
+
+        ctx.memory_mut(|memory| memory.request_focus(id.with("submit")));
+        let ((_, submitted), _) = draw(vec![egui::Event::Key {
+            key: egui::Key::Enter,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }]);
+        assert!(submitted);
+        assert_eq!(query, "texto");
+    }
+
+    #[test]
+    fn status_pill_wraps_but_exposes_the_full_status_as_one_label() {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        theme::install_fonts(&ctx);
+        let status = "Could not synchronize histories because the other device is not reachable.";
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            ui.set_max_width(150.0);
+            status_pill(ui, status, Color32::WHITE);
+        });
+        output.textures_delta.clear();
+        assert!(output.shapes.iter().any(|shape| {
+            matches!(&shape.shape, egui::Shape::Text(text)
+                if text.galley.text() == status && text.galley.rows.len() > 1)
+        }));
+        let tree = output
+            .platform_output
+            .accesskit_update
+            .expect("accessibility tree");
+        assert!(tree.nodes.iter().any(|(_, node)| {
+            node.role() == egui::accesskit::Role::Label && node.value() == Some(status)
+        }));
+    }
+
+    #[test]
+    fn segmented_thumb_moves_with_track_without_waiting_for_animation() {
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let palette = Palette::dark();
+        let thumb = |space| {
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                ui.horizontal(|ui| {
+                    ui.add_space(space);
+                    segmented_control(ui, &palette, Id::new("segments"), &["5 min", "15 min"], 1);
+                });
+            });
+            output.textures_delta.clear();
+            output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Rect(rect) if rect.fill == palette.surface_hover => {
+                        Some(rect.rect)
+                    }
+                    _ => None,
+                })
+                .expect("selected segment thumb")
+        };
+        let first = thumb(10.0);
+        let moved = thumb(110.0);
+        assert!((moved.left() - first.left() - 100.0).abs() < 0.1);
+        assert!((moved.width() - first.width()).abs() < 0.1);
     }
 
     #[test]

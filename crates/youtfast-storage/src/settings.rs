@@ -278,6 +278,9 @@ pub struct Settings {
     /// The face that draws the interface; older settings use the system's.
     #[serde(default)]
     pub interface_font: youtfast_appearance::theme::InterfaceFont,
+    /// Visual style, surfaces and transition language of the interface.
+    #[serde(default)]
+    pub interface_style: youtfast_appearance::theme::InterfaceStyle,
     /// Applies only while signed in; older files keep separate histories.
     #[serde(default)]
     pub history_sync: HistorySync,
@@ -544,6 +547,7 @@ impl Default for Settings {
             recommendations: Recommendations::default(),
             language: youtfast_i18n::Locale::default(),
             interface_font: youtfast_appearance::theme::InterfaceFont::default(),
+            interface_style: youtfast_appearance::theme::InterfaceStyle::default(),
             history_sync: HistorySync::default(),
             playback_buffer: PlaybackBuffer::default(),
             quality: Quality::default(),
@@ -624,22 +628,24 @@ impl Settings {
     }
 
     /// The colours the interface draws with now: the selected palette's
-    /// cache when it has one, else a built-in.
+    /// cache when it has one, else the active interface style's built-in.
     pub fn palette(&self) -> Palette {
+        let style = self.interface_style;
+        let tonal = style.spec().tonal_elevation;
         match &self.theme {
             ThemeChoice::Custom(filename) => self
                 .custom_theme_cache
                 .as_ref()
                 .filter(|theme| &theme.filename == filename)
-                .map(|theme| theme.palette)
-                .unwrap_or_else(Palette::dark),
+                .map(|theme| theme.palette.with_tonal_elevation(tonal))
+                .unwrap_or_else(|| Palette::for_style(style, true)),
             ThemeChoice::Auto => self
                 .system_theme_cache
                 .as_ref()
-                .map(|theme| theme.palette)
-                .unwrap_or_else(Palette::dark),
-            ThemeChoice::Dark => Palette::dark(),
-            ThemeChoice::Light => Palette::light(),
+                .map(|theme| theme.palette.with_tonal_elevation(tonal))
+                .unwrap_or_else(|| Palette::for_style(style, true)),
+            ThemeChoice::Dark => Palette::for_style(style, true),
+            ThemeChoice::Light => Palette::for_style(style, false),
         }
     }
 }
@@ -832,13 +838,32 @@ mod tests {
 
     #[test]
     fn the_palette_follows_the_theme_choice() {
+        use youtfast_appearance::theme::InterfaceStyle;
+
+        let default_dark = Palette::for_style(InterfaceStyle::default(), true);
+        let default_light = Palette::for_style(InterfaceStyle::default(), false);
         let with_theme = |theme| Settings {
             theme,
             ..Settings::default()
         };
-        assert_eq!(with_theme(ThemeChoice::Auto).palette(), Palette::dark());
-        assert_eq!(with_theme(ThemeChoice::Light).palette(), Palette::light());
-        assert_eq!(with_theme(ThemeChoice::Dark).palette(), Palette::dark());
+        assert_eq!(with_theme(ThemeChoice::Auto).palette(), default_dark);
+        assert_eq!(with_theme(ThemeChoice::Light).palette(), default_light);
+        assert_eq!(with_theme(ThemeChoice::Dark).palette(), default_dark);
+        // Built-in dark/light palettes follow the chosen interface style.
+        for style in InterfaceStyle::ALL {
+            let dark = Settings {
+                interface_style: style,
+                theme: ThemeChoice::Dark,
+                ..Settings::default()
+            };
+            let light = Settings {
+                interface_style: style,
+                theme: ThemeChoice::Light,
+                ..Settings::default()
+            };
+            assert_eq!(dark.palette(), Palette::for_style(style, true));
+            assert_eq!(light.palette(), Palette::for_style(style, false));
+        }
         // Automatic picks the desktop's cached palette when there is one.
         let mut omarchy = Palette::light();
         omarchy.accent = egui::Color32::from_rgb(1, 2, 3);
@@ -861,7 +886,41 @@ mod tests {
         assert_eq!(settings.palette(), nord);
         // A cache for another file does not count.
         settings.theme = ThemeChoice::Custom("Gone.json".into());
-        assert_eq!(settings.palette(), Palette::dark());
+        assert_eq!(settings.palette(), default_dark);
+    }
+
+    #[test]
+    fn interface_style_round_trips_and_falls_back_on_unknown() {
+        use youtfast_appearance::theme::InterfaceStyle;
+
+        for style in InterfaceStyle::ALL {
+            let settings = Settings {
+                interface_style: style,
+                ..Settings::default()
+            };
+            let json = serde_json::to_string(&settings).unwrap();
+            let decoded: Settings = serde_json::from_str(&json).unwrap();
+            assert_eq!(decoded.interface_style, style);
+        }
+        let unknown: Settings =
+            serde_json::from_str(r#"{"interface_style":"future_style"}"#).unwrap();
+        assert_eq!(unknown.interface_style, InterfaceStyle::default());
+
+        // Material Tonal gently tints custom/Omarchy surfaces toward the accent.
+        let mut custom = Palette::dark();
+        custom.accent = egui::Color32::from_rgb(0xd0, 0xbc, 0xff);
+        let tinted = Settings {
+            interface_style: InterfaceStyle::MaterialTonal,
+            theme: ThemeChoice::Custom("Nord.json".into()),
+            custom_theme_cache: Some(CustomTheme {
+                filename: "Nord.json".into(),
+                palette: custom,
+            }),
+            ..Settings::default()
+        }
+        .palette();
+        assert_ne!(tinted.surface, custom.surface);
+        assert_eq!(tinted.accent, custom.accent);
     }
 
     #[test]

@@ -50,8 +50,1219 @@ pub struct Palette {
     pub cyan: Color32,
 }
 
+/// The visual direction and motion language of the interface.
+///
+/// Built-in Dark/Light themes adapt their palette to the selected style while
+/// custom JSON palettes and Omarchy themes keep their own colours and adopt
+/// the style's geometry, surfaces and transitions.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InterfaceStyle {
+    /// macOS Sequoia / Apple TV+ precision: hairline dividers, refined corners,
+    /// floating player dock, and smooth cubic-out transitions.
+    #[default]
+    Cupertino,
+    /// visionOS / Liquid Glass floating chrome: inset translucent sidebar,
+    /// specular top-edge highlights, rounded glass dock, and springy motion.
+    LiquidGlass,
+    /// Apple Music / editorial focus: compact chrome, tight corners, fast
+    /// silky transitions, and maximum space for video and feeds.
+    Cinema,
+    /// Warm graphite and alabaster surfaces, generous spacing and corners,
+    /// and soft tactile response.
+    WarmStudio,
+    /// GNOME Adwaita HIG: clean Linux header bar, boxed lists, balanced contrast,
+    /// and moderate rounded corners.
+    Adwaita,
+    /// Microsoft Fluent 2 Mica: layered surfaces, subtle top-edge light,
+    /// 8 px corners, and crisp active indicators.
+    Fluent,
+    /// Dieter Rams / Braun studio hardware: sharp 1 px borders, tactile bevels,
+    /// and high-visibility tabular readouts.
+    Industrial,
+    /// Technical tiling-WM style (Hyprland / Zed / Ghostty): compact 44 px chrome,
+    /// sharp 4 px corners, 1 px outlines, and fast 100 ms transitions.
+    Technical,
+    /// Tactile modern surfaces (Things 3 / Nova): physical top highlight and
+    /// bottom shade bevels with responsive press depth.
+    Tactile,
+    /// Google Material 3 Tonal: surfaces tinted with the active accent colour
+    /// and generous rounded containers.
+    MaterialTonal,
+    /// Low-stimulation warm paper and ink tones for comfortable long reading.
+    Paper,
+    /// Original YouTFast look (v0.9.x): 56 px top bar, 8 px corners, 120 ms fades.
+    Classic,
+}
+
+/// How settings present a fixed list of time intervals.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IntervalPickerStyle {
+    /// Individually styled options.
+    Chips,
+    /// Options share an animated selection track.
+    Segmented,
+}
+
+impl InterfaceStyle {
+    /// Control used for interval settings, independent of divider decoration.
+    pub const fn interval_picker(self) -> IntervalPickerStyle {
+        match self {
+            Self::MaterialTonal | Self::Classic => IntervalPickerStyle::Chips,
+            Self::Cupertino
+            | Self::LiquidGlass
+            | Self::Cinema
+            | Self::WarmStudio
+            | Self::Adwaita
+            | Self::Fluent
+            | Self::Industrial
+            | Self::Technical
+            | Self::Tactile
+            | Self::Paper => IntervalPickerStyle::Segmented,
+        }
+    }
+
+    /// Every style offered in Settings → Appearance, in presentation order.
+    pub const ALL: [Self; 12] = [
+        Self::Cupertino,
+        Self::LiquidGlass,
+        Self::Cinema,
+        Self::WarmStudio,
+        Self::Adwaita,
+        Self::Fluent,
+        Self::Industrial,
+        Self::Technical,
+        Self::Tactile,
+        Self::MaterialTonal,
+        Self::Paper,
+        Self::Classic,
+    ];
+
+    /// Short display name for pickers (kept consistent across languages as style titles).
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Cupertino => "Cupertino Quiet",
+            Self::LiquidGlass => "Liquid Glass",
+            Self::Cinema => "Cinema Minimal",
+            Self::WarmStudio => "Warm Studio",
+            Self::Adwaita => "Adwaita (GNOME)",
+            Self::Fluent => "Fluent Mica",
+            Self::Industrial => "Industrial (Braun)",
+            Self::Technical => "Technical (Tiling)",
+            Self::Tactile => "Tactile Modern",
+            Self::MaterialTonal => "Material Tonal",
+            Self::Paper => "Paper",
+            Self::Classic => "Classic",
+        }
+    }
+
+    /// Translatable one-line summary shown under the style picker.
+    pub const fn description(self) -> &'static str {
+        match self {
+            Self::Cupertino => {
+                "Quiet precision with hairline dividers, a floating player dock, and smooth transitions."
+            }
+            Self::LiquidGlass => {
+                "Floating sidebar and controls with specular highlights, rounded glass surfaces, and spring motion."
+            }
+            Self::Cinema => {
+                "Compact chrome, crisp corners, and fast silky transitions that keep the focus on video."
+            }
+            Self::WarmStudio => {
+                "Warm graphite and alabaster tones with generous spacing, softer corners, and tactile feedback."
+            }
+            Self::Adwaita => {
+                "Clean Linux desktop look with boxed cards, balanced contrast, and soft corners."
+            }
+            Self::Fluent => {
+                "Layered surfaces with subtle top highlights, 8 px corners, and crisp active indicators."
+            }
+            Self::Industrial => {
+                "Studio-hardware precision with sharp 1 px borders, tactile bevels, and high-visibility tabular readouts."
+            }
+            Self::Technical => {
+                "Compact tiling-friendly chrome with 4 px corners, sharp outlines, and fast keyboard-first transitions."
+            }
+            Self::Tactile => {
+                "Physical button feel with subtle top bevels, crisp short shadows, and responsive press depth."
+            }
+            Self::MaterialTonal => {
+                "Tonal surface elevation tinted by the accent colour with generous rounded containers."
+            }
+            Self::Paper => {
+                "Low-stimulation warm paper and ink tones designed for comfortable long reading sessions."
+            }
+            Self::Classic => "The original YouTFast appearance and timing.",
+        }
+    }
+
+    /// Geometry, elevation and motion metrics for this style.
+    pub const fn spec(self) -> StyleSpec {
+        match self {
+            Self::Cupertino => StyleSpec {
+                top_bar_height: 50.0,
+                tab_bar_height: 34.0,
+                sidebar_open: 232.0,
+                sidebar_rail: 66.0,
+                sidebar_inset: 0,
+                sidebar_radius: 0,
+                sidebar_animate: true,
+                card_radius: 14,
+                card_margin: 14,
+                thumb_radius: 10,
+                ctrl_radius: 8,
+                modal_radius: 16,
+                pip_radius: 14,
+                mini_radius: 14,
+                mini_frame_pad: 0,
+                animation_time: 0.22,
+                floating_dock: true,
+                dock_inset: 10.0,
+                dock_radius: 12,
+                specular_highlight: true,
+                hairline_dividers: true,
+                grouped_palette: true,
+                show_search_submit_button: false,
+                hover_lift: 1.5,
+                press_inset: 0.6,
+                nav_accent_pill: true,
+                floating_chrome: false,
+                tonal_elevation: 0.0,
+                tactile_bevel: false,
+                sharp_borders: false,
+            },
+            Self::LiquidGlass => StyleSpec {
+                top_bar_height: 54.0,
+                tab_bar_height: 36.0,
+                sidebar_open: 238.0,
+                sidebar_rail: 68.0,
+                sidebar_inset: 8,
+                sidebar_radius: 16,
+                sidebar_animate: true,
+                card_radius: 18,
+                card_margin: 14,
+                thumb_radius: 13,
+                ctrl_radius: 11,
+                modal_radius: 20,
+                pip_radius: 18,
+                mini_radius: 18,
+                mini_frame_pad: 0,
+                animation_time: 0.26,
+                floating_dock: true,
+                dock_inset: 14.0,
+                dock_radius: 16,
+                specular_highlight: true,
+                hairline_dividers: true,
+                grouped_palette: true,
+                show_search_submit_button: false,
+                hover_lift: 2.0,
+                press_inset: 0.9,
+                nav_accent_pill: false,
+                floating_chrome: true,
+                tonal_elevation: 0.0,
+                tactile_bevel: false,
+                sharp_borders: false,
+            },
+            Self::Cinema => StyleSpec {
+                top_bar_height: 46.0,
+                tab_bar_height: 32.0,
+                sidebar_open: 220.0,
+                sidebar_rail: 60.0,
+                sidebar_inset: 0,
+                sidebar_radius: 0,
+                sidebar_animate: true,
+                card_radius: 10,
+                card_margin: 12,
+                thumb_radius: 8,
+                ctrl_radius: 7,
+                modal_radius: 12,
+                pip_radius: 10,
+                mini_radius: 10,
+                mini_frame_pad: 0,
+                animation_time: 0.16,
+                floating_dock: false,
+                dock_inset: 0.0,
+                dock_radius: 0,
+                specular_highlight: false,
+                hairline_dividers: true,
+                grouped_palette: true,
+                show_search_submit_button: false,
+                hover_lift: 0.0,
+                press_inset: 0.4,
+                nav_accent_pill: true,
+                floating_chrome: false,
+                tonal_elevation: 0.0,
+                tactile_bevel: false,
+                sharp_borders: false,
+            },
+            Self::WarmStudio => StyleSpec {
+                top_bar_height: 54.0,
+                tab_bar_height: 36.0,
+                sidebar_open: 244.0,
+                sidebar_rail: 70.0,
+                sidebar_inset: 6,
+                sidebar_radius: 14,
+                sidebar_animate: true,
+                card_radius: 16,
+                card_margin: 16,
+                thumb_radius: 12,
+                ctrl_radius: 10,
+                modal_radius: 18,
+                pip_radius: 14,
+                mini_radius: 14,
+                mini_frame_pad: 0,
+                animation_time: 0.24,
+                floating_dock: true,
+                dock_inset: 10.0,
+                dock_radius: 14,
+                specular_highlight: true,
+                hairline_dividers: true,
+                grouped_palette: true,
+                show_search_submit_button: false,
+                hover_lift: 1.5,
+                press_inset: 0.8,
+                nav_accent_pill: false,
+                floating_chrome: false,
+                tonal_elevation: 0.0,
+                tactile_bevel: false,
+                sharp_borders: false,
+            },
+            Self::Adwaita => StyleSpec {
+                top_bar_height: 48.0,
+                tab_bar_height: 34.0,
+                sidebar_open: 236.0,
+                sidebar_rail: 66.0,
+                sidebar_inset: 0,
+                sidebar_radius: 0,
+                sidebar_animate: true,
+                card_radius: 12,
+                card_margin: 14,
+                thumb_radius: 10,
+                ctrl_radius: 8,
+                modal_radius: 14,
+                pip_radius: 12,
+                mini_radius: 12,
+                mini_frame_pad: 0,
+                animation_time: 0.20,
+                floating_dock: false,
+                dock_inset: 0.0,
+                dock_radius: 0,
+                specular_highlight: false,
+                hairline_dividers: true,
+                grouped_palette: true,
+                show_search_submit_button: false,
+                hover_lift: 1.0,
+                press_inset: 0.5,
+                nav_accent_pill: false,
+                floating_chrome: false,
+                tonal_elevation: 0.0,
+                tactile_bevel: false,
+                sharp_borders: false,
+            },
+            Self::Fluent => StyleSpec {
+                top_bar_height: 48.0,
+                tab_bar_height: 34.0,
+                sidebar_open: 232.0,
+                sidebar_rail: 64.0,
+                sidebar_inset: 0,
+                sidebar_radius: 0,
+                sidebar_animate: true,
+                card_radius: 8,
+                card_margin: 14,
+                thumb_radius: 6,
+                ctrl_radius: 6,
+                modal_radius: 10,
+                pip_radius: 8,
+                mini_radius: 8,
+                mini_frame_pad: 0,
+                animation_time: 0.18,
+                floating_dock: true,
+                dock_inset: 8.0,
+                dock_radius: 8,
+                specular_highlight: true,
+                hairline_dividers: true,
+                grouped_palette: true,
+                show_search_submit_button: false,
+                hover_lift: 1.0,
+                press_inset: 0.6,
+                nav_accent_pill: true,
+                floating_chrome: false,
+                tonal_elevation: 0.0,
+                tactile_bevel: false,
+                sharp_borders: false,
+            },
+            Self::Industrial => StyleSpec {
+                top_bar_height: 48.0,
+                tab_bar_height: 32.0,
+                sidebar_open: 224.0,
+                sidebar_rail: 64.0,
+                sidebar_inset: 0,
+                sidebar_radius: 0,
+                sidebar_animate: true,
+                card_radius: 4,
+                card_margin: 12,
+                thumb_radius: 3,
+                ctrl_radius: 3,
+                modal_radius: 6,
+                pip_radius: 4,
+                mini_radius: 4,
+                mini_frame_pad: 0,
+                animation_time: 0.14,
+                floating_dock: false,
+                dock_inset: 0.0,
+                dock_radius: 0,
+                specular_highlight: false,
+                hairline_dividers: true,
+                grouped_palette: true,
+                show_search_submit_button: false,
+                hover_lift: 0.0,
+                press_inset: 0.8,
+                nav_accent_pill: true,
+                floating_chrome: false,
+                tonal_elevation: 0.0,
+                tactile_bevel: true,
+                sharp_borders: true,
+            },
+            Self::Technical => StyleSpec {
+                top_bar_height: 44.0,
+                tab_bar_height: 30.0,
+                sidebar_open: 216.0,
+                sidebar_rail: 58.0,
+                sidebar_inset: 0,
+                sidebar_radius: 0,
+                sidebar_animate: true,
+                card_radius: 4,
+                card_margin: 12,
+                thumb_radius: 3,
+                ctrl_radius: 3,
+                modal_radius: 5,
+                pip_radius: 4,
+                mini_radius: 4,
+                mini_frame_pad: 0,
+                animation_time: 0.10,
+                floating_dock: false,
+                dock_inset: 0.0,
+                dock_radius: 0,
+                specular_highlight: false,
+                hairline_dividers: true,
+                grouped_palette: true,
+                show_search_submit_button: false,
+                hover_lift: 0.0,
+                press_inset: 0.3,
+                nav_accent_pill: true,
+                floating_chrome: false,
+                tonal_elevation: 0.0,
+                tactile_bevel: false,
+                sharp_borders: true,
+            },
+            Self::Tactile => StyleSpec {
+                top_bar_height: 52.0,
+                tab_bar_height: 36.0,
+                sidebar_open: 236.0,
+                sidebar_rail: 68.0,
+                sidebar_inset: 0,
+                sidebar_radius: 0,
+                sidebar_animate: true,
+                card_radius: 12,
+                card_margin: 14,
+                thumb_radius: 9,
+                ctrl_radius: 8,
+                modal_radius: 14,
+                pip_radius: 12,
+                mini_radius: 12,
+                mini_frame_pad: 0,
+                animation_time: 0.20,
+                floating_dock: true,
+                dock_inset: 10.0,
+                dock_radius: 12,
+                specular_highlight: true,
+                hairline_dividers: true,
+                grouped_palette: true,
+                show_search_submit_button: false,
+                hover_lift: 1.5,
+                press_inset: 1.0,
+                nav_accent_pill: true,
+                floating_chrome: false,
+                tonal_elevation: 0.0,
+                tactile_bevel: true,
+                sharp_borders: false,
+            },
+            Self::MaterialTonal => StyleSpec {
+                top_bar_height: 54.0,
+                tab_bar_height: 36.0,
+                sidebar_open: 244.0,
+                sidebar_rail: 72.0,
+                sidebar_inset: 0,
+                sidebar_radius: 0,
+                sidebar_animate: true,
+                card_radius: 16,
+                card_margin: 16,
+                thumb_radius: 12,
+                ctrl_radius: 10,
+                modal_radius: 20,
+                pip_radius: 16,
+                mini_radius: 16,
+                mini_frame_pad: 0,
+                animation_time: 0.22,
+                floating_dock: true,
+                dock_inset: 10.0,
+                dock_radius: 16,
+                specular_highlight: false,
+                hairline_dividers: false,
+                grouped_palette: true,
+                show_search_submit_button: false,
+                hover_lift: 1.5,
+                press_inset: 0.7,
+                nav_accent_pill: false,
+                floating_chrome: false,
+                tonal_elevation: 0.08,
+                tactile_bevel: false,
+                sharp_borders: false,
+            },
+            Self::Paper => StyleSpec {
+                top_bar_height: 50.0,
+                tab_bar_height: 34.0,
+                sidebar_open: 232.0,
+                sidebar_rail: 64.0,
+                sidebar_inset: 0,
+                sidebar_radius: 0,
+                sidebar_animate: true,
+                card_radius: 10,
+                card_margin: 14,
+                thumb_radius: 8,
+                ctrl_radius: 7,
+                modal_radius: 12,
+                pip_radius: 10,
+                mini_radius: 10,
+                mini_frame_pad: 0,
+                animation_time: 0.14,
+                floating_dock: false,
+                dock_inset: 0.0,
+                dock_radius: 0,
+                specular_highlight: false,
+                hairline_dividers: true,
+                grouped_palette: true,
+                show_search_submit_button: false,
+                hover_lift: 0.0,
+                press_inset: 0.3,
+                nav_accent_pill: false,
+                floating_chrome: false,
+                tonal_elevation: 0.0,
+                tactile_bevel: false,
+                sharp_borders: false,
+            },
+            Self::Classic => StyleSpec {
+                top_bar_height: 56.0,
+                tab_bar_height: 40.0,
+                sidebar_open: 240.0,
+                sidebar_rail: 72.0,
+                sidebar_inset: 0,
+                sidebar_radius: 0,
+                sidebar_animate: false,
+                card_radius: RADIUS + 4,
+                card_margin: 12,
+                thumb_radius: RADIUS,
+                ctrl_radius: RADIUS_SMALL + 2,
+                modal_radius: RADIUS + 4,
+                pip_radius: 0,
+                mini_radius: RADIUS + 1,
+                mini_frame_pad: 3,
+                animation_time: 0.12,
+                floating_dock: false,
+                dock_inset: 0.0,
+                dock_radius: 0,
+                specular_highlight: false,
+                hairline_dividers: false,
+                grouped_palette: false,
+                show_search_submit_button: true,
+                hover_lift: 0.0,
+                press_inset: 0.0,
+                nav_accent_pill: false,
+                floating_chrome: false,
+                tonal_elevation: 0.0,
+                tactile_bevel: false,
+                sharp_borders: false,
+            },
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for InterfaceStyle {
+    /// Unknown style names saved by a newer version fall back to the default
+    /// instead of discarding the settings file.
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "snake_case")]
+        enum Known {
+            Cupertino,
+            LiquidGlass,
+            Cinema,
+            WarmStudio,
+            Adwaita,
+            Fluent,
+            Industrial,
+            Technical,
+            Tactile,
+            MaterialTonal,
+            Paper,
+            Classic,
+        }
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum Saved {
+            Known(Known),
+            Other(serde::de::IgnoredAny),
+        }
+        Ok(match Saved::deserialize(deserializer)? {
+            Saved::Known(Known::Cupertino) => Self::Cupertino,
+            Saved::Known(Known::LiquidGlass) => Self::LiquidGlass,
+            Saved::Known(Known::Cinema) => Self::Cinema,
+            Saved::Known(Known::WarmStudio) => Self::WarmStudio,
+            Saved::Known(Known::Adwaita) => Self::Adwaita,
+            Saved::Known(Known::Fluent) => Self::Fluent,
+            Saved::Known(Known::Industrial) => Self::Industrial,
+            Saved::Known(Known::Technical) => Self::Technical,
+            Saved::Known(Known::Tactile) => Self::Tactile,
+            Saved::Known(Known::MaterialTonal) => Self::MaterialTonal,
+            Saved::Known(Known::Paper) => Self::Paper,
+            Saved::Known(Known::Classic) => Self::Classic,
+            Saved::Other(_) => Self::default(),
+        })
+    }
+}
+
+/// Geometry, elevation and motion parameters resolved from [`InterfaceStyle`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StyleSpec {
+    pub top_bar_height: f32,
+    pub tab_bar_height: f32,
+    pub sidebar_open: f32,
+    pub sidebar_rail: f32,
+    pub sidebar_inset: i8,
+    pub sidebar_radius: u8,
+    pub sidebar_animate: bool,
+    pub card_radius: u8,
+    pub card_margin: i8,
+    pub thumb_radius: u8,
+    pub ctrl_radius: u8,
+    pub modal_radius: u8,
+    pub pip_radius: u8,
+    pub mini_radius: u8,
+    pub mini_frame_pad: i8,
+    pub animation_time: f32,
+    pub floating_dock: bool,
+    pub dock_inset: f32,
+    pub dock_radius: u8,
+    pub specular_highlight: bool,
+    pub hairline_dividers: bool,
+    pub grouped_palette: bool,
+    pub show_search_submit_button: bool,
+    pub hover_lift: f32,
+    pub press_inset: f32,
+    pub nav_accent_pill: bool,
+    pub floating_chrome: bool,
+    pub tonal_elevation: f32,
+    pub tactile_bevel: bool,
+    pub sharp_borders: bool,
+}
+
+fn style_id() -> egui::Id {
+    egui::Id::new("youtfast-interface-style")
+}
+
+/// The active [`InterfaceStyle`] stored on `ctx`, defaulting to [`InterfaceStyle::default`].
+pub fn current_style(ctx: &egui::Context) -> InterfaceStyle {
+    ctx.data(|data| data.get_temp::<InterfaceStyle>(style_id()))
+        .unwrap_or_default()
+}
+
+/// Stores `style` on `ctx` so widgets can adapt without threading it through every signature.
+fn set_current_style(ctx: &egui::Context, style: InterfaceStyle) {
+    ctx.data_mut(|data| data.insert_temp(style_id(), style));
+}
+
 impl Palette {
-    /// YouTFast's dark colours.
+    /// Built-in dark or light palette tailored to `style`.
+    pub fn for_style(style: InterfaceStyle, dark: bool) -> Self {
+        match (style, dark) {
+            (InterfaceStyle::Classic, dark) => Self {
+                on_accent: Color32::BLACK,
+                ..if dark { Self::dark() } else { Self::light() }
+            },
+            (InterfaceStyle::Cupertino, true) => Self {
+                dark: true,
+                window: Color32::from_rgb(0x0b, 0x0b, 0x0d),
+                panel: Color32::from_rgb(0x12, 0x12, 0x15),
+                surface: Color32::from_rgb(0x1b, 0x1b, 0x1f),
+                surface_hover: Color32::from_rgb(0x25, 0x25, 0x2b),
+                surface_active: Color32::from_rgb(0x32, 0x32, 0x3a),
+                outline: Color32::from_rgb(0x2d, 0x2d, 0x34),
+                text: Color32::from_rgb(0xf5, 0xf5, 0xf7),
+                secondary: Color32::from_rgb(0xa8, 0xa8, 0xb0),
+                dim: Color32::from_rgb(0x6e, 0x6e, 0x76),
+                accent: Color32::from_rgb(0xff, 0x37, 0x5f),
+                accent_hover: Color32::from_rgb(0xff, 0x51, 0x73),
+                on_accent: Color32::BLACK,
+                danger: Color32::from_rgb(0xff, 0x45, 0x3a),
+                warning: Color32::from_rgb(0xff, 0xd6, 0x0a),
+                overlay: Color32::from_rgb(0x1d, 0x1d, 0x22),
+                shadow: Color32::from_black_alpha(175),
+                red: Color32::from_rgb(0xff, 0x45, 0x3a),
+                green: Color32::from_rgb(0x30, 0xd1, 0x58),
+                yellow: Color32::from_rgb(0xff, 0xd6, 0x0a),
+                blue: Color32::from_rgb(0x0a, 0x84, 0xff),
+                magenta: Color32::from_rgb(0xbf, 0x5a, 0xf2),
+                cyan: Color32::from_rgb(0x5a, 0xc8, 0xfa),
+            },
+            (InterfaceStyle::Cupertino, false) => Self {
+                dark: false,
+                window: Color32::from_rgb(0xf5, 0xf5, 0xf7),
+                panel: Color32::from_rgb(0xec, 0xec, 0xf0),
+                surface: Color32::from_rgb(0xff, 0xff, 0xff),
+                surface_hover: Color32::from_rgb(0xef, 0xef, 0xf3),
+                surface_active: Color32::from_rgb(0xdc, 0xdc, 0xe2),
+                outline: Color32::from_rgb(0xd6, 0xd6, 0xde),
+                text: Color32::from_rgb(0x1d, 0x1d, 0x1f),
+                secondary: Color32::from_rgb(0x58, 0x58, 0x5e),
+                dim: Color32::from_rgb(0x8e, 0x8e, 0x93),
+                accent: Color32::from_rgb(0xff, 0x2d, 0x55),
+                accent_hover: Color32::from_rgb(0xe0, 0x20, 0x46),
+                on_accent: Color32::BLACK,
+                danger: Color32::from_rgb(0xd7, 0x00, 0x15),
+                warning: Color32::from_rgb(0xb2, 0x76, 0x00),
+                overlay: Color32::from_rgb(0xff, 0xff, 0xff),
+                shadow: Color32::from_black_alpha(42),
+                red: Color32::from_rgb(0xd7, 0x00, 0x15),
+                green: Color32::from_rgb(0x1d, 0x83, 0x39),
+                yellow: Color32::from_rgb(0xb2, 0x76, 0x00),
+                blue: Color32::from_rgb(0x00, 0x66, 0xcc),
+                magenta: Color32::from_rgb(0x89, 0x44, 0xab),
+                cyan: Color32::from_rgb(0x00, 0x71, 0xa4),
+            },
+            (InterfaceStyle::LiquidGlass, true) => Self {
+                dark: true,
+                window: Color32::from_rgb(0x07, 0x08, 0x0c),
+                panel: Color32::from_rgb(0x13, 0x15, 0x1f),
+                surface: Color32::from_rgb(0x1b, 0x1e, 0x2b),
+                surface_hover: Color32::from_rgb(0x25, 0x29, 0x3a),
+                surface_active: Color32::from_rgb(0x31, 0x36, 0x4a),
+                outline: Color32::from_rgb(0x36, 0x3c, 0x54),
+                text: Color32::from_rgb(0xf7, 0xf8, 0xfc),
+                secondary: Color32::from_rgb(0xad, 0xb2, 0xc4),
+                dim: Color32::from_rgb(0x6b, 0x71, 0x87),
+                accent: Color32::from_rgb(0xff, 0x37, 0x5f),
+                accent_hover: Color32::from_rgb(0xff, 0x5c, 0x7c),
+                on_accent: Color32::BLACK,
+                danger: Color32::from_rgb(0xff, 0x45, 0x3a),
+                warning: Color32::from_rgb(0xff, 0xd6, 0x0a),
+                overlay: Color32::from_rgb(0x19, 0x1c, 0x28),
+                shadow: Color32::from_black_alpha(185),
+                red: Color32::from_rgb(0xff, 0x45, 0x3a),
+                green: Color32::from_rgb(0x30, 0xd1, 0x58),
+                yellow: Color32::from_rgb(0xff, 0xd6, 0x0a),
+                blue: Color32::from_rgb(0x40, 0x9c, 0xff),
+                magenta: Color32::from_rgb(0xc7, 0x7d, 0xff),
+                cyan: Color32::from_rgb(0x64, 0xd2, 0xff),
+            },
+            (InterfaceStyle::LiquidGlass, false) => Self {
+                dark: false,
+                window: Color32::from_rgb(0xee, 0xf1, 0xf7),
+                panel: Color32::from_rgb(0xf6, 0xf8, 0xfc),
+                surface: Color32::from_rgb(0xff, 0xff, 0xff),
+                surface_hover: Color32::from_rgb(0xe8, 0xec, 0xf4),
+                surface_active: Color32::from_rgb(0xd7, 0xdd, 0xe9),
+                outline: Color32::from_rgb(0xcc, 0xd4, 0xe4),
+                text: Color32::from_rgb(0x12, 0x15, 0x20),
+                secondary: Color32::from_rgb(0x52, 0x59, 0x6c),
+                dim: Color32::from_rgb(0x88, 0x90, 0xa4),
+                accent: Color32::from_rgb(0xff, 0x2d, 0x55),
+                accent_hover: Color32::from_rgb(0xe0, 0x20, 0x46),
+                on_accent: Color32::BLACK,
+                danger: Color32::from_rgb(0xd7, 0x00, 0x15),
+                warning: Color32::from_rgb(0xb2, 0x76, 0x00),
+                overlay: Color32::from_rgb(0xfb, 0xfc, 0xff),
+                shadow: Color32::from_black_alpha(48),
+                red: Color32::from_rgb(0xd7, 0x00, 0x15),
+                green: Color32::from_rgb(0x1d, 0x83, 0x39),
+                yellow: Color32::from_rgb(0xb2, 0x76, 0x00),
+                blue: Color32::from_rgb(0x00, 0x66, 0xcc),
+                magenta: Color32::from_rgb(0x89, 0x44, 0xab),
+                cyan: Color32::from_rgb(0x00, 0x71, 0xa4),
+            },
+            (InterfaceStyle::Cinema, true) => Self {
+                dark: true,
+                window: Color32::from_rgb(0x09, 0x09, 0x0a),
+                panel: Color32::from_rgb(0x0d, 0x0d, 0x0f),
+                surface: Color32::from_rgb(0x15, 0x15, 0x18),
+                surface_hover: Color32::from_rgb(0x1f, 0x1f, 0x24),
+                surface_active: Color32::from_rgb(0x2c, 0x2c, 0x33),
+                outline: Color32::from_rgb(0x26, 0x26, 0x2c),
+                text: Color32::from_rgb(0xf3, 0xf3, 0xf5),
+                secondary: Color32::from_rgb(0x9f, 0x9f, 0xa8),
+                dim: Color32::from_rgb(0x60, 0x60, 0x68),
+                accent: Color32::from_rgb(0xff, 0x2d, 0x47),
+                accent_hover: Color32::from_rgb(0xff, 0x47, 0x5e),
+                on_accent: Color32::BLACK,
+                danger: Color32::from_rgb(0xff, 0x45, 0x3a),
+                warning: Color32::from_rgb(0xf5, 0xc4, 0x3d),
+                overlay: Color32::from_rgb(0x16, 0x16, 0x1a),
+                shadow: Color32::from_black_alpha(185),
+                red: Color32::from_rgb(0xff, 0x45, 0x3a),
+                green: Color32::from_rgb(0x2e, 0xc7, 0x54),
+                yellow: Color32::from_rgb(0xf5, 0xc4, 0x3d),
+                blue: Color32::from_rgb(0x3e, 0xa6, 0xff),
+                magenta: Color32::from_rgb(0xc7, 0x7d, 0xff),
+                cyan: Color32::from_rgb(0x5a, 0xc8, 0xfa),
+            },
+            (InterfaceStyle::Cinema, false) => Self {
+                dark: false,
+                window: Color32::from_rgb(0xfc, 0xfc, 0xfd),
+                panel: Color32::from_rgb(0xf4, 0xf4, 0xf6),
+                surface: Color32::from_rgb(0xff, 0xff, 0xff),
+                surface_hover: Color32::from_rgb(0xec, 0xec, 0xf0),
+                surface_active: Color32::from_rgb(0xdc, 0xdc, 0xe2),
+                outline: Color32::from_rgb(0xdc, 0xdc, 0xe2),
+                text: Color32::from_rgb(0x11, 0x11, 0x14),
+                secondary: Color32::from_rgb(0x59, 0x59, 0x61),
+                dim: Color32::from_rgb(0x90, 0x90, 0x98),
+                accent: Color32::from_rgb(0xe6, 0x26, 0x40),
+                accent_hover: Color32::from_rgb(0xc9, 0x1e, 0x36),
+                on_accent: Color32::BLACK,
+                danger: Color32::from_rgb(0xcc, 0x00, 0x00),
+                warning: Color32::from_rgb(0xb2, 0x76, 0x00),
+                overlay: Color32::from_rgb(0xff, 0xff, 0xff),
+                shadow: Color32::from_black_alpha(40),
+                red: Color32::from_rgb(0xcc, 0x00, 0x00),
+                green: Color32::from_rgb(0x10, 0x75, 0x16),
+                yellow: Color32::from_rgb(0xb2, 0x76, 0x00),
+                blue: Color32::from_rgb(0x06, 0x5f, 0xd4),
+                magenta: Color32::from_rgb(0x8e, 0x44, 0xad),
+                cyan: Color32::from_rgb(0x06, 0x5f, 0xd4),
+            },
+            (InterfaceStyle::WarmStudio, true) => Self {
+                dark: true,
+                window: Color32::from_rgb(0x11, 0x10, 0x10),
+                panel: Color32::from_rgb(0x17, 0x16, 0x15),
+                surface: Color32::from_rgb(0x21, 0x1f, 0x1e),
+                surface_hover: Color32::from_rgb(0x2c, 0x29, 0x27),
+                surface_active: Color32::from_rgb(0x3a, 0x36, 0x33),
+                outline: Color32::from_rgb(0x35, 0x31, 0x2e),
+                text: Color32::from_rgb(0xf5, 0xf1, 0xeb),
+                secondary: Color32::from_rgb(0xb5, 0xae, 0xa6),
+                dim: Color32::from_rgb(0x76, 0x70, 0x69),
+                accent: Color32::from_rgb(0xf0, 0x44, 0x38),
+                accent_hover: Color32::from_rgb(0xff, 0x5b, 0x4f),
+                on_accent: Color32::BLACK,
+                danger: Color32::from_rgb(0xff, 0x55, 0x4a),
+                warning: Color32::from_rgb(0xf4, 0xc3, 0x4a),
+                overlay: Color32::from_rgb(0x24, 0x22, 0x20),
+                shadow: Color32::from_black_alpha(175),
+                red: Color32::from_rgb(0xff, 0x55, 0x4a),
+                green: Color32::from_rgb(0x3a, 0xc7, 0x62),
+                yellow: Color32::from_rgb(0xf4, 0xc3, 0x4a),
+                blue: Color32::from_rgb(0x52, 0xa8, 0xff),
+                magenta: Color32::from_rgb(0xcf, 0x86, 0xff),
+                cyan: Color32::from_rgb(0x63, 0xc7, 0xe8),
+            },
+            (InterfaceStyle::WarmStudio, false) => Self {
+                dark: false,
+                window: Color32::from_rgb(0xf7, 0xf5, 0xf1),
+                panel: Color32::from_rgb(0xef, 0xec, 0xe6),
+                surface: Color32::from_rgb(0xff, 0xff, 0xff),
+                surface_hover: Color32::from_rgb(0xea, 0xe6, 0xdf),
+                surface_active: Color32::from_rgb(0xdd, 0xd7, 0xce),
+                outline: Color32::from_rgb(0xd8, 0xd1, 0xc7),
+                text: Color32::from_rgb(0x1e, 0x1b, 0x18),
+                secondary: Color32::from_rgb(0x5a, 0x54, 0x4c),
+                dim: Color32::from_rgb(0x94, 0x8d, 0x84),
+                accent: Color32::from_rgb(0xdc, 0x35, 0x2c),
+                accent_hover: Color32::from_rgb(0xc4, 0x28, 0x20),
+                on_accent: Color32::from_rgb(0xff, 0xff, 0xff),
+                danger: Color32::from_rgb(0xc8, 0x24, 0x1c),
+                warning: Color32::from_rgb(0xa8, 0x6e, 0x00),
+                overlay: Color32::from_rgb(0xff, 0xfd, 0xfa),
+                shadow: Color32::from_black_alpha(44),
+                red: Color32::from_rgb(0xc8, 0x24, 0x1c),
+                green: Color32::from_rgb(0x1b, 0x7c, 0x35),
+                yellow: Color32::from_rgb(0xa8, 0x6e, 0x00),
+                blue: Color32::from_rgb(0x0b, 0x61, 0xc2),
+                magenta: Color32::from_rgb(0x88, 0x42, 0xa8),
+                cyan: Color32::from_rgb(0x0b, 0x6e, 0x99),
+            },
+            (InterfaceStyle::Adwaita, true) => Self {
+                dark: true,
+                window: Color32::from_rgb(0x1e, 0x1e, 0x1e),
+                panel: Color32::from_rgb(0x24, 0x24, 0x24),
+                surface: Color32::from_rgb(0x2c, 0x2c, 0x2c),
+                surface_hover: Color32::from_rgb(0x36, 0x36, 0x36),
+                surface_active: Color32::from_rgb(0x42, 0x42, 0x42),
+                outline: Color32::from_rgb(0x3e, 0x3e, 0x3e),
+                text: Color32::from_rgb(0xff, 0xff, 0xff),
+                secondary: Color32::from_rgb(0xc0, 0xc0, 0xc4),
+                dim: Color32::from_rgb(0x7a, 0x7a, 0x80),
+                accent: Color32::from_rgb(0x35, 0x84, 0xe4),
+                accent_hover: Color32::from_rgb(0x4a, 0x95, 0xee),
+                on_accent: Color32::BLACK,
+                danger: Color32::from_rgb(0xf6, 0x61, 0x51),
+                warning: Color32::from_rgb(0xf6, 0xd3, 0x2d),
+                overlay: Color32::from_rgb(0x2e, 0x2e, 0x2e),
+                shadow: Color32::from_black_alpha(150),
+                red: Color32::from_rgb(0xf6, 0x61, 0x51),
+                green: Color32::from_rgb(0x33, 0xd1, 0x7a),
+                yellow: Color32::from_rgb(0xf6, 0xd3, 0x2d),
+                blue: Color32::from_rgb(0x62, 0xa0, 0xea),
+                magenta: Color32::from_rgb(0xc0, 0x61, 0xcb),
+                cyan: Color32::from_rgb(0x62, 0xa0, 0xea),
+            },
+            (InterfaceStyle::Adwaita, false) => Self {
+                dark: false,
+                window: Color32::from_rgb(0xfa, 0xfa, 0xfa),
+                panel: Color32::from_rgb(0xeb, 0xeb, 0xeb),
+                surface: Color32::from_rgb(0xff, 0xff, 0xff),
+                surface_hover: Color32::from_rgb(0xf0, 0xf0, 0xf0),
+                surface_active: Color32::from_rgb(0xde, 0xde, 0xde),
+                outline: Color32::from_rgb(0xd6, 0xd6, 0xd6),
+                text: Color32::from_rgb(0x1e, 0x1e, 0x1e),
+                secondary: Color32::from_rgb(0x5e, 0x5c, 0x64),
+                dim: Color32::from_rgb(0x8e, 0x8c, 0x94),
+                accent: Color32::from_rgb(0x1c, 0x71, 0xd8),
+                accent_hover: Color32::from_rgb(0x16, 0x5f, 0xb8),
+                on_accent: Color32::from_rgb(0xff, 0xff, 0xff),
+                danger: Color32::from_rgb(0xc0, 0x1c, 0x28),
+                warning: Color32::from_rgb(0xa5, 0x6c, 0x00),
+                overlay: Color32::from_rgb(0xff, 0xff, 0xff),
+                shadow: Color32::from_black_alpha(36),
+                red: Color32::from_rgb(0xc0, 0x1c, 0x28),
+                green: Color32::from_rgb(0x1d, 0x7e, 0x45),
+                yellow: Color32::from_rgb(0xa5, 0x6c, 0x00),
+                blue: Color32::from_rgb(0x1c, 0x71, 0xd8),
+                magenta: Color32::from_rgb(0x81, 0x3d, 0x9c),
+                cyan: Color32::from_rgb(0x1c, 0x71, 0xd8),
+            },
+            (InterfaceStyle::Fluent, true) => Self {
+                dark: true,
+                window: Color32::from_rgb(0x19, 0x19, 0x19),
+                panel: Color32::from_rgb(0x20, 0x20, 0x20),
+                surface: Color32::from_rgb(0x27, 0x27, 0x27),
+                surface_hover: Color32::from_rgb(0x32, 0x32, 0x32),
+                surface_active: Color32::from_rgb(0x3d, 0x3d, 0x3d),
+                outline: Color32::from_rgb(0x3a, 0x3a, 0x3a),
+                text: Color32::from_rgb(0xf5, 0xf5, 0xf5),
+                secondary: Color32::from_rgb(0xb8, 0xb8, 0xbc),
+                dim: Color32::from_rgb(0x76, 0x76, 0x7a),
+                accent: Color32::from_rgb(0x60, 0xcd, 0xff),
+                accent_hover: Color32::from_rgb(0x7a, 0xd6, 0xff),
+                on_accent: Color32::from_rgb(0x0f, 0x11, 0x14),
+                danger: Color32::from_rgb(0xff, 0x6b, 0x6b),
+                warning: Color32::from_rgb(0xfc, 0xe1, 0x00),
+                overlay: Color32::from_rgb(0x2a, 0x2a, 0x2a),
+                shadow: Color32::from_black_alpha(165),
+                red: Color32::from_rgb(0xff, 0x6b, 0x6b),
+                green: Color32::from_rgb(0x6c, 0xcb, 0x5f),
+                yellow: Color32::from_rgb(0xfc, 0xe1, 0x00),
+                blue: Color32::from_rgb(0x60, 0xcd, 0xff),
+                magenta: Color32::from_rgb(0xd4, 0x8f, 0xff),
+                cyan: Color32::from_rgb(0x60, 0xcd, 0xff),
+            },
+            (InterfaceStyle::Fluent, false) => Self {
+                dark: false,
+                window: Color32::from_rgb(0xf3, 0xf3, 0xf3),
+                panel: Color32::from_rgb(0xee, 0xee, 0xee),
+                surface: Color32::from_rgb(0xff, 0xff, 0xff),
+                surface_hover: Color32::from_rgb(0xf5, 0xf5, 0xf5),
+                surface_active: Color32::from_rgb(0xe5, 0xe5, 0xe5),
+                outline: Color32::from_rgb(0xd9, 0xd9, 0xd9),
+                text: Color32::from_rgb(0x1a, 0x1a, 0x1a),
+                secondary: Color32::from_rgb(0x5d, 0x5d, 0x63),
+                dim: Color32::from_rgb(0x8e, 0x8e, 0x94),
+                accent: Color32::from_rgb(0x00, 0x67, 0xc0),
+                accent_hover: Color32::from_rgb(0x00, 0x54, 0x9e),
+                on_accent: Color32::from_rgb(0xff, 0xff, 0xff),
+                danger: Color32::from_rgb(0xc4, 0x2b, 0x1c),
+                warning: Color32::from_rgb(0x9d, 0x5d, 0x00),
+                overlay: Color32::from_rgb(0xff, 0xff, 0xff),
+                shadow: Color32::from_black_alpha(40),
+                red: Color32::from_rgb(0xc4, 0x2b, 0x1c),
+                green: Color32::from_rgb(0x0f, 0x7b, 0x0f),
+                yellow: Color32::from_rgb(0x9d, 0x5d, 0x00),
+                blue: Color32::from_rgb(0x00, 0x67, 0xc0),
+                magenta: Color32::from_rgb(0x88, 0x3b, 0xa8),
+                cyan: Color32::from_rgb(0x00, 0x67, 0xc0),
+            },
+            (InterfaceStyle::Industrial, true) => Self {
+                dark: true,
+                window: Color32::from_rgb(0x12, 0x13, 0x14),
+                panel: Color32::from_rgb(0x17, 0x18, 0x1a),
+                surface: Color32::from_rgb(0x1e, 0x20, 0x22),
+                surface_hover: Color32::from_rgb(0x28, 0x2b, 0x2e),
+                surface_active: Color32::from_rgb(0x34, 0x37, 0x3b),
+                outline: Color32::from_rgb(0x3a, 0x3e, 0x42),
+                text: Color32::from_rgb(0xf2, 0xf3, 0xf4),
+                secondary: Color32::from_rgb(0xa8, 0xad, 0xb3),
+                dim: Color32::from_rgb(0x6e, 0x73, 0x78),
+                accent: Color32::from_rgb(0xff, 0x55, 0x00),
+                accent_hover: Color32::from_rgb(0xff, 0x6d, 0x24),
+                on_accent: Color32::BLACK,
+                danger: Color32::from_rgb(0xff, 0x44, 0x38),
+                warning: Color32::from_rgb(0xff, 0xb8, 0x00),
+                overlay: Color32::from_rgb(0x20, 0x22, 0x25),
+                shadow: Color32::from_black_alpha(155),
+                red: Color32::from_rgb(0xff, 0x44, 0x38),
+                green: Color32::from_rgb(0x26, 0xd0, 0x62),
+                yellow: Color32::from_rgb(0xff, 0xb8, 0x00),
+                blue: Color32::from_rgb(0x4d, 0xa3, 0xff),
+                magenta: Color32::from_rgb(0xc7, 0x7d, 0xff),
+                cyan: Color32::from_rgb(0x4d, 0xc7, 0xe8),
+            },
+            (InterfaceStyle::Industrial, false) => Self {
+                dark: false,
+                window: Color32::from_rgb(0xe9, 0xe8, 0xe4),
+                panel: Color32::from_rgb(0xdf, 0xde, 0xd9),
+                surface: Color32::from_rgb(0xf4, 0xf3, 0xef),
+                surface_hover: Color32::from_rgb(0xe8, 0xe7, 0xe2),
+                surface_active: Color32::from_rgb(0xd8, 0xd6, 0xcf),
+                outline: Color32::from_rgb(0xc2, 0xc0, 0xb8),
+                text: Color32::from_rgb(0x16, 0x17, 0x18),
+                secondary: Color32::from_rgb(0x55, 0x57, 0x5a),
+                dim: Color32::from_rgb(0x85, 0x87, 0x8a),
+                accent: Color32::from_rgb(0xe6, 0x48, 0x00),
+                accent_hover: Color32::from_rgb(0xc7, 0x3e, 0x00),
+                on_accent: Color32::BLACK,
+                danger: Color32::from_rgb(0xc8, 0x24, 0x1c),
+                warning: Color32::from_rgb(0xa2, 0x6b, 0x00),
+                overlay: Color32::from_rgb(0xf7, 0xf6, 0xf2),
+                shadow: Color32::from_black_alpha(46),
+                red: Color32::from_rgb(0xc8, 0x24, 0x1c),
+                green: Color32::from_rgb(0x16, 0x7c, 0x3b),
+                yellow: Color32::from_rgb(0xa2, 0x6b, 0x00),
+                blue: Color32::from_rgb(0x0b, 0x5e, 0xb8),
+                magenta: Color32::from_rgb(0x88, 0x42, 0xa8),
+                cyan: Color32::from_rgb(0x0b, 0x6b, 0x8f),
+            },
+            (InterfaceStyle::Technical, true) => Self {
+                dark: true,
+                window: Color32::from_rgb(0x0a, 0x0b, 0x0d),
+                panel: Color32::from_rgb(0x0f, 0x11, 0x14),
+                surface: Color32::from_rgb(0x16, 0x19, 0x1e),
+                surface_hover: Color32::from_rgb(0x1f, 0x23, 0x2a),
+                surface_active: Color32::from_rgb(0x2a, 0x2f, 0x38),
+                outline: Color32::from_rgb(0x2d, 0x33, 0x3d),
+                text: Color32::from_rgb(0xe8, 0xec, 0xf2),
+                secondary: Color32::from_rgb(0x9a, 0xa3, 0xb2),
+                dim: Color32::from_rgb(0x61, 0x6a, 0x78),
+                accent: Color32::from_rgb(0x00, 0xd1, 0xff),
+                accent_hover: Color32::from_rgb(0x38, 0xdc, 0xff),
+                on_accent: Color32::from_rgb(0x09, 0x0b, 0x0e),
+                danger: Color32::from_rgb(0xff, 0x53, 0x70),
+                warning: Color32::from_rgb(0xff, 0xcb, 0x6b),
+                overlay: Color32::from_rgb(0x17, 0x1a, 0x20),
+                shadow: Color32::from_black_alpha(150),
+                red: Color32::from_rgb(0xff, 0x53, 0x70),
+                green: Color32::from_rgb(0x3b, 0xd6, 0x71),
+                yellow: Color32::from_rgb(0xff, 0xcb, 0x6b),
+                blue: Color32::from_rgb(0x52, 0xb0, 0xff),
+                magenta: Color32::from_rgb(0xc7, 0x92, 0xea),
+                cyan: Color32::from_rgb(0x00, 0xd1, 0xff),
+            },
+            (InterfaceStyle::Technical, false) => Self {
+                dark: false,
+                window: Color32::from_rgb(0xf7, 0xf8, 0xfa),
+                panel: Color32::from_rgb(0xee, 0xf0, 0xf4),
+                surface: Color32::from_rgb(0xff, 0xff, 0xff),
+                surface_hover: Color32::from_rgb(0xee, 0xf1, 0xf6),
+                surface_active: Color32::from_rgb(0xdf, 0xe4, 0xec),
+                outline: Color32::from_rgb(0xcb, 0xd2, 0xde),
+                text: Color32::from_rgb(0x0f, 0x14, 0x19),
+                secondary: Color32::from_rgb(0x4f, 0x59, 0x66),
+                dim: Color32::from_rgb(0x84, 0x8e, 0x9c),
+                accent: Color32::from_rgb(0x00, 0x70, 0xf3),
+                accent_hover: Color32::from_rgb(0x00, 0x5c, 0xc8),
+                on_accent: Color32::from_rgb(0xff, 0xff, 0xff),
+                danger: Color32::from_rgb(0xd1, 0x24, 0x2f),
+                warning: Color32::from_rgb(0x9a, 0x67, 0x00),
+                overlay: Color32::from_rgb(0xff, 0xff, 0xff),
+                shadow: Color32::from_black_alpha(36),
+                red: Color32::from_rgb(0xd1, 0x24, 0x2f),
+                green: Color32::from_rgb(0x1a, 0x7f, 0x37),
+                yellow: Color32::from_rgb(0x9a, 0x67, 0x00),
+                blue: Color32::from_rgb(0x00, 0x70, 0xf3),
+                magenta: Color32::from_rgb(0x82, 0x50, 0xdf),
+                cyan: Color32::from_rgb(0x09, 0x69, 0xda),
+            },
+            (InterfaceStyle::Tactile, true) => Self {
+                dark: true,
+                window: Color32::from_rgb(0x16, 0x17, 0x1a),
+                panel: Color32::from_rgb(0x1c, 0x1e, 0x22),
+                surface: Color32::from_rgb(0x24, 0x27, 0x2c),
+                surface_hover: Color32::from_rgb(0x2f, 0x33, 0x3a),
+                surface_active: Color32::from_rgb(0x3b, 0x40, 0x48),
+                outline: Color32::from_rgb(0x3e, 0x43, 0x4c),
+                text: Color32::from_rgb(0xf4, 0xf5, 0xf7),
+                secondary: Color32::from_rgb(0xaf, 0xb5, 0xc0),
+                dim: Color32::from_rgb(0x70, 0x76, 0x82),
+                accent: Color32::from_rgb(0xff, 0x4f, 0x5e),
+                accent_hover: Color32::from_rgb(0xff, 0x68, 0x75),
+                on_accent: Color32::BLACK,
+                danger: Color32::from_rgb(0xff, 0x4f, 0x5e),
+                warning: Color32::from_rgb(0xf5, 0xc4, 0x3d),
+                overlay: Color32::from_rgb(0x26, 0x29, 0x2f),
+                shadow: Color32::from_black_alpha(170),
+                red: Color32::from_rgb(0xff, 0x4f, 0x5e),
+                green: Color32::from_rgb(0x32, 0xd2, 0x66),
+                yellow: Color32::from_rgb(0xf5, 0xc4, 0x3d),
+                blue: Color32::from_rgb(0x4b, 0xa3, 0xff),
+                magenta: Color32::from_rgb(0xc8, 0x82, 0xff),
+                cyan: Color32::from_rgb(0x5a, 0xc8, 0xfa),
+            },
+            (InterfaceStyle::Tactile, false) => Self {
+                dark: false,
+                window: Color32::from_rgb(0xf1, 0xf2, 0xf5),
+                panel: Color32::from_rgb(0xe7, 0xe9, 0xee),
+                surface: Color32::from_rgb(0xff, 0xff, 0xff),
+                surface_hover: Color32::from_rgb(0xf0, 0xf2, 0xf6),
+                surface_active: Color32::from_rgb(0xe0, 0xe3, 0xea),
+                outline: Color32::from_rgb(0xcf, 0xd4, 0xde),
+                text: Color32::from_rgb(0x18, 0x1a, 0x1f),
+                secondary: Color32::from_rgb(0x58, 0x5e, 0x6a),
+                dim: Color32::from_rgb(0x8b, 0x91, 0x9e),
+                accent: Color32::from_rgb(0xe6, 0x39, 0x46),
+                accent_hover: Color32::from_rgb(0xc9, 0x2a, 0x37),
+                on_accent: Color32::BLACK,
+                danger: Color32::from_rgb(0xc9, 0x2a, 0x37),
+                warning: Color32::from_rgb(0xa8, 0x6e, 0x00),
+                overlay: Color32::from_rgb(0xff, 0xff, 0xff),
+                shadow: Color32::from_black_alpha(44),
+                red: Color32::from_rgb(0xc9, 0x2a, 0x37),
+                green: Color32::from_rgb(0x1b, 0x7c, 0x35),
+                yellow: Color32::from_rgb(0xa8, 0x6e, 0x00),
+                blue: Color32::from_rgb(0x0b, 0x61, 0xc2),
+                magenta: Color32::from_rgb(0x88, 0x42, 0xa8),
+                cyan: Color32::from_rgb(0x0b, 0x6e, 0x99),
+            },
+            (InterfaceStyle::MaterialTonal, true) => Self {
+                dark: true,
+                window: Color32::from_rgb(0x14, 0x12, 0x18),
+                panel: Color32::from_rgb(0x1b, 0x18, 0x21),
+                surface: Color32::from_rgb(0x22, 0x1f, 0x29),
+                surface_hover: Color32::from_rgb(0x2c, 0x28, 0x36),
+                surface_active: Color32::from_rgb(0x37, 0x32, 0x42),
+                outline: Color32::from_rgb(0x44, 0x3d, 0x52),
+                text: Color32::from_rgb(0xf4, 0xef, 0xfa),
+                secondary: Color32::from_rgb(0xc4, 0xbc, 0xd1),
+                dim: Color32::from_rgb(0x7f, 0x77, 0x8c),
+                accent: Color32::from_rgb(0xd0, 0xbc, 0xff),
+                accent_hover: Color32::from_rgb(0xde, 0xcf, 0xff),
+                on_accent: Color32::from_rgb(0x1d, 0x19, 0x2b),
+                danger: Color32::from_rgb(0xf2, 0xb8, 0xb5),
+                warning: Color32::from_rgb(0xf5, 0xce, 0x6e),
+                overlay: Color32::from_rgb(0x25, 0x21, 0x2d),
+                shadow: Color32::from_black_alpha(165),
+                red: Color32::from_rgb(0xf2, 0xb8, 0xb5),
+                green: Color32::from_rgb(0xa8, 0xda, 0xb5),
+                yellow: Color32::from_rgb(0xf5, 0xce, 0x6e),
+                blue: Color32::from_rgb(0xa8, 0xc7, 0xfa),
+                magenta: Color32::from_rgb(0xd0, 0xbc, 0xff),
+                cyan: Color32::from_rgb(0x9d, 0xd3, 0xe8),
+            },
+            (InterfaceStyle::MaterialTonal, false) => Self {
+                dark: false,
+                window: Color32::from_rgb(0xfe, 0xf7, 0xff),
+                panel: Color32::from_rgb(0xf3, 0xed, 0xf7),
+                surface: Color32::from_rgb(0xff, 0xff, 0xff),
+                surface_hover: Color32::from_rgb(0xf2, 0xec, 0xf7),
+                surface_active: Color32::from_rgb(0xe4, 0xdc, 0xed),
+                outline: Color32::from_rgb(0xd4, 0xca, 0xdb),
+                text: Color32::from_rgb(0x1d, 0x1b, 0x20),
+                secondary: Color32::from_rgb(0x5b, 0x55, 0x63),
+                dim: Color32::from_rgb(0x8a, 0x83, 0x94),
+                accent: Color32::from_rgb(0x67, 0x50, 0xa4),
+                accent_hover: Color32::from_rgb(0x53, 0x3e, 0x8a),
+                on_accent: Color32::from_rgb(0xff, 0xff, 0xff),
+                danger: Color32::from_rgb(0xb3, 0x26, 0x1e),
+                warning: Color32::from_rgb(0x9a, 0x64, 0x00),
+                overlay: Color32::from_rgb(0xff, 0xff, 0xff),
+                shadow: Color32::from_black_alpha(40),
+                red: Color32::from_rgb(0xb3, 0x26, 0x1e),
+                green: Color32::from_rgb(0x19, 0x6b, 0x3b),
+                yellow: Color32::from_rgb(0x9a, 0x64, 0x00),
+                blue: Color32::from_rgb(0x0b, 0x57, 0xd0),
+                magenta: Color32::from_rgb(0x67, 0x50, 0xa4),
+                cyan: Color32::from_rgb(0x00, 0x67, 0x7d),
+            },
+            (InterfaceStyle::Paper, true) => Self {
+                dark: true,
+                window: Color32::from_rgb(0x19, 0x18, 0x16),
+                panel: Color32::from_rgb(0x20, 0x1e, 0x1c),
+                surface: Color32::from_rgb(0x27, 0x25, 0x22),
+                surface_hover: Color32::from_rgb(0x32, 0x2f, 0x2b),
+                surface_active: Color32::from_rgb(0x3e, 0x3a, 0x35),
+                outline: Color32::from_rgb(0x3b, 0x37, 0x32),
+                text: Color32::from_rgb(0xeb, 0xe6, 0xdc),
+                secondary: Color32::from_rgb(0xb5, 0xae, 0xa2),
+                dim: Color32::from_rgb(0x78, 0x72, 0x68),
+                accent: Color32::from_rgb(0xd9, 0x77, 0x57),
+                accent_hover: Color32::from_rgb(0xe6, 0x89, 0x6a),
+                on_accent: Color32::BLACK,
+                danger: Color32::from_rgb(0xe5, 0x6b, 0x5c),
+                warning: Color32::from_rgb(0xdf, 0xb4, 0x58),
+                overlay: Color32::from_rgb(0x29, 0x27, 0x23),
+                shadow: Color32::from_black_alpha(150),
+                red: Color32::from_rgb(0xe5, 0x6b, 0x5c),
+                green: Color32::from_rgb(0x78, 0xb4, 0x7a),
+                yellow: Color32::from_rgb(0xdf, 0xb4, 0x58),
+                blue: Color32::from_rgb(0x74, 0xa4, 0xcf),
+                magenta: Color32::from_rgb(0xba, 0x94, 0xc7),
+                cyan: Color32::from_rgb(0x74, 0xb5, 0xb8),
+            },
+            (InterfaceStyle::Paper, false) => Self {
+                dark: false,
+                window: Color32::from_rgb(0xf6, 0xf2, 0xea),
+                panel: Color32::from_rgb(0xed, 0xe7, 0xdc),
+                surface: Color32::from_rgb(0xfb, 0xf9, 0xf4),
+                surface_hover: Color32::from_rgb(0xef, 0xea, 0xe0),
+                surface_active: Color32::from_rgb(0xe2, 0xdb, 0xd0),
+                outline: Color32::from_rgb(0xd4, 0xcc, 0xbe),
+                text: Color32::from_rgb(0x24, 0x21, 0x1c),
+                secondary: Color32::from_rgb(0x62, 0x5c, 0x52),
+                dim: Color32::from_rgb(0x91, 0x8a, 0x7e),
+                accent: Color32::from_rgb(0xb8, 0x4b, 0x2c),
+                accent_hover: Color32::from_rgb(0x9c, 0x3c, 0x20),
+                on_accent: Color32::from_rgb(0xff, 0xff, 0xff),
+                danger: Color32::from_rgb(0xb0, 0x34, 0x28),
+                warning: Color32::from_rgb(0x96, 0x66, 0x08),
+                overlay: Color32::from_rgb(0xfd, 0xfb, 0xf7),
+                shadow: Color32::from_black_alpha(36),
+                red: Color32::from_rgb(0xb0, 0x34, 0x28),
+                green: Color32::from_rgb(0x2b, 0x6e, 0x38),
+                yellow: Color32::from_rgb(0x96, 0x66, 0x08),
+                blue: Color32::from_rgb(0x24, 0x5f, 0x99),
+                magenta: Color32::from_rgb(0x76, 0x42, 0x8a),
+                cyan: Color32::from_rgb(0x21, 0x68, 0x75),
+            },
+        }
+    }
+
+    /// Tints neutral surfaces slightly toward `self.accent` for Material Tonal
+    /// elevation, keeping luminance ordering intact.
+    pub fn with_tonal_elevation(mut self, amount: f32) -> Self {
+        let amount = amount.clamp(0.0, 0.12);
+        if amount <= 0.0 {
+            return self;
+        }
+        let blend = |base: Color32, target: Color32, t: f32| {
+            Color32::from(egui::lerp(
+                egui::Rgba::from(base)..=egui::Rgba::from(target),
+                t,
+            ))
+        };
+        self.panel = blend(self.panel, self.accent, amount * 0.45);
+        self.surface = blend(self.surface, self.accent, amount * 0.6);
+        self.surface_hover = blend(self.surface_hover, self.accent, amount * 0.75);
+        self.surface_active = blend(self.surface_active, self.accent, amount * 0.9);
+        self
+    }
+
+    /// YouTFast's classic dark colours.
     pub fn dark() -> Self {
         Self {
             dark: true,
@@ -66,7 +1277,7 @@ impl Palette {
             dim: Color32::from_rgb(0x71, 0x71, 0x71),
             accent: Color32::from_rgb(0xff, 0x00, 0x33),
             accent_hover: Color32::from_rgb(0xff, 0x33, 0x55),
-            on_accent: Color32::from_rgb(0xff, 0xff, 0xff),
+            on_accent: Color32::WHITE,
             danger: Color32::from_rgb(0xff, 0x4e, 0x45),
             warning: Color32::from_rgb(0xf2, 0xc9, 0x4c),
             overlay: Color32::from_rgb(0x28, 0x28, 0x2d),
@@ -95,7 +1306,7 @@ impl Palette {
             dim: Color32::from_rgb(0x90, 0x90, 0x90),
             accent: Color32::from_rgb(0xff, 0x00, 0x33),
             accent_hover: Color32::from_rgb(0xcc, 0x00, 0x29),
-            on_accent: Color32::from_rgb(0xff, 0xff, 0xff),
+            on_accent: Color32::WHITE,
             danger: Color32::from_rgb(0xcc, 0x00, 0x00),
             warning: Color32::from_rgb(0xb5, 0x81, 0x00),
             overlay: Color32::from_rgb(0xff, 0xff, 0xff),
@@ -531,9 +1742,16 @@ impl SystemFonts {
     }
 }
 
-/// Applies the palette to egui's own widgets so dialogs, menus, and text
-/// fields agree with the views, with the siblings' corners and spacing.
+/// Applies the palette to egui's own widgets using the active [`InterfaceStyle`].
 pub fn apply(ctx: &egui::Context, palette: &Palette) {
+    apply_style(ctx, palette, current_style(ctx));
+}
+
+/// Applies `palette` and `interface_style` to egui's own widgets so dialogs,
+/// menus, shadows, radii, and animation timing agree with the chosen style.
+pub fn apply_style(ctx: &egui::Context, palette: &Palette, interface_style: InterfaceStyle) {
+    set_current_style(ctx, interface_style);
+    let spec = interface_style.spec();
     let (theme, mut visuals) = if palette.dark {
         (egui::Theme::Dark, egui::Visuals::dark())
     } else {
@@ -543,7 +1761,7 @@ pub fn apply(ctx: &egui::Context, palette: &Palette) {
     ctx.set_theme(theme);
     visuals.dark_mode = palette.dark;
     text_rendering().apply_to_visuals(&mut visuals);
-    visuals.panel_fill = palette.panel;
+    visuals.panel_fill = palette.window;
     visuals.window_fill = palette.overlay;
     visuals.extreme_bg_color = palette.surface;
     visuals.faint_bg_color = palette.surface;
@@ -554,21 +1772,56 @@ pub fn apply(ctx: &egui::Context, palette: &Palette) {
     visuals.selection.bg_fill = palette.accent.gamma_multiply(0.35);
     visuals.selection.stroke = Stroke::new(1.0, palette.accent);
     visuals.window_stroke = Stroke::new(1.0, palette.outline);
-    visuals.window_corner_radius = egui::CornerRadius::same(RADIUS + 2);
-    visuals.menu_corner_radius = egui::CornerRadius::same(RADIUS);
+    visuals.window_corner_radius = egui::CornerRadius::same(spec.modal_radius);
+    visuals.menu_corner_radius = egui::CornerRadius::same(spec.card_radius.min(14));
     visuals.window_shadow = egui::epaint::Shadow {
-        offset: [0, 6],
-        blur: 24,
+        offset: [
+            0,
+            if spec.sharp_borders {
+                3
+            } else if spec.floating_chrome {
+                10
+            } else {
+                6
+            },
+        ],
+        blur: if spec.sharp_borders {
+            10
+        } else if spec.floating_chrome {
+            32
+        } else {
+            24
+        },
         spread: 0,
         color: palette.shadow,
     };
     visuals.popup_shadow = egui::epaint::Shadow {
-        offset: [0, 4],
-        blur: 16,
+        offset: [
+            0,
+            if spec.sharp_borders {
+                2
+            } else if spec.floating_chrome {
+                8
+            } else {
+                4
+            },
+        ],
+        blur: if spec.sharp_borders {
+            8
+        } else if spec.floating_chrome {
+            24
+        } else {
+            16
+        },
         spread: 0,
         color: palette.shadow,
     };
-    let corner = egui::CornerRadius::same(RADIUS_SMALL + 2);
+    let corner = egui::CornerRadius::same(spec.ctrl_radius);
+    let widget_stroke = if spec.sharp_borders {
+        Stroke::new(1.0, palette.outline)
+    } else {
+        Stroke::NONE
+    };
     for widget in [
         &mut visuals.widgets.inactive,
         &mut visuals.widgets.hovered,
@@ -576,7 +1829,7 @@ pub fn apply(ctx: &egui::Context, palette: &Palette) {
         &mut visuals.widgets.open,
     ] {
         widget.corner_radius = corner;
-        widget.bg_stroke = Stroke::NONE;
+        widget.bg_stroke = widget_stroke;
         widget.fg_stroke = Stroke::new(1.0, palette.text);
         widget.expansion = 0.0;
     }
@@ -630,7 +1883,7 @@ pub fn apply(ctx: &egui::Context, palette: &Palette) {
         };
         style.interaction.selectable_labels = true;
         style.interaction.tooltip_delay = 0.4;
-        style.animation_time = 0.12;
+        style.animation_time = spec.animation_time;
         style.url_in_tooltip = false;
     });
 }
@@ -653,30 +1906,57 @@ mod tests {
 
     #[test]
     fn built_in_text_and_letter_avatars_meet_wcag_aa() {
-        for palette in [Palette::dark(), Palette::light()] {
-            for foreground in [palette.text, palette.secondary] {
-                for background in [palette.window, palette.surface, palette.surface_active] {
+        for style in InterfaceStyle::ALL {
+            for dark in [true, false] {
+                let palette = Palette::for_style(style, dark);
+                let check_contrast = |foreground, background| {
                     let a = luminance(foreground);
                     let b = luminance(background);
                     let contrast = (a.max(b) + 0.05) / (a.min(b) + 0.05);
                     assert!(
                         contrast >= 4.5,
-                        "{foreground:?} on {background:?}: {contrast}"
+                        "{style:?} dark={dark}: {foreground:?} on {background:?}: {contrast}"
                     );
+                };
+                for foreground in [palette.text, palette.secondary] {
+                    for background in [
+                        palette.window,
+                        palette.surface,
+                        palette.surface_hover,
+                        palette.surface_active,
+                    ] {
+                        check_contrast(foreground, background);
+                    }
                 }
+                check_contrast(palette.on_accent, palette.accent);
+                // Window/surface steps stay ordered: hover, then selected.
+                let steps = [
+                    palette.surface,
+                    palette.surface_hover,
+                    palette.surface_active,
+                ]
+                .map(luminance);
+                assert!(
+                    if palette.dark {
+                        steps[0] < steps[1] && steps[1] < steps[2]
+                    } else {
+                        steps[0] > steps[1] && steps[1] > steps[2]
+                    },
+                    "{style:?} dark={dark}: {steps:?}"
+                );
             }
-            // Window/surface steps stay ordered: hover, then selected.
-            let steps = [
-                palette.surface,
-                palette.surface_hover,
-                palette.surface_active,
-            ]
-            .map(luminance);
-            assert!(if palette.dark {
-                steps[0] < steps[1] && steps[1] < steps[2]
-            } else {
-                steps[0] > steps[1] && steps[1] > steps[2]
-            });
+        }
+    }
+
+    #[test]
+    fn every_interface_style_has_valid_spec_and_metadata() {
+        for style in InterfaceStyle::ALL {
+            let spec = style.spec();
+            assert!(!style.label().is_empty());
+            assert!(!style.description().is_empty());
+            assert!(spec.top_bar_height >= 40.0);
+            assert!(spec.sidebar_open > spec.sidebar_rail);
+            assert!(spec.animation_time > 0.0);
         }
     }
 

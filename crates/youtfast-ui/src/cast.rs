@@ -1,8 +1,11 @@
 //! Native TV picker and remote. These controls explicitly target the TV;
 //! libmpv's controls and media keys continue to target this computer.
 
+use crate::widgets;
+use egui::RichText;
 use youtfast_app::Action;
 use youtfast_app::State;
+use youtfast_appearance::theme;
 use youtfast_cast::{Action as CastAction, Control};
 use youtfast_i18n::{gettext as tr, message};
 
@@ -16,7 +19,7 @@ pub fn show(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
     // window silently clipped the TV-code section even after an update.
     // Floor the picker at the height its full content needs in every
     // language instead; short viewports clamp the window and scroll.
-    const PICKER_HEIGHT: f32 = 560.0;
+    const PICKER_HEIGHT: f32 = 620.0;
     let height = (ctx.content_rect().height() - 100.0).max(120.0);
     egui::Window::new(tr(locale, "Cast to TV"))
         .id(egui::Id::new("cast-to-tv"))
@@ -39,12 +42,18 @@ pub fn show(ctx: &egui::Context, state: &mut State, actions: &mut Vec<Action>) {
 
 fn body(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
+    let palette = state.palette;
+    let raised = widgets::on_card(&palette);
     let cast = &mut state.cast;
     ui.set_max_width((ui.ctx().content_rect().width() - 72.0).clamp(216.0, 396.0));
-    ui.label(tr(locale, "Google Cast and YouTube TVs on your network."));
-    ui.add_space(8.0);
+    ui.label(
+        RichText::new(tr(locale, "Google Cast and YouTube TVs on your network."))
+            .font(theme::regular(13.0))
+            .color(palette.secondary),
+    );
+    ui.add_space(10.0);
     if let Some(error) = cast.error {
-        ui.colored_label(state.palette.accent, message(locale, error.message()));
+        ui.colored_label(palette.accent, message(locale, error.message()));
         if error == youtfast_cast::Error::MissingHelper {
             ui.hyperlink_to(
                 tr(locale, "Install catt"),
@@ -56,10 +65,14 @@ fn body(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
     // Guidance, not an error: the search itself still worked, and the
     // IP-address and TV-code routes below need no helper.
     if cast.helper_missing {
-        ui.label(tr(
-            locale,
-            "Google Cast is optional: without the catt tool, only TVs with the YouTube app are found.",
-        ));
+        ui.label(
+            RichText::new(tr(
+                locale,
+                "Google Cast is optional: without the catt tool, only TVs with the YouTube app are found.",
+            ))
+            .font(theme::regular(12.5))
+            .color(palette.secondary),
+        );
         ui.hyperlink_to(
             tr(locale, "Install catt"),
             "https://github.com/skorokithakis/catt#installation",
@@ -69,108 +82,289 @@ fn body(ui: &mut egui::Ui, state: &mut State, actions: &mut Vec<Action>) {
     if cast.busy() {
         ui.horizontal(|ui| {
             ui.spinner();
-            ui.label(tr(
-                locale,
-                if cast.scanning() {
-                    "Searching for TVs…"
-                } else {
-                    "Waiting for the TV…"
-                },
-            ));
+            ui.label(
+                RichText::new(tr(
+                    locale,
+                    if cast.scanning() {
+                        "Searching for TVs…"
+                    } else {
+                        "Waiting for the TV…"
+                    },
+                ))
+                .font(theme::medium(13.5))
+                .color(palette.text),
+            );
         });
         if cast.starting() {
-            ui.label(tr(locale, "If the TV shows an ad or asks who is watching, answer on the TV. This can take up to a minute."));
+            ui.label(
+                RichText::new(tr(
+                    locale,
+                    "If the TV shows an ad or asks who is watching, answer on the TV. This can take up to a minute.",
+                ))
+                .font(theme::regular(12.5))
+                .color(palette.secondary),
+            );
         }
+        ui.add_space(8.0);
     }
     ui.add_enabled_ui(!cast.busy(), |ui| {
         if let Some(session) = &cast.session {
-            ui.strong(&session.device.name);
-            ui.label(&session.video.title);
-            ui.label(tr(
-                locale,
-                if session.confirmed {
-                    "Playback confirmed on TV."
-                } else {
-                    "Video requested; playback is not confirmed."
-                },
-            ));
-            ui.add_space(8.0);
-            ui.horizontal_wrapped(|ui| {
-                for (label, control) in [
-                    ("Play", Control::Play),
-                    ("Pause", Control::Pause),
-                    ("−10 s on TV", Control::Rewind),
-                    ("+10 s on TV", Control::Forward),
-                    ("TV volume −", Control::VolumeDown),
-                    ("TV volume +", Control::VolumeUp),
-                ] {
-                    if ui.button(tr(locale, label)).clicked() {
-                        actions.push(Action::Cast(CastAction::Control(control)));
+            widgets::card(ui, &palette, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(
+                        RichText::new(&session.device.name)
+                            .font(theme::semibold(14.5))
+                            .color(palette.text),
+                    );
+                    widgets::status_pill(
+                        ui,
+                        tr(
+                            locale,
+                            if session.confirmed {
+                                "Playback confirmed on TV."
+                            } else {
+                                "Video requested; playback is not confirmed."
+                            },
+                        )
+                        .as_ref(),
+                        if session.confirmed {
+                            palette.green
+                        } else {
+                            palette.warning
+                        },
+                    );
+                });
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(&session.video.title)
+                            .font(theme::regular(12.5))
+                            .color(palette.secondary),
+                    )
+                    .truncate(),
+                )
+                .on_hover_text(&session.video.title);
+                ui.add_space(4.0);
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(5.0, 4.0);
+                    for (label, control) in [
+                        ("Play", Control::Play),
+                        ("Pause", Control::Pause),
+                        ("−10 s on TV", Control::Rewind),
+                        ("+10 s on TV", Control::Forward),
+                        ("TV volume −", Control::VolumeDown),
+                        ("TV volume +", Control::VolumeUp),
+                    ] {
+                        let btn = egui::Button::new(
+                            RichText::new(tr(locale, label).as_ref())
+                                .font(theme::medium(13.0))
+                                .color(palette.text),
+                        )
+                        .fill(raised.surface)
+                        .corner_radius(egui::CornerRadius::same(13))
+                        .min_size(egui::vec2(0.0, 26.0));
+                        if ui.add(btn).clicked() {
+                            actions.push(Action::Cast(CastAction::Control(control)));
+                        }
                     }
+                });
+                if cast.command_sent {
+                    ui.add_space(2.0);
+                    ui.label(
+                        RichText::new(tr(locale, "Command sent to TV."))
+                            .font(theme::regular(12.5))
+                            .color(palette.green),
+                    );
                 }
+                ui.add_space(4.0);
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(6.0, 4.0);
+                    let stop = egui::Button::new(
+                        RichText::new(tr(locale, "Stop on TV").as_ref())
+                            .font(theme::semibold(13.0))
+                            .color(palette.window),
+                    )
+                    .fill(palette.text)
+                    .corner_radius(egui::CornerRadius::same(14))
+                    .min_size(egui::vec2(0.0, 28.0));
+                    if ui.add(stop).clicked() {
+                        actions.push(Action::Cast(CastAction::Control(Control::Stop)));
+                    }
+                    let disconnect = egui::Button::new(
+                        RichText::new(tr(locale, "Disconnect; keep TV playing").as_ref())
+                            .font(theme::medium(13.0))
+                            .color(palette.text),
+                    )
+                    .fill(raised.surface)
+                    .corner_radius(egui::CornerRadius::same(14))
+                    .min_size(egui::vec2(0.0, 28.0));
+                    if ui.add(disconnect).clicked() {
+                        actions.push(Action::Cast(CastAction::Disconnect));
+                    }
+                });
             });
-            if cast.command_sent {
-                ui.label(tr(locale, "Command sent to TV."));
-            }
             ui.add_space(8.0);
-            ui.horizontal_wrapped(|ui| {
-                if ui.button(tr(locale, "Stop on TV")).clicked() {
-                    actions.push(Action::Cast(CastAction::Control(Control::Stop)));
-                }
-                if ui.button(tr(locale, "Disconnect; keep TV playing")).clicked() {
-                    actions.push(Action::Cast(CastAction::Disconnect));
-                }
-            });
-            ui.add_space(8.0);
-            ui.label(tr(locale, "Use these controls for the TV. Player controls and media keys control this computer."));
+            ui.label(
+                RichText::new(tr(
+                    locale,
+                    "Use these controls for the TV. Player controls and media keys control this computer.",
+                ))
+                .font(theme::regular(12.5))
+                .color(palette.secondary),
+            );
         } else {
-            if let Some(video) = &state.watching {
-                ui.label(tr(locale, "Send the current video:"));
-                ui.strong(&video.title);
-            } else {
-                ui.label(tr(locale, "Open a video to send it to a TV."));
-            }
-            ui.add_space(8.0);
-            ui.add_enabled_ui(state.watching.is_some(), |ui| {
-                for device in &cast.devices {
-                    // Long names wrap instead of expanding the floating window.
-                    if ui
-                        .add(egui::Button::new(&device.name).wrap())
+            widgets::card(ui, &palette, |ui| {
+                if let Some(video) = &state.watching {
+                    ui.label(
+                        RichText::new(tr(locale, "Send the current video:"))
+                            .font(theme::regular(12.5))
+                            .color(palette.secondary),
+                    );
+                    ui.label(
+                        RichText::new(&video.title)
+                            .font(theme::semibold(14.0))
+                            .color(palette.text),
+                    );
+                } else {
+                    ui.label(
+                        RichText::new(tr(locale, "Open a video to send it to a TV."))
+                            .font(theme::regular(13.0))
+                            .color(palette.secondary),
+                    );
+                }
+                ui.add_space(10.0);
+                ui.add_enabled_ui(state.watching.is_some(), |ui| {
+                    for (idx, device) in cast.devices.iter().enumerate() {
+                        if idx > 0 {
+                            ui.add_space(6.0);
+                        }
+                        if widgets::button(
+                            ui,
+                            &raised,
+                            &device.name,
+                            widgets::ButtonStyle::Normal,
+                        )
                         .clicked()
+                        {
+                            actions.push(Action::Cast(CastAction::Start(device.clone())));
+                        }
+                        if !matches!(device.protocol, youtfast_cast::Protocol::Linked { .. }) {
+                            ui.label(
+                                RichText::new(device.host.to_string())
+                                    .font(theme::regular(12.0))
+                                    .color(palette.secondary),
+                            );
+                        }
+                    }
+                });
+                if cast.searched && cast.devices.is_empty() && cast.error.is_none() {
+                    ui.label(
+                        RichText::new(tr(
+                            locale,
+                            "No TVs found. Open YouTube on your TV, check the network, or enter its IP address below.",
+                        ))
+                        .font(theme::regular(13.0))
+                        .color(palette.secondary),
+                    );
+                    ui.add_space(6.0);
+                }
+                ui.add_space(4.0);
+                if widgets::button(
+                    ui,
+                    &raised,
+                    tr(locale, "Search for TVs").as_ref(),
+                    widgets::ButtonStyle::Primary,
+                )
+                .clicked()
+                {
+                    actions.push(Action::Cast(CastAction::Scan));
+                }
+            });
+            ui.add_space(10.0);
+            widgets::card(ui, &palette, |ui| {
+                ui.label(
+                    RichText::new(tr(locale, "Find a YouTube TV by IP address"))
+                        .font(theme::medium(13.5))
+                        .color(palette.text),
+                );
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    widgets::text_input(
+                        ui,
+                        &palette,
+                        &mut cast.address,
+                        widgets::TextInputConfig {
+                            id: egui::Id::new("cast-ip-input"),
+                            width: 180.0,
+                            hint: "192.168.1.10",
+                            password: false,
+                            monospace: true,
+                            char_limit: None,
+                        },
+                    );
+                    if widgets::button(
+                        ui,
+                        &raised,
+                        tr(locale, "Find TV").as_ref(),
+                        widgets::ButtonStyle::Normal,
+                    )
+                    .clicked()
                     {
-                        actions.push(Action::Cast(CastAction::Start(device.clone())));
+                        actions.push(Action::Cast(CastAction::FindYouTube(cast.address.clone())));
                     }
-                    if !matches!(device.protocol, youtfast_cast::Protocol::Linked { .. }) {
-                        ui.small(device.host.to_string());
+                });
+                widgets::hairline_divider(ui, &palette);
+                // Works for any YouTube app (Apple TV, consoles, another network).
+                ui.label(
+                    RichText::new(tr(locale, "Link a TV with a code"))
+                        .font(theme::medium(13.5))
+                        .color(palette.text),
+                );
+                ui.label(
+                    RichText::new(tr(
+                        locale,
+                        "On the TV, open YouTube, then Settings, then Link with TV code.",
+                    ))
+                    .font(theme::regular(12.5))
+                    .color(palette.secondary),
+                );
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    widgets::text_input(
+                        ui,
+                        &palette,
+                        &mut cast.code,
+                        widgets::TextInputConfig {
+                            id: egui::Id::new("cast-code-input"),
+                            width: 180.0,
+                            hint: "123 456 789 012",
+                            password: false,
+                            monospace: true,
+                            char_limit: None,
+                        },
+                    );
+                    if widgets::button(
+                        ui,
+                        &raised,
+                        tr(locale, "Link TV").as_ref(),
+                        widgets::ButtonStyle::Normal,
+                    )
+                    .clicked()
+                    {
+                        actions.push(Action::Cast(CastAction::Link(std::mem::take(
+                            &mut cast.code,
+                        ))));
                     }
-                }
-            });
-            if cast.searched && cast.devices.is_empty() && cast.error.is_none() {
-                ui.label(tr(locale, "No TVs found. Open YouTube on your TV, check the network, or enter its IP address below."));
-            }
-            if ui.button(tr(locale, "Search for TVs")).clicked() {
-                actions.push(Action::Cast(CastAction::Scan));
-            }
-            ui.add_space(8.0);
-            ui.label(tr(locale, "Find a YouTube TV by IP address"));
-            ui.horizontal(|ui| {
-                ui.add(egui::TextEdit::singleline(&mut cast.address).hint_text("192.168.1.10").desired_width(160.0));
-                if ui.button(tr(locale, "Find TV")).clicked() {
-                    actions.push(Action::Cast(CastAction::FindYouTube(cast.address.clone())));
-                }
+                });
             });
             ui.add_space(8.0);
-            // Works for any YouTube app (Apple TV, consoles, another network).
-            ui.label(tr(locale, "Link a TV with a code"));
-            ui.label(tr(locale, "On the TV, open YouTube, then Settings, then Link with TV code."));
-            ui.horizontal(|ui| {
-                ui.add(egui::TextEdit::singleline(&mut cast.code).hint_text("123 456 789 012").desired_width(160.0));
-                if ui.button(tr(locale, "Link TV")).clicked() {
-                    actions.push(Action::Cast(CastAction::Link(std::mem::take(&mut cast.code))));
-                }
-            });
-            ui.add_space(8.0);
-            ui.label(tr(locale, "The TV uses its YouTube app and account. Local playback pauses only after confirmation."));
+            ui.label(
+                RichText::new(tr(
+                    locale,
+                    "The TV uses its YouTube app and account. Local playback pauses only after confirmation.",
+                ))
+                .font(theme::regular(12.5))
+                .color(palette.secondary),
+            );
         }
     });
 }
@@ -210,6 +404,13 @@ mod tests {
         events: Vec<egui::Event>,
         actions: &mut Vec<Action>,
     ) -> Vec<(String, egui::Pos2)> {
+        if !ctx.data(|d| {
+            d.get_temp::<bool>(egui::Id::new("cast-test-fonts"))
+                .unwrap_or(false)
+        }) {
+            youtfast_appearance::theme::install_fonts(ctx);
+            ctx.data_mut(|d| d.insert_temp(egui::Id::new("cast-test-fonts"), true));
+        }
         let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)),

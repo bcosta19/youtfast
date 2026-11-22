@@ -6,7 +6,7 @@ use youtfast_i18n::{Locale, format as trf, gettext as tr};
 use super::{CONTROL_WIDTH, setting_row};
 use crate::widgets;
 use youtfast_app::{Action, State};
-use youtfast_appearance::theme::{self, InterfaceFont};
+use youtfast_appearance::theme::{self, InterfaceFont, InterfaceStyle};
 use youtfast_storage::settings::ThemeChoice;
 
 /// How tall the list of installed families may grow.
@@ -33,7 +33,7 @@ pub(super) fn appearance(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) 
                     language_picker(ui, state, actions);
                 },
             );
-            ui.add_space(12.0);
+            widgets::hairline_divider(ui, palette);
             setting_row(
                 ui,
                 palette,
@@ -95,7 +95,18 @@ pub(super) fn appearance(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) 
                     }
                 }
             }
-            ui.add_space(12.0);
+            widgets::hairline_divider(ui, palette);
+            setting_row(
+                ui,
+                palette,
+                &tr(locale, "Interface style"),
+                &tr(locale, state.settings.interface_style.description()),
+                CONTROL_WIDTH,
+                |ui| {
+                    interface_style_picker(ui, state, actions);
+                },
+            );
+            widgets::hairline_divider(ui, palette);
             setting_row(
                 ui,
                 palette,
@@ -218,6 +229,38 @@ fn interface_font_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) 
         // The next time it opens, the menu starts unfiltered.
         ui.data_mut(|d| d.remove::<String>(search));
     }
+}
+
+/// The visual style picker across all twelve [`InterfaceStyle`] presets.
+fn interface_style_picker(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
+    let locale = state.settings.language;
+    let current = state.settings.interface_style;
+    let label = |style: InterfaceStyle| {
+        if style == InterfaceStyle::Classic {
+            tr(locale, style.label()).into_owned()
+        } else {
+            style.label().to_owned()
+        }
+    };
+    egui::ComboBox::from_id_salt("interface-style")
+        .width(200.0)
+        .height(FONT_MENU_HEIGHT)
+        .selected_text(RichText::new(label(current)).font(theme::regular(14.0)))
+        .show_ui(ui, |ui| {
+            for style in InterfaceStyle::ALL {
+                let selected = current == style;
+                if ui
+                    .selectable_label(
+                        selected,
+                        RichText::new(label(style)).font(theme::regular(14.0)),
+                    )
+                    .clicked()
+                {
+                    actions.push(Action::SetInterfaceStyle(style));
+                    ui.close();
+                }
+            }
+        });
 }
 
 /// The theme's menu: Automatic, Dark, Light, then the palette files.
@@ -484,5 +527,51 @@ mod tests {
             &mut actions,
         );
         assert_eq!(actions, [Action::SetInterfaceFont(InterfaceFont::System)]);
+    }
+
+    #[test]
+    fn the_interface_style_menu_emits_the_chosen_style() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let state = State::default();
+        let mut actions = Vec::new();
+        let labels = draw_appearance(&ctx, &state, Vec::new(), &mut actions);
+        click_at(
+            &ctx,
+            &state,
+            centre_of(&labels, InterfaceStyle::default().label()),
+            &mut actions,
+        );
+        let open = draw_appearance(&ctx, &state, Vec::new(), &mut actions);
+        for style in InterfaceStyle::ALL {
+            assert!(
+                open.iter().any(|(label, _)| label == style.label()),
+                "missing style {}",
+                style.label()
+            );
+        }
+        click_at(&ctx, &state, centre_of(&open, "Liquid Glass"), &mut actions);
+        assert_eq!(
+            actions,
+            [Action::SetInterfaceStyle(InterfaceStyle::LiquidGlass)]
+        );
+        actions.clear();
+        click_at(
+            &ctx,
+            &state,
+            centre_of(&labels, InterfaceStyle::default().label()),
+            &mut actions,
+        );
+        let open = draw_appearance(&ctx, &state, Vec::new(), &mut actions);
+        click_at(
+            &ctx,
+            &state,
+            centre_of(&open, "Industrial (Braun)"),
+            &mut actions,
+        );
+        assert_eq!(
+            actions,
+            [Action::SetInterfaceStyle(InterfaceStyle::Industrial)]
+        );
     }
 }

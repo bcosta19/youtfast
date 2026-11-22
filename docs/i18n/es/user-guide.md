@@ -574,7 +574,17 @@ con cualquiera de las dos opciones, para que no baile mientras cuenta.
 
 ## Temas
 
-Configuración → Aspecto. **Automático** sigue en directo el tema del escritorio
+Configuración → Aspecto. **Estilo de la interfaz** permite elegir en directo
+entre doce estilos visuales: **Cupertino Quiet** (predeterminado), **Liquid
+Glass**, **Cinema Minimal**, **Warm Studio**, **Adwaita (GNOME)**, **Fluent
+Mica**, **Industrial (Braun)**, **Technical (Tiling)**, **Tactile Modern**,
+**Material Tonal**, **Paper** y **Clásico** (la apariencia y el ritmo
+originales). Los temas oscuro y claro integrados adaptan sus colores al estilo
+elegido, mientras que las paletas personalizadas y los temas de Omarchy
+conservan sus propios colores y adoptan las superficies, elevación tonal,
+esquinas, bordes, barra flotante del reproductor y transiciones del estilo.
+
+**Automático** sigue en directo el tema del escritorio
 Omarchy en Linux, y es oscuro en los demás casos. **Oscuro** y **Claro** son los
 colores propios de YouTFast. Las ocho paletas compartidas (Catppuccin, Nord, Rosé
 Pine, Tokyo Night y más) se instalan en `~/.config/youtfast/themes` en la primera

@@ -561,7 +561,17 @@ Inter con entrambe le scelte, così non tremola durante il conteggio.
 
 ## Temi
 
-Impostazioni → Aspetto. **Automatico** segue in tempo reale il tema del desktop
+Impostazioni → Aspetto. **Stile dell'interfaccia** consente di scegliere in
+tempo reale tra dodici stili visivi: **Cupertino Quiet** (predefinito), **Liquid
+Glass**, **Cinema Minimal**, **Warm Studio**, **Adwaita (GNOME)**, **Fluent
+Mica**, **Industrial (Braun)**, **Technical (Tiling)**, **Tactile Modern**,
+**Material Tonal**, **Paper** e **Classico** (l'aspetto e i tempi originali). I
+temi scuro e chiaro integrati adattano i colori allo stile scelto, mentre le
+tavolozze personalizzate e i temi Omarchy mantengono i propri colori e adottano
+superfici, elevazione tonale, angoli, bordi, barra fluttuante del lettore e
+transizioni dello stile.
+
+**Automatico** segue in tempo reale il tema del desktop
 Omarchy su Linux ed è scuro altrove. **Scuro** e **Chiaro** sono i colori propri di
 YouTFast. Le otto tavolozze condivise (Catppuccin, Nord, Rosé Pine, Tokyo
 Night e altre) vengono installate in `~/.config/youtfast/themes` al primo avvio

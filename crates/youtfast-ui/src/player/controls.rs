@@ -16,9 +16,125 @@ use youtfast_core::model::{Fetch, Segment, SponsorBehavior, Video};
 use youtfast_core::util;
 use youtfast_mpv::Status;
 
+const BUTTON_EDGE: f32 = 32.0; // `control_button` uses the widget's minimum target.
+const BUTTON_SPACING: f32 = 4.0;
+const GROUP_GAP: f32 = 8.0;
+
+fn group_width(count: usize) -> f32 {
+    count as f32 * BUTTON_EDGE + count.saturating_sub(1) as f32 * BUTTON_SPACING
+}
+
+#[derive(Clone, Copy, Default)]
+pub(super) struct ButtonLayout {
+    play: bool,
+    next: bool,
+    mute: bool,
+    settings: bool,
+    fullscreen: bool,
+    page_controls: bool,
+    pip: bool,
+    captions: bool,
+    audio_and_cast: bool,
+}
+
+impl ButtonLayout {
+    pub(super) fn new(state: &State, status: &Status, mode: Mode, live: bool) -> Self {
+        let page_controls = mode == Mode::Page && !state.watching_short();
+        Self {
+            play: true,
+            next: !live
+                && mode != Mode::Short
+                && (state.playing_more.is_some() || state.next_video().is_some()),
+            mute: true,
+            settings: true,
+            fullscreen: true,
+            page_controls,
+            pip: page_controls,
+            captions: !status.subtitles.is_empty(),
+            audio_and_cast: mode != Mode::Short,
+        }
+    }
+
+    pub(super) fn preferred(mut self, width: f32, mode: Mode) -> Self {
+        self.pip &= width >= 332.0;
+        // Narrow bars keep audio-only on its shortcut and Cast in the top bar.
+        self.audio_and_cast &= width >= 376.0;
+        if mode == Mode::Short {
+            self.mute &= width >= 112.0;
+            self.fullscreen &= width >= 152.0;
+            self.captions &= width >= 188.0;
+        }
+        self
+    }
+
+    fn right_width(self) -> f32 {
+        group_width(
+            usize::from(self.settings)
+                + usize::from(self.fullscreen)
+                + usize::from(self.page_controls) * 2
+                + usize::from(self.pip)
+                + usize::from(self.captions)
+                + usize::from(self.audio_and_cast) * 2,
+        )
+    }
+
+    fn gap(self) -> f32 {
+        if self.play && self.settings {
+            GROUP_GAP
+        } else {
+            0.0
+        }
+    }
+
+    fn required_width(self) -> f32 {
+        group_width(usize::from(self.play) + usize::from(self.next) + usize::from(self.mute))
+            + self.gap()
+            + self.right_width()
+    }
+
+    pub(super) fn fits(self, width: f32) -> bool {
+        self.required_width() <= width
+    }
+
+    pub(super) fn compact(self, width: f32) -> Self {
+        if self.fits(width) {
+            return self;
+        }
+        if width < 2.0 * BUTTON_EDGE + GROUP_GAP {
+            return Self {
+                play: width >= BUTTON_EDGE,
+                ..Self::default()
+            };
+        }
+        // Keep full-size targets. Two groups each omit their trailing spacing.
+        let mut slots =
+            ((width - GROUP_GAP + 2.0 * BUTTON_SPACING) / (BUTTON_EDGE + BUTTON_SPACING)) as usize;
+        let mut take = |enabled, count| {
+            if enabled && slots >= count {
+                slots -= count;
+                true
+            } else {
+                false
+            }
+        };
+        Self {
+            play: take(self.play, 1),
+            settings: take(self.settings, 1),
+            fullscreen: take(self.fullscreen, 1),
+            mute: take(self.mute, 1),
+            next: take(self.next, 1),
+            captions: take(self.captions, 1),
+            page_controls: take(self.page_controls, 2),
+            pip: take(self.pip, 1),
+            audio_and_cast: take(self.audio_and_cast, 2),
+        }
+    }
+}
+
 /// The row under the seek bar.
 pub(super) fn buttons(
     ui: &mut Ui,
+    layout: ButtonLayout,
     state: &mut State,
     status: &Status,
     mode: Mode,
@@ -30,66 +146,55 @@ pub(super) fn buttons(
     // volume/time/chapter content. A long title must never push a control
     // beyond the edge of the video.
     let row = ui.available_rect_before_wrap();
-    let spacing = 4.0;
-    let page_controls = mode == Mode::Page && !state.watching_short();
-    let pip_button = page_controls && row.width() >= 332.0;
-    let fullscreen_button = mode != Mode::Short || row.width() >= 152.0;
-    let captions_button =
-        !status.subtitles.is_empty() && (mode != Mode::Short || row.width() >= 188.0);
-    // Shorts stay a picture-first bar; the switch is for a page or full screen.
-    // Reserve two adjacent slots for audio-only and Cast. A narrow page bar
-    // keeps audio-only on its shortcut and Cast available from the top bar.
-    let audio_only_button = mode != Mode::Short && row.width() >= 376.0;
-    let mute_button = mode != Mode::Short || row.width() >= 112.0;
-    let right_count = 1
-        + usize::from(fullscreen_button)
-        + usize::from(page_controls) * 2
-        + usize::from(pip_button)
-        + usize::from(captions_button)
-        + usize::from(audio_only_button) * 2;
     let speed = (!at_live_edge(live, status) && status.speed != 1.0 && row.width() >= 900.0)
-        .then(|| speed_label(status.speed));
-    let speed_width = speed.as_ref().map_or(0.0, |label| {
-        ui.painter()
-            .layout_no_wrap(label.clone(), theme::medium(13.0), Color32::WHITE)
-            .size()
-            .x
-            + spacing
-    });
-    let right_width = right_count as f32 * 32.0 + (right_count - 1) as f32 * spacing + speed_width;
+        .then(|| {
+            let galley = ui.painter().layout_no_wrap(
+                speed_label(status.speed),
+                theme::medium(13.0),
+                Color32::WHITE,
+            );
+            let width = galley.size().x + BUTTON_SPACING;
+            (galley, width)
+        })
+        .filter(|(_, width)| layout.required_width() + width <= row.width());
+    let right_width = layout.right_width() + speed.as_ref().map_or(0.0, |(_, width)| *width);
     let right_rect = Rect::from_min_max(
         pos2((row.right() - right_width).max(row.left()), row.top()),
         row.max,
     );
     let left_rect = Rect::from_min_max(
         row.min,
-        pos2((right_rect.left() - 8.0).max(row.left()), row.bottom()),
+        pos2(
+            (right_rect.left() - layout.gap()).max(row.left()),
+            row.bottom(),
+        ),
     );
     let mut right = ui.new_child(
         UiBuilder::new()
             .id_salt("right-controls")
-            .max_rect(right_rect),
+            .max_rect(right_rect)
+            .layout(Layout::right_to_left(Align::Center)),
     );
-    right.spacing_mut().item_spacing.x = spacing;
+    right.spacing_mut().item_spacing.x = BUTTON_SPACING;
     let mut left = ui.new_child(
         UiBuilder::new()
             .id_salt("left-controls")
             .max_rect(left_rect)
             .layout(Layout::left_to_right(Align::Center)),
     );
-    left.spacing_mut().item_spacing.x = spacing;
+    left.spacing_mut().item_spacing.x = BUTTON_SPACING;
     let ui = &mut left;
     let (icon, hint) = if status.paused {
         (Icon::Play, tr(locale, "Play (k)"))
     } else {
         (Icon::Pause, tr(locale, "Pause (k)"))
     };
-    if control_button(ui, icon, 20.0, &hint).clicked() {
+    if layout.play && control_button(ui, icon, 20.0, &hint).clicked() {
         actions.push(Action::TogglePause);
     }
-    let next = state.next_video();
-    if !live && mode != Mode::Short && (next.is_some() || state.playing_more.is_some()) {
-        let hint = next
+    if layout.next {
+        let hint = state
+            .next_video()
             .map(|video| next_hint(state, video, locale))
             .unwrap_or_else(|| tr(locale, "Load next videos / retry (Shift+N)").into());
         if control_button(ui, Icon::SkipForward, 18.0, &hint).clicked() {
@@ -101,7 +206,7 @@ pub(super) fn buttons(
     } else {
         (Icon::Volume, tr(locale, "Mute (m)"))
     };
-    if mute_button && control_button(ui, icon, 18.0, &hint).clicked() {
+    if layout.mute && control_button(ui, icon, 18.0, &hint).clicked() {
         actions.push(Action::ToggleMute);
     }
     if mode != Mode::Short && left_rect.width() >= 300.0 {
@@ -118,30 +223,33 @@ pub(super) fn buttons(
             actions.push(Action::SetVolume(volume));
         }
     }
-    ui.add_space(4.0);
-    if live && ui.available_width() >= 24.0 {
-        live_badge(ui, state, status, actions);
-    } else {
-        time_label(
-            ui,
-            state,
-            status,
-            mode != Mode::Short && row.width() >= 720.0,
-            actions,
-        );
+    if layout.play && ui.available_width() >= 4.0 {
+        ui.add_space(4.0);
+        if live && ui.available_width() >= 24.0 {
+            live_badge(ui, state, status, actions);
+        } else {
+            time_label(
+                ui,
+                state,
+                status,
+                mode != Mode::Short && row.width() >= 720.0,
+                actions,
+            );
+        }
     }
 
-    right.with_layout(Layout::right_to_left(Align::Center), |ui| {
+    {
+        let ui = &mut right;
         let (icon, hint) = if mode == Mode::Fullscreen {
             (Icon::ExitFullscreen, tr(locale, "Exit full screen (f)"))
         } else {
             (Icon::Fullscreen, tr(locale, "Full screen (f)"))
         };
-        if fullscreen_button && control_button(ui, icon, 18.0, &hint).clicked() {
+        if layout.fullscreen && control_button(ui, icon, 18.0, &hint).clicked() {
             actions.push(Action::ToggleFullscreen);
         }
         // Full screen has no page layout to change.
-        if page_controls {
+        if layout.page_controls {
             let hint = if state.settings.theater {
                 tr(locale, "Default view (t)")
             } else {
@@ -150,29 +258,33 @@ pub(super) fn buttons(
             if control_button(ui, Icon::Theater, 18.0, &hint).clicked() {
                 actions.push(Action::ToggleTheater);
             }
-            if pip_button
-                && control_button(
-                    ui,
-                    Icon::ExternalLink,
-                    18.0,
-                    &tr(locale, "Picture-in-picture (p)"),
-                )
-                .clicked()
-            {
-                actions.push(Action::TogglePip);
-            }
-            if control_button(ui, Icon::MiniPlayer, 18.0, &tr(locale, "Miniplayer (i)")).clicked() {
-                actions.push(Action::ToggleMiniPlayer);
-            }
         }
-        if control_button(ui, Icon::Settings, 18.0, &tr(locale, "Settings")).clicked() {
+        if layout.pip
+            && control_button(
+                ui,
+                Icon::ExternalLink,
+                18.0,
+                &tr(locale, "Picture-in-picture (p)"),
+            )
+            .clicked()
+        {
+            actions.push(Action::TogglePip);
+        }
+        if layout.page_controls
+            && control_button(ui, Icon::MiniPlayer, 18.0, &tr(locale, "Miniplayer (i)")).clicked()
+        {
+            actions.push(Action::ToggleMiniPlayer);
+        }
+        if layout.settings
+            && control_button(ui, Icon::Settings, 18.0, &tr(locale, "Settings")).clicked()
+        {
             state.player_menu = if state.player_menu == PlayerMenu::Closed {
                 PlayerMenu::Main
             } else {
                 PlayerMenu::Closed
             };
         }
-        if captions_button {
+        if layout.captions {
             let on = status.subtitles.iter().any(|subtitle| subtitle.selected);
             let response = control_button(ui, Icon::Captions, 18.0, &tr(locale, "Captions (c)"));
             if on {
@@ -182,7 +294,7 @@ pub(super) fn buttons(
                 actions.push(Action::ToggleCaptions);
             }
         }
-        if audio_only_button {
+        if layout.audio_and_cast {
             let response = control_button(
                 ui,
                 Icon::AudioOnly,
@@ -203,14 +315,10 @@ pub(super) fn buttons(
                 actions.push(Action::Cast(youtfast_cast::Action::Open));
             }
         }
-        if let Some(speed) = speed {
-            ui.label(
-                RichText::new(speed)
-                    .font(theme::medium(13.0))
-                    .color(Color32::WHITE),
-            );
+        if let Some((galley, _)) = speed {
+            ui.label(galley);
         }
-    });
+    }
     (left.min_rect(), right.min_rect())
 }
 
@@ -274,11 +382,25 @@ fn time_label(
     } else {
         util::duration(position)
     };
-    ui.add_sized(
-        vec2(full_width.min(available), 32.0),
-        egui::Label::new(RichText::new(text).font(font).color(Color32::WHITE)).truncate(),
-    )
-    .on_hover_text(time);
+    let industrial = theme::current_style(ui.ctx()) == theme::InterfaceStyle::Industrial;
+    let time_resp = ui
+        .add_sized(
+            vec2(full_width.min(available), 32.0),
+            egui::Label::new(RichText::new(text).font(font).color(Color32::WHITE)).truncate(),
+        )
+        .on_hover_text(time);
+    if industrial {
+        let readout = time_resp
+            .rect
+            .shrink2(vec2(0.0, 5.0))
+            .expand2(vec2(3.0, 0.0));
+        ui.painter().rect_stroke(
+            readout,
+            CornerRadius::same(3),
+            egui::Stroke::new(1.0, Color32::from_white_alpha(64)),
+            egui::StrokeKind::Inside,
+        );
+    }
     if show_chapter
         && ui.available_width() >= 80.0
         && let Some(chapter) = chapter_at(state, position)
@@ -551,7 +673,7 @@ mod tests {
             ..Default::default()
         };
         for (mode, widths) in [
-            (Mode::Page, &[296.0, 336.0, 420.0, 720.0, 1280.0][..]),
+            (Mode::Page, &[296.0, 336.0, 376.0, 420.0, 720.0, 1280.0][..]),
             (
                 Mode::Short,
                 &[76.0, 100.0, 115.0, 140.0, 164.0, 200.0, 296.0][..],
@@ -574,8 +696,18 @@ mod tests {
                             },
                             |ui| {
                                 let row = ui.max_rect();
-                                let (left, right) =
-                                    buttons(ui, &mut state, &status, mode, live, &mut Vec::new());
+                                let layout = ButtonLayout::new(&state, &status, mode, live)
+                                    .preferred(row.width(), mode)
+                                    .compact(row.width());
+                                let (left, right) = buttons(
+                                    ui,
+                                    layout,
+                                    &mut state,
+                                    &status,
+                                    mode,
+                                    live,
+                                    &mut Vec::new(),
+                                );
                                 assert!(
                                     left.right() <= right.left(),
                                     "control groups overlap at {width}: {left:?}, {right:?}"

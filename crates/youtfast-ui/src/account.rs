@@ -993,8 +993,9 @@ mod tests {
                     title.start - 8.0 <= centre && centre <= title.end + 24.0,
                     "{width}: Sign in is not on the profile's line: {bounds:?} vs {title:?}"
                 );
+                let card_pad = f64::from(state.settings.interface_style.spec().card_margin);
                 assert!(
-                    bounds.x1 >= f64::from(column_right) - 12.0 - 1.0,
+                    bounds.x1 >= f64::from(column_right) - card_pad - 1.0,
                     "{width}: Sign in is not at the column's right edge: {bounds:?}"
                 );
             }
