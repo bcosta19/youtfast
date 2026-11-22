@@ -501,7 +501,16 @@ either choice, so it does not jiggle while it counts.
 
 ## Themes
 
-Settings → Appearance. **Automatic** follows the Omarchy desktop's theme
+Settings → Appearance. **Interface style** chooses between twelve visual styles
+applied live: **Cupertino Quiet** (the default), **Liquid Glass**, **Cinema
+Minimal**, **Warm Studio**, **Adwaita (GNOME)**, **Fluent Mica**, **Industrial
+(Braun)**, **Technical (Tiling)**, **Tactile Modern**, **Material Tonal**,
+**Paper**, and **Classic** (the original layout and timing). Built-in dark and
+light themes adapt their colours to the chosen style, while custom palettes and
+Omarchy themes keep their own colours and adopt the style's surfaces, tonal
+elevation, corners, borders, floating player dock, and transitions.
+
+**Automatic** follows the Omarchy desktop's theme
 live on Linux, and is dark elsewhere. **Dark** and **Light** are YouTFast's
 own colours. The eight shared palettes (Catppuccin, Nord, Rosé Pine, Tokyo
 Night, and more) are installed into `~/.config/youtfast/themes` on the

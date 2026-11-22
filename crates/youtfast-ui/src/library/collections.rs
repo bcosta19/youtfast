@@ -302,13 +302,23 @@ fn playlists_toolbar(
                 ui.memory_mut(|m| m.request_focus(new_input_id));
             }
         } else {
-            let response = ui.add_enabled(
-                has_capacity,
-                egui::TextEdit::singleline(&mut draft)
-                    .id(new_input_id)
-                    .hint_text(tr(locale, "Playlist name").as_ref())
-                    .desired_width(180.0),
-            );
+            let response = ui
+                .add_enabled_ui(has_capacity, |ui| {
+                    widgets::text_input(
+                        ui,
+                        palette,
+                        &mut draft,
+                        widgets::TextInputConfig {
+                            id: new_input_id,
+                            width: 200.0,
+                            hint: tr(locale, "Playlist name").as_ref(),
+                            password: false,
+                            monospace: false,
+                            char_limit: None,
+                        },
+                    )
+                })
+                .inner;
             let can_create = has_capacity && !draft.trim().is_empty();
             let enter = response.lost_focus()
                 && ui.input(|i| i.key_pressed(egui::Key::Enter))
@@ -463,11 +473,18 @@ pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     }
                     if is_local {
                         if renaming {
-                            let response = ui.add(
-                                egui::TextEdit::singleline(&mut rename_draft)
-                                    .id(rename_input_id)
-                                    .hint_text(tr(locale, "Playlist name").as_ref())
-                                    .desired_width(180.0),
+                            let response = widgets::text_input(
+                                ui,
+                                &state.palette,
+                                &mut rename_draft,
+                                widgets::TextInputConfig {
+                                    id: rename_input_id,
+                                    width: 200.0,
+                                    hint: tr(locale, "Playlist name").as_ref(),
+                                    password: false,
+                                    monospace: false,
+                                    char_limit: None,
+                                },
                             );
                             let can_save = !rename_draft.trim().is_empty();
                             let enter = response.lost_focus()

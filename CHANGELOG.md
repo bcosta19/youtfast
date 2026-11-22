@@ -10,6 +10,7 @@ are the distribution record.
 
 ### Added
 
+- **Interface style** selector under **Settings → Appearance** with twelve selectable visual styles (**Cupertino Quiet** as the default, **Liquid Glass**, **Cinema Minimal**, **Warm Studio**, **Adwaita (GNOME)**, **Fluent Mica**, **Industrial (Braun)**, **Technical (Tiling)**, **Tactile Modern**, **Material Tonal**, **Paper**, and **Classic**), tailoring dark/light palettes, tonal surface elevation, hairline or sharp 1 px borders, tactile bevels, floating player dock, rounded miniplayer and pop-out PiP corners, sidebar width animation, and transition timing live while keeping custom JSON and Omarchy palettes intact.
 - **Device sync** under **Settings → History**: optionally sync your device subscriptions, watch history (including resume positions), Watch later, device playlists, hidden videos, and blocked channels directly between your computers over Tailscale, NetBird, or a private local network using an encrypted connection authenticated by a shared pairing key, plus a **Sync devices now** command-palette action. Accounts, sessions, alert timestamps, and settings stay on each computer.
 - Home → **For you** now offers persistent **Local recommendation settings**: duration, channel discovery or familiarity, interests, muted title terms, and priority for recent uploads or fewer views. Signed-in users can choose the local ranking instead of YouTube's. An optional first-run search sends up to three interests to YouTube without signing in when no eligible device history exists; muted terms stay on the device.
 - Command palette (`Ctrl+K`, `Cmd+K` on macOS): a localized fuzzy list over sidebar views, page and player actions (`Refresh page`, `Toggle sidebar`, `Back`, `Forward`, `New video tab`, `Play` / `Pause`, `Mute` / `Unmute`, `Theater mode`, `Full screen`, `Mini player`, `Captions`, `Audio only`, `Transcript`, `Loop`, `Next video`, `Previous video`), Settings groups (`Appearance`, `Playback`, `Sidebar`, `History`, `Notifications`, `About`), recent searches, and recent watch history entries, navigated with `↑`/`↓`, `Enter`, `Esc` or the mouse without making network requests.
@@ -24,10 +25,14 @@ are the distribution record.
 
 ### Changed
 
+- Refined recent and core UI components across styles: structured cards and compact remote controls in **Cast to TV**, status pill badges, styled monospace inputs and segmented interval selectors in **Device sync** and **Notifications**, colour-coded indented category rows in **SponsorBlock**, grouped category headers and keycap badges in the **Command palette**, styled inline playlist creation/rename inputs, and a distinct toggle chip for **Hide watched**.
 - Stop submitting releases to the official Winget catalog; the maintainer has not accepted Microsoft's Contributor License Agreement. Windows setup and portable downloads, Homebrew updates and website deployment remain available.
 - Playback progress saves no longer copy unchanged device playlists.
 
 ### Fixed
+
+- Search can be submitted by clicking the magnifying glass in every interface style. The search hint and accent badges are more readable in built-in palettes.
+- The floating playback dock adapts to narrow players without overlapping controls. Device-sync errors wrap, and Cast and sync status badges expose their text to assistive technology.
 
 - The command palette blocks the mouse Back and Forward buttons while it is open.
 - The command palette offers video full screen only on the watch page.

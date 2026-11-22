@@ -9,7 +9,7 @@ use egui::{CornerRadius, CursorIcon, Key, Rect, Sense, Stroke, Ui, pos2, vec2};
 use super::{SidebarButton, sidebar_buttons, widgets};
 use youtfast_app::{AccountState, Action, PlayerMenu, RECENT_SEARCHES_LIMIT, State};
 use youtfast_appearance::icons::Icon;
-use youtfast_appearance::theme::{self, RADIUS};
+use youtfast_appearance::theme;
 use youtfast_core::model::{SettingsGroup, View};
 use youtfast_i18n::gettext as tr;
 use youtfast_mpv::Status;
@@ -794,6 +794,7 @@ pub(super) fn show(
 
     let locale = state.settings.language;
     let palette = state.palette;
+    let spec = state.applied_interface_style.spec();
     let raised = widgets::on_card(&palette);
     let id = egui::Id::new("command-palette");
     let width = (ctx.content_rect().width() - 48.0).clamp(260.0, 560.0);
@@ -805,7 +806,7 @@ pub(super) fn show(
             egui::Frame::popup(&ctx.style_of(ctx.theme()))
                 .fill(palette.overlay)
                 .stroke(Stroke::new(1.0, palette.outline))
-                .corner_radius(CornerRadius::same(RADIUS + 4))
+                .corner_radius(CornerRadius::same(spec.modal_radius))
                 .inner_margin(egui::Margin::same(14)),
         )
         .show(ctx, |ui| {
@@ -852,6 +853,7 @@ pub(super) fn show(
             }
             let cursor_moved = take_cursor_moved(ui.ctx());
             ui.add_space(8.0);
+            let grouped = spec.grouped_palette && state.palette_query.trim().is_empty();
             egui::ScrollArea::vertical()
                 .id_salt("command-palette-list")
                 .max_height(max_list_height)
@@ -859,9 +861,25 @@ pub(super) fn show(
                 .show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
                     let row_width = ui.available_width().max(120.0);
+                    let mut last_category: Option<String> = None;
                     for (index, item) in items.into_iter().enumerate() {
+                        if grouped && last_category.as_deref() != Some(item.category.as_str()) {
+                            if last_category.is_some() {
+                                ui.add_space(6.0);
+                            }
+                            ui.horizontal(|ui| {
+                                ui.add_space(10.0);
+                                ui.label(
+                                    egui::RichText::new(item.category.to_uppercase())
+                                        .font(theme::semibold(11.0))
+                                        .color(palette.dim),
+                                );
+                            });
+                            last_category = Some(item.category.clone());
+                        }
                         let selected = index == state.palette_cursor;
-                        let response = draw_row(ui, &palette, &raised, &item, selected, row_width);
+                        let response =
+                            draw_row(ui, &palette, &raised, &item, selected, !grouped, row_width);
                         if selected && cursor_moved {
                             response.scroll_to_me(None);
                         }
@@ -886,6 +904,7 @@ fn draw_row(
     raised: &youtfast_appearance::theme::Palette,
     item: &PaletteItem,
     selected: bool,
+    show_category: bool,
     width: f32,
 ) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(vec2(width, ROW_HEIGHT), Sense::click());
@@ -898,7 +917,8 @@ fn draw_row(
     if response.hovered() {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
     }
-    let radius = CornerRadius::same(theme::RADIUS_SMALL + 2);
+    let spec = widgets::style_spec(ui);
+    let radius = CornerRadius::same(spec.ctrl_radius);
     widgets::row_fill_radius(ui, palette, rect, &response, selected, radius);
     if selected {
         let bar = Rect::from_center_size(pos2(rect.left() + 4.0, rect.center().y), vec2(3.0, 18.0));
@@ -926,8 +946,28 @@ fn draw_row(
             pos2(right - pill_w / 2.0, rect.center().y),
             vec2(pill_w, pill_h),
         );
+        let key_radius = if spec.sharp_borders {
+            CornerRadius::same(spec.ctrl_radius)
+        } else if spec.hairline_dividers {
+            CornerRadius::same(5)
+        } else {
+            CornerRadius::same(11)
+        };
         ui.painter()
-            .rect_filled(pill_rect, CornerRadius::same(11), raised.surface);
+            .rect_filled(pill_rect, key_radius, raised.surface);
+        if spec.sharp_borders || spec.hairline_dividers {
+            let stroke_color = if spec.sharp_borders {
+                palette.outline
+            } else {
+                widgets::hairline_color(palette)
+            };
+            ui.painter().rect_stroke(
+                pill_rect,
+                key_radius,
+                Stroke::new(1.0, stroke_color),
+                egui::StrokeKind::Inside,
+            );
+        }
         ui.painter().galley(
             pill_rect.center() - galley.size() / 2.0,
             galley,
@@ -936,17 +976,19 @@ fn draw_row(
         right = pill_rect.left() - 8.0;
     }
 
-    let cat_galley = ui.painter().layout_no_wrap(
-        item.category.clone(),
-        theme::medium(12.0),
-        palette.secondary,
-    );
-    let cat_pos = pos2(
-        right - cat_galley.size().x,
-        rect.center().y - cat_galley.size().y / 2.0,
-    );
-    ui.painter().galley(cat_pos, cat_galley, palette.secondary);
-    right = (cat_pos.x - 12.0).max(icon_rect.right() + 24.0);
+    if show_category {
+        let cat_galley = ui.painter().layout_no_wrap(
+            item.category.clone(),
+            theme::medium(12.0),
+            palette.secondary,
+        );
+        let cat_pos = pos2(
+            right - cat_galley.size().x,
+            rect.center().y - cat_galley.size().y / 2.0,
+        );
+        ui.painter().galley(cat_pos, cat_galley, palette.secondary);
+        right = (cat_pos.x - 12.0).max(icon_rect.right() + 24.0);
+    }
 
     let text_left = icon_rect.right() + 10.0;
     let max_text_width = (right - text_left).max(16.0);

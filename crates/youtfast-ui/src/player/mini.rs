@@ -41,18 +41,19 @@ pub fn mini(
         return;
     }
     let palette = &state.palette;
+    let spec = state.applied_interface_style.spec();
     let width = (ctx.content_rect().width() * MINI_SHARE).clamp(220.0, MINI_WIDTH);
     let height = width * 9.0 / 16.0;
     let position = ctx.content_rect().right_bottom() - vec2(width + 20.0, height + 20.0);
     let frame = egui::Frame::new()
         .fill(Color32::BLACK)
-        .corner_radius(CornerRadius::same(theme::RADIUS + 1))
-        .inner_margin(egui::Margin::same(3))
+        .corner_radius(CornerRadius::same(spec.mini_radius))
+        .inner_margin(egui::Margin::same(spec.mini_frame_pad))
         .shadow(egui::Shadow {
-            offset: [0, 6],
-            blur: 20,
+            offset: [0, 8],
+            blur: 24,
             spread: 0,
-            color: Color32::from_black_alpha(140),
+            color: Color32::from_black_alpha(150),
         });
     egui::Window::new(tr(locale, "Miniplayer"))
         .id(egui::Id::new("mini-player"))
@@ -68,7 +69,10 @@ pub fn mini(
             let width = ui.available_width().max(180.0);
             ui.spacing_mut().item_spacing.y = 0.0;
             let height = width * 9.0 / 16.0;
-            let radius = CornerRadius::same(theme::RADIUS - 1);
+            let pic_r = spec
+                .mini_radius
+                .saturating_sub(spec.mini_frame_pad.max(0) as u8);
+            let radius = CornerRadius::same(pic_r);
             let (rect, response) = ui.allocate_exact_size(vec2(width, height), Sense::click());
             ctx.data_mut(|data| {
                 data.insert_temp(egui::Id::new("mini-video-keyboard-focus"), response.id)
@@ -79,7 +83,7 @@ pub fn mini(
             progress_strip(
                 ui,
                 rect,
-                theme::RADIUS - 1,
+                pic_r,
                 status.position,
                 status.duration,
                 state.watching_live(),
@@ -217,18 +221,27 @@ pub fn mini(
                     actions.push(Action::TogglePip);
                 }
             }
-            ui.painter().rect_stroke(
-                rect.expand(1.5),
-                CornerRadius::same(theme::RADIUS),
-                Stroke::new(3.5, Color32::BLACK),
-                egui::StrokeKind::Middle,
-            );
-            ui.painter().rect_stroke(
-                rect.expand(3.0),
-                CornerRadius::same(theme::RADIUS + 1),
-                Stroke::new(1.0, palette.outline),
-                egui::StrokeKind::Inside,
-            );
+            if spec.mini_frame_pad > 0 {
+                ui.painter().rect_stroke(
+                    rect.expand(1.5),
+                    CornerRadius::same(theme::RADIUS),
+                    Stroke::new(3.5, Color32::BLACK),
+                    egui::StrokeKind::Middle,
+                );
+                ui.painter().rect_stroke(
+                    rect.expand(3.0),
+                    CornerRadius::same(spec.mini_radius),
+                    Stroke::new(1.0, palette.outline),
+                    egui::StrokeKind::Inside,
+                );
+            } else {
+                ui.painter().rect_stroke(
+                    rect,
+                    radius,
+                    Stroke::new(1.0, Color32::from_white_alpha(34)),
+                    egui::StrokeKind::Inside,
+                );
+            }
             if !control_clicked && response.clicked() {
                 actions.push(Action::ReturnToWatch);
             }

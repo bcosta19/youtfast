@@ -608,7 +608,17 @@ décompte.
 
 ## Thèmes
 
-Paramètres → Apparence. **Automatique** suit en direct le thème du bureau
+Paramètres → Apparence. **Style de l'interface** choisit en direct parmi douze
+styles visuels : **Cupertino Quiet** (par défaut), **Liquid Glass**, **Cinema
+Minimal**, **Warm Studio**, **Adwaita (GNOME)**, **Fluent Mica**, **Industrial
+(Braun)**, **Technical (Tiling)**, **Tactile Modern**, **Material Tonal**,
+**Paper** et **Classique** (l'apparence et le rythme d'origine). Les thèmes
+sombre et clair intégrés adaptent leurs couleurs au style choisi, tandis que les
+palettes personnalisées et les thèmes Omarchy conservent leurs propres couleurs
+et adoptent les surfaces, l'élévation tonale, les coins, les bordures, la barre
+flottante du lecteur et les transitions du style.
+
+**Automatique** suit en direct le thème du bureau
 Omarchy sous Linux, et est sombre ailleurs. **Sombre** et **Clair** sont les
 couleurs propres à YouTFast. Les huit palettes partagées (Catppuccin, Nord, Rosé
 Pine, Tokyo Night, et d'autres) sont installées dans `~/.config/youtfast/themes`

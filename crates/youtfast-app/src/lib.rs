@@ -253,6 +253,8 @@ pub struct State {
     pub settings: Settings,
     /// The colours the interface draws, resolved from the settings.
     pub palette: Palette,
+    /// The style applied alongside `palette`, which may lag the saved choice during capture.
+    pub applied_interface_style: theme::InterfaceStyle,
     /// The palettes the settings page lists, as (filename, display name).
     pub themes: Vec<(String, String)>,
     /// Whether the desktop's palette is followed (Omarchy on Linux).
@@ -1370,11 +1372,13 @@ impl App {
             &theme_waker,
         );
         let palette = settings.palette();
-        theme::apply(ctx, &palette);
+        let applied_style = settings.interface_style;
+        theme::apply_style(ctx, &palette, applied_style);
         let mut state = State {
             library: Library::load(&dirs.library()).context("could not safely load the library")?,
             themes_dir: dirs.config.join("themes").display().to_string(),
             palette,
+            applied_interface_style: applied_style,
             sync_port_draft: settings.device_sync.port.to_string(),
             settings,
             browser: browsers.first().copied().unwrap_or("chromium").to_owned(),
@@ -2059,6 +2063,7 @@ impl App {
             Action::ToggleAudioOnly => self.toggle_audio_only(),
             Action::SetQuality(quality) => self.set_quality(quality),
             Action::SetTheme(choice) => self.set_theme(choice),
+            Action::SetInterfaceStyle(style) => self.set_interface_style(ctx, style),
             Action::SetLanguage(language) => {
                 self.state.settings.language = language;
                 self.state.osd = None;
@@ -2562,6 +2567,10 @@ impl App {
 }
 
 impl eframe::App for App {
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        self.state.palette.window.to_normalized_gamma_f32()
+    }
+
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if self.fonts.as_ref().is_some_and(|fonts| fonts.poll(ctx)) {
             self.fonts = None;

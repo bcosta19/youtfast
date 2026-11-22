@@ -105,6 +105,8 @@ pub enum Action {
     ToggleAudioOnly,
     SetQuality(Quality),
     SetTheme(youtfast_storage::settings::ThemeChoice),
+    /// Change the visual style, surfaces, and transition language.
+    SetInterfaceStyle(youtfast_appearance::theme::InterfaceStyle),
     SetLanguage(youtfast_i18n::Locale),
     /// Draw the interface with this face, now.
     SetInterfaceFont(youtfast_appearance::theme::InterfaceFont),

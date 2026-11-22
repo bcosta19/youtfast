@@ -2268,3 +2268,45 @@ msgstr "Classé sur cet appareil"
 
 msgid "Watch a few videos or enable topic search to get recommendations"
 msgstr "Regardez quelques vidéos ou activez la recherche par sujet pour obtenir des recommandations"
+
+msgid "Interface style"
+msgstr "Style de l'interface"
+
+msgid "Classic"
+msgstr "Classique"
+
+msgid "Quiet precision with hairline dividers, a floating player dock, and smooth transitions."
+msgstr "Précision discrète avec séparateurs fins, barre flottante du lecteur et transitions fluides."
+
+msgid "Floating sidebar and controls with specular highlights, rounded glass surfaces, and spring motion."
+msgstr "Barre latérale et commandes flottantes avec reflets subtils, surfaces vitrées arrondies et mouvement élastique."
+
+msgid "Compact chrome, crisp corners, and fast silky transitions that keep the focus on video."
+msgstr "Habillage compact, angles nets et transitions rapides et fluides centrées sur la vidéo."
+
+msgid "Warm graphite and alabaster tones with generous spacing, softer corners, and tactile feedback."
+msgstr "Teintes chaudes graphite et albâtre avec espacement généreux, coins doux et retour tactile."
+
+msgid "The original YouTFast appearance and timing."
+msgstr "L'apparence et le rythme d'origine de YouTFast."
+
+msgid "Clean Linux desktop look with boxed cards, balanced contrast, and soft corners."
+msgstr "Aspect épuré de bureau Linux avec cartes délimitées, contraste équilibré et coins doux."
+
+msgid "Layered surfaces with subtle top highlights, 8 px corners, and crisp active indicators."
+msgstr "Surfaces superposées avec légers reflets supérieurs, coins de 8 px et indicateurs actifs nets."
+
+msgid "Studio-hardware precision with sharp 1 px borders, tactile bevels, and high-visibility tabular readouts."
+msgstr "Précision d'équipement de studio avec bordures nettes de 1 px, biseaux tactiles et affichages tabulaires très lisibles."
+
+msgid "Compact tiling-friendly chrome with 4 px corners, sharp outlines, and fast keyboard-first transitions."
+msgstr "Cadre compact adapté au pavage avec coins de 4 px, contours nets et transitions rapides pensées pour le clavier."
+
+msgid "Physical button feel with subtle top bevels, crisp short shadows, and responsive press depth."
+msgstr "Sensation de bouton physique avec biseau supérieur subtil, ombres courtes et nettes et enfoncement réactif."
+
+msgid "Tonal surface elevation tinted by the accent colour with generous rounded containers."
+msgstr "Élévation tonale des surfaces teintée par la couleur d'accentuation avec de grands conteneurs arrondis."
+
+msgid "Low-stimulation warm paper and ink tones designed for comfortable long reading sessions."
+msgstr "Tons chauds de papier et d'encre peu stimulants, conçus pour le confort des longues sessions."

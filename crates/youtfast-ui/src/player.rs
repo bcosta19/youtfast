@@ -31,6 +31,7 @@ use youtfast_mpv::{Status, VideoSurface};
 const CONTROLS_FOR: Duration = Duration::from_millis(2500);
 /// The controls' strip: the seek bar over a row of buttons.
 pub(super) const STRIP: f32 = 64.0;
+const CONTROL_PADDING: f32 = 12.0;
 const HOLD_AFTER: f64 = 0.4;
 
 #[derive(Clone)]
@@ -340,22 +341,62 @@ pub fn player(
         overlays::countdown(ui, rect, state, actions);
         return;
     }
-    let live = state.watching_live();
-    if shown {
-        ui.ctx().data_mut(|data| {
-            data.insert_temp(
-                egui::Id::new("player-control-focus"),
-                Vec::<egui::Id>::new(),
-            )
-        });
-    }
-    let strip = Rect::from_min_max(pos2(rect.left(), rect.bottom() - STRIP), rect.max);
-    overlays::skip_button(ui, rect, strip, state, status, shown, actions);
     if !shown {
+        overlays::skip_button(ui, rect, rect, state, status, false, actions);
         return;
     }
-    surface::shade(ui, rect);
-    let inner = strip.shrink2(vec2(12.0, 0.0));
+    let live = state.watching_live();
+    ui.ctx().data_mut(|data| {
+        data.insert_temp(
+            egui::Id::new("player-control-focus"),
+            Vec::<egui::Id>::new(),
+        )
+    });
+    let spec = crate::widgets::style_spec(ui);
+    let preferred_inset = if spec.floating_dock && mode != Mode::Short {
+        spec.dock_inset
+    } else {
+        0.0
+    };
+    let full_width = (rect.width() - 2.0 * CONTROL_PADDING).max(0.0);
+    let dock_width = full_width - 2.0 * preferred_inset;
+    let buttons = controls::ButtonLayout::new(state, status, mode, live);
+    let layout = buttons.preferred(dock_width, mode);
+    let (dock_inset, layout) = if layout.fits(dock_width) {
+        (preferred_inset, layout)
+    } else {
+        // Reclaim the dock inset before dropping any transport buttons.
+        (0.0, buttons.preferred(full_width, mode).compact(full_width))
+    };
+    let strip = Rect::from_min_max(
+        pos2(rect.left() + dock_inset, rect.bottom() - STRIP - dock_inset),
+        pos2(rect.right() - dock_inset, rect.bottom() - dock_inset),
+    );
+    overlays::skip_button(ui, rect, strip, state, status, true, actions);
+    if dock_inset > 0.0 {
+        let dock_radius = CornerRadius::same(spec.dock_radius);
+        let dock_alpha = if spec.floating_chrome { 172 } else { 205 };
+        ui.painter().rect_filled(
+            strip,
+            dock_radius,
+            egui::Color32::from_black_alpha(dock_alpha),
+        );
+        ui.painter().rect_stroke(
+            strip,
+            dock_radius,
+            egui::Stroke::new(
+                1.0,
+                egui::Color32::from_white_alpha(if spec.floating_chrome { 42 } else { 28 }),
+            ),
+            egui::StrokeKind::Inside,
+        );
+    } else {
+        surface::shade(ui, rect);
+    }
+    let inner = strip.shrink2(vec2(
+        CONTROL_PADDING.min(strip.width() / 2.0),
+        if dock_inset > 0.0 { 4.0 } else { 0.0 },
+    ));
     let bar = Rect::from_min_max(inner.min, pos2(inner.right(), inner.top() + 16.0));
     if live {
         // A live stream has no timeline to seek in: the bar is full.
@@ -372,7 +413,15 @@ pub fn player(
             .layout(Layout::left_to_right(Align::Center)),
     );
     surface::on_video_style(&mut row_controls);
-    controls::buttons(&mut row_controls, state, status, mode, live, actions);
+    controls::buttons(
+        &mut row_controls,
+        layout,
+        state,
+        status,
+        mode,
+        live,
+        actions,
+    );
     if state.player_menu != PlayerMenu::Closed {
         menu::menu(ui, rect, state, status, live, actions);
     }
@@ -383,6 +432,79 @@ mod tests {
     use super::*;
     use youtfast_core::model::{Chapter, Details, Fetch, Segment, SegmentAction, Video};
     use youtfast_mpv::Subtitle;
+
+    #[test]
+    fn floating_dock_keeps_transport_buttons_inside_the_player() {
+        use youtfast_appearance::theme::{self, InterfaceStyle};
+
+        let mut state = State {
+            watching: Some(Video::from_id("aaaaaaaaaaa".into())),
+            queue: vec![Video::from_id("bbbbbbbbbbb".into())],
+            ..Default::default()
+        };
+        let status = Status {
+            paused: true,
+            subtitles: vec![Subtitle {
+                id: 1,
+                lang: "en".into(),
+                title: "English".into(),
+                selected: true,
+            }],
+            ..Default::default()
+        };
+        for (width, side_padding, count, preferred_style) in [
+            (285.0, 12.0, 6, InterfaceStyle::Cupertino),
+            (420.0, 12.0, 11, InterfaceStyle::Cupertino),
+            (460.0, 22.0, 11, InterfaceStyle::Classic),
+        ] {
+            let ctx = egui::Context::default();
+            theme::install_fonts(&ctx);
+            theme::apply_style(&ctx, &theme::Palette::dark(), InterfaceStyle::Cupertino);
+            state.settings.interface_style = preferred_style;
+            let rect = Rect::from_min_size(pos2(0.0, 0.0), vec2(width, 240.0));
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(rect),
+                    ..Default::default()
+                },
+                |ui| {
+                    player(
+                        ui,
+                        rect,
+                        &mut state,
+                        Some(&status),
+                        None,
+                        Mode::Page,
+                        &mut Vec::new(),
+                    );
+                },
+            );
+            output.textures_delta.clear();
+            let ids = ctx
+                .data(|data| data.get_temp::<Vec<egui::Id>>(egui::Id::new("player-control-focus")))
+                .expect("paused player registered controls");
+            let mut buttons: Vec<_> = ids
+                .into_iter()
+                .filter_map(|id| ctx.read_response(id))
+                .map(|response| response.rect)
+                .filter(|rect| rect.size() == vec2(32.0, 32.0))
+                .collect();
+            buttons.sort_by(|a, b| a.left().total_cmp(&b.left()));
+            assert_eq!(buttons.len(), count, "player width {width}: {buttons:?}");
+            assert_eq!(buttons[0].left(), side_padding, "player width {width}");
+            assert_eq!(
+                buttons[count - 1].right(),
+                width - side_padding,
+                "player width {width}: {buttons:?}"
+            );
+            assert!(
+                buttons
+                    .windows(2)
+                    .all(|pair| pair[0].right() <= pair[1].left()),
+                "overlapping buttons at player width {width}: {buttons:?}"
+            );
+        }
+    }
 
     #[test]
     fn a_real_volume_slider_keeps_keyboard_focus_after_controls_timeout() {

@@ -5,9 +5,7 @@ desktop's interface face, with rounded cards, pill buttons and chips, round
 avatars and soft fills instead of borders. The layout and what each page
 offers follow what a video page expects (home's grid of cards under chips,
 search's large rows, the watch page's title, channel line, actions and
-description box, the subscribed channels in the sidebar). The palette is
-YouTFast's dark or light, a shared preset, or the desktop's (Omarchy), as
-`crates/youtfast-appearance/src/theme.rs` resolves it.
+description box, the subscribed channels in the sidebar). The palette is YouTFast's dark or light, a shared preset, or the desktop's (Omarchy), as `crates/youtfast-appearance/src/theme.rs` resolves it. Settings → Appearance → **Interface style** lets the user switch live between twelve visual styles — **Cupertino Quiet** (default), **Liquid Glass**, **Cinema Minimal**, **Warm Studio**, **Adwaita (GNOME)**, **Fluent Mica**, **Industrial (Braun)**, **Technical (Tiling)**, **Tactile Modern**, **Material Tonal**, **Paper**, and **Classic** — adjusting surface elevation, tonal tinting, corner radii, hairline or sharp borders, tactile bevels, segmented controls, floating player dock, PiP rounding, and transition timings (`StyleSpec`) while preserving custom and Omarchy colour palettes.
 
 Mode: Operate. Scanning a feed, opening a video, and keyboard control come
 before decoration. Every keyboard binding stays; the `?` overlay lists them.

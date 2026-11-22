@@ -8,14 +8,20 @@ pub(super) fn show(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) 
         return;
     }
     let palette = &state.palette;
-    egui::Panel::top("video-tabs")
-        .exact_size(40.0)
+    let spec = state.applied_interface_style.spec();
+    let tab_fill = if spec.hairline_dividers && !spec.floating_chrome {
+        palette.window
+    } else {
+        palette.panel
+    };
+    let response = egui::Panel::top("video-tabs")
+        .exact_size(spec.tab_bar_height)
         .resizable(false)
         .show_separator_line(false)
         .frame(
             Frame::new()
-                .fill(palette.panel)
-                .inner_margin(Margin::symmetric(16, 4)),
+                .fill(tab_fill)
+                .inner_margin(Margin::symmetric(16, 3)),
         )
         .show(ui, |ui| {
             ui.spacing_mut().item_spacing.x = 6.0;
@@ -34,6 +40,14 @@ pub(super) fn show(ui: &mut egui::Ui, state: &State, actions: &mut Vec<Action>) 
                     });
                 });
         });
+    if spec.hairline_dividers {
+        let rect = response.response.rect;
+        ui.painter().hline(
+            rect.left()..=rect.right(),
+            rect.bottom() - 0.5,
+            Stroke::new(1.0, widgets::hairline_color(palette)),
+        );
+    }
 }
 
 fn video_tab(
@@ -61,7 +75,9 @@ fn video_tab(
     } else {
         title.to_owned()
     };
-    let tab_size = vec2(204.0, 30.0);
+    let spec = state.applied_interface_style.spec();
+    let tab_height = (spec.tab_bar_height - 8.0).clamp(24.0, 30.0);
+    let tab_size = vec2(204.0, tab_height);
     let (rect, response) = ui.allocate_exact_size(tab_size, Sense::click());
     response.widget_info(|| {
         egui::WidgetInfo::selected(egui::WidgetType::Button, true, selected, title)
@@ -80,34 +96,62 @@ fn video_tab(
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
     }
     let hovered = response.hovered() || close_response.hovered();
-    let hover_t = ui
-        .ctx()
-        .animate_bool(response.id.with("tab-hover"), hovered);
-    let selected_t = ui
-        .ctx()
-        .animate_bool(response.id.with("tab-selected"), selected);
-    let radius = CornerRadius::same(RADIUS);
-    let base_fill = palette.surface.gamma_multiply(0.55);
+    let hover_t = ui.ctx().animate_bool_with_easing(
+        response.id.with("tab-hover"),
+        hovered,
+        egui::emath::easing::cubic_out,
+    );
+    let selected_t = ui.ctx().animate_bool_with_easing(
+        response.id.with("tab-selected"),
+        selected,
+        egui::emath::easing::cubic_out,
+    );
+    let radius = CornerRadius::same(spec.ctrl_radius.max(RADIUS));
+    let base_fill = if spec.hairline_dividers {
+        egui::Color32::TRANSPARENT
+    } else {
+        palette.surface.gamma_multiply(0.55)
+    };
     let hover_fill = widgets::mix(base_fill, palette.surface_hover, hover_t);
-    let fill = widgets::mix(hover_fill, palette.surface_active, selected_t * 0.85);
+    let active_fill = if spec.hairline_dividers {
+        palette.surface
+    } else {
+        palette.surface_active
+    };
+    let fill = widgets::mix(hover_fill, active_fill, selected_t * 0.92);
     let painter = ui.painter();
-    painter.rect_filled(rect, radius, fill);
+    if fill.a() > 0 {
+        painter.rect_filled(rect, radius, fill);
+    }
     if selected_t > 0.01 {
+        let stroke_color = if spec.hairline_dividers {
+            widgets::hairline_color(palette)
+        } else {
+            palette.outline
+        };
         painter.rect_stroke(
             rect,
             radius,
-            Stroke::new(1.0, palette.outline.gamma_multiply(selected_t)),
+            Stroke::new(1.0, stroke_color.gamma_multiply(selected_t)),
             egui::StrokeKind::Inside,
         );
-        let indicator = Rect::from_center_size(
-            pos2(rect.left() + 8.0, rect.center().y),
-            vec2(3.0, 14.0 * selected_t),
-        );
-        painter.rect_filled(
-            indicator,
-            CornerRadius::same(2),
-            palette.accent.gamma_multiply(selected_t),
-        );
+        if spec.hairline_dividers {
+            painter.circle_filled(
+                pos2(rect.left() + 10.0, rect.center().y),
+                3.0 * selected_t,
+                palette.accent.gamma_multiply(selected_t),
+            );
+        } else {
+            let indicator = Rect::from_center_size(
+                pos2(rect.left() + 8.0, rect.center().y),
+                vec2(3.0, 14.0 * selected_t),
+            );
+            painter.rect_filled(
+                indicator,
+                CornerRadius::same(2),
+                palette.accent.gamma_multiply(selected_t),
+            );
+        }
     }
     widgets::focus_outline(ui, &response, radius);
 

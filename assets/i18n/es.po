@@ -2268,3 +2268,45 @@ msgstr "Clasificado en este dispositivo"
 
 msgid "Watch a few videos or enable topic search to get recommendations"
 msgstr "Mira algunos vídeos o activa la búsqueda por intereses para recibir recomendaciones"
+
+msgid "Interface style"
+msgstr "Estilo de la interfaz"
+
+msgid "Classic"
+msgstr "Clásico"
+
+msgid "Quiet precision with hairline dividers, a floating player dock, and smooth transitions."
+msgstr "Precisión silenciosa con divisores finos, barra flotante en el reproductor y transiciones suaves."
+
+msgid "Floating sidebar and controls with specular highlights, rounded glass surfaces, and spring motion."
+msgstr "Barra lateral y controles flotantes con reflejos sutiles, superficies redondeadas de cristal y movimiento elástico."
+
+msgid "Compact chrome, crisp corners, and fast silky transitions that keep the focus on video."
+msgstr "Marco compacto, esquinas precisas y transiciones rápidas y fluidas centradas en el vídeo."
+
+msgid "Warm graphite and alabaster tones with generous spacing, softer corners, and tactile feedback."
+msgstr "Tonos cálidos de grafito y alabastro con espaciado generoso, esquinas suaves y respuesta táctil."
+
+msgid "The original YouTFast appearance and timing."
+msgstr "La apariencia y el ritmo originales de YouTFast."
+
+msgid "Clean Linux desktop look with boxed cards, balanced contrast, and soft corners."
+msgstr "Aspecto limpio de escritorio Linux con tarjetas delimitadas, contraste equilibrado y esquinas suaves."
+
+msgid "Layered surfaces with subtle top highlights, 8 px corners, and crisp active indicators."
+msgstr "Superficies en capas con reflejos superiores sutiles, esquinas de 8 px e indicadores activos nítidos."
+
+msgid "Studio-hardware precision with sharp 1 px borders, tactile bevels, and high-visibility tabular readouts."
+msgstr "Precisión de equipo de estudio con bordes nítidos de 1 px, biseles táctiles y lecturas tabulares de alta visibilidad."
+
+msgid "Compact tiling-friendly chrome with 4 px corners, sharp outlines, and fast keyboard-first transitions."
+msgstr "Marco compacto pensado para mosaico con esquinas de 4 px, contornos nítidos y transiciones rápidas centradas en el teclado."
+
+msgid "Physical button feel with subtle top bevels, crisp short shadows, and responsive press depth."
+msgstr "Sensación de botón físico con bisel superior sutil, sombras cortas y nítidas y profundidad reactiva al pulsar."
+
+msgid "Tonal surface elevation tinted by the accent colour with generous rounded containers."
+msgstr "Elevación tonal de superficies teñida por el color de acento con contenedores amplios y redondeados."
+
+msgid "Low-stimulation warm paper and ink tones designed for comfortable long reading sessions."
+msgstr "Tonos cálidos de papel y tinta de baja estimulación visual, pensados para sesiones largas y cómodas."

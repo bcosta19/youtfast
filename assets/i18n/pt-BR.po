@@ -2306,3 +2306,45 @@ msgstr "Ordenado neste dispositivo"
 
 msgid "Watch a few videos or enable topic search to get recommendations"
 msgstr "Assista a alguns vídeos ou ative a busca por interesses para receber recomendações"
+
+msgid "Interface style"
+msgstr "Estilo da interface"
+
+msgid "Classic"
+msgstr "Clássico"
+
+msgid "Quiet precision with hairline dividers, a floating player dock, and smooth transitions."
+msgstr "Precisão silenciosa com divisórias finas, barra flutuante no player e transições suaves."
+
+msgid "Floating sidebar and controls with specular highlights, rounded glass surfaces, and spring motion."
+msgstr "Barra lateral e controles flutuantes com brilho sutil, superfícies arredondadas de vidro e movimento elástico."
+
+msgid "Compact chrome, crisp corners, and fast silky transitions that keep the focus on video."
+msgstr "Moldura compacta, cantos discretos e transições rápidas e fluidas que mantêm o foco no vídeo."
+
+msgid "Warm graphite and alabaster tones with generous spacing, softer corners, and tactile feedback."
+msgstr "Tons quentes de grafite e alabastro com espaçamento generoso, cantos suaves e resposta tátil."
+
+msgid "The original YouTFast appearance and timing."
+msgstr "A aparência e o ritmo originais do YouTFast."
+
+msgid "Clean Linux desktop look with boxed cards, balanced contrast, and soft corners."
+msgstr "Visual limpo de desktop Linux com cartões delimitados, contraste equilibrado e cantos suaves."
+
+msgid "Layered surfaces with subtle top highlights, 8 px corners, and crisp active indicators."
+msgstr "Superfícies em camadas com realce superior sutil, cantos de 8 px e indicadores ativos nítidos."
+
+msgid "Studio-hardware precision with sharp 1 px borders, tactile bevels, and high-visibility tabular readouts."
+msgstr "Precisão de equipamento de estúdio com bordas nítidas de 1 px, chanfro tátil e leituras tabulares de alta visibilidade."
+
+msgid "Compact tiling-friendly chrome with 4 px corners, sharp outlines, and fast keyboard-first transitions."
+msgstr "Moldura compacta pensada para tiling com cantos de 4 px, contornos nítidos e transições rápidas focadas em teclado."
+
+msgid "Physical button feel with subtle top bevels, crisp short shadows, and responsive press depth."
+msgstr "Sensação de botão físico com chanfro superior sutil, sombras curtas e nítidas e profundidade responsiva ao clique."
+
+msgid "Tonal surface elevation tinted by the accent colour with generous rounded containers."
+msgstr "Elevação tonal de superfícies tingida pela cor de destaque com contêineres amplos e arredondados."
+
+msgid "Low-stimulation warm paper and ink tones designed for comfortable long reading sessions."
+msgstr "Tons quentes de papel e tinta de baixo estímulo visual, pensados para sessões longas e confortáveis."

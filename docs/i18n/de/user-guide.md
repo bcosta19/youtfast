@@ -590,7 +590,17 @@ nicht wackelt.
 
 ## Designs
 
-Einstellungen → Darstellung. **Automatisch** folgt unter Linux live dem Design des
+Einstellungen → Darstellung. **Oberflächenstil** wählt live zwischen zwölf
+visuellen Stilen: **Cupertino Quiet** (Standard), **Liquid Glass**, **Cinema
+Minimal**, **Warm Studio**, **Adwaita (GNOME)**, **Fluent Mica**, **Industrial
+(Braun)**, **Technical (Tiling)**, **Tactile Modern**, **Material Tonal**,
+**Paper** und **Klassisch** (das ursprüngliche Erscheinungsbild und Timing). Die
+integrierten dunklen und hellen Designs passen ihre Farben an den gewählten
+Stil an, während eigene Paletten und Omarchy-Designs ihre Farben behalten und
+Flächen, tonale Abstufung, Ecken, Ränder, schwebende Player-Leiste sowie
+Übergänge des Stils übernehmen.
+
+**Automatisch** folgt unter Linux live dem Design des
 Omarchy-Desktops und ist anderswo dunkel. **Dunkel** und **Hell** sind die
 eigenen Farben von YouTFast. Die acht gemeinsamen Farbpaletten (Catppuccin, Nord,
 Rosé Pine, Tokyo Night und weitere) werden beim ersten Start als einfache

@@ -1985,13 +1985,18 @@ mod tests {
 
     #[test]
     fn scrolling_miniplayer_is_optional_and_returning_reveals_the_video() {
-        fn contains_miniplayer(shape: &egui::Shape) -> bool {
+        fn contains_miniplayer(shape: &egui::Shape, radius: u8) -> bool {
             match shape {
                 egui::Shape::Rect(rect) => {
-                    rect.stroke.width == 3.5
-                        && rect.corner_radius == CornerRadius::same(theme::RADIUS)
+                    (rect.stroke.width == 3.5
+                        && rect.corner_radius == CornerRadius::same(theme::RADIUS))
+                        || (rect.stroke.width == 1.0
+                            && rect.stroke.color == Color32::from_white_alpha(34)
+                            && rect.corner_radius == CornerRadius::same(radius))
                 }
-                egui::Shape::Vec(shapes) => shapes.iter().any(contains_miniplayer),
+                egui::Shape::Vec(shapes) => shapes
+                    .iter()
+                    .any(|shape| contains_miniplayer(shape, radius)),
                 _ => false,
             }
         }
@@ -2031,10 +2036,11 @@ mod tests {
                     },
                     |ui| show(ui, state, Some(&status), None, &mut Vec::new()),
                 );
+                let mini_r = state.settings.interface_style.spec().mini_radius;
                 let mini = output
                     .shapes
                     .iter()
-                    .any(|shape| contains_miniplayer(&shape.shape));
+                    .any(|shape| contains_miniplayer(&shape.shape, mini_r));
                 output.textures_delta.clear();
                 mini
             };

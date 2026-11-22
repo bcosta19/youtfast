@@ -63,6 +63,7 @@ pub struct PipSnapshot {
     pub watching_live: bool,
     pub thumbnail: Option<Arc<str>>,
     pub palette: Palette,
+    pub interface_style: theme::InterfaceStyle,
     pub language: youtfast_i18n::Locale,
     pub demo_synthetic_images: bool,
 }
@@ -110,6 +111,7 @@ impl PipBridge {
             watching_live: state.watching_live(),
             thumbnail,
             palette: state.palette,
+            interface_style: state.applied_interface_style,
             language: state.settings.language,
             demo_synthetic_images,
         };
@@ -166,6 +168,7 @@ struct SnapshotKey<'a> {
     watching_live: bool,
     thumbnail: Option<&'a str>,
     palette: Palette,
+    interface_style: theme::InterfaceStyle,
     language: youtfast_i18n::Locale,
     demo_synthetic_images: bool,
 }
@@ -186,6 +189,7 @@ fn snapshot_key(snapshot: &PipSnapshot) -> SnapshotKey<'_> {
         watching_live: snapshot.watching_live,
         thumbnail: snapshot.thumbnail.as_deref(),
         palette: snapshot.palette,
+        interface_style: snapshot.interface_style,
         language: snapshot.language,
         demo_synthetic_images: snapshot.demo_synthetic_images,
     }
@@ -1729,6 +1733,15 @@ mod tests {
         let snap = bridge.snapshot();
         assert!(!snap.audio_only);
         assert!(snap.thumbnail.is_none());
+        state.settings.interface_style = theme::InterfaceStyle::Classic;
+        assert!(!bridge.sync(&state, Some(&status), false));
+        assert_eq!(bridge.snapshot().interface_style, snap.interface_style);
+        state.applied_interface_style = theme::InterfaceStyle::Classic;
+        assert!(bridge.sync(&state, Some(&status), false));
+        assert_eq!(
+            bridge.snapshot().interface_style,
+            theme::InterfaceStyle::Classic
+        );
         assert!(!bridge.sync(
             &state,
             Some(&mpv::Status {

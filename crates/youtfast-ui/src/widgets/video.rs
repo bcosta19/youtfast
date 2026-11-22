@@ -7,7 +7,9 @@ use egui::{
 };
 use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
-use super::{avatar, focus_outline, hover_fade, line, mix, press_fade, row_fill_radius};
+use super::{
+    avatar, focus_outline, hover_fade, line, mix, press_fade, row_fill_radius, style_spec,
+};
 use youtfast_app::{Action, State};
 use youtfast_appearance::icons::Icon;
 use youtfast_appearance::theme::{self, Palette, RADIUS, RADIUS_SMALL};
@@ -110,7 +112,8 @@ pub(crate) fn thumbnail(
     if !ui.is_rect_visible(rect) {
         return;
     }
-    let radius = CornerRadius::same(RADIUS);
+    let thumb_r = style_spec(ui).thumb_radius;
+    let radius = CornerRadius::same(thumb_r);
     ui.painter().rect_filled(rect, radius, palette.surface);
     video_thumbnail(ui, state, video)
         .fit_to_exact_size(rect.size())
@@ -131,8 +134,8 @@ pub(crate) fn thumbnail(
             CornerRadius {
                 nw: 0,
                 ne: 0,
-                sw: RADIUS,
-                se: RADIUS,
+                sw: thumb_r,
+                se: thumb_r,
             },
             Color32::from_black_alpha(165),
         );
@@ -143,8 +146,8 @@ pub(crate) fn thumbnail(
             CornerRadius {
                 nw: 0,
                 ne: 0,
-                sw: RADIUS,
-                se: if fraction >= 0.99 { RADIUS } else { 0 },
+                sw: thumb_r,
+                se: if fraction >= 0.99 { thumb_r } else { 0 },
             },
             palette.accent,
         );
@@ -287,15 +290,18 @@ fn video_row_sized(
     if !ui.is_rect_visible(rect) {
         return response;
     }
+    let spec = style_spec(ui);
     row_fill_radius(
         ui,
         palette,
         rect,
         &response,
         selected,
-        CornerRadius::same(RADIUS + 4),
+        CornerRadius::same(spec.card_radius),
     );
-    let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), thumb);
+    let hover = hover_fade(ui, &response);
+    let lift = vec2(0.0, -spec.hover_lift * hover);
+    let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad) + lift, thumb);
     thumbnail(ui, state, video, thumb_rect, watched, locale);
     let text_x = thumb_rect.right() + 12.0;
     let width = (rect.right() - text_x - pad - 34.0).max(20.0);
@@ -585,15 +591,18 @@ pub fn video_card(
     if !ui.is_rect_visible(rect) {
         return response;
     }
+    let spec = style_spec(ui);
     row_fill_radius(
         ui,
         palette,
         rect,
         &response,
         selected,
-        CornerRadius::same(RADIUS + 4),
+        CornerRadius::same(spec.card_radius),
     );
-    let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad), thumb);
+    let hover = hover_fade(ui, &response);
+    let lift = vec2(0.0, -spec.hover_lift * hover);
+    let thumb_rect = Rect::from_min_size(rect.min + vec2(pad, pad) + lift, thumb);
     thumbnail(ui, state, video, thumb_rect, watched, locale);
     let avatar_rect = Rect::from_min_size(
         pos2(thumb_rect.left(), thumb_rect.bottom() + 10.0),
