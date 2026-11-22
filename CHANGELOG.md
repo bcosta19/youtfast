@@ -8,6 +8,8 @@ are the distribution record.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-22
+
 ### Added
 
 - **Interface style** selector under **Settings → Appearance** with twelve selectable visual styles (**Cupertino Quiet** as the default, **Liquid Glass**, **Cinema Minimal**, **Warm Studio**, **Adwaita (GNOME)**, **Fluent Mica**, **Industrial (Braun)**, **Technical (Tiling)**, **Tactile Modern**, **Material Tonal**, **Paper**, and **Classic**), tailoring dark/light palettes, tonal surface elevation, hairline or sharp 1 px borders, tactile bevels, floating player dock, rounded miniplayer and pop-out PiP corners, sidebar width animation, and transition timing live while keeping custom JSON and Omarchy palettes intact.
@@ -51,6 +53,10 @@ are the distribution record.
 - On Windows, Google Cast now finds a `catt` installed with `pip install --user catt` or `pipx install catt`, even though those folders are not on the `PATH` a desktop application inherits; a running YouTFast picks it up at the next search.
 - The TV picker no longer reports a missing `catt` as the search's error, which masked why no YouTube TVs were found: it is now guidance beside the results, and the IP-address and TV-code routes stay available without it.
 - The **Cast to TV** picker no longer clips its TV-code section behind a too-short dialog: it now sizes to its full content in every language, and only scrolls when the screen is too short for it.
+
+### Security
+
+- Updated `url` to 2.5.9 to fix [RUSTSEC-2026-0592](https://rustsec.org/advisories/RUSTSEC-2026-0592).
 
 ## [0.9.1] - 2026-11-17
 
@@ -523,7 +529,8 @@ macOS Apple Silicon. Interactive Windows/macOS qualification is still pending.
 These exclusions are scope decisions, not completed features promised for a
 specific next version. See [ROADMAP.md](ROADMAP.md) for follow-up gates.
 
-[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/bcosta19/youtfast/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/bcosta19/youtfast/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/bcosta19/youtfast/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/bcosta19/youtfast/compare/v0.8.0...v0.8.1
