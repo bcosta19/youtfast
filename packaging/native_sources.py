@@ -137,6 +137,18 @@ def recipe_is_plain(text):
                for match in re.finditer(rb'^\s*resource\s+"[^"]*"([^\n]*)', build, re.MULTILINE))
 
 
+def plain_recipe_source(text):
+    """Read the pinned stable tarball directly from the installed recipe."""
+    if not recipe_is_plain(text):
+        return None
+    build = re.split(rb"^\s*test do\b", text, maxsplit=1, flags=re.MULTILINE)[0]
+    url = re.search(rb'^  url "(https://[^"]+)"\s*$', build, re.MULTILINE)
+    checksum = re.search(rb'^  sha256 "([0-9a-f]{64})"\s*$', build, re.MULTILINE)
+    if url and checksum:
+        return url[1].decode(), checksum[1].decode()
+    return None
+
+
 def validate_msys_source(text, base, installed_version):
     metadata = fields(text)
     epoch = metadata.get("epoch", [None])[0]
@@ -220,15 +232,17 @@ def collect_macos(candidate, output):
         copied = recipes / f"{name}.rb"
         shutil.copy2(recipe, copied)
         shutil.copy2(prefix / "INSTALL_RECEIPT.json", recipes / f"{name}-receipt.json")
-        formula_paths.append(copied)
         declared = bool(identity) and identity.encode() in text
-        # Only a plain recipe whose keg declares this exact tarball digest may
-        # fall back to downloading it directly.
-        if declared and stable.get("checksum") and recipe_is_plain(text):
-            plain[name] = (stable["url"], stable["checksum"])
+        pinned = plain_recipe_source(text)
+        if pinned:
+            plain[name] = pinned
+        if not declared and not pinned:
+            raise ValueError(f"Homebrew source changed for {name}; cannot recover its installed build inputs")
+        if declared:
+            formula_paths.append(copied)
         sources.append({"formula": name, "version": version, "recipe_sha256": hashlib.sha256(text).hexdigest(),
                         "current_source_url": stable.get("url"), "current_source_identity": identity,
-                        "installed_recipe_declares_current_source": bool(identity) and identity.encode() in text})
+                        "installed_recipe_declares_current_source": declared})
     if not sources:
         raise ValueError("No bundled macOS dependencies were identified")
     # A dedicated cache includes all downloaded resources/patches without
@@ -242,7 +256,8 @@ def collect_macos(candidate, output):
     # revision whenever patches change, so fetching by name collects the same
     # sources and patches. The current recipe is archived beside the keg's.
     names = [path.stem for path in formula_paths]
-    for name, source in zip(names, sources):
+    for source in sources:
+        name = source["formula"]
         try:
             (recipes / f"{name}.current.rb").write_text(run("brew", "cat", name, env=environment))
             source["current_recipe_archived"] = True
@@ -250,7 +265,8 @@ def collect_macos(candidate, output):
             # Only a reference copy; the keg recipe is archived regardless.
             source["current_recipe_archived"] = False
     try:
-        run("brew", "fetch", "--build-from-source", "--retry", *names, env=environment)
+        if names:
+            run("brew", "fetch", "--build-from-source", "--retry", *names, env=environment)
         failed = {}
     except ValueError:
         # One formula Homebrew cannot fetch fails the whole batch; retry each
@@ -265,7 +281,7 @@ def collect_macos(candidate, output):
     for source in sources:
         name = source["formula"]
         source["fetched_by"] = "homebrew"
-        if name not in failed:
+        if source["installed_recipe_declares_current_source"] and name not in failed:
             continue
         if name not in plain:
             raise ValueError(f"Homebrew could not fetch {name}, whose recipe has patches or "
@@ -274,6 +290,8 @@ def collect_macos(candidate, output):
         fallback.mkdir(parents=True, exist_ok=True)
         filename = f"{name}--" + Path(urllib.parse.urlsplit(url).path).name
         download_checked(url, fallback / filename, checksum)
+        source["installed_source_path"] = f"downloads/upstream/{filename}"
+        source["installed_source_sha256"] = checksum
         source["fetched_by"] = "upstream-url"
     if not any(path.is_file() for path in (output / "downloads").rglob("*")):
         raise ValueError("Homebrew did not collect source downloads")

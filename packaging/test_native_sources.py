@@ -134,7 +134,8 @@ class NativeSourcesTests(unittest.TestCase):
         keg = self.root / "Cellar/example/1.0_2"
         (keg / ".brew").mkdir(parents=True)
         checksum = "a" * 64
-        recipe = f'# synthetic formula; never executed by this test\nsha256 "{checksum}"\n'.encode()
+        installed_url = "https://example.invalid/installed-1.0.tar.gz"
+        recipe = f'  url "{installed_url}"\n  sha256 "{checksum}"\n'.encode()
         (keg / ".brew/example.rb").write_bytes(recipe)
         (keg / "INSTALL_RECEIPT.json").write_text("{}")
         # The current homebrew-core recipe digest may differ from the keg's.
@@ -175,9 +176,15 @@ class NativeSourcesTests(unittest.TestCase):
         (candidate / "native-dependencies.json").write_text(json.dumps({"formulae": [formula]}))
         shutil.rmtree(output)
         output.mkdir()
-        with patch.object(native_sources, "run", side_effect=run):
+        def fetch(url, destination, sha256):
+            self.assertEqual((url, sha256), (installed_url, checksum))
+            destination.write_bytes(b"installed source")
+
+        with patch.object(native_sources, "run", side_effect=run), \
+                patch.object(native_sources, "download_checked", side_effect=fetch):
             result = native_sources.collect_macos(candidate, output)
         self.assertFalse(result[0]["installed_recipe_declares_current_source"])
+        self.assertEqual((output / result[0]["installed_source_path"]).read_bytes(), b"installed source")
         self.assertEqual((output / "recipes/example.rb").read_bytes(), recipe)
 
 
@@ -225,7 +232,8 @@ end
         for name, extra in [("plain", b""), ("patched", b"  patch do\n  end\n")]:
             keg = self.root / f"Cellar/{name}/1.0"
             (keg / ".brew").mkdir(parents=True)
-            (keg / f".brew/{name}.rb").write_bytes(f'sha256 "{checksum}"\n'.encode() + extra)
+            recipe = f'  url "https://example.invalid/{name}-1.0.tar.gz"\n  sha256 "{checksum}"\n'
+            (keg / f".brew/{name}.rb").write_bytes(recipe.encode() + extra)
             (keg / "INSTALL_RECEIPT.json").write_text("{}")
             kegs[name] = keg
             formulae.append({"name": name, "versions": {"stable": "1.0"}, "installed": [{"version": "1.0"}],
