@@ -1679,7 +1679,12 @@ impl App {
             } => self.on_update_installed(release, auto, result),
             Event::CheckDeviceSync { generation } => {
                 if self.device_sync_is_current(generation) {
-                    self.sync_devices_now(false);
+                    if matches!(self.state.sync_status, SyncStatus::Syncing) {
+                        // Run once the current round ends instead of dropping it.
+                        self.sync_dirty_since = Some(Instant::now());
+                    } else {
+                        self.sync_devices_now(false);
+                    }
                 }
             }
             Event::DeviceSyncIncoming {

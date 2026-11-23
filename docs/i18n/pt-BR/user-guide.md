@@ -369,21 +369,27 @@ ocultos e canais bloqueados. Em um computador, selecione **Nova chave**, depois
 **Copiar chave**, e cole-a em **Chave de pareamento** no outro. Os dispositivos
 verificam se usam a mesma chave e criptografam a conexão antes de enviar dados
 da biblioteca. Deixe **Endereço do outro dispositivo** vazio e o YouTFast
-encontra seus outros computadores sozinho: ele pede aos clientes de linha de
-comando `tailscale` e `netbird` a lista de pares e sincroniza com todos que
-respondem na mesma **Porta de escuta** com a mesma chave, então um computador
-novo recebe a biblioteca dos outros poucos segundos depois que você cola a
-chave. A busca se repete a cada 10 minutos e sempre que os dispositivos
-conhecidos param de responder. Para usar só um computador, ou quando nenhum dos
-clientes está instalado (o Flatpak não consegue acessá-los), informe o endereço
-dele (como `100.64.0.2:38452`). Ajuste **Porta de escuta** (TCP
-`1024`–`65535`, padrão `38452`) ou **Sincronizar a cada** se necessário.
-Endereços IP públicos são recusados, e contas do YouTube, sessões, horários de
-alertas e configurações permanecem em cada computador. Inicie uma
-sincronização imediata, que também busca os dispositivos de novo, com
-**Sincronizar agora** ou **Sincronizar dispositivos agora** na paleta de
-comandos. Se você testou uma versão preliminar da sincronização, atualize os
-dois computadores e gere uma nova chave.
+encontra seus outros computadores sozinho, de três formas: pergunta na rede
+local quais dispositivos têm a mesma chave, pede aos clientes de linha de
+comando `tailscale` e `netbird` a lista de pares, e os dispositivos que
+sincronizaram contam uns aos outros quais outros computadores conhecem.
+Qualquer uma delas basta: quando um computador encontra outro, ele passa a
+conhecer todos os computadores que esse outro conhece, então um computador
+novo recebe a biblioteca de todos os outros poucos segundos depois que você
+cola a chave. A busca se repete a cada 10 minutos e sempre que os dispositivos
+conhecidos param de responder. Na rede local, a pergunta leva só a porta de
+escuta e um código que prova a chave, nunca a própria chave; libere no
+firewall a entrada TCP e UDP na **Porta de escuta**. Para usar só um
+computador, ou quando nenhuma busca o alcança (o Flatpak não consegue executar
+os clientes), informe o endereço dele (como `100.64.0.2:38452`). Ajuste
+**Porta de escuta** (`1024`–`65535`, padrão `38452`, a mesma em todos os
+computadores) ou **Sincronizar a cada** se necessário. Endereços IP públicos
+são recusados, e contas do YouTube, sessões, horários de alertas e
+configurações permanecem em cada computador. Inicie uma sincronização
+imediata, que também busca os dispositivos de novo, com **Sincronizar agora**
+ou **Sincronizar dispositivos agora** na paleta de comandos. Se você testou uma
+versão preliminar da sincronização, atualize os dois computadores e gere uma
+nova chave.
 
 **Sincronização do histórico**, em Configurações → Histórico, vale enquanto há
 uma conta conectada:

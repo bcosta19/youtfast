@@ -389,21 +389,27 @@ zusammenzuführen. Wählen Sie auf einem Computer **Neuer Schlüssel**, dann
 **Kopplungsschlüssel** ein. Die Geräte prüfen den gemeinsamen Schlüssel und
 verschlüsseln die Verbindung, bevor sie Bibliotheksdaten senden. Lassen Sie
 **Adresse des anderen Geräts** leer, findet YouTFast Ihre anderen Computer
-selbst: Es fragt die Kommandozeilen-Clients `tailscale` und `netbird` nach ihren
-Peers und synchronisiert mit allen, die am selben **Empfangsport** mit demselben
-Schlüssel antworten. Ein neuer Computer erhält so wenige Sekunden nach dem
-Einfügen des Schlüssels die Bibliothek der anderen. Die Suche wiederholt sich
-alle 10 Minuten und immer dann, wenn die bekannten Geräte nicht mehr antworten.
-Um nur einen Computer zu verwenden oder wenn keiner der beiden Clients
-installiert ist (das Flatpak erreicht sie nicht), tragen Sie dessen Adresse ein
-(zum Beispiel `100.64.0.2:38452`). Passen Sie bei Bedarf **Empfangsport** (TCP
-`1024`–`65535`, Standard `38452`) oder **Synchronisieren alle** an. Öffentliche
-IP-Adressen werden abgelehnt; YouTube-Konten, Sitzungen, Benachrichtigungszeiten
-und Einstellungen bleiben auf jedem Computer lokal. Mit **Jetzt
-synchronisieren** oder **Geräte jetzt synchronisieren** in der Befehlspalette
-stoßen Sie sofort einen Abgleich an, der auch erneut nach Geräten sucht. Falls
-Sie eine frühere Vorschau dieser Funktion getestet haben, aktualisieren Sie
-beide Computer und erstellen Sie einen neuen Schlüssel.
+selbst, auf drei Wegen: Es fragt im lokalen Netzwerk, welche Geräte denselben
+Schlüssel haben, es fragt die Kommandozeilen-Clients `tailscale` und `netbird`
+nach ihren Peers, und Geräte, die sich synchronisiert haben, teilen einander
+mit, welche anderen Computer sie kennen. Ein Weg genügt: Sobald ein Computer
+einen anderen trifft, lernt er alle Computer kennen, die dieser kennt. Ein
+neuer Computer erhält so wenige Sekunden nach dem Einfügen des Schlüssels die
+Bibliothek aller anderen. Die Suche wiederholt sich alle 10 Minuten und immer
+dann, wenn die bekannten Geräte nicht mehr antworten. Im lokalen Netzwerk
+enthält die Anfrage nur den Empfangsport und einen Code, der den Schlüssel
+belegt, nie den Schlüssel selbst; erlauben Sie in der Firewall eingehendes TCP
+und UDP auf dem **Empfangsport**. Um nur einen Computer zu verwenden oder wenn
+keine Suche ihn erreicht (das Flatpak kann die Clients nicht ausführen),
+tragen Sie dessen Adresse ein (zum Beispiel `100.64.0.2:38452`). Passen Sie bei
+Bedarf **Empfangsport** (`1024`–`65535`, Standard `38452`, auf allen Computern
+gleich) oder **Synchronisieren alle** an. Öffentliche IP-Adressen werden
+abgelehnt; YouTube-Konten, Sitzungen, Benachrichtigungszeiten und
+Einstellungen bleiben auf jedem Computer lokal. Mit **Jetzt synchronisieren**
+oder **Geräte jetzt synchronisieren** in der Befehlspalette stoßen Sie sofort
+einen Abgleich an, der auch erneut nach Geräten sucht. Falls Sie eine frühere
+Vorschau dieser Funktion getestet haben, aktualisieren Sie beide Computer und
+erstellen Sie einen neuen Schlüssel.
 
 **History sync** (Verlaufssynchronisierung) unter Einstellungen → Verlauf gilt, solange Sie
 angemeldet sind:

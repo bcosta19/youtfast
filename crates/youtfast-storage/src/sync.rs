@@ -5,9 +5,11 @@
 
 use std::collections::{HashMap, HashSet};
 use std::io::{self, Read, Write};
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
+use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 
 use crate::backup::{SUBSCRIPTIONS_LIMIT, WATCH_LATER_LIMIT};
 use crate::library::{
@@ -25,6 +27,8 @@ pub const MAX_PAIRING_KEY_CHARS: usize = 128;
 pub const MAX_PEER_ADDRESS_CHARS: usize = 253;
 pub const TOMBSTONES_LIMIT: usize = 2_000;
 pub const MAX_SYNC_BYTES: u64 = 64 * 1024 * 1024;
+/// Most device addresses one snapshot shares with a peer.
+pub const MAX_SHARED_PEERS: usize = 32;
 
 pub const ERR_PAIRING_KEY_INVALID: &str = "Generate a new pairing key and copy it to both devices.";
 pub const ERR_PEER_MISSING: &str =
@@ -188,6 +192,97 @@ pub fn netbird_peer_ips(json: &[u8]) -> Vec<IpAddr> {
         .collect();
     found.sort();
     found
+}
+
+/// Size of a local-network announcement datagram.
+pub const ANNOUNCE_BYTES: usize = 43;
+const ANNOUNCE_MAGIC: &[u8; 8] = b"YTFSYNC1";
+const ANNOUNCE_BODY: usize = 11 + 16;
+const ANNOUNCE_TAG: usize = 16;
+const QUERY: u8 = 1;
+const REPLY: u8 = 2;
+
+/// The random nonce of a local-network query; a reply is bound to it.
+pub type AnnounceNonce = [u8; 16];
+
+/// A query asking the local network which devices share the key, carrying
+/// this device's listen port, and its nonce. The tag (HMAC-SHA-256 under the
+/// key) proves the key without revealing it; the random nonce keeps queries
+/// from identifying the key or the device.
+pub fn announce_query(
+    port: u16,
+    key: &[u8; PAIRING_KEY_BYTES],
+) -> ([u8; ANNOUNCE_BYTES], AnnounceNonce) {
+    let nonce = rand::random();
+    (seal(QUERY, port, &nonce, &[], key), nonce)
+}
+
+/// The answer to the query with `query` nonce, carrying this device's listen port.
+pub fn announce_reply(
+    port: u16,
+    key: &[u8; PAIRING_KEY_BYTES],
+    query: &AnnounceNonce,
+) -> [u8; ANNOUNCE_BYTES] {
+    seal(REPLY, port, &rand::random(), query, key)
+}
+
+/// The listen port and nonce of a query made with the same key.
+pub fn read_announce_query(
+    datagram: &[u8],
+    key: &[u8; PAIRING_KEY_BYTES],
+) -> Option<(u16, AnnounceNonce)> {
+    let port = open(datagram, QUERY, &[], key)?;
+    let mut nonce = [0; 16];
+    nonce.copy_from_slice(&datagram[11..ANNOUNCE_BODY]);
+    Some((port, nonce))
+}
+
+/// The listen port in a reply made with the same key to the `query` nonce.
+pub fn read_announce_reply(
+    datagram: &[u8],
+    key: &[u8; PAIRING_KEY_BYTES],
+    query: &AnnounceNonce,
+) -> Option<u16> {
+    open(datagram, REPLY, query, key)
+}
+
+fn seal(
+    kind: u8,
+    port: u16,
+    nonce: &AnnounceNonce,
+    bound: &[u8],
+    key: &[u8; PAIRING_KEY_BYTES],
+) -> [u8; ANNOUNCE_BYTES] {
+    let mut out = [0; ANNOUNCE_BYTES];
+    out[..8].copy_from_slice(ANNOUNCE_MAGIC);
+    out[8] = kind;
+    out[9..11].copy_from_slice(&port.to_be_bytes());
+    out[11..ANNOUNCE_BODY].copy_from_slice(nonce);
+    let tag = announce_mac(&out[..ANNOUNCE_BODY], bound, key)
+        .finalize()
+        .into_bytes();
+    out[ANNOUNCE_BODY..].copy_from_slice(&tag[..ANNOUNCE_TAG]);
+    out
+}
+
+fn open(datagram: &[u8], kind: u8, bound: &[u8], key: &[u8; PAIRING_KEY_BYTES]) -> Option<u16> {
+    if datagram.len() != ANNOUNCE_BYTES || &datagram[..8] != ANNOUNCE_MAGIC || datagram[8] != kind {
+        return None;
+    }
+    let (body, tag) = datagram.split_at(ANNOUNCE_BODY);
+    announce_mac(body, bound, key)
+        .verify_truncated_left(tag)
+        .ok()?;
+    let port = u16::from_be_bytes([datagram[9], datagram[10]]);
+    (port >= MIN_SYNC_PORT).then_some(port)
+}
+
+fn announce_mac(body: &[u8], bound: &[u8], key: &[u8; PAIRING_KEY_BYTES]) -> Hmac<Sha256> {
+    let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(key).expect("HMAC takes any key size");
+    mac.update(b"youtfast device sync announcement");
+    mac.update(body);
+    mac.update(bound);
+    mac
 }
 
 /// Parses a peer address such as `100.64.0.2`, `100.64.0.2:38452`,
@@ -524,6 +619,10 @@ pub struct SyncSnapshot {
     pub version: u32,
     #[serde(default)]
     pub listen_port: u16,
+    /// Devices the sender completed a keyed exchange with, so paired devices
+    /// learn about each other through any one of them.
+    #[serde(default)]
+    pub peers: Vec<SocketAddr>,
     #[serde(default)]
     pub subscriptions: Vec<Channel>,
     #[serde(default)]
@@ -543,6 +642,13 @@ pub struct SyncSnapshot {
 impl SyncSnapshot {
     /// Strips avatars and enforces all storage bounds on an untrusted peer snapshot.
     pub fn sanitized(mut self) -> Self {
+        let mut seen_peers = HashSet::new();
+        self.peers.retain(|peer| {
+            peer.port() >= MIN_SYNC_PORT
+                && is_private_or_mesh_ip(peer.ip())
+                && seen_peers.insert(*peer)
+        });
+        self.peers.truncate(MAX_SHARED_PEERS);
         let mut seen_subs = HashSet::new();
         self.subscriptions.retain_mut(|channel| {
             channel.avatar = None;
@@ -878,5 +984,59 @@ mod tests {
             ips(&["100.90.0.2", "100.90.0.3"])
         );
         assert!(netbird_peer_ips(br#"{"peers": {"details": null}}"#).is_empty());
+    }
+
+    #[test]
+    fn announcements_verify_only_with_the_same_key_and_the_query_they_answer() {
+        let key = normalize_pairing_key(&generate_pairing_key()).unwrap();
+        let other = normalize_pairing_key(&generate_pairing_key()).unwrap();
+        let (query, nonce) = announce_query(38452, &key);
+        assert_eq!(read_announce_query(&query, &key), Some((38452, nonce)));
+        assert_eq!(read_announce_query(&query, &other), None);
+        // A fresh nonce each time: the same device and key are not linkable.
+        assert_ne!(query, announce_query(38452, &key).0);
+
+        let reply = announce_reply(40000, &key, &nonce);
+        assert_eq!(read_announce_reply(&reply, &key, &nonce), Some(40000));
+        // A reply to an earlier query, replayed, does not answer this one.
+        let (_, later) = announce_query(38452, &key);
+        assert_eq!(read_announce_reply(&reply, &key, &later), None);
+        assert_eq!(read_announce_query(&reply, &key), None);
+
+        let mut forged = reply;
+        forged[9..11].copy_from_slice(&38452u16.to_be_bytes());
+        assert_eq!(read_announce_reply(&forged, &key, &nonce), None);
+        assert_eq!(
+            read_announce_query(&query[..ANNOUNCE_BYTES - 1], &key),
+            None
+        );
+    }
+
+    #[test]
+    fn shared_peers_keep_only_private_endpoints_and_older_snapshots_still_parse() {
+        let mut snapshot = crate::library::Library::default().sync_snapshot(38452);
+        snapshot.peers = vec![
+            "100.95.0.2:38452".parse().unwrap(),
+            "100.95.0.2:38452".parse().unwrap(),
+            "8.8.8.8:38452".parse().unwrap(),
+            "192.168.1.5:80".parse().unwrap(),
+        ];
+        snapshot
+            .peers
+            .extend((0..40).map(|n| SocketAddr::new([10, 0, 0, n].into(), 38452)));
+        let parsed = parse_sync_bytes(&to_sync_json_bytes(&snapshot).unwrap()).unwrap();
+        assert_eq!(parsed.peers.len(), MAX_SHARED_PEERS);
+        assert_eq!(parsed.peers[0], "100.95.0.2:38452".parse().unwrap());
+        assert!(
+            parsed
+                .peers
+                .iter()
+                .all(|peer| peer.ip().is_ipv4() && peer.port() == 38452)
+        );
+        assert!(!parsed.peers.contains(&"8.8.8.8:38452".parse().unwrap()));
+
+        // 0.10.0 sends no peers.
+        let older = format!("{{\"version\":{SYNC_VERSION},\"listen_port\":38452}}");
+        assert!(parse_sync_bytes(older.as_bytes()).unwrap().peers.is_empty());
     }
 }

@@ -2152,8 +2152,8 @@ msgstr "Neuer Schlüssel"
 msgid "Other device address"
 msgstr "Adresse des anderen Geräts"
 
-msgid "Leave empty to find your other computers on Tailscale or NetBird automatically, or enter an address (for example, 100.64.0.2:38452)."
-msgstr "Leer lassen, um Ihre anderen Computer in Tailscale oder NetBird automatisch zu finden, oder eine Adresse eingeben (zum Beispiel 100.64.0.2:38452)."
+msgid "Leave empty to find your other computers automatically on the local network, Tailscale, or NetBird, or enter an address (for example, 100.64.0.2:38452)."
+msgstr "Leer lassen, um Ihre anderen Computer automatisch im lokalen Netzwerk, in Tailscale oder NetBird zu finden, oder eine Adresse eingeben (zum Beispiel 100.64.0.2:38452)."
 
 msgid "Listen port"
 msgstr "Empfangsport"

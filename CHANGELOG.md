@@ -10,7 +10,7 @@ are the distribution record.
 
 ### Added
 
-- **Device sync** finds your other computers by itself: with **Other device address** empty, YouTFast asks the `tailscale` and `netbird` clients for their peers and syncs with every computer answering on the same **Listen port** with the same pairing key, searching again every 10 minutes, when known devices stop answering, and on **Sync now**. Sync also starts at launch and a few seconds after its settings change, so a newly installed computer pulls the others' library as soon as the key is pasted. The Flatpak cannot reach the clients; enter an address there.
+- **Device sync** finds your other computers by itself: with **Other device address** empty, YouTFast asks the local network which devices share the pairing key, asks the `tailscale` and `netbird` clients for their peers, and devices that synced share the other computers they know, so meeting any one computer is enough to meet them all. It syncs with every computer answering on the same **Listen port** with the same key, searching again every 10 minutes, when known devices stop answering, and on **Sync now**. Sync also starts at launch and a few seconds after its settings change, so a newly installed computer pulls the others' library as soon as the key is pasted. Local-network discovery needs incoming UDP on the listen port as well as TCP; the Flatpak cannot run the clients but still finds devices on the local network and through shared peers.
 
 ### Fixed
 
