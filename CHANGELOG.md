@@ -8,6 +8,10 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Fixed
+
+- `curl -fsSL https://youtfast.pages.dev/install.sh | sh` on Arch no longer quits silently at pacman's `Proceed with installation? [Y/n]`: the question now reads its answer from the terminal instead of the piped script, and without a terminal the installer asks for `--yes`.
+
 ## [0.10.0] - 2026-11-22
 
 ### Added
