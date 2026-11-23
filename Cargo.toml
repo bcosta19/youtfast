@@ -117,8 +117,11 @@ ureq = "3"
 resvg = { version = "0.45", default-features = false }
 # Device sync authenticates a shared key and encrypts snapshots with Noise.
 snow = { version = "0.10", default-features = false, features = ["std", "use-chacha20poly1305", "use-curve25519", "use-getrandom", "use-sha2"] }
-# SponsorBlock's lookups name a prefix of the video id's SHA-256, not the id.
+# SponsorBlock's lookups name a prefix of the video id's SHA-256, not the id;
+# device sync's local-network announcements are tagged with HMAC-SHA-256.
 sha2 = "0.11"
+# Device sync's announcements prove the pairing key without revealing it.
+hmac = "0.13"
 # InnerTube's SAPISIDHASH authorization header is SHA-1 over
 # "timestamp SAPISID origin"; the protocol requires SHA-1, not a newer hash.
 sha1 = "0.10"

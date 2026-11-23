@@ -331,13 +331,25 @@ subscriptions, watch history (including resume positions), Watch later, device
 playlists, hidden videos, and blocked channels. On one computer, select
 **New key**, then **Copy key**, and paste it into **Pairing key** on the other.
 The devices verify that they share the key and encrypt the connection before
-sending any library data. Enter the other computer's address in **Other device
-address** (such as `100.64.0.2:38452`), and adjust
-**Listen port** (TCP `1024`–`65535`, default `38452`) or **Sync every** if
-needed. Public IP addresses are refused, and YouTube accounts, sessions,
-alert timestamps, and settings stay on each computer. Trigger an immediate sync
-with **Sync now** or **Sync devices now** in the command palette. If you tested
-an earlier preview of device sync, update both computers and generate a new key.
+sending any library data. Leave **Other device address** empty and YouTFast
+finds your other computers on its own, three ways: it asks the local network
+which devices have the same key, it asks the `tailscale` and `netbird`
+command-line clients for their peers, and devices that synced tell each other
+about the other computers they know. Any one of these is enough: once a
+computer meets another one, it meets every computer that one knows, so a new
+computer pulls the library of all the others a few seconds after you paste
+the key. Devices are searched again every 10 minutes and whenever the known
+ones stop answering. On the local network, the question carries only the
+listen port and a code proving the key, never the key itself; allow incoming
+TCP and UDP on **Listen port** in the firewall. To use one computer only, or
+when no search can reach it (the Flatpak can't run the clients), enter its
+address (such as `100.64.0.2:38452`). Adjust **Listen port** (`1024`–`65535`,
+default `38452`, the same on every computer) or **Sync every** if needed.
+Public IP addresses are refused, and YouTube accounts, sessions, alert
+timestamps, and settings stay on each computer. Trigger an immediate sync,
+which also searches for devices again, with **Sync now** or **Sync devices
+now** in the command palette. If you tested an earlier preview of device sync,
+update both computers and generate a new key.
 
 **History sync** in Settings → History applies while signed in:
 

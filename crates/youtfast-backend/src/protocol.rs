@@ -481,10 +481,11 @@ pub enum Event {
         generation: u64,
         snapshot: Box<youtfast_storage::sync::SyncSnapshot>,
     },
-    /// Result of an outbound peer sync or listener startup failure.
+    /// Result of an outbound sync: one snapshot per device reached, or the
+    /// listener's startup failure.
     DeviceSyncCompleted {
         generation: u64,
-        result: Result<Box<youtfast_storage::sync::SyncSnapshot>, String>,
+        result: Result<Vec<youtfast_storage::sync::SyncSnapshot>, String>,
         manual: bool,
     },
 }

@@ -372,15 +372,28 @@ privata per unire iscrizioni del dispositivo, cronologia delle visualizzazioni
 video nascosti e canali bloccati. Su un computer seleziona **Nuova chiave**,
 poi **Copia chiave** e incollala nella **Chiave di abbinamento** dell'altro.
 I dispositivi verificano di condividere la stessa chiave e cifrano la connessione
-prima di inviare dati della raccolta. Inserisci l'indirizzo dell'altro computer
-in **Indirizzo dell'altro dispositivo** (ad esempio
-`100.64.0.2:38452`) e regola **Porta di ascolto** (TCP `1024`–`65535`,
-predefinita `38452`) o **Sincronizza ogni** se necessario. Gli indirizzi IP
-pubblici vengono rifiutati, mentre account YouTube, sessioni, orari degli avvisi
-e impostazioni restano su ciascun computer. Avvia una sincronizzazione immediata
-con **Sincronizza ora** o **Sincronizza dispositivi ora** nella palette dei
-comandi. Se hai provato una versione preliminare della sincronizzazione,
-aggiorna entrambi i computer e genera una nuova chiave.
+prima di inviare dati della raccolta. Lascia vuoto **Indirizzo dell'altro
+dispositivo** e YouTFast trova da solo gli altri computer, in tre modi: chiede
+alla rete locale quali dispositivi hanno la stessa chiave, chiede i peer ai
+client a riga di comando `tailscale` e `netbird`, e i dispositivi che si sono
+sincronizzati si comunicano gli altri computer che conoscono. Ne basta uno:
+quando un computer ne incontra un altro, conosce tutti i computer che
+quest'ultimo conosce, così un computer nuovo riceve la raccolta di tutti gli
+altri pochi secondi dopo aver incollato la chiave. La ricerca si ripete ogni
+10 minuti e ogni volta che i dispositivi noti smettono di rispondere. Sulla
+rete locale la domanda contiene solo la porta di ascolto e un codice che prova
+la chiave, mai la chiave stessa; consenti nel firewall l'ingresso TCP e UDP
+sulla **Porta di ascolto**. Per usare un solo computer, o quando nessuna
+ricerca lo raggiunge (il Flatpak non può eseguire i client), inserisci il suo
+indirizzo (ad esempio `100.64.0.2:38452`). Regola **Porta di ascolto**
+(`1024`–`65535`, predefinita `38452`, la stessa su tutti i computer) o
+**Sincronizza ogni** se necessario. Gli indirizzi IP pubblici vengono
+rifiutati, mentre account YouTube, sessioni, orari degli avvisi e impostazioni
+restano su ciascun computer. Avvia una sincronizzazione immediata, che cerca
+anche di nuovo i dispositivi, con **Sincronizza ora** o **Sincronizza
+dispositivi ora** nella palette dei comandi. Se hai provato una versione
+preliminare della sincronizzazione, aggiorna entrambi i computer e genera una
+nuova chiave.
 
 **History sync** (sincronizzazione della cronologia) in Impostazioni → Cronologia si
 applica quando hai effettuato l'accesso:

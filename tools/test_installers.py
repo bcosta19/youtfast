@@ -1,9 +1,11 @@
+import fcntl
 import hashlib
 import os
 import stat
 import subprocess
 import tarfile
 import tempfile
+import termios
 import unittest
 from pathlib import Path
 
@@ -94,6 +96,8 @@ esac
         home.mkdir()
         fake_bin = self.tmp / "bin"
         fake_bin.mkdir()
+        # Keep --uninstall away from the host's pacman, where youtfast may be installed.
+        self.write_executable(fake_bin / "pacman", "#!/bin/sh\nexit 1\n")
         env = self.base_env(archive.parent, home, fake_bin)
 
         subprocess.run(["sh", str(INSTALL_SH), "--method", "native", "--yes"], env=env, capture_output=True, check=True)
@@ -178,6 +182,63 @@ esac
         logged = log_file.read_text(encoding="utf-8")
         self.assertIn("-U --noconfirm ", logged)
         self.assertIn(pkg.name, logged)
+
+    def make_arch_fixture(self) -> tuple[dict[str, str], Path]:
+        server = self.tmp / "server"
+        server.mkdir()
+        pkg = server / "youtfast-0.6.2-1-x86_64.pkg.tar.zst"
+        pkg.write_bytes(b"synthetic arch pkg")
+        digest = hashlib.sha256(pkg.read_bytes()).hexdigest()
+        (server / "checksums.txt").write_text(f"{digest}  {pkg.name}\n", encoding="utf-8")
+        home = self.tmp / "home"
+        home.mkdir()
+        fake_bin = self.tmp / "bin"
+        fake_bin.mkdir()
+        log_file = self.tmp / "pacman.log"
+        self.write_executable(fake_bin / "sudo", "#!/bin/sh\nexec \"$@\"\n")
+        self.write_executable(
+            fake_bin / "pacman",
+            f"#!/bin/sh\nif [ -t 0 ]; then t=tty; else t=pipe; fi\nprintf '%s %s\\n' \"$t\" \"$*\" >> '{log_file}'\n",
+        )
+        return self.base_env(server, home, fake_bin), log_file
+
+    def test_piped_arch_install_prompts_on_the_terminal(self):
+        # `curl … | sh`: the script arrives on stdin, so pacman must read its answer from the terminal.
+        env, log_file = self.make_arch_fixture()
+        primary, secondary = os.openpty()
+
+        def take_terminal():
+            os.setsid()
+            fcntl.ioctl(secondary, termios.TIOCSCTTY, 0)
+
+        try:
+            subprocess.run(
+                ["sh", "-s", "--", "--method", "arch"],
+                input=INSTALL_SH.read_bytes(),
+                env=env,
+                capture_output=True,
+                check=True,
+                preexec_fn=take_terminal,
+            )
+        finally:
+            os.close(primary)
+            os.close(secondary)
+        logged = log_file.read_text(encoding="utf-8")
+        self.assertTrue(logged.startswith("tty -U "), logged)
+        self.assertNotIn("--noconfirm", logged)
+
+    def test_piped_arch_install_without_terminal_asks_for_yes(self):
+        env, log_file = self.make_arch_fixture()
+        result = subprocess.run(
+            ["sh", "-s", "--", "--method", "arch"],
+            input=INSTALL_SH.read_bytes(),
+            env=env,
+            capture_output=True,
+            start_new_session=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b"--yes", result.stderr)
+        self.assertFalse(log_file.exists())
 
 
 if __name__ == "__main__":

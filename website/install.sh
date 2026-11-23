@@ -115,6 +115,18 @@ run_root() {
   fi
 }
 
+# Under `curl … | sh` stdin is the script itself, so a prompting command would
+# read its answer from the pipe and abort: give it the terminal instead.
+run_root_prompting() {
+  if [ -t 0 ]; then
+    run_root "$@"
+  elif (: </dev/tty) 2>/dev/null; then
+    run_root "$@" </dev/tty
+  else
+    fail "No terminal to confirm '$*'; rerun with --yes to proceed without prompts."
+  fi
+}
+
 fetch_text() {
   url="$1"
   if command -v curl >/dev/null 2>&1; then
@@ -242,7 +254,7 @@ do_uninstall() {
       if [ "$ASSUME_YES" -eq 1 ]; then
         run_root pacman -R --noconfirm youtfast
       else
-        run_root pacman -R youtfast
+        run_root_prompting pacman -R youtfast
       fi
       removed=1
     else
@@ -295,7 +307,7 @@ case "$METHOD" in
     if [ "$ASSUME_YES" -eq 1 ]; then
       run_root pacman -U --noconfirm "${WORKDIR}/${ASSET}"
     else
-      run_root pacman -U "${WORKDIR}/${ASSET}"
+      run_root_prompting pacman -U "${WORKDIR}/${ASSET}"
     fi
     say "Done. Run 'youtfast' or launch YouTFast from your application menu."
     ;;

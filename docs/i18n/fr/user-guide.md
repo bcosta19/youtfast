@@ -400,16 +400,29 @@ les positions de reprise), À regarder plus tard, les playlists de l'appareil,
 les vidéos masquées et les chaînes bloquées. Sur un ordinateur, sélectionnez
 **Nouvelle clé**, puis **Copier la clé**, et collez-la dans **Clé d'appairage**
 sur l'autre. Les appareils vérifient qu'ils partagent la même clé et chiffrent
-la connexion avant tout envoi de données de la bibliothèque. Indiquez l'adresse
-de l'autre ordinateur dans **Adresse de l'autre appareil**
-(par exemple `100.64.0.2:38452`) et ajustez **Port d'écoute** (TCP
-`1024`–`65535`, par défaut `38452`) ou **Synchroniser toutes les** si besoin.
-Les adresses IP publiques sont refusées, et les comptes YouTube, sessions,
-horodatages d'alertes et paramètres restent sur chaque ordinateur. Lancez une
-synchronisation immédiate avec **Synchroniser maintenant** ou **Synchroniser les
-appareils maintenant** dans la palette de commandes. Si vous avez testé une
-version préliminaire de la synchronisation, mettez les deux ordinateurs à jour
-et générez une nouvelle clé.
+la connexion avant tout envoi de données de la bibliothèque. Laissez **Adresse
+de l'autre appareil** vide et YouTFast trouve vos autres ordinateurs tout
+seul, de trois façons : il demande au réseau local quels appareils ont la même
+clé, il demande leurs pairs aux clients en ligne de commande `tailscale` et
+`netbird`, et les appareils qui se sont synchronisés se signalent les autres
+ordinateurs qu'ils connaissent. Une seule suffit : dès qu'un ordinateur en
+rencontre un autre, il rencontre tous les ordinateurs que celui-ci connaît ;
+un nouvel ordinateur reçoit ainsi la bibliothèque de tous les autres quelques
+secondes après le collage de la clé. La recherche est relancée toutes les
+10 minutes et dès que les appareils connus ne répondent plus. Sur le réseau
+local, la question ne contient que le port d'écoute et un code prouvant la
+clé, jamais la clé elle-même ; autorisez dans le pare-feu l'entrée TCP et UDP
+sur le **Port d'écoute**. Pour n'utiliser qu'un seul ordinateur, ou si aucune
+recherche ne l'atteint (le Flatpak ne peut pas exécuter les clients), indiquez
+son adresse (par exemple `100.64.0.2:38452`). Ajustez **Port d'écoute**
+(`1024`–`65535`, par défaut `38452`, le même sur tous les ordinateurs) ou
+**Synchroniser toutes les** si besoin. Les adresses IP publiques sont
+refusées, et les comptes YouTube, sessions, horodatages d'alertes et
+paramètres restent sur chaque ordinateur. Lancez une synchronisation
+immédiate, qui relance aussi la recherche des appareils, avec **Synchroniser
+maintenant** ou **Synchroniser les appareils maintenant** dans la palette de
+commandes. Si vous avez testé une version préliminaire de la synchronisation,
+mettez les deux ordinateurs à jour et générez une nouvelle clé.
 
 **History sync** (synchronisation de l'historique) dans Paramètres → Historique
 s'applique lorsque vous êtes connecté :
