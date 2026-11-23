@@ -81,11 +81,11 @@ sequenceDiagram
         App->>Mpv: Poll status
         App->>App: Playback, prefetch and suggestion ticks
         App->>Views: App::ui calls the injected Views callback
-        Views-->>App: Actions; only view-local state mutates directly
+        Views-->>App: Actions, only view-local state mutates directly
         App->>App: App::apply after drawing
         App->>Mpv: Immediate playback controls
         App->>Backend: Commands for slow work
-        Backend-->>App: Events carrying session epoch; request repaint
+        Backend-->>App: Events carrying session epoch, request repaint
         App->>App: Reject stale generations and private session events
     end
 ```
@@ -134,8 +134,8 @@ ffmpeg retry the 403 for up to about 11 seconds on older libmpv
 ```mermaid
 stateDiagram-v2
     [*] --> Waiting
-    Visible --> Waiting: VideoSurface::forget on open, retry or stop
-    Waiting --> Waiting: Drop old framebuffer on next draw; show black backing
+    Visible --> Waiting: VideoSurface forget() on open, retry or stop
+    Waiting --> Waiting: Drop old framebuffer on next draw, show black backing
     Waiting --> Visible: New file loaded AND fresh non-redraw frame
     Visible --> Visible: Redraw retains the last picture
     Waiting --> Waiting: Failed load never reveals the previous video
@@ -263,7 +263,7 @@ sequenceDiagram
     Writer->>Gate: Serialize write
     Gate->>Disk: write_atomic
     App->>Gate: Exit save_final
-    Gate->>Gate: Wait for earlier writes; seal against later snapshots
+    Gate->>Gate: Wait for earlier writes, seal against later snapshots
     Gate->>Disk: Final library/settings snapshot
 ```
 
@@ -291,7 +291,7 @@ sequenceDiagram
     participant Client as Fresh InnerTube Client
     participant YouTube as YouTube account API
     UI->>Backend: Select or sign in to an account
-    Backend->>Backend: Order account writes; cancel stale loads; advance epoch
+    Backend->>Backend: Order account writes, cancel stale loads, advance epoch
     Backend->>Store: Restore selected account's session
     Store-->>Backend: Cookies in memory only
     Backend->>Client: Validate session cookie
@@ -299,7 +299,7 @@ sequenceDiagram
     YouTube-->>Client: Accepted or rejected
     Client-->>Backend: Controlled result
     Backend-->>UI: Event carrying session epoch
-    UI->>UI: Reject old private events; dismiss account menus
+    UI->>UI: Reject old private events, dismiss account menus
 ```
 
 Browser sign-in uses yt-dlp's Python cookie extractor through a pipe, never a
