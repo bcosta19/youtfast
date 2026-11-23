@@ -1,35 +1,55 @@
 //! Direct device library sync over Tailscale, NetBird, and private LANs.
 
 use std::future::Future;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{Mutex, Semaphore, oneshot, watch};
+use tokio::task::JoinSet;
 
 use crate::{Context, Event};
 use youtfast_storage::library::Library;
 use youtfast_storage::settings::DeviceSync;
 use youtfast_storage::sync::{
-    ERR_INCOMPATIBLE_VERSION, ERR_INVALID_RESPONSE, ERR_LISTENER_FAILED, ERR_PAIRING_KEY_INVALID,
-    ERR_PEER_MISSING, ERR_PRIVATE_ONLY, ERR_SIZE_LIMIT, ERR_UNREACHABLE, MIN_SYNC_PORT,
-    PAIRING_KEY_BYTES, SyncSnapshot, is_private_or_mesh_ip, normalize_pairing_key,
-    parse_peer_target, parse_sync_bytes, to_sync_json_bytes,
+    ERR_INCOMPATIBLE_VERSION, ERR_INVALID_RESPONSE, ERR_LISTENER_FAILED, ERR_NO_PEERS_FOUND,
+    ERR_PAIRING_KEY_INVALID, ERR_PRIVATE_ONLY, ERR_SIZE_LIMIT, ERR_UNREACHABLE, MIN_SYNC_PORT,
+    PAIRING_KEY_BYTES, SyncSnapshot, is_private_or_mesh_ip, local_sync_addresses,
+    normalize_pairing_key, parse_peer_target, parse_sync_bytes, to_sync_json_bytes,
 };
 
+mod discovery;
 mod transport;
 use transport::{PacketKind, SecurePeer};
 
 const MAX_CONCURRENT_INCOMING: usize = 4;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(4);
 const IO_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long a search of Tailscale and NetBird is reused by automatic syncs.
+const DISCOVERY_TTL: Duration = Duration::from_secs(10 * 60);
+/// Most devices remembered between rounds.
+const MAX_PEERS: usize = 32;
+/// Most exchanges a round runs at once; every candidate is still tried.
+const EXCHANGES_AT_ONCE: usize = 8;
 
 #[derive(Clone, Default)]
 struct ActiveConfig {
     generation: u64,
     settings: DeviceSync,
-    last_peer: Option<SocketAddr>,
+    /// Devices that completed an exchange with the current key, synced
+    /// when no address is set.
+    peers: Vec<SocketAddr>,
+    /// When Tailscale and NetBird were last searched for peers.
+    searched_at: Option<Instant>,
+}
+
+impl ActiveConfig {
+    fn remember(&mut self, peer: SocketAddr) {
+        if !self.peers.contains(&peer) && self.peers.len() < MAX_PEERS {
+            self.peers.push(peer);
+        }
+    }
 }
 
 struct RunningListener {
@@ -90,7 +110,8 @@ pub(crate) async fn configure(context: &Context, next: DeviceSync, generation: u
             || active.settings.peer_address != next.peer_address
             || active.settings.port != next.port
         {
-            active.last_peer = None;
+            active.peers.clear();
+            active.searched_at = None;
         }
         active.settings = next.clone();
         active.generation = generation;
@@ -192,7 +213,7 @@ async fn serve_loop(
                     return;
                 }
                 if incoming.listen_port >= MIN_SYNC_PORT {
-                    active.last_peer = Some(SocketAddr::new(peer_addr.ip(), incoming.listen_port));
+                    active.remember(SocketAddr::new(peer_addr.ip(), incoming.listen_port));
                 }
                 drop(active);
                 ctx.send(Event::DeviceSyncIncoming {
@@ -248,47 +269,188 @@ async fn exchange_incoming(
 
 pub(crate) async fn sync_now(context: &Context, manual: bool, generation: u64) {
     let _flight = context.sync.client_lock.lock().await;
-    let (settings, last_peer) = {
+    let (settings, known, searched_at) = {
         let active = context.sync.active();
         if !active.settings.enabled || active.generation != generation {
             return;
         }
-        (active.settings.clone(), active.last_peer)
+        (
+            active.settings.clone(),
+            active.peers.clone(),
+            active.searched_at,
+        )
     };
     let library = latest_library(&context.library_saves);
-    let work = sync_with_peer(&settings, last_peer, library);
-    if let Some(result) = context.sync.while_current(generation, work).await {
-        if let Err(error) = &result {
-            log::warn!("device sync failed: {error}");
+    let work = async {
+        if settings.peer_address.trim().is_empty() {
+            let search = manual || searched_at.is_none_or(|at| at.elapsed() >= DISCOVERY_TTL);
+            sync_with_found_peers(&settings, known, search, library).await
+        } else {
+            let result = sync_with_address(&settings, library).await;
+            (result.map(|snapshot| vec![*snapshot]), None)
         }
-        context.send(Event::DeviceSyncCompleted {
-            generation,
-            result,
-            manual,
-        });
+    };
+    let Some((result, found)) = context.sync.while_current(generation, work).await else {
+        return;
+    };
+    if let Some(found) = found {
+        let mut active = context.sync.active();
+        if active.generation != generation {
+            return;
+        }
+        if found.searched {
+            active.searched_at = Some(Instant::now());
+        }
+        // Keep devices that connected in while the round ran.
+        let learned: Vec<SocketAddr> = std::mem::replace(&mut active.peers, found.reached)
+            .into_iter()
+            .filter(|peer| !found.known.contains(peer))
+            .collect();
+        for peer in learned {
+            active.remember(peer);
+        }
     }
+    if let Err(error) = &result {
+        log::warn!("device sync failed: {error}");
+    }
+    context.send(Event::DeviceSyncCompleted {
+        generation,
+        result,
+        manual,
+    });
 }
 
-async fn sync_with_peer(
+/// The peers a round without an address reached, the ones it started from,
+/// and whether it searched.
+struct Found {
+    reached: Vec<SocketAddr>,
+    known: Vec<SocketAddr>,
+    searched: bool,
+}
+
+/// Syncs with every known device and, when `search` is set or none of them
+/// answers, with every Tailscale and NetBird peer that shares the key.
+async fn sync_with_found_peers(
     settings: &DeviceSync,
-    last_peer: Option<SocketAddr>,
+    known: Vec<SocketAddr>,
+    search: bool,
+    library: Library,
+) -> (Result<Vec<SyncSnapshot>, String>, Option<Found>) {
+    let Some(key) = normalize_pairing_key(&settings.pairing_key) else {
+        return (Err(ERR_PAIRING_KEY_INVALID.to_owned()), None);
+    };
+    let request = match serialize_snapshot(library, settings.port).await {
+        Ok(bytes) => Arc::new(bytes),
+        Err(error) => return (Err(error.to_owned()), None),
+    };
+
+    let mut replies = if search {
+        Vec::new()
+    } else {
+        exchange_all(known.clone(), key, &request).await
+    };
+    // Known devices that all stopped answering may have changed address.
+    let searched = search || (!known.is_empty() && !replies.iter().any(|(_, reply)| reply.is_ok()));
+    if searched {
+        let mut candidates = search_candidates(&known, settings.port).await;
+        candidates.retain(|addr| !replies.iter().any(|(tried, _)| tried == addr));
+        replies.extend(exchange_all(candidates, key, &request).await);
+    }
+
+    let mut reached = Vec::new();
+    let mut snapshots = Vec::new();
+    // Without any exchange, report the problem of a device that did accept the key.
+    let mut failure = ERR_NO_PEERS_FOUND;
+    for (addr, reply) in replies {
+        match reply {
+            Ok(snapshot) => {
+                reached.push(addr);
+                snapshots.push(*snapshot);
+            }
+            Err(error @ (ERR_INCOMPATIBLE_VERSION | ERR_SIZE_LIMIT | ERR_INVALID_RESPONSE)) => {
+                failure = error;
+            }
+            Err(_) => {}
+        }
+    }
+    let result = if snapshots.is_empty() {
+        Err(failure.to_owned())
+    } else {
+        Ok(snapshots)
+    };
+    let found = Found {
+        reached,
+        known,
+        searched,
+    };
+    (result, Some(found))
+}
+
+/// Known devices first, then every Tailscale and NetBird peer on the listen
+/// port, without this computer's own addresses.
+async fn search_candidates(known: &[SocketAddr], port: u16) -> Vec<SocketAddr> {
+    let own: Vec<IpAddr> = local_sync_addresses();
+    let mut candidates = known.to_vec();
+    for ip in discovery::mesh_peers().await {
+        let addr = SocketAddr::new(ip, port);
+        if !own.contains(&ip) && !candidates.contains(&addr) {
+            candidates.push(addr);
+        }
+    }
+    log::info!("device sync is trying {} devices", candidates.len());
+    candidates
+}
+
+/// Exchanges with every address, a few at a time to bound the buffered
+/// snapshots (64 MiB each at most).
+async fn exchange_all(
+    addrs: Vec<SocketAddr>,
+    key: [u8; PAIRING_KEY_BYTES],
+    request: &Arc<Vec<u8>>,
+) -> Vec<(SocketAddr, Result<Box<SyncSnapshot>, &'static str>)> {
+    let slots = Arc::new(Semaphore::new(EXCHANGES_AT_ONCE));
+    let mut exchanges = JoinSet::new();
+    for addr in addrs {
+        let request = Arc::clone(request);
+        let slots = Arc::clone(&slots);
+        exchanges.spawn(async move {
+            let _slot = slots.acquire_owned().await;
+            (addr, exchange(&[addr], &key, &request).await)
+        });
+    }
+    let mut replies = Vec::new();
+    while let Some(joined) = exchanges.join_next().await {
+        if let Ok(reply) = joined {
+            replies.push(reply);
+        }
+    }
+    replies
+}
+
+async fn sync_with_address(
+    settings: &DeviceSync,
     library: Library,
 ) -> Result<Box<SyncSnapshot>, String> {
     let key = normalize_pairing_key(&settings.pairing_key).ok_or(ERR_PAIRING_KEY_INVALID)?;
-    let (host, port) = if !settings.peer_address.trim().is_empty() {
-        parse_peer_target(&settings.peer_address, settings.port)?
-    } else if let Some(peer) = last_peer {
-        (peer.ip().to_string(), peer.port())
-    } else {
-        return Err(ERR_PEER_MISSING.to_owned());
-    };
-
+    let (host, port) = parse_peer_target(&settings.peer_address, settings.port)?;
     let addrs = resolve_private_targets(&host, port).await?;
-    let stream = connect_any(&addrs).await?;
+    let request = serialize_snapshot(library, settings.port).await?;
+    exchange(&addrs, &key, &request)
+        .await
+        .map_err(str::to_owned)
+}
+
+/// Sends this device's snapshot to the first of `addrs` that answers and
+/// returns the peer's.
+async fn exchange(
+    addrs: &[SocketAddr],
+    key: &[u8; PAIRING_KEY_BYTES],
+    request: &[u8],
+) -> Result<Box<SyncSnapshot>, &'static str> {
+    let stream = connect_any(addrs).await?;
     tokio::time::timeout(IO_TIMEOUT, async {
-        let mut peer = SecurePeer::handshake(stream, &key, true).await?;
-        let bytes = serialize_snapshot(library, settings.port).await?;
-        peer.send(PacketKind::Request, &bytes).await?;
+        let mut peer = SecurePeer::handshake(stream, key, true).await?;
+        peer.send(PacketKind::Request, request).await?;
         let (kind, body) = peer.receive().await?;
         match kind {
             PacketKind::Ok => parse_snapshot(body).await,
@@ -299,7 +461,6 @@ async fn sync_with_peer(
     })
     .await
     .map_err(|_| ERR_UNREACHABLE)?
-    .map_err(str::to_owned)
 }
 
 async fn serialize_snapshot(library: Library, port: u16) -> Result<Vec<u8>, &'static str> {
@@ -434,7 +595,7 @@ mod tests {
             ..DeviceSync::default()
         };
         assert_eq!(
-            sync_with_peer(&wrong, None, client_lib.clone())
+            sync_with_address(&wrong, client_lib.clone())
                 .await
                 .unwrap_err(),
             ERR_KEY_REJECTED
@@ -445,7 +606,7 @@ mod tests {
             pairing_key: key,
             ..wrong
         };
-        let reply = sync_with_peer(&settings, None, client_lib.clone())
+        let reply = sync_with_address(&settings, client_lib.clone())
             .await
             .unwrap();
         client_lib.merge_sync(*reply);
@@ -462,11 +623,72 @@ mod tests {
         };
         assert!(snapshot.history.iter().any(|w| w.video.id == "client00001"));
         assert_eq!(
-            ctx.sync.active().last_peer,
-            Some("127.0.0.1:39999".parse().unwrap())
+            ctx.sync.active().peers,
+            vec!["127.0.0.1:39999".parse().unwrap()]
         );
         let _ = shutdown.send(());
         server.await.unwrap();
+    }
+
+    async fn listening_device(key: &str, video: &str) -> (SocketAddr, oneshot::Sender<()>) {
+        let mut library = Library::default();
+        library.record_watch(Video::from_id(video.into()), 100);
+        let (ctx, _events) = test_context(library);
+        let tcp = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = tcp.local_addr().unwrap();
+        ctx.sync.active().settings = DeviceSync {
+            enabled: true,
+            port: addr.port(),
+            pairing_key: key.to_owned(),
+            ..DeviceSync::default()
+        };
+        let (shutdown, receiver) = oneshot::channel();
+        tokio::spawn(serve_loop(tcp, addr.port(), ctx, receiver));
+        (addr, shutdown)
+    }
+
+    #[tokio::test]
+    async fn found_peers_sync_only_with_devices_sharing_the_key() {
+        let key = generate_pairing_key();
+        let (paired, _stop_paired) = listening_device(&key, "paired00001").await;
+        let (stranger, _stop_stranger) =
+            listening_device(&generate_pairing_key(), "strange0001").await;
+        let closed = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap()
+            .local_addr()
+            .unwrap();
+        let settings = DeviceSync {
+            enabled: true,
+            pairing_key: key,
+            ..DeviceSync::default()
+        };
+
+        let (result, found) = sync_with_found_peers(
+            &settings,
+            vec![stranger, closed, paired],
+            false,
+            Library::default(),
+        )
+        .await;
+        let snapshots = result.unwrap();
+        assert_eq!(snapshots.len(), 1);
+        assert!(
+            snapshots[0]
+                .history
+                .iter()
+                .any(|w| w.video.id == "paired00001")
+        );
+        let found = found.unwrap();
+        assert_eq!(found.reached, vec![paired]);
+        assert!(!found.searched);
+
+        // Nothing known and the last search still fresh: no device is contacted.
+        let (result, found) =
+            sync_with_found_peers(&settings, Vec::new(), false, Library::default()).await;
+        assert_eq!(result.unwrap_err(), ERR_NO_PEERS_FOUND);
+        let found = found.unwrap();
+        assert!(found.reached.is_empty() && !found.searched);
     }
 
     #[tokio::test]
@@ -489,7 +711,7 @@ mod tests {
             pairing_key: generate_pairing_key(),
             ..DeviceSync::default()
         };
-        let ((), result) = tokio::join!(unverified, sync_with_peer(&settings, None, library));
+        let ((), result) = tokio::join!(unverified, sync_with_address(&settings, library));
         assert_eq!(result.unwrap_err(), ERR_KEY_REJECTED);
     }
 
@@ -562,7 +784,7 @@ mod tests {
             ..DeviceSync::default()
         };
         assert_eq!(
-            sync_with_peer(&settings, None, Library::default())
+            sync_with_address(&settings, Library::default())
                 .await
                 .unwrap_err(),
             ERR_PRIVATE_ONLY

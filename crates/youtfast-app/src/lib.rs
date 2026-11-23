@@ -1467,15 +1467,7 @@ impl App {
                 .send(Command::SaveLibrary(Box::new(app.state.library.clone())));
         }
         app.configure_device_sync();
-        if app.state.settings.device_sync.enabled
-            && !app
-                .state
-                .settings
-                .device_sync
-                .peer_address
-                .trim()
-                .is_empty()
-        {
+        if app.state.settings.device_sync.enabled {
             app.sync_devices_now(false);
         }
         app.set_alerts_timer();

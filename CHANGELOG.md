@@ -8,6 +8,10 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Added
+
+- **Device sync** finds your other computers by itself: with **Other device address** empty, YouTFast asks the `tailscale` and `netbird` clients for their peers and syncs with every computer answering on the same **Listen port** with the same pairing key, searching again every 10 minutes, when known devices stop answering, and on **Sync now**. Sync also starts at launch and a few seconds after its settings change, so a newly installed computer pulls the others' library as soon as the key is pasted. The Flatpak cannot reach the clients; enter an address there.
+
 ### Fixed
 
 - `curl -fsSL https://youtfast.pages.dev/install.sh | sh` on Arch no longer quits silently at pacman's `Proceed with installation? [Y/n]`: the question now reads its answer from the terminal instead of the piped script, and without a terminal the installer asks for `--yes`.

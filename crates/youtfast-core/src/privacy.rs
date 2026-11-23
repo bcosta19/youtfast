@@ -39,6 +39,7 @@ pub fn safe_error(error: &str) -> String {
         "The library exceeds the 64 MiB sync limit.",
         "Could not read the sync response from the other device.",
         "Could not start the device sync listener on the selected port.",
+        "No other device with this pairing key was found. Check that YouTFast is open with Device sync and the same key on your other computer, or enter its address.",
     ]
     .contains(&error)
     {

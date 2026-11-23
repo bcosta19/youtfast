@@ -615,7 +615,7 @@ fn device_sync_card(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             &tr(locale, "Other device address"),
             &tr(
                 locale,
-                "Enter the other computer's Tailscale, NetBird, or local IP address (for example, 100.64.0.2:38452).",
+                "Leave empty to find your other computers on Tailscale or NetBird automatically, or enter an address (for example, 100.64.0.2:38452).",
             ),
             CONTROL_WIDTH,
             |ui| {

@@ -331,11 +331,18 @@ subscriptions, watch history (including resume positions), Watch later, device
 playlists, hidden videos, and blocked channels. On one computer, select
 **New key**, then **Copy key**, and paste it into **Pairing key** on the other.
 The devices verify that they share the key and encrypt the connection before
-sending any library data. Enter the other computer's address in **Other device
-address** (such as `100.64.0.2:38452`), and adjust
-**Listen port** (TCP `1024`–`65535`, default `38452`) or **Sync every** if
-needed. Public IP addresses are refused, and YouTube accounts, sessions,
-alert timestamps, and settings stay on each computer. Trigger an immediate sync
+sending any library data. Leave **Other device address** empty and YouTFast
+finds your other computers on its own: it asks the `tailscale` and `netbird`
+command-line clients for their peers and syncs with every one that answers on
+the same **Listen port** with the same key, so a new computer pulls the
+library of the others a few seconds after you paste the key. Peers are
+searched again every 10 minutes and whenever the known devices stop
+answering. To use one computer only, or when neither client is installed
+(the Flatpak can't reach them), enter its address (such as
+`100.64.0.2:38452`). Adjust **Listen port** (TCP `1024`–`65535`, default
+`38452`) or **Sync every** if needed. Public IP addresses are refused, and
+YouTube accounts, sessions, alert timestamps, and settings stay on each
+computer. Trigger an immediate sync, which also searches for devices again,
 with **Sync now** or **Sync devices now** in the command palette. If you tested
 an earlier preview of device sync, update both computers and generate a new key.
 

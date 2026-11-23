@@ -40,6 +40,7 @@ pub const ERR_SIZE_LIMIT: &str = "The library exceeds the 64 MiB sync limit.";
 pub const ERR_INVALID_RESPONSE: &str = "Could not read the sync response from the other device.";
 pub const ERR_LISTENER_FAILED: &str =
     "Could not start the device sync listener on the selected port.";
+pub const ERR_NO_PEERS_FOUND: &str = "No other device with this pairing key was found. Check that YouTFast is open with Device sync and the same key on your other computer, or enter its address.";
 
 /// Generates a random 256-bit key in readable groups of four bytes.
 pub fn generate_pairing_key() -> String {
@@ -116,6 +117,77 @@ pub fn local_sync_addresses() -> Vec<IpAddr> {
     });
     addresses.dedup();
     addresses.into_iter().map(IpAddr::V4).collect()
+}
+
+/// Online peers in `tailscale status --json`, one address each (IPv4 first),
+/// keeping only mesh and private addresses. Unknown or missing fields yield
+/// no peers rather than an error: discovery is best-effort.
+pub fn tailscale_peer_ips(json: &[u8]) -> Vec<IpAddr> {
+    #[derive(Deserialize)]
+    struct Status {
+        #[serde(rename = "Peer", default)]
+        peer: Option<HashMap<String, Peer>>,
+    }
+    #[derive(Deserialize)]
+    struct Peer {
+        #[serde(rename = "TailscaleIPs", default)]
+        ips: Option<Vec<IpAddr>>,
+        #[serde(rename = "Online", default)]
+        online: bool,
+    }
+    let Ok(status) = serde_json::from_slice::<Status>(json) else {
+        return Vec::new();
+    };
+    let mut found: Vec<IpAddr> = status
+        .peer
+        .unwrap_or_default()
+        .into_values()
+        .filter(|peer| peer.online)
+        .filter_map(|peer| {
+            let ips: Vec<IpAddr> = peer
+                .ips
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|ip| is_private_or_mesh_ip(*ip))
+                .collect();
+            ips.iter().find(|ip| ip.is_ipv4()).or(ips.first()).copied()
+        })
+        .collect();
+    found.sort();
+    found
+}
+
+/// Peers in `netbird status --json` with mesh or private addresses. Every
+/// listed peer is kept: with lazy connections a reachable peer reads `Idle`.
+pub fn netbird_peer_ips(json: &[u8]) -> Vec<IpAddr> {
+    #[derive(Deserialize)]
+    struct Status {
+        #[serde(default)]
+        peers: Option<Peers>,
+    }
+    #[derive(Deserialize)]
+    struct Peers {
+        #[serde(default)]
+        details: Option<Vec<Peer>>,
+    }
+    #[derive(Deserialize)]
+    struct Peer {
+        #[serde(rename = "netbirdIp", default)]
+        ip: String,
+    }
+    let Ok(status) = serde_json::from_slice::<Status>(json) else {
+        return Vec::new();
+    };
+    let mut found: Vec<IpAddr> = status
+        .peers
+        .and_then(|peers| peers.details)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|peer| peer.ip.split('/').next()?.parse().ok())
+        .filter(|ip| is_private_or_mesh_ip(*ip))
+        .collect();
+    found.sort();
+    found
 }
 
 /// Parses a peer address such as `100.64.0.2`, `100.64.0.2:38452`,
@@ -769,5 +841,42 @@ mod tests {
             parse_sync_limited(too_big.as_bytes(), 14).unwrap_err(),
             ERR_SIZE_LIMIT
         );
+    }
+
+    #[test]
+    fn mesh_status_parsers_keep_reachable_private_peers_once() {
+        let tailscale = br#"{
+            "Self": {"TailscaleIPs": ["100.85.31.24"], "Online": true},
+            "Peer": {
+                "nodekey:a": {"TailscaleIPs": ["fd7a:115c:a1e0::1", "100.95.0.2"], "Online": true},
+                "nodekey:b": {"TailscaleIPs": ["100.95.0.3"], "Online": false},
+                "nodekey:c": {"TailscaleIPs": ["fd7a:115c:a1e0::4"], "Online": true},
+                "nodekey:d": {"TailscaleIPs": ["8.8.8.8"], "Online": true},
+                "nodekey:e": {"Online": true, "Future": 1}
+            }
+        }"#;
+        let ips =
+            |list: &[&str]| -> Vec<IpAddr> { list.iter().map(|ip| ip.parse().unwrap()).collect() };
+        assert_eq!(
+            tailscale_peer_ips(tailscale),
+            ips(&["100.95.0.2", "fd7a:115c:a1e0::4"])
+        );
+        assert!(tailscale_peer_ips(br#"{"Peer": null}"#).is_empty());
+        assert!(tailscale_peer_ips(b"not json").is_empty());
+
+        let netbird = br#"{
+            "netbirdIp": "100.90.0.1/16",
+            "peers": {"total": 3, "connected": 1, "details": [
+                {"fqdn": "a.netbird.cloud", "netbirdIp": "100.90.0.2", "status": "Connected"},
+                {"fqdn": "b.netbird.cloud", "netbirdIp": "100.90.0.3/32", "status": "Idle"},
+                {"fqdn": "c.netbird.cloud", "netbirdIp": "1.1.1.1", "status": "Connected"},
+                {"fqdn": "d.netbird.cloud", "status": "Connecting"}
+            ]}
+        }"#;
+        assert_eq!(
+            netbird_peer_ips(netbird),
+            ips(&["100.90.0.2", "100.90.0.3"])
+        );
+        assert!(netbird_peer_ips(br#"{"peers": {"details": null}}"#).is_empty());
     }
 }
