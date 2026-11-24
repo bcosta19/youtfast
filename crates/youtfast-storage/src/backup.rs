@@ -47,6 +47,8 @@ struct PortableVideo {
     duration: Option<f64>,
     views: Option<u64>,
     live: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    members_only: Option<bool>,
     published_at: Option<i64>,
     published: Option<String>,
     short: bool,

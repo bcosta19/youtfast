@@ -8,7 +8,8 @@ use egui::{
 use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 use super::{
-    avatar, focus_outline, hover_fade, line, mix, press_fade, row_fill_radius, style_spec,
+    MEMBERS_GOLD, avatar, focus_outline, hover_fade, line, mix, press_fade, row_fill_radius,
+    style_spec,
 };
 use youtfast_app::{Action, State};
 use youtfast_appearance::icons::Icon;
@@ -53,17 +54,22 @@ fn overlay_icon_button(
 }
 
 /// The duration (or LIVE) in the thumbnail's corner, YouTube's way.
-fn badge(ui: &Ui, thumbnail: Rect, video: &Video, palette: &Palette, locale: Locale) {
+fn badge(
+    ui: &Ui,
+    thumbnail: Rect,
+    video: &Video,
+    palette: &Palette,
+    locale: Locale,
+) -> Option<Rect> {
     let (text, fill, border) = if video.live {
         (tr(locale, "LIVE").into_owned(), palette.red, false)
-    } else if let Some(seconds) = video.duration {
+    } else {
+        let seconds = video.duration?;
         (
             util::duration(seconds),
             Color32::from_black_alpha(210),
             true,
         )
-    } else {
-        return;
     };
     let painter = ui.painter();
     let galley = painter.layout_no_wrap(text, theme::semibold(12.0), Color32::WHITE);
@@ -80,6 +86,56 @@ fn badge(ui: &Ui, thumbnail: Rect, video: &Video, palette: &Palette, locale: Loc
         );
     }
     painter.galley(rect.min + vec2(5.0, 2.0), galley, Color32::WHITE);
+    Some(rect)
+}
+
+/// The "Members only" mark in a thumbnail's lower left. The duration or LIVE
+/// badge keeps the other corner; on a thumbnail too small for the label, a
+/// gold star stands in so neither mark overflows or covers the other.
+fn members_badge(ui: &Ui, thumbnail: Rect, duration: Option<Rect>, locale: Locale) {
+    let painter = ui.painter();
+    let galley = painter.layout_no_wrap(
+        tr(locale, "Members only").into_owned(),
+        theme::semibold(11.0),
+        MEMBERS_GOLD,
+    );
+    let size = galley.size() + vec2(10.0, 4.0);
+    let left = thumbnail.left() + 6.0;
+    let right = duration.map_or(thumbnail.right() - 6.0, |rect| rect.left() - 6.0);
+    if left + size.x <= right {
+        let rect = Rect::from_min_size(pos2(left, thumbnail.bottom() - size.y - 6.0), size);
+        let radius = CornerRadius::same(RADIUS_SMALL + 1);
+        painter.rect_filled(rect, radius, Color32::from_black_alpha(210));
+        painter.rect_stroke(
+            rect,
+            radius,
+            Stroke::new(1.0, Color32::from_white_alpha(22)),
+            egui::StrokeKind::Inside,
+        );
+        painter.galley(rect.min + vec2(5.0, 2.0), galley, MEMBERS_GOLD);
+    } else {
+        compact_members_badge(ui, thumbnail);
+    }
+}
+
+/// A small gold star in a thumbnail's upper left, for thumbnails too small
+/// for the text mark. The lower right stays free for the duration.
+fn compact_members_badge(ui: &Ui, thumbnail: Rect) {
+    let center = pos2(thumbnail.left() + 9.5, thumbnail.top() + 9.5);
+    let painter = ui.painter();
+    painter.circle_filled(center, 5.5, Color32::from_black_alpha(210));
+    let points: [Pos2; 10] = std::array::from_fn(|index| {
+        let angle = -std::f32::consts::FRAC_PI_2 + index as f32 * std::f32::consts::PI / 5.0;
+        let radius = if index % 2 == 0 { 3.8 } else { 1.6 };
+        center + vec2(angle.cos() * radius, angle.sin() * radius)
+    });
+    for index in 0..points.len() {
+        painter.add(egui::Shape::convex_polygon(
+            vec![center, points[index], points[(index + 1) % points.len()]],
+            MEMBERS_GOLD,
+            Stroke::NONE,
+        ));
+    }
 }
 
 /// Uses a community thumbnail only after egui has decoded and uploaded it.
@@ -126,7 +182,10 @@ pub(crate) fn thumbnail(
         Stroke::new(1.0, hairline),
         egui::StrokeKind::Inside,
     );
-    badge(ui, rect, video, palette, locale);
+    let duration = badge(ui, rect, video, palette, locale);
+    if video.is_members_only() {
+        members_badge(ui, rect, duration, locale);
+    }
     if let Some(watched) = watched.filter(|fraction| *fraction > 0.0) {
         let track = Rect::from_min_max(pos2(rect.left(), rect.bottom() - 4.0), rect.right_bottom());
         ui.painter().rect_filled(
@@ -329,6 +388,21 @@ pub fn video_card_height(ui: &Ui, width: f32) -> f32 {
     (width - 12.0) * 9.0 / 16.0 + 4.0 * line(ui) + 28.0
 }
 
+/// Accessible name for a video card or preview strip, including membership
+/// status when marked.
+pub(crate) fn video_accessible_label(state: &State, video: &Video, locale: Locale) -> String {
+    let title = state.display_title(video);
+    if !video.is_members_only() {
+        return title.to_owned();
+    }
+    let badge = tr(locale, "Members only");
+    if title.is_empty() {
+        badge.into_owned()
+    } else {
+        format!("{title} — {badge}")
+    }
+}
+
 /// Shared card/row actions. Child hit targets never also open the video.
 pub fn video_interactions(
     ui: &mut Ui,
@@ -343,12 +417,9 @@ pub fn video_interactions(
     if !ui.is_rect_visible(response.rect) {
         return;
     }
+    let label = video_accessible_label(state, video, locale);
     response.widget_info(|| {
-        egui::WidgetInfo::labeled(
-            egui::WidgetType::Button,
-            ui.is_enabled(),
-            state.display_title(video),
-        )
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), &label)
     });
     // `put` advances its Ui's layout cursor. These controls overlay a card
     // already allocated by the parent, so keep their layout and automatic
@@ -711,6 +782,141 @@ mod tests {
                 assert_eq!(bars[0].width(), rect.width() * fraction.min(1.0));
             } else {
                 assert!(bars.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn a_members_badge_stays_clear_of_the_duration_on_small_thumbnails() {
+        for locale in [
+            Locale::English,
+            Locale::PortugueseBrazil,
+            Locale::French,
+            Locale::German,
+        ] {
+            for live in [false, true] {
+                for size in [vec2(74.0, 42.0), vec2(168.0, 94.5)] {
+                    let ctx = egui::Context::default();
+                    theme::install_fonts(&ctx);
+                    let state = State::default();
+                    let rect = Rect::from_min_size(pos2(10.0, 10.0), size);
+                    let mut video = Video::from_id("members0000".into());
+                    video.members_only = Some(true);
+                    video.live = live;
+                    video.duration = (!live).then_some(f64::from(3_723));
+                    let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                        thumbnail(ui, &state, &video, rect, None, locale);
+                    });
+                    output.textures_delta.clear();
+                    let expected_text = tr(locale, "Members only");
+                    let rect_badges: Vec<Rect> = output
+                        .shapes
+                        .iter()
+                        .filter_map(|shape| {
+                            if let egui::Shape::Rect(shape) = &shape.shape
+                                && (shape.fill == Color32::from_black_alpha(210)
+                                    || (live && shape.fill == state.palette.red))
+                            {
+                                Some(shape.rect)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    let star_circles: Vec<Rect> = output
+                        .shapes
+                        .iter()
+                        .filter_map(|shape| {
+                            if let egui::Shape::Circle(circle) = &shape.shape
+                                && circle.fill == Color32::from_black_alpha(210)
+                            {
+                                Some(Rect::from_center_size(
+                                    circle.center,
+                                    vec2(circle.radius * 2.0, circle.radius * 2.0),
+                                ))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    let star_gold_polys: Vec<&egui::epaint::PathShape> = output
+                        .shapes
+                        .iter()
+                        .filter_map(|shape| match &shape.shape {
+                            egui::Shape::Path(path) if path.fill == MEMBERS_GOLD => Some(path),
+                            _ => None,
+                        })
+                        .collect();
+                    let has_members_text = output.shapes.iter().any(|shape| {
+                        matches!(
+                            &shape.shape,
+                            egui::Shape::Text(text) if text.galley.text() == expected_text.as_ref()
+                        )
+                    });
+
+                    let duration_or_live_rect = rect_badges
+                        .iter()
+                        .copied()
+                        .find(|badge| (badge.right() - (rect.right() - 6.0)).abs() < 0.1)
+                        .expect("duration or LIVE badge");
+                    let members_rect = if let Some(star) = star_circles.first().copied() {
+                        assert_eq!(
+                            star_circles.len(),
+                            1,
+                            "{locale:?} live={live} {size:?}: expected single compact star backdrop"
+                        );
+                        assert_eq!(
+                            star_gold_polys.len(),
+                            10,
+                            "{locale:?} live={live} {size:?}: expected 10-part gold star"
+                        );
+                        assert_eq!(rect_badges.len(), 1);
+                        assert!(!has_members_text);
+                        star
+                    } else {
+                        assert!(
+                            has_members_text,
+                            "{locale:?} live={live} {size:?}: expected members mark"
+                        );
+                        assert_eq!(rect_badges.len(), 2);
+                        rect_badges
+                            .iter()
+                            .copied()
+                            .find(|badge| (badge.left() - (rect.left() + 6.0)).abs() < 0.1)
+                            .expect("left-anchored members text badge")
+                    };
+
+                    if size.x < 100.0 {
+                        assert!(
+                            !star_circles.is_empty(),
+                            "{locale:?} live={live} {size:?}: expected compact star on 74px thumbnail"
+                        );
+                    }
+
+                    for poly in &star_gold_polys {
+                        for point in &poly.points {
+                            assert!(
+                                rect.contains(*point),
+                                "{locale:?} live={live} {size:?}: star vertex {point:?} leaves thumbnail"
+                            );
+                        }
+                    }
+
+                    assert!(
+                        rect.contains_rect(members_rect),
+                        "{locale:?} live={live} {size:?}: members badge {members_rect:?} leaves the thumbnail"
+                    );
+                    if !live || size.x > 100.0 {
+                        assert!(
+                            rect.contains_rect(duration_or_live_rect),
+                            "{locale:?} live={live} {size:?}: duration/LIVE badge {duration_or_live_rect:?} leaves the thumbnail"
+                        );
+                    }
+                    assert!(
+                        !members_rect.intersects(duration_or_live_rect),
+                        "{locale:?} live={live} {size:?}: badges overlap: {members_rect:?} and {duration_or_live_rect:?}"
+                    );
+                }
             }
         }
     }

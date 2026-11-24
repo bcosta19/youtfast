@@ -180,6 +180,7 @@ fn watch() -> State {
         published: Some("Oct 4, 2026".to_owned()),
         published_date: Some("2026-10-04".to_owned()),
         live: false,
+        members_only: None,
         description: spans(40),
         chapters: Vec::new(),
         related: (0..20).map(|index| video(2_000 + index, None)).collect(),

@@ -135,7 +135,10 @@ videos.
 
 Channel pages include a banner and video ordering. Playlists show their cover,
 metadata and the currently playing item. Shorts use a portrait stage with
-next/previous controls and wheel navigation. The interface starts in English.
+next/previous controls and wheel navigation. Members-only videos show a
+**Members only** badge on regular video thumbnails (a gold star on compact
+thumbnails) and under the title on the watch page when YouTube supplies the
+badge; Shorts cards and the Shorts shelf do not show it. The interface starts in English.
 Choose English, Português (Brasil), Español, Français, Deutsch or Italiano under
 Settings → Appearance → Language; the change applies immediately and is kept
 between runs, including for desktop notifications. Older settings also default

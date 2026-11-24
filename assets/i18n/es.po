@@ -509,6 +509,9 @@ msgstr "Bucle de vídeo"
 msgid "Mark all as seen"
 msgstr "Marcar todo como visto"
 
+msgid "Members only"
+msgstr "Solo para miembros"
+
 msgid "Miniplayer"
 msgstr "Minirreproductor"
 

@@ -8,8 +8,8 @@ use serde_json::{Value, json};
 use super::client::{Client, Error};
 use super::edit::{collect, find, text};
 use super::items::{
-    at_least_value, collect_videos_and_ctoken, extract_ctoken, parse_count, parse_length,
-    spans_from_value, widest,
+    at_least_value, collect_videos_and_ctoken, extract_ctoken, members_only_badges, parse_count,
+    parse_length, spans_from_value, widest,
 };
 use youtfast_core::model::{Channel, Chapter, CommentRow, Details, Span};
 
@@ -59,6 +59,7 @@ pub fn parse_details(page: &Value, id: &str) -> Details {
         .and_then(|vr| vr.get("isLive"))
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let members_only = primary.map(|p| members_only_badges(p.get("badges")));
 
     let likes = extract_like_count(page, primary).map(|n| n as u32);
 
@@ -105,6 +106,7 @@ pub fn parse_details(page: &Value, id: &str) -> Details {
         published,
         published_date,
         live,
+        members_only,
         description,
         chapters,
         related,

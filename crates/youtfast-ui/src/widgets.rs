@@ -10,14 +10,14 @@ mod video;
 
 pub use controls::{
     ButtonStyle, SearchField, TextInputConfig, button, chip, icon_button, icon_text_button,
-    nav_item, paint_switch, search_field, search_field_with_submit, segmented_control, status_pill,
-    subscribe, text_input, toggle_chip,
+    label_pill, nav_item, paint_switch, search_field, search_field_with_submit, segmented_control,
+    status_pill, subscribe, text_input, toggle_chip,
 };
 pub use playlist::{playlist_card, playlist_card_height, playlist_row};
 pub use rich_text::{rich_text, spans_truncated};
 pub(crate) use video::{
     device_playlist_checkbox, meta, save_to_playlist_menu, thumbnail, thumbnail_hairline,
-    video_thumbnail,
+    video_accessible_label, video_thumbnail,
 };
 pub use video::{
     short_uv, video_card, video_card_height, video_interactions, video_row, video_row_large,
@@ -33,6 +33,10 @@ use youtfast_app::Action;
 use youtfast_appearance::theme::{self, Palette, RADIUS};
 use youtfast_core::model::{Channel, Fetch};
 use youtfast_core::util;
+
+/// YouTube's membership gold, fixed so it stays gold on the dark overlay in
+/// light themes too.
+pub(crate) const MEMBERS_GOLD: Color32 = Color32::from_rgb(0xff, 0xd6, 0x0a);
 
 /// The height of one line of body text.
 pub fn line(ui: &Ui) -> f32 {

@@ -158,7 +158,11 @@ vídeos del propio canal.
 Las páginas de canal incluyen un banner y el orden de los vídeos. Las listas de
 reproducción muestran su portada, sus metadatos y el elemento que se está
 reproduciendo. Los Shorts usan un escenario vertical con controles de
-siguiente/anterior y navegación con la rueda. La interfaz empieza en inglés.
+siguiente/anterior y navegación con la rueda. Los vídeos exclusivos para miembros
+muestran la insignia **Solo para miembros** en las miniaturas de vídeos normales
+(una estrella dorada en miniaturas compactas) y debajo del título en la página
+del vídeo cuando YouTube incluye la insignia; las tarjetas de Shorts y el estante
+de Shorts no la muestran. La interfaz empieza en inglés.
 Elige English, Português (Brasil), Español, Français, Deutsch o Italiano en
 Configuración → Aspecto → Idioma; el cambio se aplica de inmediato y se conserva
 entre ejecuciones, también para las notificaciones de escritorio. Las

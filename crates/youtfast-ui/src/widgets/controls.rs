@@ -7,7 +7,7 @@ use youtfast_i18n::{Locale, gettext as tr};
 use super::{focus_outline, hairline_color, hover_fade, mix, press_fade, style_spec};
 use youtfast_app::{Action, State};
 use youtfast_appearance::icons::Icon;
-use youtfast_appearance::theme::{self, Palette, RADIUS};
+use youtfast_appearance::theme::{self, Palette, RADIUS, RADIUS_SMALL};
 use youtfast_core::model::Channel;
 
 /// A frameless button that is just the icon, a round tint under it that fades
@@ -689,6 +689,33 @@ pub fn status_pill(ui: &mut Ui, label: &str, tint: Color32) {
     );
 }
 
+/// A standalone label badge: a compact, lightly rounded box with no outline,
+/// for a label that is not attached to another control. In dark themes it is
+/// a dark box with `tint` text; in light themes a pale tint with darkened
+/// text, so it belongs to the page it sits on.
+pub fn label_pill(ui: &mut Ui, palette: &Palette, label: &str, tint: Color32) -> Response {
+    let (fill, text) = if palette.dark {
+        (Color32::from_black_alpha(210), tint)
+    } else {
+        (
+            mix(tint, palette.window, 0.84),
+            mix(tint, Color32::BLACK, 0.8),
+        )
+    };
+    let galley = ui
+        .painter()
+        .layout_no_wrap(label.to_owned(), theme::semibold(12.0), text);
+    let size = galley.size() + vec2(14.0, 5.0);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
+    response
+        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, ui.is_enabled(), label));
+    let radius = CornerRadius::same(RADIUS_SMALL + 1);
+    let painter = ui.painter();
+    painter.rect_filled(rect, radius, fill);
+    painter.galley(rect.min + vec2(7.0, 2.5), galley, text);
+    response
+}
+
 /// Text edit identity, sizing, and optional embedded submit button.
 #[derive(Debug)]
 pub struct SearchField<'a> {
@@ -1022,6 +1049,57 @@ mod tests {
         assert!(tree.nodes.iter().any(|(_, node)| {
             node.role() == egui::accesskit::Role::Label && node.value() == Some(status)
         }));
+    }
+
+    #[test]
+    fn label_pill_text_meets_wcag_aa_in_both_themes() {
+        fn luminance(color: Color32) -> f32 {
+            fn linear(value: u8) -> f32 {
+                let value = f32::from(value) / 255.0;
+                if value <= 0.04045 {
+                    value / 12.92
+                } else {
+                    ((value + 0.055) / 1.055).powf(2.4)
+                }
+            }
+            0.2126 * linear(color.r()) + 0.7152 * linear(color.g()) + 0.0722 * linear(color.b())
+        }
+        for palette in [Palette::dark(), Palette::light()] {
+            let ctx = egui::Context::default();
+            theme::install_fonts(&ctx);
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                label_pill(ui, &palette, "Members only", crate::widgets::MEMBERS_GOLD);
+            });
+            output.textures_delta.clear();
+            let fill = output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Rect(rect) => Some(rect.fill),
+                    _ => None,
+                })
+                .expect("pill fill");
+            let text = output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) => text
+                        .galley
+                        .job
+                        .sections
+                        .first()
+                        .map(|section| section.format.color),
+                    _ => None,
+                })
+                .expect("pill text");
+            let (a, b) = (luminance(text), luminance(fill));
+            let contrast = (a.max(b) + 0.05) / (a.min(b) + 0.05);
+            assert!(
+                contrast >= 4.5,
+                "dark={}: {text:?} on {fill:?}: {contrast}",
+                palette.dark
+            );
+        }
     }
 
     #[test]

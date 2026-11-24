@@ -15,6 +15,7 @@ are the distribution record.
 ### Fixed
 
 - `curl -fsSL https://youtfast.pages.dev/install.sh | sh` on Arch no longer quits silently at pacman's `Proceed with installation? [Y/n]`: the question now reads its answer from the terminal instead of the piped script, and without a terminal the installer asks for `--yes`.
+- Marked members-only videos with a "Members only" badge on their thumbnails and on the watch page, instead of presenting them like any other video.
 
 ## [0.10.0] - 2026-11-22
 

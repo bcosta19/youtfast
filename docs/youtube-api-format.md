@@ -227,6 +227,36 @@ public endpoints.
 - **Live comparison:** with libmpv older than 0.42, play a video uploaded the
   same day: it starts a few seconds late instead of failing.
 
+### YT-10: members-only lockups add an age-and-badge metadata row (2026-11-16)
+
+- **Symptom:** on a channel's Videos tab, a members-only card showed no age
+  and the number in its age as a view count (`2 months ago` became `2 views`).
+  Other cards on the same tab were right.
+- **Old format:** a video lockup's `metadataRows` were `[channel, views ·
+  age]`, or on a channel's own tab `[views · age]` (YT-7).
+- **New format:** a members-only card on a channel's Videos tab sends
+  `[channel]`, then a row that carries the age and the badge together; it has
+  no view count. The old reader assumed the second row was `[views, age]`, so
+  it parsed the age's number as views and lost the age.
+- **Fix:** `lockup_channel_row` in
+  `crates/youtfast-youtube/src/innertube/items.rs` finds the channel row by
+  its `UC…` browse endpoint, falling back to a single-part first row when a
+  later row carries stats and the first part is neither an age/schedule nor a
+  labeled view count. `lockup_stats` scans up to 32 non-channel metadata parts
+  in a single pass without collecting, classifying exact age/schedule strings,
+  labeled or bare counts, or another date wording, and `parse_relative_age`
+  uses checked multiplication and requires `"ago"`. `home::from_lockup`
+  delegates to the canonical `items::from_lockup` instead of repeating the
+  positional read.
+- **Tests:** `yt10_a_members_only_channel_lockup_keeps_its_age`,
+  `yt10_a_scheduled_card_keeps_its_date_and_views`,
+  `yt10_an_unlinked_channel_name_is_not_read_as_a_view_count`,
+  `yt10_unlinked_channel_names_like_premier_league_and_tech_reviews_are_preserved`,
+  and `yt10_oversized_relative_age_does_not_overflow` in
+  `crates/youtfast-youtube/tests/youtube_api.rs`; the live check on
+  @SamayRainaOfficial's Videos tab reads 11 of the first 30 cards as
+  members-only, each with its age and without a view count.
+
 ## Adding an entry
 
 Copy this outline. Number entries in order, and never reuse a number.

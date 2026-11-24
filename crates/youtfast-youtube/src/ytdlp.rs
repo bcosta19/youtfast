@@ -41,6 +41,7 @@ impl Entry {
             duration: self.duration,
             views: self.view_count,
             live: self.live_status.as_deref() == Some("is_live"),
+            members_only: None,
             published_at: self.timestamp,
             published: None,
             short: false,

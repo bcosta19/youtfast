@@ -572,6 +572,253 @@ fn yt7_a_lockup_with_a_channel_row_keeps_every_field() {
     assert_eq!(video.duration, Some(f64::from(12 * 60 + 34)));
 }
 
+// ---------------------------------------------------------------------------
+// Members-only badges
+// ---------------------------------------------------------------------------
+
+/// A channel-tab video with YouTube's "Members only" badge and age sharing a
+/// metadata row, as @SamayRainaOfficial's Videos tab sent on 2026-11-16: the
+/// channel row, then `[age] + badges`, with no view count.
+const MEMBERS_ONLY_LOCKUP: &str = r#"[{ "richItemRenderer": { "content": { "lockupViewModel": {
+    "contentId": "ccccccccccc",
+    "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+    "contentImage": { "thumbnailViewModel": {
+        "image": { "sources": [ { "url": "https://i.ytimg.com/vi/ccccccccccc/hq720.jpg", "width": 720, "height": 404 } ] }
+    } },
+    "metadata": { "lockupMetadataViewModel": {
+        "title": { "content": "A members-only video" },
+        "metadata": { "contentMetadataViewModel": { "metadataRows": [
+            { "metadataParts": [ { "text": { "content": "Samay Raina",
+                "commandRuns": [ { "onTap": { "innertubeCommand":
+                    { "browseEndpoint": { "browseId": "UCAov2BBv1ZJav0c_yHEciAw" } } } } ] } } ] },
+            { "metadataParts": [ { "text": { "content": "2 months ago" } } ],
+                "badges": [ { "badgeViewModel": {
+                    "badgeText": "Members only",
+                    "badgeStyle": "BADGE_MEMBERS_ONLY",
+                    "iconName": "SPONSORSHIP_STAR"
+                } } ] }
+        ] } }
+    } }
+} } } }]"#;
+
+#[test]
+fn a_channel_lockup_keeps_the_members_only_badge() {
+    let items = parse_videos(MEMBERS_ONLY_LOCKUP);
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].members_only, Some(true));
+    assert!(items[0].is_members_only());
+}
+
+// YT-10: the badge shares the age's metadata row and the card has no view
+// count, so the age must not be read as views.
+#[test]
+fn yt10_a_members_only_channel_lockup_keeps_its_age() {
+    let items = parse_videos(MEMBERS_ONLY_LOCKUP);
+    let video = &items[0];
+    assert_eq!(video.channel.as_deref(), Some("Samay Raina"));
+    assert_eq!(
+        video.channel_id.as_deref(),
+        Some("UCAov2BBv1ZJav0c_yHEciAw")
+    );
+    assert_eq!(video.views, None);
+    assert_eq!(video.published.as_deref(), Some("2 months ago"));
+    assert!(video.published_at.is_some());
+}
+
+#[test]
+fn yt10_a_scheduled_card_keeps_its_date_and_views() {
+    let json = r#"[{ "richItemRenderer": { "content": { "lockupViewModel": {
+        "contentId": "eeeeeeeeeee",
+        "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+        "metadata": { "lockupMetadataViewModel": {
+            "title": { "content": "A scheduled premiere" },
+            "metadata": { "contentMetadataViewModel": { "metadataRows": [
+                { "metadataParts": [
+                    { "text": { "content": "105K views" } },
+                    { "text": { "content": "Scheduled for Nov 23, 2026" } }
+                ] }
+            ] } }
+        } }
+    } } } }]"#;
+    let items = parse_videos(json);
+    let video = &items[0];
+    assert_eq!(video.views, Some(105_000));
+    assert_eq!(
+        video.published.as_deref(),
+        Some("Scheduled for Nov 23, 2026")
+    );
+}
+
+#[test]
+fn yt10_an_unlinked_channel_name_is_not_read_as_a_view_count() {
+    let json = r#"[{ "richItemRenderer": { "content": { "lockupViewModel": {
+        "contentId": "fffffffffff",
+        "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+        "metadata": { "lockupMetadataViewModel": {
+            "title": { "content": "A members-only video" },
+            "metadata": { "contentMetadataViewModel": { "metadataRows": [
+                { "metadataParts": [ { "text": { "content": "50 Cent" } } ] },
+                { "metadataParts": [ { "text": { "content": "2 months ago" } } ],
+                    "badges": [ { "badgeViewModel": {
+                        "badgeStyle": "BADGE_MEMBERS_ONLY"
+                    } } ] }
+            ] } }
+        } }
+    } } } }]"#;
+    let items = parse_videos(json);
+    let video = &items[0];
+    assert_eq!(video.channel.as_deref(), Some("50 Cent"));
+    assert_eq!(video.channel_id, None);
+    assert_eq!(video.views, None);
+    assert_eq!(video.published.as_deref(), Some("2 months ago"));
+    assert!(video.is_members_only());
+}
+
+#[test]
+fn yt10_unlinked_channel_names_like_premier_league_and_tech_reviews_are_preserved() {
+    for (channel_name, stats_parts) in [
+        ("Premier League", r#"["105K views", "4 hours ago"]"#),
+        ("Tech Reviews", r#"["105K views", "4 hours ago"]"#),
+        ("Bird Watching", r#"["2 months ago"]"#),
+        ("Will Smith", r#"["2 months ago"]"#),
+        ("5 Minute Crafts", r#"["10K views", "1 day ago"]"#),
+    ] {
+        let parts: Vec<String> = serde_json::from_str(stats_parts).unwrap();
+        let stats_json: Vec<serde_json::Value> = parts
+            .iter()
+            .map(|text| serde_json::json!({ "text": { "content": text } }))
+            .collect();
+        let json = serde_json::json!([{ "richItemRenderer": { "content": { "lockupViewModel": {
+            "contentId": "ggggggggggg",
+            "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+            "metadata": { "lockupMetadataViewModel": {
+                "title": { "content": "A video" },
+                "metadata": { "contentMetadataViewModel": { "metadataRows": [
+                    { "metadataParts": [ { "text": { "content": channel_name } } ] },
+                    { "metadataParts": stats_json }
+                ] } }
+            } }
+        } } } }])
+        .to_string();
+        let items = parse_videos(&json);
+        let video = &items[0];
+        assert_eq!(
+            video.channel.as_deref(),
+            Some(channel_name),
+            "lost unlinked channel name {channel_name}"
+        );
+        assert!(video.published.is_some());
+    }
+}
+
+#[test]
+fn yt10_oversized_relative_age_does_not_overflow() {
+    assert_eq!(
+        innertube::items::parse_relative_age("999999999999999999 years ago"),
+        None
+    );
+    assert_eq!(innertube::items::parse_relative_age("-5 days ago"), None);
+    assert_eq!(
+        innertube::items::parse_relative_age("5 Minute Crafts"),
+        None
+    );
+    assert!(innertube::items::parse_relative_age("Streamed 2 days ago").is_some());
+
+    let json = r#"[{ "richItemRenderer": { "content": { "lockupViewModel": {
+        "contentId": "hhhhhhhhhhh",
+        "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+        "metadata": { "lockupMetadataViewModel": {
+            "title": { "content": "An oversized age" },
+            "metadata": { "contentMetadataViewModel": { "metadataRows": [
+                { "metadataParts": [ { "text": { "content": "999999999999999999 years ago" } } ] }
+            ] } }
+        } }
+    } } } }]"#;
+    let items = parse_videos(json);
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].published_at, None);
+    assert_eq!(
+        items[0].published.as_deref(),
+        Some("999999999999999999 years ago")
+    );
+}
+
+#[test]
+fn a_stored_video_without_members_only_still_loads() {
+    let video: youtfast_core::model::Video =
+        serde_json::from_str(r#"{"id":"aaaaaaaaaaa","title":"Old card"}"#).unwrap();
+    assert_eq!(video.members_only, None);
+    assert!(!video.is_members_only());
+}
+
+#[test]
+fn an_ordinary_channel_lockup_is_not_members_only() {
+    let items = parse_videos(CHANNEL_TAB_LOCKUP);
+    assert_eq!(items[0].members_only, Some(false));
+    assert!(!items[0].is_members_only());
+}
+
+#[test]
+fn an_older_video_renderer_keeps_the_members_only_badge() {
+    let json = r#"[{ "videoRenderer": {
+        "videoId": "ddddddddddd",
+        "title": { "simpleText": "A members-only video" },
+        "badges": [ { "metadataBadgeRenderer": {
+            "style": "BADGE_STYLE_TYPE_MEMBERS_ONLY",
+            "label": "Members only"
+        } } ]
+    } }]"#;
+    let items = parse_videos(json);
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].members_only, Some(true));
+    assert!(items[0].is_members_only());
+}
+
+#[test]
+fn a_watch_page_keeps_the_members_only_badge() {
+    let page = serde_json::json!({
+        "contents": { "twoColumnWatchNextResults": { "results": { "results": { "contents": [
+            { "videoPrimaryInfoRenderer": {
+                "title": { "runs": [ { "text": "A members-only video" } ] },
+                "badges": [ { "metadataBadgeRenderer": {
+                    "style": "BADGE_STYLE_TYPE_MEMBERS_ONLY",
+                    "label": "Members only"
+                } } ]
+            } },
+            { "videoSecondaryInfoRenderer": {
+                "owner": { "videoOwnerRenderer": {
+                    "title": { "runs": [ { "text": "A channel" } ] },
+                    "navigationEndpoint": { "browseEndpoint": { "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa" } }
+                } },
+                "attributedDescription": { "content": "" }
+            } }
+        ] } } } }
+    });
+    let details = innertube::watch::parse_details(&page, "ddddddddddd");
+    assert_eq!(details.members_only, Some(true));
+    assert_eq!(details.title, "A members-only video");
+}
+
+#[test]
+fn a_watch_page_distinguishes_confirmed_public_from_missing_primary() {
+    let public_page = serde_json::json!({
+        "contents": { "twoColumnWatchNextResults": { "results": { "results": { "contents": [
+            { "videoPrimaryInfoRenderer": {
+                "title": { "runs": [ { "text": "Public video" } ] }
+            } }
+        ] } } } }
+    });
+    assert_eq!(
+        innertube::watch::parse_details(&public_page, "ddddddddddd").members_only,
+        Some(false)
+    );
+    let empty_page = serde_json::json!({});
+    assert_eq!(
+        innertube::watch::parse_details(&empty_page, "ddddddddddd").members_only,
+        None
+    );
+}
+
 #[test]
 fn comment_button_continuations_keep_replies_and_next_page() {
     let page = serde_json::json!({

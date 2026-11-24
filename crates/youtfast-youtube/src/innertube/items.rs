@@ -143,34 +143,88 @@ pub fn parse_count(text: &str) -> Option<u64> {
     Some((value * scale).round() as u64)
 }
 
+fn strip_prefix_ascii_case<'a>(text: &'a str, prefix: &str) -> Option<&'a str> {
+    let head = text.get(..prefix.len())?;
+    head.eq_ignore_ascii_case(prefix)
+        .then(|| &text[prefix.len()..])
+}
+
+fn ends_with_ascii_case(text: &str, suffix: &str) -> bool {
+    text.len() >= suffix.len() && text[text.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
+}
+
 /// Estimates a Unix timestamp from relative age text like `"4 hours ago"` or `"2 days ago"`.
 pub fn parse_relative_age(text: &str) -> Option<i64> {
-    let lower = text.to_ascii_lowercase();
-    let lower = lower
-        .strip_prefix("streamed ")
-        .or_else(|| lower.strip_prefix("premiered "))
-        .unwrap_or(&lower);
-    let mut parts = lower.split_whitespace();
+    let trimmed = text.trim();
+    let rest = strip_prefix_ascii_case(trimmed, "streamed ")
+        .or_else(|| strip_prefix_ascii_case(trimmed, "premiered "))
+        .unwrap_or(trimmed);
+    let mut parts = rest.split_whitespace();
     let count: i64 = parts.next()?.parse().ok()?;
+    if count < 0 {
+        return None;
+    }
     let unit = parts.next()?;
-    let seconds = if unit.starts_with("second") || unit.starts_with("sec") {
-        count
-    } else if unit.starts_with("minute") || unit.starts_with("min") {
-        count * 60
-    } else if unit.starts_with("hour") || unit.starts_with("hr") {
-        count * 3600
-    } else if unit.starts_with("day") {
-        count * 86_400
-    } else if unit.starts_with("week") || unit.starts_with("wk") {
-        count * 7 * 86_400
-    } else if unit.starts_with("month") || unit.starts_with("mo") {
-        count * 30 * 86_400
-    } else if unit.starts_with("year") || unit.starts_with("yr") {
-        count * 365 * 86_400
+    let unit_seconds: i64 = if unit.eq_ignore_ascii_case("second")
+        || unit.eq_ignore_ascii_case("seconds")
+        || unit.eq_ignore_ascii_case("sec")
+        || unit.eq_ignore_ascii_case("secs")
+    {
+        1
+    } else if unit.eq_ignore_ascii_case("minute")
+        || unit.eq_ignore_ascii_case("minutes")
+        || unit.eq_ignore_ascii_case("min")
+        || unit.eq_ignore_ascii_case("mins")
+    {
+        60
+    } else if unit.eq_ignore_ascii_case("hour")
+        || unit.eq_ignore_ascii_case("hours")
+        || unit.eq_ignore_ascii_case("hr")
+        || unit.eq_ignore_ascii_case("hrs")
+    {
+        3600
+    } else if unit.eq_ignore_ascii_case("day") || unit.eq_ignore_ascii_case("days") {
+        86_400
+    } else if unit.eq_ignore_ascii_case("week")
+        || unit.eq_ignore_ascii_case("weeks")
+        || unit.eq_ignore_ascii_case("wk")
+        || unit.eq_ignore_ascii_case("wks")
+    {
+        7 * 86_400
+    } else if unit.eq_ignore_ascii_case("month")
+        || unit.eq_ignore_ascii_case("months")
+        || unit.eq_ignore_ascii_case("mo")
+        || unit.eq_ignore_ascii_case("mos")
+    {
+        30 * 86_400
+    } else if unit.eq_ignore_ascii_case("year")
+        || unit.eq_ignore_ascii_case("years")
+        || unit.eq_ignore_ascii_case("yr")
+        || unit.eq_ignore_ascii_case("yrs")
+    {
+        365 * 86_400
     } else {
         return None;
     };
+    if !parts.next()?.eq_ignore_ascii_case("ago") || parts.next().is_some() {
+        return None;
+    }
+    let seconds = count.checked_mul(unit_seconds)?;
     Some(util::now().saturating_sub(seconds))
+}
+
+/// Whether a `badges` list marks its item as members-only. Older renderers
+/// put the marker in `metadataBadgeRenderer.style`, modern lockups in
+/// `badgeViewModel.badgeStyle`.
+pub fn members_only_badges(badges: Option<&Value>) -> bool {
+    badges.and_then(Value::as_array).is_some_and(|badges| {
+        badges.iter().any(|badge| {
+            ["/metadataBadgeRenderer/style", "/badgeViewModel/badgeStyle"]
+                .into_iter()
+                .filter_map(|path| badge.pointer(path).and_then(Value::as_str))
+                .any(|style| style.contains("MEMBERS_ONLY"))
+        })
+    })
 }
 
 /// Reads an older `videoRenderer`, `gridVideoRenderer` or `compactVideoRenderer`.
@@ -258,10 +312,158 @@ pub fn from_renderer(renderer: &Value) -> Option<Video> {
         duration,
         views,
         live,
+        members_only: Some(members_only_badges(renderer.get("badges"))),
         published_at,
         published,
         short,
     })
+}
+
+const MAX_LOCKUP_STAT_PARTS: usize = 32;
+
+fn row_text_parts(row: &Value) -> impl Iterator<Item = &str> {
+    row.get("metadataParts")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|part| part.pointer("/text/content").and_then(Value::as_str))
+}
+
+/// The metadata row that names a lockup's channel, found by its `UC…` browse
+/// endpoint rather than by position: a members-only badge adds a second row
+/// that carries no metadata parts. An unlinked first row still counts only
+/// when it holds a single part, another row holds stats, and its text is
+/// neither an age/schedule nor a labeled view count.
+pub(super) fn lockup_channel_row(rows: &[Value]) -> Option<usize> {
+    rows.iter()
+        .position(|row| {
+            find(row, &|value| {
+                value
+                    .pointer("/browseEndpoint/browseId")
+                    .and_then(Value::as_str)
+                    .filter(|id| id.starts_with("UC"))
+            })
+            .is_some()
+        })
+        .or_else(|| {
+            let first = rows.first()?;
+            let mut first_parts = row_text_parts(first);
+            let first_text = first_parts.next()?;
+            if first_parts.next().is_some() {
+                return None;
+            }
+            let has_later_stats = rows[1..]
+                .iter()
+                .any(|row| row_text_parts(row).next().is_some());
+            (has_later_stats
+                && !is_age_or_schedule(first_text)
+                && !is_view_count_labeled(first_text))
+            .then_some(0)
+        })
+}
+
+fn is_count_number(word: &str) -> bool {
+    let core = word
+        .strip_suffix(['K', 'k', 'M', 'm', 'B', 'b'])
+        .unwrap_or(word);
+    let bytes = core.as_bytes();
+    if bytes.is_empty() || !bytes[0].is_ascii_digit() || !bytes[bytes.len() - 1].is_ascii_digit() {
+        return false;
+    }
+    let mut seen_dot = false;
+    for &b in bytes {
+        match b {
+            b'0'..=b'9' => {}
+            b',' if !seen_dot => {}
+            b'.' if !seen_dot => seen_dot = true,
+            _ => return false,
+        }
+    }
+    true
+}
+
+/// Exact labeled view or watching counts (`"1.2M views"`, `"No views"`, `"35K watching"`).
+fn is_view_count_labeled(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.eq_ignore_ascii_case("no views") {
+        return true;
+    }
+    let mut parts = trimmed.split_whitespace();
+    let Some(number) = parts.next() else {
+        return false;
+    };
+    if !is_count_number(number) {
+        return false;
+    }
+    let Some(label) = parts.next() else {
+        return false;
+    };
+    if label.eq_ignore_ascii_case("view") || label.eq_ignore_ascii_case("views") {
+        parts.next().is_none()
+    } else if label.eq_ignore_ascii_case("watching") {
+        match parts.next() {
+            None => true,
+            Some(next) => next.eq_ignore_ascii_case("now") && parts.next().is_none(),
+        }
+    } else {
+        false
+    }
+}
+
+/// Bare abbreviated counts (`"1.2M"`) that appear in non-channel stats rows.
+fn is_bare_count(text: &str) -> bool {
+    is_count_number(text.trim())
+}
+
+/// Age or schedule text, which can start with a number without being a view count.
+fn is_age_or_schedule(text: &str) -> bool {
+    let trimmed = text.trim();
+    parse_relative_age(trimmed).is_some()
+        || ends_with_ascii_case(trimmed, " ago")
+        || strip_prefix_ascii_case(trimmed, "scheduled for ").is_some()
+        || strip_prefix_ascii_case(trimmed, "premieres ").is_some()
+        || strip_prefix_ascii_case(trimmed, "premiered ").is_some()
+        || strip_prefix_ascii_case(trimmed, "streamed ").is_some()
+        || strip_prefix_ascii_case(trimmed, "started streaming ").is_some()
+        || strip_prefix_ascii_case(trimmed, "will premiere ").is_some()
+        || trimmed.eq_ignore_ascii_case("upcoming")
+        || trimmed.eq_ignore_ascii_case("live now")
+}
+
+/// The views and age of a lockup, from the metadata parts that carry them.
+/// A members-only card can hold the age alone (`[2 months ago]`), while an
+/// ordinary card sends `[views, age]`; neither view count nor age is assumed
+/// to come first, and the badge's row holds neither.
+pub(super) fn lockup_stats(
+    rows: &[Value],
+    channel_row: Option<usize>,
+) -> (Option<u64>, Option<String>) {
+    let mut views = None;
+    let mut age = None;
+    let mut fallback_date = None;
+    let parts = rows
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| Some(*index) != channel_row)
+        .flat_map(|(_, row)| row_text_parts(row))
+        .take(MAX_LOCKUP_STAT_PARTS);
+    for text in parts {
+        if age.is_none() && is_age_or_schedule(text) {
+            age = Some(text);
+        } else if views.is_none() && (is_view_count_labeled(text) || is_bare_count(text)) {
+            views = parse_count(text);
+        } else if age.is_none()
+            && fallback_date.is_none()
+            && !is_view_count_labeled(text)
+            && !is_bare_count(text)
+        {
+            fallback_date = Some(text);
+        }
+        if views.is_some() && age.is_some() {
+            break;
+        }
+    }
+    (views, age.or(fallback_date).map(str::to_owned))
 }
 
 /// Reads a modern `lockupViewModel` of a video (`YT-6` and `YT-7`).
@@ -279,31 +481,26 @@ pub fn from_lockup(lockup: &Value) -> Option<Video> {
     let rows = metadata
         .pointer("/metadata/contentMetadataViewModel/metadataRows")
         .and_then(Value::as_array);
+    let channel_row = rows.and_then(|rows| lockup_channel_row(rows));
     let part = |row: usize, part: usize| {
         rows.and_then(|rows| rows.get(row))
             .and_then(|row| row.pointer(&format!("/metadataParts/{part}/text/content")))
             .and_then(Value::as_str)
             .map(str::to_owned)
     };
-    let first_row_channel_id = rows
-        .and_then(|rows| rows.first())
+    let channel = channel_row.and_then(|row| part(row, 0));
+    let channel_id = channel_row
         .and_then(|row| {
-            find(row, &|value| {
-                value
-                    .pointer("/browseEndpoint/browseId")
-                    .and_then(Value::as_str)
-                    .filter(|id| id.starts_with("UC"))
+            rows.and_then(|rows| rows.get(row)).and_then(|row| {
+                find(row, &|value| {
+                    value
+                        .pointer("/browseEndpoint/browseId")
+                        .and_then(Value::as_str)
+                        .filter(|id| id.starts_with("UC"))
+                })
             })
         })
         .map(str::to_owned);
-    let row_count = rows.map_or(0, Vec::len);
-    // YT-7: on a channel's own tab there is only one metadata row (`[views, age]`)
-    // with no channel link; home/search/related send `[channel, views · age]`.
-    let (channel, channel_id, stats_row) = if row_count >= 2 || first_row_channel_id.is_some() {
-        (part(0, 0), first_row_channel_id, 1)
-    } else {
-        (None, None, 0)
-    };
     // The badge over the thumbnail: the length (in either overlay shape, YT-7), or LIVE.
     let badge = lockup.get("contentImage").and_then(|image| {
         find(image, &|value| {
@@ -313,11 +510,11 @@ pub fn from_lockup(lockup: &Value) -> Option<Video> {
         })
     });
     let live = badge.is_some_and(|badge| badge.eq_ignore_ascii_case("live"));
-    let (views, published) = match (part(stats_row, 0), part(stats_row, 1)) {
-        // A live stream's row is `N watching`, with no age.
-        (Some(first), second) => (parse_count(&first), second),
-        (None, _) => (None, None),
-    };
+    let members_only = rows.map(|rows| {
+        rows.iter()
+            .any(|row| members_only_badges(row.get("badges")))
+    });
+    let (views, published) = rows.map_or((None, None), |rows| lockup_stats(rows, channel_row));
     let published_at = published.as_deref().and_then(parse_relative_age);
     // YT-6: The channel's avatar, left of the title.
     let avatar = metadata
@@ -332,6 +529,7 @@ pub fn from_lockup(lockup: &Value) -> Option<Video> {
         duration: badge.and_then(parse_length),
         views,
         live,
+        members_only,
         published_at,
         published,
         short: false,
@@ -399,6 +597,7 @@ pub fn from_short(short: &Value) -> Option<Video> {
         duration: None,
         views,
         live: false,
+        members_only: None,
         published_at: None,
         published: None,
         short: true,

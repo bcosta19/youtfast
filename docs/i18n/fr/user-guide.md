@@ -162,7 +162,11 @@ de la chaîne.
 Les pages de chaîne incluent une bannière et le tri des vidéos. Les playlists
 affichent leur couverture, leurs métadonnées et l'élément en cours de lecture.
 Les Shorts utilisent un affichage en portrait avec des commandes
-suivant/précédent et la navigation à la molette. L'interface démarre en anglais.
+suivant/précédent et la navigation à la molette. Les vidéos réservées aux
+membres affichent un badge **Réservé aux membres** sur les vignettes des vidéos
+classiques (une étoile dorée sur les vignettes compactes) et sous le titre sur
+la page de la vidéo lorsque YouTube fournit le badge ; les cartes Shorts et le
+rayon Shorts ne l'affichent pas. L'interface démarre en anglais.
 Choisissez English, Português (Brasil), Español, Français, Deutsch ou Italiano
 dans Paramètres → Apparence → Langue ; le changement s'applique immédiatement et
 est conservé d'une session à l'autre, y compris pour les notifications sur le

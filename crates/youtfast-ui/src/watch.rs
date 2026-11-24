@@ -551,6 +551,20 @@ fn about_video(
             &[("title", original_title)],
         ));
     }
+    let members_only = state
+        .details
+        .ready()
+        .and_then(|details| details.members_only)
+        .unwrap_or_else(|| watching.is_members_only());
+    if members_only {
+        ui.add_space(6.0);
+        widgets::label_pill(
+            ui,
+            &palette,
+            &tr(locale, "Members only"),
+            widgets::MEMBERS_GOLD,
+        );
+    }
     ui.add_space(12.0);
     channel_line(ui, state, watching, status, actions);
     ui.add_space(16.0);
@@ -2646,5 +2660,59 @@ mod tests {
                 .any(|l| l == "Original title: CLICKBAIT WATCH TITLE"),
             "hovering watch title should show original title; got {labels:?}"
         );
+    }
+
+    #[test]
+    fn watch_page_members_only_pill_clears_when_details_confirm_public() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let mut video = Video::from_id("early000001".into());
+        video.title = "Early Access Video".into();
+        video.members_only = Some(true);
+
+        let mut state = State {
+            view: youtfast_core::model::View::Watch,
+            watching: Some(video),
+            details: Fetch::Ready(youtfast_core::model::Details {
+                id: "early000001".into(),
+                title: "Early Access Video".into(),
+                members_only: Some(false),
+                ..Default::default()
+            }),
+            ..State::default()
+        };
+        let status = Status {
+            paused: true,
+            ..Status::default()
+        };
+        let labels = |state: &mut State| -> Vec<String> {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1280.0, 800.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    let mut actions = Vec::new();
+                    show(ui, state, Some(&status), None, &mut actions);
+                },
+            );
+            let texts = out
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                    _ => None,
+                })
+                .collect();
+            out.textures_delta.clear();
+            texts
+        };
+
+        assert!(!labels(&mut state).iter().any(|l| l == "Members only"));
+
+        if let Fetch::Ready(details) = &mut state.details {
+            details.members_only = Some(true);
+        }
+        assert!(labels(&mut state).iter().any(|l| l == "Members only"));
     }
 }

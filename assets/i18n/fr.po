@@ -509,6 +509,9 @@ msgstr "Lire en boucle"
 msgid "Mark all as seen"
 msgstr "Tout marquer comme vu"
 
+msgid "Members only"
+msgstr "Réservé aux membres"
+
 msgid "Miniplayer"
 msgstr "Mini-lecteur"
 

@@ -151,7 +151,11 @@ canal.
 
 As páginas de canal incluem um banner e a ordenação dos vídeos. As playlists
 mostram a capa, os metadados e o item em reprodução. Os Shorts usam um palco em
-retrato com controles de próximo/anterior e navegação pela roda do mouse. A
+retrato com controles de próximo/anterior e navegação pela roda do mouse. Vídeos
+exclusivos para membros exibem o selo **Somente para membros** nas miniaturas de
+vídeos comuns (uma estrela dourada em miniaturas compactas) e abaixo do título na
+página do vídeo quando o YouTube fornece o selo; cards de Shorts e a estante de
+Shorts não o exibem. A
 interface começa em inglês. Escolha English, Português (Brasil), Español,
 Français, Deutsch ou Italiano em Configurações → Aparência → Idioma; a mudança
 vale na hora e é mantida entre execuções, inclusive para as notificações na área

@@ -7,7 +7,8 @@ use serde_json::{Value, json};
 
 use super::More;
 use super::client::{Client, ContinuationEndpoint};
-use super::edit::{collect, find, post, text};
+use super::edit::{collect, post, text};
+use super::items::members_only_badges;
 use youtfast_core::model::Video;
 
 /// What YouTube recommends to the account, and the next page. An account
@@ -94,6 +95,7 @@ pub(super) fn from_renderer(renderer: &Value) -> Option<Video> {
         duration: text(renderer.get("lengthText")).and_then(|length| parse_length(&length)),
         views: text(renderer.get("viewCountText")).and_then(|views| parse_count(&views)),
         live,
+        members_only: Some(members_only_badges(renderer.get("badges"))),
         published_at: None,
         published: text(renderer.get("publishedTimeText")),
         short: false,
@@ -101,68 +103,9 @@ pub(super) fn from_renderer(renderer: &Value) -> Option<Video> {
 }
 
 /// The newer card: a `lockupViewModel` of a video. Its rows are the
-/// channel, then `views · age`.
+/// channel, then `views · age`; the canonical reader handles both shapes.
 pub(super) fn from_lockup(lockup: &Value) -> Option<Video> {
-    if lockup.get("contentType")?.as_str()? != "LOCKUP_CONTENT_TYPE_VIDEO" {
-        return None;
-    }
-    let id = lockup.get("contentId")?.as_str()?.to_owned();
-    let metadata = lockup.pointer("/metadata/lockupMetadataViewModel")?;
-    let title = metadata
-        .pointer("/title/content")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_owned();
-    let rows = metadata
-        .pointer("/metadata/contentMetadataViewModel/metadataRows")
-        .and_then(Value::as_array);
-    let part = |row: usize, part: usize| {
-        rows.and_then(|rows| rows.get(row))
-            .and_then(|row| row.pointer(&format!("/metadataParts/{part}/text/content")))
-            .and_then(Value::as_str)
-            .map(str::to_owned)
-    };
-    let channel_id = rows
-        .and_then(|rows| rows.first())
-        .and_then(|row| {
-            find(row, &|value| {
-                value
-                    .pointer("/browseEndpoint/browseId")
-                    .and_then(Value::as_str)
-                    .filter(|id| id.starts_with("UC"))
-            })
-        })
-        .map(str::to_owned);
-    // The badge over the thumbnail: the length, or LIVE.
-    let badge = lockup.get("contentImage").and_then(|image| {
-        find(image, &|value| {
-            value
-                .pointer("/thumbnailBadgeViewModel/text")
-                .and_then(Value::as_str)
-        })
-    });
-    let live = badge.is_some_and(|badge| badge.eq_ignore_ascii_case("live"));
-    let (views, published) = match (part(1, 0), part(1, 1)) {
-        // A live stream's row is `N watching`, with no age.
-        (Some(first), second) => (parse_count(&first), second),
-        (None, _) => (None, None),
-    };
-    // The channel's avatar, left of the title.
-    let avatar =
-        metadata.pointer("/image/decoratedAvatarViewModel/avatar/avatarViewModel/image/sources");
-    Some(Video {
-        id,
-        title,
-        channel_avatar: widest(avatar),
-        channel: part(0, 0),
-        channel_id,
-        duration: badge.and_then(parse_length),
-        views,
-        live,
-        published_at: None,
-        published,
-        short: false,
-    })
+    super::items::from_lockup(lockup)
 }
 
 /// The URL of the widest image in a `thumbnails` or `sources` list.
