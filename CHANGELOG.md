@@ -8,6 +8,8 @@ are the distribution record.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-24
+
 ### Added
 
 - **Device sync** finds your other computers by itself: with **Other device address** empty, YouTFast asks the local network which devices share the pairing key, asks the `tailscale` and `netbird` clients for their peers, and devices that synced share the other computers they know, so meeting any one computer is enough to meet them all. It syncs with every computer answering on the same **Listen port** with the same key, searching again every 10 minutes, when known devices stop answering, and on **Sync now**. Sync also starts at launch and a few seconds after its settings change, so a newly installed computer pulls the others' library as soon as the key is pasted. Local-network discovery needs incoming UDP on the listen port as well as TCP; the Flatpak cannot run the clients but still finds devices on the local network and through shared peers.
@@ -540,7 +542,8 @@ macOS Apple Silicon. Interactive Windows/macOS qualification is still pending.
 These exclusions are scope decisions, not completed features promised for a
 specific next version. See [ROADMAP.md](ROADMAP.md) for follow-up gates.
 
-[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/bcosta19/youtfast/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/bcosta19/youtfast/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/bcosta19/youtfast/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/bcosta19/youtfast/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/bcosta19/youtfast/compare/v0.8.1...v0.9.0

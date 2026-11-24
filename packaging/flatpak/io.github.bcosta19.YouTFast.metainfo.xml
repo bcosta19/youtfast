@@ -15,6 +15,9 @@
   <url type="bugtracker">https://github.com/bcosta19/youtfast/issues</url>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.11.0" date="2026-11-24">
+      <description><p>Device sync now finds your other computers on its own, members-only videos are marked, playback memory is reclaimed on stop, and a crash on multibyte YouTube metadata is fixed.</p></description>
+    </release>
     <release version="0.10.0" date="2026-11-22">
       <description><p>Choose from twelve interface styles, sync your local library across devices, and tune local video recommendations.</p></description>
     </release>
