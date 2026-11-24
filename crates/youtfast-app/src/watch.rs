@@ -195,6 +195,13 @@ impl App {
                         self.state.player_error = Some(failure_message(failure).into());
                     }
                 }
+                mpv::Event::Idle => {
+                    if self.state.watching.is_none()
+                        && let Some(surface) = &self.surface
+                    {
+                        surface.release_renderer();
+                    }
+                }
                 mpv::Event::Finished => {
                     self.clear_sponsor_mute();
                     if let Some(video) = &self.state.watching {

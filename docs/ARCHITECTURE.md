@@ -145,7 +145,7 @@ stateDiagram-v2
 |---|---|
 | Quality | `mpv::FORMAT` follows the selected quality; Auto is bounded to 1080p |
 | Buffer budget | Standard: 150 MiB ahead / 50 MiB behind; Compact: 50 / 20 MiB, selected by `Settings::playback_buffer` |
-| Memory reclamation | On Linux/glibc, `memory::configure_allocator` bounds per-thread arenas and `M_MMAP_THRESHOLD` (128 KiB), `Mpv` clears `ytdl_hook` JSON on `stop` and calls `malloc_trim(0)` on file end / idle, and `VideoSurface::release_if_idle` deletes the offscreen FBO and pumps `mpv_render_context_update` on the next idle frame |
+| Memory reclamation | On Linux/glibc, `memory::configure_allocator` bounds per-thread arenas and `M_MMAP_THRESHOLD` (128 KiB), `Mpv` clears `ytdl_hook` JSON on `stop`, emits `Event::Idle` and calls `malloc_trim(0)` on file end / confirmed idle, and `VideoSurface::release_if_idle` deletes the offscreen FBO and runs a `MPV_RENDER_PARAM_SKIP_RENDERING` render pass on the GL thread after mpv confirms idle so `vo_libmpv` frees its internal video textures |
 | GL lifetime | Create lazily with the GL context current; free in `App::on_exit` before mpv; dropping a surface never frees GL objects without a context |
 | Scrolling | Keep the framebuffer at the full video's physical size; restore egui's scissor before blitting |
 | Aspect | Size from `Status::video_aspect` (`video-out-params/aspect`, after autorotate) |

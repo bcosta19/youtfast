@@ -124,6 +124,10 @@ impl RepaintTarget {
         self.ctx
             .request_repaint_of(viewport.unwrap_or(egui::ViewportId::ROOT));
     }
+
+    fn request_root(&self) {
+        self.ctx.request_repaint_of(egui::ViewportId::ROOT);
+    }
 }
 
 struct Inner {
@@ -140,10 +144,10 @@ struct Inner {
     /// Creating the renderer failed once; the error is logged and the
     /// surface stays black rather than retrying every frame.
     failed: bool,
-    /// Playback stopped or forgot its frame; run one idle GL pass to delete
-    /// the FBO target and pump `vo_libmpv` cleanup instead of waiting until
-    /// another video opens.
-    pending_idle_cleanup: bool,
+    /// mpv confirmed idle after a stop; run one no-draw `render()` pass on
+    /// the GL thread so `vo_libmpv` applies its teardown reconfiguration and
+    /// releases internal video and scaler textures.
+    pending_renderer_release: bool,
 }
 
 // SAFETY: the raw pointers (the display, the render context) are opaque
@@ -169,7 +173,7 @@ impl VideoSurface {
                 frame: Frame::default(),
                 frame_info_missing: false,
                 failed: false,
-                pending_idle_cleanup: false,
+                pending_renderer_release: false,
             })),
         }
     }
@@ -209,16 +213,31 @@ impl VideoSurface {
     pub fn forget(&self) {
         let mut inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
         inner.frame.forget();
-        inner.pending_idle_cleanup = true;
+    }
+
+    /// Arms a one-shot no-draw GL pass after mpv confirms idle so `vo_libmpv`
+    /// applies its teardown reconfiguration and frees its internal video
+    /// textures without waiting for another video to open.
+    pub fn release_renderer(&self) {
+        let repaint = {
+            let mut inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+            if inner.frame.allowed() {
+                return;
+            }
+            inner.pending_renderer_release = true;
+            Arc::clone(&inner.repaint)
+        };
+        repaint.request_root();
     }
 
     /// When no video is playing, schedules a single lightweight GL pass to
-    /// delete the offscreen framebuffer and pump `vo_libmpv` cleanup so GPU
-    /// textures are not held while browsing other views. No-op once clean.
+    /// delete the offscreen framebuffer and, once mpv has confirmed idle,
+    /// run a `SKIP_RENDERING` pass so `vo_libmpv` releases its internal video
+    /// textures. No-op once clean.
     pub fn release_if_idle(&self, ui: &egui::Ui) {
         let needs_cleanup = {
             let inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
-            !inner.frame.allowed() && (inner.pending_idle_cleanup || inner.target.is_some())
+            !inner.frame.allowed() && (inner.target.is_some() || inner.pending_renderer_release)
         };
         if !needs_cleanup {
             return;
@@ -226,10 +245,11 @@ impl VideoSurface {
         let inner = Arc::clone(&self.inner);
         let callback = egui_glow::CallbackFn::new(move |_info, painter| {
             let mut inner = inner.lock().unwrap_or_else(PoisonError::into_inner);
-            inner.pending_idle_cleanup = false;
             if inner.frame.allowed() {
+                inner.pending_renderer_release = false;
                 return;
             }
+            let release_renderer = std::mem::take(&mut inner.pending_renderer_release);
             let gl = painter.gl();
             // SAFETY: called from the egui_glow paint callback with the GL
             // context current.
@@ -238,8 +258,14 @@ impl VideoSurface {
                     old.delete(gl);
                 }
                 inner.frame.discard_target();
-                if let Some(render) = inner.render.as_ref() {
+                if release_renderer && let Some(render) = inner.render.as_ref() {
+                    let previous_draw = gl.get_parameter_i32(glow::DRAW_FRAMEBUFFER_BINDING);
+                    let previous_read = gl.get_parameter_i32(glow::READ_FRAMEBUFFER_BINDING);
                     let _ = ffi::mpv_render_context_update(render.ptr);
+                    if let Err(error) = render.skip_render() {
+                        log::debug!("mpv idle render pass: {error}");
+                    }
+                    restore(gl, previous_draw, previous_read);
                 }
             }
             crate::memory::trim_heap();
@@ -286,7 +312,7 @@ impl VideoSurface {
 
 impl Inner {
     fn draw(&mut self, info: &egui::PaintCallbackInfo, gl: &glow::Context) {
-        self.pending_idle_cleanup = false;
+        self.pending_renderer_release = false;
         if self.failed {
             return;
         }
@@ -653,6 +679,39 @@ impl RenderContext {
         }
     }
 
+    /// Runs a no-draw render pass (`MPV_RENDER_PARAM_SKIP_RENDERING`) so
+    /// `vo_libmpv` applies its post-stop reconfiguration and releases internal
+    /// video and scaler textures while idle.
+    ///
+    /// # Safety
+    ///
+    /// The GL context must be current.
+    unsafe fn skip_render(&self) -> Result<(), Error> {
+        let mut skip: c_int = 1;
+        let mut block: c_int = 0;
+        let mut params = [
+            ffi::mpv_render_param {
+                type_: ffi::MPV_RENDER_PARAM_SKIP_RENDERING,
+                data: (&raw mut skip).cast(),
+            },
+            ffi::mpv_render_param {
+                type_: ffi::MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME,
+                data: (&raw mut block).cast(),
+            },
+            ffi::mpv_render_param {
+                type_: ffi::MPV_RENDER_PARAM_INVALID,
+                data: std::ptr::null_mut(),
+            },
+        ];
+        // SAFETY: valid render context and terminated params; context current.
+        let code = unsafe { ffi::mpv_render_context_render(self.ptr, params.as_mut_ptr()) };
+        if code < 0 {
+            Err(Error::new(code, "flushing idle renderer"))
+        } else {
+            Ok(())
+        }
+    }
+
     /// The frame mpv is about to render, if this libmpv answers.
     ///
     /// # Safety
@@ -827,7 +886,7 @@ mod tests {
     }
 
     #[test]
-    fn release_if_idle_queues_callback_only_when_stopped_and_dirty() {
+    fn release_if_idle_waits_for_confirmed_idle_before_flushing_renderer() {
         let _turn = crate::tests::instance_turn();
         let ctx = egui::Context::default();
         let mpv = crate::Mpv::new(&ctx, 1080, 0.0, Vec::new()).unwrap();
@@ -850,11 +909,31 @@ mod tests {
                 .count()
         };
 
+        // Settle egui's initial layout/font passes so repaint assertions only
+        // observe `release_renderer()`.
+        for _ in 0..4 {
+            if !ctx.has_requested_repaint_for(&egui::ViewportId::ROOT) {
+                break;
+            }
+            let _ = callback_count(&surface);
+        }
+
         // Fresh idle surface needs no GL cleanup pass.
         assert_eq!(callback_count(&surface), 0);
 
-        // After `forget()`, an idle pass schedules one positive-rect callback.
+        // `forget()` alone (before mpv confirms idle, and with no target FBO)
+        // does not prematurely schedule a renderer-release pass.
         surface.forget();
+        assert_eq!(callback_count(&surface), 0);
+        assert!(!ctx.has_requested_repaint_for(&egui::ViewportId::ROOT));
+
+        // Once mpv confirms idle (`Event::Idle`), `release_renderer()` requests
+        // a root repaint and arms the one-shot GL cleanup pass.
+        surface.release_renderer();
+        assert!(
+            ctx.has_requested_repaint_for(&egui::ViewportId::ROOT),
+            "release_renderer should wake the root viewport"
+        );
         assert_eq!(callback_count(&surface), 1);
 
         // Once frames are allowed again (new video loaded), idle cleanup does not queue.

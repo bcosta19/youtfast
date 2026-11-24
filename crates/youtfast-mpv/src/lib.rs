@@ -220,6 +220,8 @@ pub enum Event {
     Started,
     /// The video reached its end.
     Finished,
+    /// Playback finished unloading to idle after [`Mpv::stop`].
+    Idle,
     /// The video could not be opened or stopped with an error.
     Failed(Failure),
 }
@@ -349,6 +351,19 @@ impl PlaybackEvents {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum StopState {
+    #[default]
+    None,
+    /// `stop` was sent while mpv was active (`idle-active == no`); wait for
+    /// mpv's observed `idle-active = 1` event, which arrives after demuxer and
+    /// VO teardown finish.
+    WaitingForIdle,
+    /// `stop` ran while mpv was already idle; confirm `Event::Idle` on the
+    /// next poll since no `idle-active` transition will follow.
+    AlreadyIdle,
+}
+
 pub struct Mpv {
     handle: Arc<Handle>,
     status: Status,
@@ -377,8 +392,9 @@ pub struct Mpv {
     /// frames, each of its changes would otherwise wake a whole interface
     /// pass just to move the seek bar.
     position_polled: bool,
-    /// A stop or replacement started; trim the C heap once mpv reports idle.
-    trim_pending: bool,
+    /// [`Mpv::stop`] teardown tracking so [`Event::Idle`] and heap trimming
+    /// run after mpv finishes unloading the demuxer and VO.
+    stop_state: StopState,
 }
 
 /// How often the position is read while playing without a picture.
@@ -534,7 +550,7 @@ impl Mpv {
             at_end: false,
             audio_only: false,
             position_polled: false,
-            trim_pending: false,
+            stop_state: StopState::None,
         })
     }
 
@@ -604,10 +620,19 @@ impl Mpv {
 
     /// Unloads the video when its last tab closes and discards pending playback events.
     pub fn stop(&mut self) -> Result<(), Error> {
+        // Query before `stop`: `idle-active` reports `"yes"` as soon as `stop`
+        // is queued (before demuxer and VO teardown complete), whereas the
+        // observed `IDLE` property-change event arrives after teardown finishes.
+        let already_idle = self.get_property("idle-active").as_deref() == Some("yes");
         self.replace(&["stop"])?;
         // Release ytdl_hook's cached extraction JSON (often several megabytes)
         // when no video is open. Missing properties on older mpv builds are harmless.
         let _ = self.command(&["del", "user-data/mpv/ytdl/json-subprocess-result"]);
+        self.stop_state = if already_idle {
+            StopState::AlreadyIdle
+        } else {
+            StopState::WaitingForIdle
+        };
         self.status.video_aspect = 0.0;
         // Nothing left for a signed-in retry to reload.
         self.current = None;
@@ -617,9 +642,16 @@ impl Mpv {
 
     /// Opens `url` in place of the current video with per-file `options`.
     fn load_with(&mut self, url: &str, options: &str) -> Result<(), Error> {
-        // The index argument (-1, ignored by "replace") came in mpv 0.38;
-        // per-file options follow it.
-        self.replace(&["loadfile", url, "replace", "-1", options])
+        // The index argument (-1, ignored by "replace") came in mpv 0.38
+        // (client API 2.3); older releases (such as Ubuntu 24.04's 0.37) take
+        // per-file options directly as the third argument.
+        // SAFETY: pure version query, thread-safe.
+        let api = unsafe { ffi::mpv_client_api_version() };
+        if api >= (2 << 16) | 3 {
+            self.replace(&["loadfile", url, "replace", "-1", options])
+        } else {
+            self.replace(&["loadfile", url, "replace", options])
+        }
     }
 
     fn replace(&mut self, args: &[&str]) -> Result<(), Error> {
@@ -635,7 +667,7 @@ impl Mpv {
         self.status.position = 0.0;
         self.status.duration = 0.0;
         self.status.seekable = false;
-        self.trim_pending = true;
+        self.stop_state = StopState::None;
         self.command(args)?;
         // loadfile replace changes the playlist synchronously, while opening
         // and decoding happen later. IDs are unique for the mpv instance.
@@ -886,16 +918,18 @@ impl Mpv {
                     {
                         unsafe { self.apply_property(event.reply_userdata, property) };
                     }
-                    // After `stop()`, `playback_events.expected` is `None`;
-                    // trim once mpv signals it has finished unloading to idle.
+                    // Once `stop()` has finished tearing down playback and the
+                    // VO (`idle-active == 1`), trim the heap and signal the GL
+                    // surface to flush `vo_libmpv`.
                     if event.reply_userdata == IDLE
-                        && self.trim_pending
+                        && self.stop_state == StopState::WaitingForIdle
                         && self.playback_events.expected.is_none()
                         && property.format == ffi::MPV_FORMAT_FLAG
                         && unsafe { *(property.data as *const c_int) != 0 }
                     {
-                        self.trim_pending = false;
+                        self.stop_state = StopState::None;
                         memory::trim_heap();
+                        events.push(Event::Idle);
                     }
                 }
                 ffi::MPV_EVENT_FILE_LOADED if self.playback_events.loaded() => {
@@ -962,6 +996,11 @@ impl Mpv {
                 unsafe { &*self.wakeup }
                     .request_repaint_after_for(POSITION_EVERY, egui::ViewportId::ROOT);
             }
+        }
+        if self.stop_state == StopState::AlreadyIdle && self.playback_events.expected.is_none() {
+            self.stop_state = StopState::None;
+            memory::trim_heap();
+            events.push(Event::Idle);
         }
         let playing = self.is_playing();
         if self.playback_events.started(playing) {
@@ -1471,15 +1510,16 @@ mod tests {
     }
 
     /// Reads a request up to the blank line that ends its headers.
-    fn read_request_head(client: &mut TcpStream) {
+    fn read_request_head(client: &mut TcpStream) -> String {
         let mut head = Vec::new();
         let mut buffer = [0u8; 1024];
         while !head.windows(4).any(|w| w == b"\r\n\r\n") {
             match client.read(&mut buffer) {
-                Ok(0) | Err(_) => return,
+                Ok(0) | Err(_) => break,
                 Ok(n) => head.extend_from_slice(&buffer[..n]),
             }
         }
+        String::from_utf8_lossy(&head).into_owned()
     }
 
     /// Answers 403 to the first `refusals` requests and the WAV to every
@@ -1577,44 +1617,51 @@ mod tests {
         assert_eq!(player.ytdl_json().as_deref(), Some(r#"{"id":"abc"}"#));
 
         player.stop().unwrap();
-        for _ in 0..20 {
-            let _ = player.poll();
-            if !player.trim_pending {
+        let mut reached_idle = false;
+        for _ in 0..50 {
+            if player.poll().contains(&Event::Idle) {
+                reached_idle = true;
                 break;
             }
             std::thread::sleep(Duration::from_millis(10));
         }
+        assert!(reached_idle, "stop did not confirm Event::Idle");
         assert!(player.ytdl_json().is_none());
         assert!(player.status().idle);
     }
 
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     #[test]
-    fn repeated_load_reload_stop_keeps_retained_heap_bounded() {
-        #[repr(C)]
-        struct Mallinfo2 {
-            arena: usize,
-            ordblks: usize,
-            smblks: usize,
-            hblks: usize,
-            hblkhd: usize,
-            usmblks: usize,
-            fsmblks: usize,
-            uordblks: usize,
-            fordblks: usize,
-            keepcost: usize,
-        }
-        unsafe extern "C" {
-            fn mallinfo2() -> Mallinfo2;
+    fn repeated_video_load_reload_stop_reclaims_rss_after_idle() {
+        fn rss_anon_kib() -> usize {
+            let status = std::fs::read_to_string("/proc/self/status").unwrap();
+            status
+                .lines()
+                .find_map(|line| {
+                    line.strip_prefix("RssAnon:")
+                        .and_then(|rest| rest.split_whitespace().next())
+                        .and_then(|value| value.parse::<usize>().ok())
+                })
+                .expect("RssAnon present in /proc/self/status")
         }
 
         let _turn = instance_turn();
         let mut player = Mpv::new(&egui::Context::default(), 1080, 0.0, Vec::new()).unwrap();
         player.set_property("ao", "null").unwrap();
         player.set_property("vo", "null").unwrap();
+        player.set_property("cache", "yes").unwrap();
+        player.set_property("demuxer-readahead-secs", "60").unwrap();
 
-        // Stream a 4 MiB WAV in memory over loopback (no disk files) across
-        // repeated load -> reload -> stop cycles.
+        // Stream a 71 MiB 1080p YUV4MPEG2 video in memory over loopback using
+        // a single reused 3.11 MiB non-zero frame buffer so the test harness
+        // itself holds minimal RAM while libmpv buffers and decodes real video.
+        const HEADER: &[u8] = b"YUV4MPEG2 W1920 H1080 F30:1 Ip A1:1 C420jpeg\n";
+        const FRAME_HEADER: &[u8] = b"FRAME\n";
+        const FRAME_PAYLOAD: usize = 1920 * 1080 * 3 / 2;
+        const FRAME_LEN: usize = FRAME_HEADER.len() + FRAME_PAYLOAD;
+        const FRAMES: usize = 24;
+        const TOTAL_LEN: usize = HEADER.len() + FRAMES * FRAME_LEN;
+
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let address = listener.local_addr().unwrap();
@@ -1622,25 +1669,11 @@ mod tests {
         let server = {
             let stop = Arc::clone(&stop.0);
             std::thread::spawn(move || {
-                let data_bytes: u32 = 4 * 1024 * 1024;
-                let mut wav = Vec::with_capacity(WAV_HEADER_BYTES + data_bytes as usize);
-                wav.extend_from_slice(b"RIFF");
-                wav.extend_from_slice(&(36 + data_bytes).to_le_bytes());
-                wav.extend_from_slice(b"WAVEfmt ");
-                wav.extend_from_slice(&16u32.to_le_bytes());
-                wav.extend_from_slice(&1u16.to_le_bytes());
-                wav.extend_from_slice(&2u16.to_le_bytes());
-                wav.extend_from_slice(&48_000u32.to_le_bytes());
-                wav.extend_from_slice(&(48_000u32 * 4).to_le_bytes());
-                wav.extend_from_slice(&4u16.to_le_bytes());
-                wav.extend_from_slice(&16u16.to_le_bytes());
-                wav.extend_from_slice(b"data");
-                wav.extend_from_slice(&data_bytes.to_le_bytes());
-                wav.resize(WAV_HEADER_BYTES + data_bytes as usize, 0);
-                let head = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nContent-Length: {}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
-                    wav.len()
-                );
+                let mut frame = vec![0u8; FRAME_LEN];
+                frame[..FRAME_HEADER.len()].copy_from_slice(FRAME_HEADER);
+                for (i, byte) in frame[FRAME_HEADER.len()..].iter_mut().enumerate() {
+                    *byte = ((i & 0xFF) as u8) ^ 0x5A;
+                }
                 while !stop.load(Ordering::Relaxed) {
                     let Ok((mut client, _)) = listener.accept() else {
                         std::thread::sleep(Duration::from_millis(10));
@@ -1650,19 +1683,72 @@ mod tests {
                     let _ = client.set_nonblocking(false);
                     let _ = client.set_read_timeout(timeout);
                     let _ = client.set_write_timeout(timeout);
-                    read_request_head(&mut client);
-                    let _ = client
-                        .write_all(head.as_bytes())
-                        .and_then(|()| client.write_all(&wav));
+                    let request = read_request_head(&mut client);
+                    let start = request
+                        .lines()
+                        .find_map(|line| {
+                            let (name, value) = line.split_once(':')?;
+                            if !name.eq_ignore_ascii_case("range") {
+                                return None;
+                            }
+                            let rest = value.trim().strip_prefix("bytes=")?;
+                            rest.split('-').next()?.parse::<usize>().ok()
+                        })
+                        .unwrap_or(0)
+                        .min(TOTAL_LEN);
+                    let remaining = TOTAL_LEN - start;
+                    let head = if start > 0 {
+                        format!(
+                            "HTTP/1.1 206 Partial Content\r\nContent-Type: video/x-raw\r\nContent-Range: bytes {start}-{}/{TOTAL_LEN}\r\nContent-Length: {remaining}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                            TOTAL_LEN - 1
+                        )
+                    } else {
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: video/x-raw\r\nContent-Length: {TOTAL_LEN}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n"
+                        )
+                    };
+                    if client.write_all(head.as_bytes()).is_err() {
+                        continue;
+                    }
+                    let mut pos = start;
+                    if pos < HEADER.len() {
+                        if client.write_all(&HEADER[pos..]).is_err() {
+                            continue;
+                        }
+                        pos = HEADER.len();
+                    }
+                    while pos < TOTAL_LEN && !stop.load(Ordering::Relaxed) {
+                        let offset = (pos - HEADER.len()) % FRAME_LEN;
+                        let chunk = &frame[offset..];
+                        let to_write = chunk.len().min(TOTAL_LEN - pos);
+                        if client.write_all(&chunk[..to_write]).is_err() {
+                            break;
+                        }
+                        pos += to_write;
+                    }
                 }
             })
         };
 
-        let url = format!("lavf://http://{address}/stream.wav");
-        let wait_loaded = |player: &mut Mpv| {
+        let url = format!("http://{address}/stream.y4m");
+        let wait_video_loaded = |player: &mut Mpv| {
             let deadline = Instant::now() + Duration::from_secs(10);
+            let mut loaded = false;
             while Instant::now() < deadline {
                 if player.poll().contains(&Event::Loaded) {
+                    loaded = true;
+                }
+                if loaded && player.status().has_video && player.status().video_width == 1920 {
+                    return true;
+                }
+                std::thread::sleep(Duration::from_millis(15));
+            }
+            false
+        };
+        let wait_idle = |player: &mut Mpv| {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while Instant::now() < deadline {
+                if player.poll().contains(&Event::Idle) {
                     return true;
                 }
                 std::thread::sleep(Duration::from_millis(15));
@@ -1670,33 +1756,65 @@ mod tests {
             false
         };
 
-        let mut retained_after_stop = Vec::new();
-        for _ in 0..4 {
-            player.load(&url, Some(1.0)).unwrap();
-            assert!(wait_loaded(&mut player), "initial load timed out");
-            player.reload(&url, 2.0, false).unwrap();
-            assert!(wait_loaded(&mut player), "reload timed out");
-            player.stop().unwrap();
-            let deadline = Instant::now() + Duration::from_secs(5);
-            while player.trim_pending && Instant::now() < deadline {
+        let baseline_rss_kib = rss_anon_kib();
+        let mut active_rss = Vec::new();
+        let mut idle_rss = Vec::new();
+        for cycle in 0..4 {
+            player.load(&url, Some(0.1)).unwrap();
+            assert!(
+                wait_video_loaded(&mut player),
+                "cycle {cycle} initial load timed out"
+            );
+            player.reload(&url, 0.1, true).unwrap();
+            assert!(
+                wait_video_loaded(&mut player),
+                "cycle {cycle} reload timed out"
+            );
+
+            // Wait until libmpv has buffered a substantial portion of the 1080p
+            // stream in its demuxer cache before sampling active RSS.
+            let buffer_deadline = Instant::now() + Duration::from_secs(3);
+            let mut peak = rss_anon_kib();
+            while Instant::now() < buffer_deadline {
                 let _ = player.poll();
-                std::thread::sleep(Duration::from_millis(15));
+                peak = peak.max(rss_anon_kib());
+                if peak >= baseline_rss_kib + 40 * 1024 {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(20));
             }
-            // SAFETY: `mallinfo2` is a standard glibc introspection call.
-            let info = unsafe { mallinfo2() };
-            retained_after_stop.push(info.fordblks);
+            active_rss.push(peak);
+
+            player.stop().unwrap();
+            assert!(
+                wait_idle(&mut player),
+                "cycle {cycle} stop timed out before confirming idle"
+            );
+            idle_rss.push(rss_anon_kib());
         }
 
         drop(player);
         drop(stop);
         server.join().unwrap();
 
-        // Retained freed heap should not climb unboundedly across cycles.
-        let first = retained_after_stop[0];
-        let last = *retained_after_stop.last().unwrap();
+        for cycle in 0..4 {
+            let surge = active_rss[cycle].saturating_sub(baseline_rss_kib);
+            assert!(
+                surge >= 20 * 1024,
+                "cycle {cycle} did not buffer enough video RSS to test reclamation: baseline={baseline_rss_kib} KiB active={active_rss:?} idle={idle_rss:?}"
+            );
+            let reclaimed = active_rss[cycle].saturating_sub(idle_rss[cycle]);
+            assert!(
+                reclaimed >= surge / 2,
+                "cycle {cycle} failed to reclaim buffered video RSS on idle: baseline={baseline_rss_kib} KiB active={active_rss:?} idle={idle_rss:?}"
+            );
+        }
+
+        let first_idle = idle_rss[0];
+        let last_idle = *idle_rss.last().unwrap();
         assert!(
-            last <= first + 16 * 1024 * 1024,
-            "retained freed heap grew across load/reload/stop cycles: {retained_after_stop:?}"
+            last_idle <= first_idle + 6 * 1024,
+            "idle RssAnon climbed across video load/reload/stop cycles: baseline={baseline_rss_kib} KiB active={active_rss:?} idle={idle_rss:?}"
         );
     }
 }
