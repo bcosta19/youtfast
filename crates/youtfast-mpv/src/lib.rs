@@ -1671,6 +1671,7 @@ mod tests {
 
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     #[test]
+    #[ignore = "allocator/RSS measurement depends on the host glibc and memory environment"]
     fn repeated_video_load_reload_stop_reclaims_rss_after_idle() {
         const CHILD_ENV: &str = "YOUTFAST_MPV_RSS_CHILD";
         // Run the RSS measurement in an isolated child process so allocations
@@ -1682,6 +1683,7 @@ mod tests {
                     "--exact",
                     "tests::repeated_video_load_reload_stop_reclaims_rss_after_idle",
                     "--nocapture",
+                    "--ignored",
                 ])
                 .env(CHILD_ENV, "1")
                 .output()

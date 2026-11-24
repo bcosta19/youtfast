@@ -153,6 +153,11 @@ stateDiagram-v2
 | End of video | `keep-open` makes `eof-reached`, not an end-file event, the playback completion signal |
 | Next video | Queue first, then Up next, then related; playlists keep mixed video and Shorts order, while standalone Shorts loop with `loop-file` |
 
+The Linux/glibc RSS reclamation probe is ignored in the default test suite:
+its absolute memory thresholds depend on the host allocator and environment.
+Run it explicitly with
+`cargo test -p youtfast-mpv repeated_video_load_reload_stop_reclaims_rss_after_idle -- --ignored`.
+
 Keep the egui/winit fork revisions coordinated. The mini player must continue
 drawing when the watch page is absent: an undrawn render-API output stalls.
 Closing it pauses playback; desktop Play returns via `App::show_playing`.
