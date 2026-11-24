@@ -8,8 +8,13 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Added
+
+- **Device sync** finds your other computers by itself: with **Other device address** empty, YouTFast asks the local network which devices share the pairing key, asks the `tailscale` and `netbird` clients for their peers, and devices that synced share the other computers they know, so meeting any one computer is enough to meet them all. It syncs with every computer answering on the same **Listen port** with the same key, searching again every 10 minutes, when known devices stop answering, and on **Sync now**. Sync also starts at launch and a few seconds after its settings change, so a newly installed computer pulls the others' library as soon as the key is pasted. Local-network discovery needs incoming UDP on the listen port as well as TCP; the Flatpak cannot run the clients but still finds devices on the local network and through shared peers.
+
 ### Fixed
 
+- `curl -fsSL https://youtfast.pages.dev/install.sh | sh` on Arch no longer quits silently at pacman's `Proceed with installation? [Y/n]`: the question now reads its answer from the terminal instead of the piped script, and without a terminal the installer asks for `--yes`.
 - Marked members-only videos with a "Members only" badge on their thumbnails and on the watch page, instead of presenting them like any other video.
 
 ## [0.10.0] - 2026-11-22

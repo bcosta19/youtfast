@@ -987,6 +987,7 @@ impl Library {
         SyncSnapshot {
             version: SYNC_VERSION,
             listen_port,
+            peers: Vec::new(),
             subscriptions,
             history,
             watch_later,

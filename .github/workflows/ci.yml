@@ -20,9 +20,88 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  linux:
-    # Preserve the private-repository pause unless explicitly opted in.
+  # Decides whether the change can affect the application. Pull requests and
+  # merge queues that touch only documentation or the website skip the
+  # platform builds; every other event, and any change elsewhere, runs them.
+  changes:
+    # Preserve the private-repository pause unless explicitly opted in; the
+    # platform jobs depend on this one, so they pause with it.
     if: github.event_name == 'workflow_dispatch' || github.event.repository.private == false || vars.YOUTFAST_AUTOMATIC_CI == 'true'
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      native: ${{ steps.classify.outputs.native }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Classify changed files
+        id: classify
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
+          QUEUE_HEAD: ${{ github.event.merge_group.head_sha }}
+        shell: python3 {0}
+        run: |
+          import fnmatch, os, subprocess
+
+          # Paths no Rust crate compiles in or depends on. CHANGELOG.md is
+          # bundled into the updater, so it is not one of them.
+          LIGHT = [
+              "*.md", "docs/*", "website/*", "assets/screenshots/*",
+              "tools/build_site.py", "tools/site_locale.py",
+              "tools/test_site.py", "tools/test_installers.py",
+          ]
+
+          def light(path):
+              return path != "CHANGELOG.md" and any(fnmatch.fnmatch(path, p) for p in LIGHT)
+
+          event = os.environ["EVENT"]
+          native = True
+          if event in ("pull_request", "merge_group"):
+              base, head = (
+                  (os.environ["PR_BASE"], os.environ["PR_HEAD"])
+                  if event == "pull_request"
+                  else (os.environ["QUEUE_BASE"], os.environ["QUEUE_HEAD"])
+              )
+              try:
+                  out = subprocess.run(
+                      ["git", "diff", "-z", "--name-only", f"{base}...{head}"],
+                      check=True, capture_output=True,
+                  ).stdout.decode()
+                  paths = [p for p in out.split("\0") if p]
+                  # Fail safe: an empty or unreadable diff runs everything.
+                  native = not paths or not all(light(p) for p in paths)
+                  print(f"{len(paths)} changed paths; platform builds: {native}")
+              except (subprocess.CalledProcessError, UnicodeDecodeError):
+                  print("could not list changed paths; running platform builds")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"native={'true' if native else 'false'}\n")
+
+  # Documentation, translations, website and installer checks; Python only.
+  docs-and-site:
+    if: github.event_name == 'workflow_dispatch' || github.event.repository.private == false || vars.YOUTFAST_AUTOMATIC_CI == 'true'
+    name: docs-and-site
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Documentation, release metadata, website and installers
+        run: |
+          python3 -m unittest discover -s packaging -p 'test_*.py'
+          python3 packaging/release.py check
+          python3 -m unittest discover -s tools -p 'test_*.py'
+
+  linux:
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
     name: linux-quality
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -94,7 +173,8 @@ jobs:
         run: cargo test --locked --profile ci --all-targets --all-features
 
   macos:
-    if: github.event_name == 'workflow_dispatch' || github.event.repository.private == false || vars.YOUTFAST_AUTOMATIC_CI == 'true'
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
     name: macos-native-tests
     runs-on: macos-15
     timeout-minutes: 60
@@ -119,7 +199,8 @@ jobs:
           test "$(target/ci/youtfast --version)" = "youtfast $(python3 packaging/release.py check)"
 
   windows:
-    if: github.event_name == 'workflow_dispatch' || github.event.repository.private == false || vars.YOUTFAST_AUTOMATIC_CI == 'true'
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
     name: windows-native-tests
     runs-on: windows-2022
     timeout-minutes: 60
@@ -156,13 +237,20 @@ jobs:
   release-gate:
     name: release-gate
     if: always() && (github.event_name == 'workflow_dispatch' || github.event.repository.private == false || vars.YOUTFAST_AUTOMATIC_CI == 'true')
-    needs: [linux, macos, windows]
+    needs: [changes, docs-and-site, linux, macos, windows]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require every platform check
+      # Platform builds may be skipped only when `changes` decided so.
+      - name: Require every check the change needs
         env:
+          CHANGES: ${{ needs.changes.result }}
+          NATIVE: ${{ needs.changes.outputs.native }}
+          DOCS: ${{ needs.docs-and-site.result }}
           LINUX: ${{ needs.linux.result }}
           MACOS: ${{ needs.macos.result }}
           WINDOWS: ${{ needs.windows.result }}
-        run: test "$LINUX" = success && test "$MACOS" = success && test "$WINDOWS" = success
+        run: |
+          test "$CHANGES" = success && test "$DOCS" = success
+          if [ "$NATIVE" = false ]; then expected=skipped; else expected=success; fi
+          test "$LINUX" = "$expected" && test "$MACOS" = "$expected" && test "$WINDOWS" = "$expected"

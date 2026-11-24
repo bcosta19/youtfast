@@ -80,6 +80,12 @@ impl App {
         self.state.sync_status = SyncStatus::Idle;
         self.save_settings();
         self.configure_device_sync();
+        // Sync shortly after the setup settles, so a new computer pulls the
+        // other devices' library as soon as its key matches.
+        if self.state.settings.device_sync.enabled {
+            self.sync_dirty_since = Some(Instant::now());
+            self.backend.context().request_repaint_after(SYNC_DEBOUNCE);
+        }
     }
 
     pub(super) fn configure_device_sync(&self) {
@@ -93,21 +99,15 @@ impl App {
         self.state.settings.device_sync.enabled && self.device_sync_generation == generation
     }
 
+    /// Syncs with the address in Settings or, without one, with the devices
+    /// found on Tailscale and NetBird.
     pub(super) fn sync_devices_now(&mut self, manual: bool) {
         if !self.state.settings.device_sync.enabled
             || matches!(self.state.sync_status, SyncStatus::Syncing)
         {
             return;
         }
-        if !manual
-            && (self
-                .state
-                .settings
-                .device_sync
-                .peer_address
-                .trim()
-                .is_empty()
-                || normalize_pairing_key(&self.state.settings.device_sync.pairing_key).is_none())
+        if !manual && normalize_pairing_key(&self.state.settings.device_sync.pairing_key).is_none()
         {
             return;
         }
@@ -134,12 +134,14 @@ impl App {
 
     pub(super) fn on_device_sync_completed(
         &mut self,
-        result: Result<Box<SyncSnapshot>, String>,
+        result: Result<Vec<SyncSnapshot>, String>,
         manual: bool,
     ) {
         match result {
-            Ok(snapshot) => {
-                self.apply_sync_snapshot(*snapshot);
+            Ok(snapshots) => {
+                for snapshot in snapshots {
+                    self.apply_sync_snapshot(snapshot);
+                }
                 self.state.sync_status = SyncStatus::Synced(util::now());
                 if manual {
                     self.state.notice = Some("Devices synced.".to_owned());

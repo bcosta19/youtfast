@@ -81,11 +81,11 @@ sequenceDiagram
         App->>Mpv: Poll status
         App->>App: Playback, prefetch and suggestion ticks
         App->>Views: App::ui calls the injected Views callback
-        Views-->>App: Actions; only view-local state mutates directly
+        Views-->>App: Actions, only view-local state mutates directly
         App->>App: App::apply after drawing
         App->>Mpv: Immediate playback controls
         App->>Backend: Commands for slow work
-        Backend-->>App: Events carrying session epoch; request repaint
+        Backend-->>App: Events carrying session epoch, request repaint
         App->>App: Reject stale generations and private session events
     end
 ```
@@ -134,8 +134,8 @@ ffmpeg retry the 403 for up to about 11 seconds on older libmpv
 ```mermaid
 stateDiagram-v2
     [*] --> Waiting
-    Visible --> Waiting: VideoSurface::forget on open, retry or stop
-    Waiting --> Waiting: Drop old framebuffer on next draw; show black backing
+    Visible --> Waiting: VideoSurface forget() on open, retry or stop
+    Waiting --> Waiting: Drop old framebuffer on next draw, show black backing
     Waiting --> Visible: New file loaded AND fresh non-redraw frame
     Visible --> Visible: Redraw retains the last picture
     Waiting --> Waiting: Failed load never reveals the previous video
@@ -263,7 +263,7 @@ sequenceDiagram
     Writer->>Gate: Serialize write
     Gate->>Disk: write_atomic
     App->>Gate: Exit save_final
-    Gate->>Gate: Wait for earlier writes; seal against later snapshots
+    Gate->>Gate: Wait for earlier writes, seal against later snapshots
     Gate->>Disk: Final library/settings snapshot
 ```
 
@@ -271,7 +271,7 @@ sequenceDiagram
 |---|---|
 | Library | `paths::Dirs::library`: device subscriptions, history/resume positions, Watch later, hidden videos and blocked channels, and device-only playlists (`local-` prefix, up to 200 playlists × 5,000 videos). Resume timestamps are pruned with history. Legacy device-scoped playlist IDs are replaced with randomly generated IDs and atomically saved at startup before syncing. |
 | Feed filter persistence | Rebuild indexes on deserialization, keeping the newest 5,000 unique hidden video IDs and 1,000 unique blocked channels. |
-| Device sync | Optional peer-to-peer sync over Tailscale, NetBird, or private LAN addresses. `youtfast-backend::sync::transport` completes a Noise `NNpsk0` handshake with a generated 256-bit pairing key before either endpoint sends an encrypted library snapshot. Snapshots are capped at 64 MiB and tombstone maps at 2,000 entries each. Accounts, sessions, alert timestamps, and settings stay local. Reconfiguration cancels active exchanges and the app discards stale device-sync events using a generation independent of the YouTube session. |
+| Device sync | Optional peer-to-peer sync over Tailscale, NetBird, or private LAN addresses. `youtfast-backend::sync::transport` completes a Noise `NNpsk0` handshake with a generated 256-bit pairing key before either endpoint sends an encrypted library snapshot. Without a peer address a round finds devices three ways: `sync::discovery` reads `tailscale status --json` and `netbird status --json` (parsed in `youtfast-storage::sync`, output never logged); `sync::lan` broadcasts a 43-byte query on the listen port, answered on its own task by the listener's UDP socket (at most 16 answers a second, never waiting on the socket), with an HMAC-SHA-256 tag under the key over a random nonce, and replies bound to the query's nonce, so datagrams prove the key without revealing or linking it and replays answer nothing; and each snapshot's `peers` field shares the devices the sender completed exchanges with (private addresses only, at most 32; this tells other key holders your devices' private addresses), which the round contacts once more and an inbound exchange queues for the next round. Shared devices that don't answer are not retried for 10 minutes; with an address set, a device neither shares nor follows shared devices. Rounds try every candidate, eight exchanges at a time; the devices reached plus those that connected in during the round are remembered (up to 32), searches are reused for 10 minutes, and `DeviceSyncCompleted` carries one snapshot per device reached. Snapshots are capped at 64 MiB and tombstone maps at 2,000 entries each. Accounts, sessions, alert timestamps, and settings stay local. Reconfiguration cancels active exchanges and the app discards stale device-sync events using a generation independent of the YouTube session. |
 | Settings | `paths::Dirs::settings`: playback, appearance and other preferences; new persisted fields need `#[serde(default)]` |
 | Invalid input | Preserve invalid JSON/UTF-8 before defaults become writable; read failures or failed backups stop startup |
 | Atomic writes | Reject non-regular targets; synchronize the parent directory on Unix |
@@ -291,7 +291,7 @@ sequenceDiagram
     participant Client as Fresh InnerTube Client
     participant YouTube as YouTube account API
     UI->>Backend: Select or sign in to an account
-    Backend->>Backend: Order account writes; cancel stale loads; advance epoch
+    Backend->>Backend: Order account writes, cancel stale loads, advance epoch
     Backend->>Store: Restore selected account's session
     Store-->>Backend: Cookies in memory only
     Backend->>Client: Validate session cookie
@@ -299,7 +299,7 @@ sequenceDiagram
     YouTube-->>Client: Accepted or rejected
     Client-->>Backend: Controlled result
     Backend-->>UI: Event carrying session epoch
-    UI->>UI: Reject old private events; dismiss account menus
+    UI->>UI: Reject old private events, dismiss account menus
 ```
 
 Browser sign-in uses yt-dlp's Python cookie extractor through a pipe, never a

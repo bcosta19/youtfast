@@ -1467,15 +1467,7 @@ impl App {
                 .send(Command::SaveLibrary(Box::new(app.state.library.clone())));
         }
         app.configure_device_sync();
-        if app.state.settings.device_sync.enabled
-            && !app
-                .state
-                .settings
-                .device_sync
-                .peer_address
-                .trim()
-                .is_empty()
-        {
+        if app.state.settings.device_sync.enabled {
             app.sync_devices_now(false);
         }
         app.set_alerts_timer();
@@ -1687,7 +1679,12 @@ impl App {
             } => self.on_update_installed(release, auto, result),
             Event::CheckDeviceSync { generation } => {
                 if self.device_sync_is_current(generation) {
-                    self.sync_devices_now(false);
+                    if matches!(self.state.sync_status, SyncStatus::Syncing) {
+                        // Run once the current round ends instead of dropping it.
+                        self.sync_dirty_since = Some(Instant::now());
+                    } else {
+                        self.sync_devices_now(false);
+                    }
                 }
             }
             Event::DeviceSyncIncoming {

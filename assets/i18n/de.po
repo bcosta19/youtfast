@@ -2155,8 +2155,8 @@ msgstr "Neuer Schlüssel"
 msgid "Other device address"
 msgstr "Adresse des anderen Geräts"
 
-msgid "Enter the other computer's Tailscale, NetBird, or local IP address (for example, 100.64.0.2:38452)."
-msgstr "Geben Sie die Tailscale-, NetBird- oder lokale IP-Adresse des anderen Computers ein (zum Beispiel 100.64.0.2:38452)."
+msgid "Leave empty to find your other computers automatically on the local network, Tailscale, or NetBird, or enter an address (for example, 100.64.0.2:38452)."
+msgstr "Leer lassen, um Ihre anderen Computer automatisch im lokalen Netzwerk, in Tailscale oder NetBird zu finden, oder eine Adresse eingeben (zum Beispiel 100.64.0.2:38452)."
 
 msgid "Listen port"
 msgstr "Empfangsport"
@@ -2217,6 +2217,9 @@ msgstr "Die Synchronisierungsantwort des anderen Geräts konnte nicht gelesen we
 
 msgid "Could not start the device sync listener on the selected port."
 msgstr "Der Empfangsdienst für die Gerätesynchronisierung konnte am gewählten Port nicht gestartet werden."
+
+msgid "No other device with this pairing key was found. Check that YouTFast is open with Device sync and the same key on your other computer, or enter its address."
+msgstr "Kein anderes Gerät mit diesem Kopplungsschlüssel gefunden. Prüfen Sie, ob YouTFast auf Ihrem anderen Computer mit Gerätesynchronisierung und demselben Schlüssel geöffnet ist, oder geben Sie dessen Adresse ein."
 
 msgid "Local recommendation settings"
 msgstr "Lokale Empfehlungseinstellungen"

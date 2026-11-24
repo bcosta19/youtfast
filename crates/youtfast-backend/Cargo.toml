@@ -17,6 +17,7 @@ youtfast-storage.workspace = true
 youtfast-youtube.workspace = true
 anyhow.workspace = true
 egui.workspace = true
+if-addrs.workspace = true
 log.workspace = true
 notify-rust.workspace = true
 rfd.workspace = true

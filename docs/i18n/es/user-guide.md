@@ -380,13 +380,26 @@ reproducciones (incluidas las posiciones de reanudación), Ver más tarde, lista
 del dispositivo, vídeos ocultos y canales bloqueados. En un ordenador,
 selecciona **Nueva clave**, luego **Copiar clave**, y pégala en **Clave de
 emparejamiento** en el otro. Los dispositivos verifican que comparten la clave
-y cifran la conexión antes de enviar datos de la biblioteca. Introduce la
-dirección del otro ordenador en **Dirección del otro dispositivo**
-(por ejemplo, `100.64.0.2:38452`) y ajusta **Puerto de escucha** (TCP
-`1024`–`65535`, predeterminado `38452`) o **Sincronizar cada** si hace falta. Se
-rechazan las direcciones IP públicas, y las cuentas de YouTube, sesiones, marcas
-de tiempo de alertas y ajustes permanecen en cada ordenador. Inicia una
-sincronización inmediata con **Sincronizar ahora** o **Sincronizar dispositivos
+y cifran la conexión antes de enviar datos de la biblioteca. Deja vacía
+**Dirección del otro dispositivo** y YouTFast encuentra tus otros ordenadores
+por sí solo, de tres formas: pregunta en la red local qué dispositivos tienen
+la misma clave, pide sus pares a los clientes de línea de comandos `tailscale`
+y `netbird`, y los dispositivos que se sincronizaron se cuentan qué otros
+ordenadores conocen. Basta con cualquiera de ellas: cuando un ordenador
+encuentra a otro, conoce a todos los ordenadores que ese otro conoce, así que
+un ordenador nuevo recibe la biblioteca de todos los demás pocos segundos
+después de pegar la clave. La búsqueda se repite cada 10 minutos y siempre que
+los dispositivos conocidos dejan de responder. En la red local, la pregunta
+solo lleva el puerto de escucha y un código que demuestra la clave, nunca la
+clave; permite en el cortafuegos la entrada TCP y UDP en el **Puerto de
+escucha**. Para usar un solo ordenador, o cuando ninguna búsqueda lo alcanza
+(el Flatpak no puede ejecutar los clientes), introduce su dirección (por
+ejemplo, `100.64.0.2:38452`). Ajusta **Puerto de escucha** (`1024`–`65535`,
+predeterminado `38452`, el mismo en todos los ordenadores) o **Sincronizar
+cada** si hace falta. Se rechazan las direcciones IP públicas, y las cuentas de
+YouTube, sesiones, marcas de tiempo de alertas y ajustes permanecen en cada
+ordenador. Inicia una sincronización inmediata, que también vuelve a buscar
+los dispositivos, con **Sincronizar ahora** o **Sincronizar dispositivos
 ahora** en la paleta de comandos. Si probaste una versión preliminar de la
 sincronización, actualiza ambos ordenadores y genera una clave nueva.
 

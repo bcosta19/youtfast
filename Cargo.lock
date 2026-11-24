@@ -6310,6 +6310,7 @@ version = "0.10.0"
 dependencies = [
  "anyhow",
  "egui",
+ "if-addrs",
  "image",
  "log",
  "notify-rust",
@@ -6408,6 +6409,7 @@ dependencies = [
  "directories",
  "egui",
  "fastframe-theme",
+ "hmac",
  "if-addrs",
  "jiff",
  "keyring-core",
@@ -6416,6 +6418,7 @@ dependencies = [
  "roxmltree 0.21.2",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "tokio",
  "windows-native-keyring-store",
  "youtfast-appearance",
