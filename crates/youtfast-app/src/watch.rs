@@ -195,6 +195,13 @@ impl App {
                         self.state.player_error = Some(failure_message(failure).into());
                     }
                 }
+                mpv::Event::Idle => {
+                    if self.state.watching.is_none()
+                        && let Some(surface) = &self.surface
+                    {
+                        surface.release_renderer();
+                    }
+                }
                 mpv::Event::Finished => {
                     self.clear_sponsor_mute();
                     if let Some(video) = &self.state.watching {
@@ -311,6 +318,9 @@ impl App {
         self.reset_watch_panes();
         self.state.forget_playback();
         self.set_fullscreen(ctx, false);
+        // Ensure one UI pass runs promptly so `VideoSurface::release_if_idle`
+        // can delete the offscreen FBO and pump `vo_libmpv` cleanup on the GL thread.
+        ctx.request_repaint();
     }
 
     pub(super) fn open(&mut self, mut video: Video) {

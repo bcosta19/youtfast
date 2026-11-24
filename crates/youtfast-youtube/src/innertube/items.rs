@@ -150,7 +150,10 @@ fn strip_prefix_ascii_case<'a>(text: &'a str, prefix: &str) -> Option<&'a str> {
 }
 
 fn ends_with_ascii_case(text: &str, suffix: &str) -> bool {
-    text.len() >= suffix.len() && text[text.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
+    text.len()
+        .checked_sub(suffix.len())
+        .and_then(|start| text.get(start..))
+        .is_some_and(|tail| tail.eq_ignore_ascii_case(suffix))
 }
 
 /// Estimates a Unix timestamp from relative age text like `"4 hours ago"` or `"2 days ago"`.
@@ -1219,6 +1222,34 @@ mod tests {
             unknown.0.into_iter().collect::<Vec<_>>(),
             vec!["brandNewVideoRenderer".to_owned()]
         );
+    }
+
+    #[test]
+    fn ascii_case_helpers_handle_multibyte_utf8_without_panicking() {
+        // Byte length 20 with 'ç' at bytes 15..17 so `len - " ago".len() == 16`
+        // lands inside the multibyte character.
+        let text = "123456789012345çabc";
+        assert_eq!(text.len(), 20);
+        assert!(!ends_with_ascii_case(text, " ago"));
+        assert!(ends_with_ascii_case("123456789012345ç AGO", " ago"));
+        assert_eq!(strip_prefix_ascii_case("çabc", "a"), None);
+
+        let lockup = serde_json::json!({
+            "contentId": "aaaaaaaaaaa",
+            "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+            "metadata": { "lockupMetadataViewModel": {
+                "title": { "content": "Video" },
+                "metadata": { "contentMetadataViewModel": { "metadataRows": [
+                    { "metadataParts": [ { "text": { "content": text } } ] },
+                    { "metadataParts": [
+                        { "text": { "content": "1.234 visualizações" } },
+                        { "text": { "content": "há 2 dias" } }
+                    ] }
+                ] } }
+            } }
+        });
+        let video = from_lockup(&lockup).expect("lockup parsed");
+        assert_eq!(video.channel.as_deref(), Some(text));
     }
 
     #[test]

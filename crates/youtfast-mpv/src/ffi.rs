@@ -31,6 +31,7 @@ pub const MPV_EVENT_LOG_MESSAGE: mpv_event_id = 2;
 pub const MPV_EVENT_START_FILE: mpv_event_id = 6;
 pub const MPV_EVENT_END_FILE: mpv_event_id = 7;
 pub const MPV_EVENT_FILE_LOADED: mpv_event_id = 8;
+pub const MPV_EVENT_IDLE: mpv_event_id = 11;
 pub const MPV_EVENT_VIDEO_RECONFIG: mpv_event_id = 17;
 pub const MPV_EVENT_PLAYBACK_RESTART: mpv_event_id = 21;
 pub const MPV_EVENT_PROPERTY_CHANGE: mpv_event_id = 22;
@@ -92,6 +93,8 @@ pub const MPV_RENDER_PARAM_FLIP_Y: mpv_render_param_type = 4;
 pub const MPV_RENDER_PARAM_X11_DISPLAY: mpv_render_param_type = 8;
 pub const MPV_RENDER_PARAM_WL_DISPLAY: mpv_render_param_type = 9;
 pub const MPV_RENDER_PARAM_NEXT_FRAME_INFO: mpv_render_param_type = 11;
+pub const MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME: mpv_render_param_type = 12;
+pub const MPV_RENDER_PARAM_SKIP_RENDERING: mpv_render_param_type = 13;
 
 pub const MPV_RENDER_API_TYPE_OPENGL: &std::ffi::CStr = c"opengl";
 pub const MPV_RENDER_UPDATE_FRAME: u64 = 1 << 0;

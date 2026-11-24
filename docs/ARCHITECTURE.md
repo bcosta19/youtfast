@@ -59,7 +59,7 @@ All paths below are relative to [`crates/`](../crates/).
 | `youtfast-desktop` | `instance`: single instance; `diagnostics`: redacted logs; `updater`: verified release installation |
 | `youtfast-core` | `model`, `util`, `links`, `privacy`: shared types, formatting, URL parsing and controlled errors; no IO or drawing |
 | `youtfast-i18n` | Build script compiles catalogs from `assets/i18n` |
-| `youtfast-mpv` | `ffi`: client API 2.x; `Mpv`: player ownership/status; `render`: OpenGL video surface |
+| `youtfast-mpv` | `ffi`: client API 2.x; `Mpv`: player ownership/status; `render`: OpenGL video surface; `memory`: Linux/glibc allocator tuning and heap trimming |
 | `youtfast-appearance` | `theme`, `icons`, `desktop_font`, `coverage`: palette, transitions, installed fonts, the bundled emoji and fallback faces, colour emoji, and desktop integration |
 
 Large modules split into feature submodules under `crates/youtfast-ui/src/` (`widgets/`, `player/`, `library/`, `settings/`) and `crates/youtfast-desktop/src/updater/` and re-export their public interfaces from the parent module.
@@ -145,12 +145,18 @@ stateDiagram-v2
 |---|---|
 | Quality | `mpv::FORMAT` follows the selected quality; Auto is bounded to 1080p |
 | Buffer budget | Standard: 150 MiB ahead / 50 MiB behind; Compact: 50 / 20 MiB, selected by `Settings::playback_buffer` |
+| Memory reclamation | On Linux/glibc, `memory::configure_allocator` bounds per-thread arenas and `M_MMAP_THRESHOLD` (128 KiB), `Mpv` clears `ytdl_hook` JSON on `stop`, emits `Event::Idle` and calls `malloc_trim(0)` on file end / confirmed idle, and `VideoSurface::release_if_idle` deletes the offscreen FBO and runs a `MPV_RENDER_PARAM_SKIP_RENDERING` render pass on the GL thread after mpv confirms idle so `vo_libmpv` frees its internal video textures |
 | GL lifetime | Create lazily with the GL context current; free in `App::on_exit` before mpv; dropping a surface never frees GL objects without a context |
 | Scrolling | Keep the framebuffer at the full video's physical size; restore egui's scissor before blitting |
 | Aspect | Size from `Status::video_aspect` (`video-out-params/aspect`, after autorotate) |
 | Native integration | Pass Wayland/X11 display handles to mpv for hardware-decoding interop; the eframe fork exposes `CreationContext::get_proc_address` |
 | End of video | `keep-open` makes `eof-reached`, not an end-file event, the playback completion signal |
 | Next video | Queue first, then Up next, then related; playlists keep mixed video and Shorts order, while standalone Shorts loop with `loop-file` |
+
+The Linux/glibc RSS reclamation probe is ignored in the default test suite:
+its absolute memory thresholds depend on the host allocator and environment.
+Run it explicitly with
+`cargo test -p youtfast-mpv repeated_video_load_reload_stop_reclaims_rss_after_idle -- --ignored`.
 
 Keep the egui/winit fork revisions coordinated. The mini player must continue
 drawing when the watch page is absent: an undrawn render-API output stalls.

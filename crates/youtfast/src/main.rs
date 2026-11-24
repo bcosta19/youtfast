@@ -57,6 +57,7 @@ enum Command {
 }
 
 fn main() -> eframe::Result {
+    youtfast_mpv::configure_allocator();
     let cli = Cli::parse();
     #[cfg(feature = "demo")]
     if cli.demo {
