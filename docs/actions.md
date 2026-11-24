@@ -25,6 +25,17 @@ timeouts are shorter (60/90 minutes). There is no monthly compute-minute quota
 for public standard runners. See [Actions limits](https://docs.github.com/en/actions/reference/limits).
 There are no scheduled builds.
 
+A `changes` job decides what a pull request or merge queue needs. When every
+changed file is documentation or website material (Markdown other than
+`CHANGELOG.md`, which the updater bundles; `docs/`, `website/`,
+`assets/screenshots/`, and the site and installer tools), the Linux, macOS and
+Windows builds are skipped. The `docs-and-site` job always runs the Python
+checks for translated documents, release metadata, the website and the
+installers, and `release-gate` accepts skipped builds only when `changes` chose
+to skip them. Pushes to `main`, manual runs, release builds and any change
+elsewhere (including workflows) run every platform; an unreadable diff does too.
+Website-only pull requests are also validated by the Website workflow.
+
 The Release workflow handles `v*` tags and manual dry runs. The same visibility
 guard applies to automatic tag builds. Its reusable CI validates all platforms;
 every package job, including the clean Arch package build, must pass before
