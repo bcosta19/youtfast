@@ -149,7 +149,8 @@ fn parse_date_text(raw: &str) -> Option<String> {
     let month_str = parts.next()?;
     let day_str = parts.next()?.trim_end_matches(',');
     let year_str = parts.next()?;
-    let month = match &month_str.to_ascii_lowercase()[..3.min(month_str.len())] {
+    let lower = month_str.to_ascii_lowercase();
+    let month = match lower.get(..3)? {
         "jan" => 1,
         "feb" => 2,
         "mar" => 3,
