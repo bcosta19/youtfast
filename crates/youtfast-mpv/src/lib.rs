@@ -351,19 +351,6 @@ impl PlaybackEvents {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-enum StopState {
-    #[default]
-    None,
-    /// `stop` was sent while mpv was active (`idle-active == no`); wait for
-    /// mpv's observed `idle-active = 1` event, which arrives after demuxer and
-    /// VO teardown finish.
-    WaitingForIdle,
-    /// `stop` ran while mpv was already idle; confirm `Event::Idle` on the
-    /// next poll since no `idle-active` transition will follow.
-    AlreadyIdle,
-}
-
 pub struct Mpv {
     handle: Arc<Handle>,
     status: Status,
@@ -392,9 +379,13 @@ pub struct Mpv {
     /// frames, each of its changes would otherwise wake a whole interface
     /// pass just to move the seek bar.
     position_polled: bool,
-    /// [`Mpv::stop`] teardown tracking so [`Event::Idle`] and heap trimming
-    /// run after mpv finishes unloading the demuxer and VO.
-    stop_state: StopState,
+    /// [`Mpv::stop`] was called; emit [`Event::Idle`] and trim the C heap once
+    /// mpv finishes tearing down any active file.
+    stop_pending: bool,
+    /// True between `MPV_EVENT_START_FILE` and `MPV_EVENT_END_FILE` /
+    /// `MPV_EVENT_IDLE` so `stop_pending` waits for discrete teardown events
+    /// instead of racing with demuxer/VO cleanup.
+    file_started: bool,
 }
 
 /// How often the position is read while playing without a picture.
@@ -550,7 +541,8 @@ impl Mpv {
             at_end: false,
             audio_only: false,
             position_polled: false,
-            stop_state: StopState::None,
+            stop_pending: false,
+            file_started: false,
         })
     }
 
@@ -620,19 +612,11 @@ impl Mpv {
 
     /// Unloads the video when its last tab closes and discards pending playback events.
     pub fn stop(&mut self) -> Result<(), Error> {
-        // Query before `stop`: `idle-active` reports `"yes"` as soon as `stop`
-        // is queued (before demuxer and VO teardown complete), whereas the
-        // observed `IDLE` property-change event arrives after teardown finishes.
-        let already_idle = self.get_property("idle-active").as_deref() == Some("yes");
         self.replace(&["stop"])?;
         // Release ytdl_hook's cached extraction JSON (often several megabytes)
         // when no video is open. Missing properties on older mpv builds are harmless.
         let _ = self.command(&["del", "user-data/mpv/ytdl/json-subprocess-result"]);
-        self.stop_state = if already_idle {
-            StopState::AlreadyIdle
-        } else {
-            StopState::WaitingForIdle
-        };
+        self.stop_pending = true;
         self.status.video_aspect = 0.0;
         // Nothing left for a signed-in retry to reload.
         self.current = None;
@@ -667,7 +651,7 @@ impl Mpv {
         self.status.position = 0.0;
         self.status.duration = 0.0;
         self.status.seekable = false;
-        self.stop_state = StopState::None;
+        self.stop_pending = false;
         self.command(args)?;
         // loadfile replace changes the playlist synchronously, while opening
         // and decoding happen later. IDs are unique for the mpv instance.
@@ -906,6 +890,7 @@ impl Mpv {
                 ffi::MPV_EVENT_START_FILE => {
                     // SAFETY: mpv documents start-file's payload as this struct.
                     let start = unsafe { &*(event.data as *const ffi::mpv_event_start_file) };
+                    self.file_started = true;
                     self.playback_events.start(start.playlist_entry_id);
                     self.ytdl_failure = None;
                 }
@@ -917,19 +902,6 @@ impl Mpv {
                         || matches!(event.reply_userdata, VOLUME | PAUSE | SPEED | MUTE)
                     {
                         unsafe { self.apply_property(event.reply_userdata, property) };
-                    }
-                    // Once `stop()` has finished tearing down playback and the
-                    // VO (`idle-active == 1`), trim the heap and signal the GL
-                    // surface to flush `vo_libmpv`.
-                    if event.reply_userdata == IDLE
-                        && self.stop_state == StopState::WaitingForIdle
-                        && self.playback_events.expected.is_none()
-                        && property.format == ffi::MPV_FORMAT_FLAG
-                        && unsafe { *(property.data as *const c_int) != 0 }
-                    {
-                        self.stop_state = StopState::None;
-                        memory::trim_heap();
-                        events.push(Event::Idle);
                     }
                 }
                 ffi::MPV_EVENT_FILE_LOADED if self.playback_events.loaded() => {
@@ -945,6 +917,7 @@ impl Mpv {
                     self.status.buffering = false;
                 }
                 ffi::MPV_EVENT_END_FILE => {
+                    self.file_started = false;
                     // Return freed demuxer/decoder pages even for superseded
                     // loads (resolution switches and video changes).
                     memory::trim_heap();
@@ -982,6 +955,16 @@ impl Mpv {
                         self.ytdl_failure = Failure::after_ytdl(self.ytdl_failure, &text);
                     }
                 }
+                ffi::MPV_EVENT_IDLE => {
+                    self.file_started = false;
+                    // Discrete idle event (emitted after demuxer and VO teardown
+                    // finish; never coalesced like `idle-active` property updates).
+                    if self.stop_pending && self.playback_events.expected.is_none() {
+                        self.stop_pending = false;
+                        memory::trim_heap();
+                        events.push(Event::Idle);
+                    }
+                }
                 ffi::MPV_EVENT_SHUTDOWN => break,
                 _ => {}
             }
@@ -997,8 +980,16 @@ impl Mpv {
                     .request_repaint_after_for(POSITION_EVERY, egui::ViewportId::ROOT);
             }
         }
-        if self.stop_state == StopState::AlreadyIdle && self.playback_events.expected.is_none() {
-            self.stop_state = StopState::None;
+        // If `stop()` ran while no file had started (already idle, or a quick
+        // `load -> stop` cancelled the queued playlist entry before
+        // `START_FILE`), no `MPV_EVENT_IDLE` will follow; confirm idle now.
+        if self.stop_pending
+            && !self.file_started
+            && self.playback_events.expected.is_none()
+            && self.get_property("filename").is_none()
+            && self.get_property("idle-active").as_deref() == Some("yes")
+        {
+            self.stop_pending = false;
             memory::trim_heap();
             events.push(Event::Idle);
         }
@@ -1630,9 +1621,88 @@ mod tests {
         assert!(player.status().idle);
     }
 
+    #[test]
+    fn immediate_load_then_stop_always_confirms_idle() {
+        let _turn = instance_turn();
+        let mut player = Mpv::new(&egui::Context::default(), 1080, 0.0, Vec::new()).unwrap();
+        player.set_property("ao", "null").unwrap();
+        player.set_property("vo", "null").unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+        let stop = StopOnDrop(Arc::new(AtomicBool::new(false)));
+        let server = {
+            let stop = Arc::clone(&stop.0);
+            std::thread::spawn(move || serve_after_refusals(listener, 0, stop))
+        };
+        let url = format!("http://{address}/clip.wav");
+
+        // Drain initial startup observations so `idle-active` starts observed
+        // as `yes`, then rapidly `load` -> `stop` with zero delay. Even when
+        // libmpv coalesces `idle-active` (`yes -> no -> yes`), `Event::Idle`
+        // must still fire so the GL surface flushes `vo_libmpv`.
+        for _ in 0..10 {
+            let _ = player.poll();
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        for iteration in 0..20 {
+            player.load(&url, None).unwrap();
+            player.stop().unwrap();
+            let deadline = Instant::now() + Duration::from_secs(3);
+            let mut confirmed = false;
+            while Instant::now() < deadline {
+                if player.poll().contains(&Event::Idle) {
+                    confirmed = true;
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert!(
+                confirmed,
+                "immediate load -> stop missed Event::Idle on iteration {iteration}"
+            );
+        }
+
+        drop(player);
+        drop(stop);
+        server.join().unwrap();
+    }
+
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     #[test]
     fn repeated_video_load_reload_stop_reclaims_rss_after_idle() {
+        const CHILD_ENV: &str = "YOUTFAST_MPV_RSS_CHILD";
+        // Run the RSS measurement in an isolated child process so allocations
+        // and arenas from other tests in this binary cannot skew RssAnon.
+        if std::env::var_os(CHILD_ENV).is_none() {
+            let exe = std::env::current_exe().unwrap();
+            let output = std::process::Command::new(exe)
+                .args([
+                    "--exact",
+                    "tests::repeated_video_load_reload_stop_reclaims_rss_after_idle",
+                    "--nocapture",
+                ])
+                .env(CHILD_ENV, "1")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "isolated RSS child failed ({:?}):\nstdout:\n{}\nstderr:\n{}",
+                output.status,
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+            );
+            return;
+        }
+
+        struct RemoveFileOnDrop(std::path::PathBuf);
+        impl Drop for RemoveFileOnDrop {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+
         fn rss_anon_kib() -> usize {
             let status = std::fs::read_to_string("/proc/self/status").unwrap();
             status
@@ -1645,105 +1715,84 @@ mod tests {
                 .expect("RssAnon present in /proc/self/status")
         }
 
-        let _turn = instance_turn();
+        fn cached_bytes(player: &Mpv) -> u64 {
+            player
+                .get_property("demuxer-cache-state")
+                .and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok())
+                .and_then(|state| state.get("total-bytes").and_then(serde_json::Value::as_u64))
+                .unwrap_or(0)
+        }
+
+        // Write two ~45-50 MiB YUV4MPEG2 fixtures (1080p and 360p) under the
+        // active target dir (unique per PID, removed on drop) using a single
+        // reused frame buffer. Loading 1080p (3.11 MiB frames) then switching
+        // to 360p (345 KiB frames, > 128 KiB threshold but < ratcheted 3.11 MiB
+        // default) mirrors a resolution change and deterministically traps RSS
+        // in glibc arenas when allocator tuning and trimming are absent.
+        const TARGET_CACHED_BYTES: u64 = 40 * 1024 * 1024;
+        fn write_y4m(path: &std::path::Path, width: usize, height: usize, frames: usize) {
+            let header = format!("YUV4MPEG2 W{width} H{height} F30:1 Ip A1:1 C420jpeg\n");
+            let frame_header = b"FRAME\n";
+            let payload = width * height * 3 / 2;
+            let mut file = std::io::BufWriter::new(std::fs::File::create(path).unwrap());
+            file.write_all(header.as_bytes()).unwrap();
+            let mut frame = vec![0u8; frame_header.len() + payload];
+            frame[..frame_header.len()].copy_from_slice(frame_header);
+            for (i, byte) in frame[frame_header.len()..].iter_mut().enumerate() {
+                *byte = ((i & 0xFF) as u8) ^ 0x5A;
+            }
+            for _ in 0..frames {
+                file.write_all(&frame).unwrap();
+            }
+            file.flush().unwrap();
+        }
+
+        let exe = std::env::current_exe().unwrap();
+        let dir = exe.parent().unwrap();
+        let pid = std::process::id();
+        let path_1080p = dir.join(format!("youtfast-mpv-rss-1080p-{pid}.y4m"));
+        let path_360p = dir.join(format!("youtfast-mpv-rss-360p-{pid}.y4m"));
+        let _cleanup_1080p = RemoveFileOnDrop(path_1080p.clone());
+        let _cleanup_360p = RemoveFileOnDrop(path_360p.clone());
+        write_y4m(&path_1080p, 1920, 1080, 16);
+        write_y4m(&path_360p, 640, 360, 130);
+        let str_1080p = path_1080p.to_str().unwrap().to_owned();
+        let str_360p = path_360p.to_str().unwrap().to_owned();
+
         let mut player = Mpv::new(&egui::Context::default(), 1080, 0.0, Vec::new()).unwrap();
         player.set_property("ao", "null").unwrap();
         player.set_property("vo", "null").unwrap();
         player.set_property("cache", "yes").unwrap();
         player.set_property("demuxer-readahead-secs", "60").unwrap();
 
-        // Stream a 71 MiB 1080p YUV4MPEG2 video in memory over loopback using
-        // a single reused 3.11 MiB non-zero frame buffer so the test harness
-        // itself holds minimal RAM while libmpv buffers and decodes real video.
-        const HEADER: &[u8] = b"YUV4MPEG2 W1920 H1080 F30:1 Ip A1:1 C420jpeg\n";
-        const FRAME_HEADER: &[u8] = b"FRAME\n";
-        const FRAME_PAYLOAD: usize = 1920 * 1080 * 3 / 2;
-        const FRAME_LEN: usize = FRAME_HEADER.len() + FRAME_PAYLOAD;
-        const FRAMES: usize = 24;
-        const TOTAL_LEN: usize = HEADER.len() + FRAMES * FRAME_LEN;
-
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        listener.set_nonblocking(true).unwrap();
-        let address = listener.local_addr().unwrap();
-        let stop = StopOnDrop(Arc::new(AtomicBool::new(false)));
-        let server = {
-            let stop = Arc::clone(&stop.0);
-            std::thread::spawn(move || {
-                let mut frame = vec![0u8; FRAME_LEN];
-                frame[..FRAME_HEADER.len()].copy_from_slice(FRAME_HEADER);
-                for (i, byte) in frame[FRAME_HEADER.len()..].iter_mut().enumerate() {
-                    *byte = ((i & 0xFF) as u8) ^ 0x5A;
-                }
-                while !stop.load(Ordering::Relaxed) {
-                    let Ok((mut client, _)) = listener.accept() else {
-                        std::thread::sleep(Duration::from_millis(10));
-                        continue;
-                    };
-                    let timeout = Some(Duration::from_secs(5));
-                    let _ = client.set_nonblocking(false);
-                    let _ = client.set_read_timeout(timeout);
-                    let _ = client.set_write_timeout(timeout);
-                    let request = read_request_head(&mut client);
-                    let start = request
-                        .lines()
-                        .find_map(|line| {
-                            let (name, value) = line.split_once(':')?;
-                            if !name.eq_ignore_ascii_case("range") {
-                                return None;
-                            }
-                            let rest = value.trim().strip_prefix("bytes=")?;
-                            rest.split('-').next()?.parse::<usize>().ok()
-                        })
-                        .unwrap_or(0)
-                        .min(TOTAL_LEN);
-                    let remaining = TOTAL_LEN - start;
-                    let head = if start > 0 {
-                        format!(
-                            "HTTP/1.1 206 Partial Content\r\nContent-Type: video/x-raw\r\nContent-Range: bytes {start}-{}/{TOTAL_LEN}\r\nContent-Length: {remaining}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
-                            TOTAL_LEN - 1
-                        )
-                    } else {
-                        format!(
-                            "HTTP/1.1 200 OK\r\nContent-Type: video/x-raw\r\nContent-Length: {TOTAL_LEN}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n"
-                        )
-                    };
-                    if client.write_all(head.as_bytes()).is_err() {
-                        continue;
-                    }
-                    let mut pos = start;
-                    if pos < HEADER.len() {
-                        if client.write_all(&HEADER[pos..]).is_err() {
-                            continue;
-                        }
-                        pos = HEADER.len();
-                    }
-                    while pos < TOTAL_LEN && !stop.load(Ordering::Relaxed) {
-                        let offset = (pos - HEADER.len()) % FRAME_LEN;
-                        let chunk = &frame[offset..];
-                        let to_write = chunk.len().min(TOTAL_LEN - pos);
-                        if client.write_all(&chunk[..to_write]).is_err() {
-                            break;
-                        }
-                        pos += to_write;
-                    }
-                }
-            })
-        };
-
-        let url = format!("http://{address}/stream.y4m");
-        let wait_video_loaded = |player: &mut Mpv| {
+        let wait_video_loaded = |player: &mut Mpv, expected_width: i64| {
             let deadline = Instant::now() + Duration::from_secs(10);
             let mut loaded = false;
             while Instant::now() < deadline {
                 if player.poll().contains(&Event::Loaded) {
                     loaded = true;
                 }
-                if loaded && player.status().has_video && player.status().video_width == 1920 {
+                if loaded
+                    && player.status().has_video
+                    && player.status().video_width == expected_width
+                {
                     return true;
                 }
-                std::thread::sleep(Duration::from_millis(15));
+                std::thread::sleep(Duration::from_millis(10));
             }
             false
+        };
+        let wait_cached = |player: &mut Mpv| {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while Instant::now() < deadline {
+                let _ = player.poll();
+                let bytes = cached_bytes(player);
+                if bytes >= TARGET_CACHED_BYTES {
+                    return Some(bytes);
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            None
         };
         let wait_idle = |player: &mut Mpv| {
             let deadline = Instant::now() + Duration::from_secs(5);
@@ -1751,7 +1800,7 @@ mod tests {
                 if player.poll().contains(&Event::Idle) {
                     return true;
                 }
-                std::thread::sleep(Duration::from_millis(15));
+                std::thread::sleep(Duration::from_millis(10));
             }
             false
         };
@@ -1760,30 +1809,29 @@ mod tests {
         let mut active_rss = Vec::new();
         let mut idle_rss = Vec::new();
         for cycle in 0..4 {
-            player.load(&url, Some(0.1)).unwrap();
+            player.load(&str_1080p, Some(0.1)).unwrap();
             assert!(
-                wait_video_loaded(&mut player),
-                "cycle {cycle} initial load timed out"
+                wait_video_loaded(&mut player, 1920),
+                "cycle {cycle} 1080p load timed out"
             );
-            player.reload(&url, 0.1, true).unwrap();
             assert!(
-                wait_video_loaded(&mut player),
-                "cycle {cycle} reload timed out"
+                wait_cached(&mut player).is_some(),
+                "cycle {cycle} 1080p cache did not reach {TARGET_CACHED_BYTES} bytes"
             );
-
-            // Wait until libmpv has buffered a substantial portion of the 1080p
-            // stream in its demuxer cache before sampling active RSS.
-            let buffer_deadline = Instant::now() + Duration::from_secs(3);
-            let mut peak = rss_anon_kib();
-            while Instant::now() < buffer_deadline {
-                let _ = player.poll();
-                peak = peak.max(rss_anon_kib());
-                if peak >= baseline_rss_kib + 40 * 1024 {
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(20));
-            }
-            active_rss.push(peak);
+            player.reload(&str_360p, 0.1, true).unwrap();
+            assert!(
+                wait_video_loaded(&mut player, 640),
+                "cycle {cycle} 360p reload timed out"
+            );
+            let buffered = wait_cached(&mut player).unwrap_or_else(|| {
+                panic!(
+                    "cycle {cycle} 360p demuxer cache did not reach {} bytes (got {})",
+                    TARGET_CACHED_BYTES,
+                    cached_bytes(&player)
+                )
+            });
+            assert!(buffered >= TARGET_CACHED_BYTES);
+            active_rss.push(rss_anon_kib());
 
             player.stop().unwrap();
             assert!(
@@ -1794,26 +1842,23 @@ mod tests {
         }
 
         drop(player);
-        drop(stop);
-        server.join().unwrap();
 
         for cycle in 0..4 {
             let surge = active_rss[cycle].saturating_sub(baseline_rss_kib);
             assert!(
-                surge >= 20 * 1024,
-                "cycle {cycle} did not buffer enough video RSS to test reclamation: baseline={baseline_rss_kib} KiB active={active_rss:?} idle={idle_rss:?}"
+                surge >= 30 * 1024,
+                "cycle {cycle} did not fault buffered video into RssAnon: baseline={baseline_rss_kib} KiB active={active_rss:?} idle={idle_rss:?}"
             );
-            let reclaimed = active_rss[cycle].saturating_sub(idle_rss[cycle]);
             assert!(
-                reclaimed >= surge / 2,
-                "cycle {cycle} failed to reclaim buffered video RSS on idle: baseline={baseline_rss_kib} KiB active={active_rss:?} idle={idle_rss:?}"
+                idle_rss[cycle] <= baseline_rss_kib + 4 * 1024,
+                "cycle {cycle} retained too much RssAnon after idle: baseline={baseline_rss_kib} KiB active={active_rss:?} idle={idle_rss:?}"
             );
         }
 
         let first_idle = idle_rss[0];
         let last_idle = *idle_rss.last().unwrap();
         assert!(
-            last_idle <= first_idle + 6 * 1024,
+            last_idle <= first_idle + 2 * 1024,
             "idle RssAnon climbed across video load/reload/stop cycles: baseline={baseline_rss_kib} KiB active={active_rss:?} idle={idle_rss:?}"
         );
     }
