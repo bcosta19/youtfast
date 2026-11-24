@@ -311,6 +311,9 @@ impl App {
         self.reset_watch_panes();
         self.state.forget_playback();
         self.set_fullscreen(ctx, false);
+        // Ensure one UI pass runs promptly so `VideoSurface::release_if_idle`
+        // can delete the offscreen FBO and pump `vo_libmpv` cleanup on the GL thread.
+        ctx.request_repaint();
     }
 
     pub(super) fn open(&mut self, mut video: Video) {

@@ -2659,6 +2659,11 @@ impl eframe::App for App {
             self.surface.as_ref(),
             &mut actions,
         );
+        if self.state.watching.is_none()
+            && let Some(surface) = &self.surface
+        {
+            surface.release_if_idle(ui);
+        }
         self.theme_transition.paint(ui.ctx());
         let ctx = ui.ctx().clone();
         for action in actions {

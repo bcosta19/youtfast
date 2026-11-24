@@ -140,6 +140,10 @@ struct Inner {
     /// Creating the renderer failed once; the error is logged and the
     /// surface stays black rather than retrying every frame.
     failed: bool,
+    /// Playback stopped or forgot its frame; run one idle GL pass to delete
+    /// the FBO target and pump `vo_libmpv` cleanup instead of waiting until
+    /// another video opens.
+    pending_idle_cleanup: bool,
 }
 
 // SAFETY: the raw pointers (the display, the render context) are opaque
@@ -165,6 +169,7 @@ impl VideoSurface {
                 frame: Frame::default(),
                 frame_info_missing: false,
                 failed: false,
+                pending_idle_cleanup: false,
             })),
         }
     }
@@ -199,13 +204,53 @@ impl VideoSurface {
         });
     }
 
-    /// A new video is opening: the framebuffer still holds the old picture.
+    /// A new video is opening or playback stopped: the framebuffer still holds
+    /// the old picture.
     pub fn forget(&self) {
-        self.inner
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .frame
-            .forget();
+        let mut inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+        inner.frame.forget();
+        inner.pending_idle_cleanup = true;
+    }
+
+    /// When no video is playing, schedules a single lightweight GL pass to
+    /// delete the offscreen framebuffer and pump `vo_libmpv` cleanup so GPU
+    /// textures are not held while browsing other views. No-op once clean.
+    pub fn release_if_idle(&self, ui: &egui::Ui) {
+        let needs_cleanup = {
+            let inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
+            !inner.frame.allowed() && (inner.pending_idle_cleanup || inner.target.is_some())
+        };
+        if !needs_cleanup {
+            return;
+        }
+        let inner = Arc::clone(&self.inner);
+        let callback = egui_glow::CallbackFn::new(move |_info, painter| {
+            let mut inner = inner.lock().unwrap_or_else(PoisonError::into_inner);
+            inner.pending_idle_cleanup = false;
+            if inner.frame.allowed() {
+                return;
+            }
+            let gl = painter.gl();
+            // SAFETY: called from the egui_glow paint callback with the GL
+            // context current.
+            unsafe {
+                if let Some(old) = inner.target.take() {
+                    old.delete(gl);
+                }
+                inner.frame.discard_target();
+                if let Some(render) = inner.render.as_ref() {
+                    let _ = ffi::mpv_render_context_update(render.ptr);
+                }
+            }
+            crate::memory::trim_heap();
+        });
+        // egui_glow skips PaintCallbacks whose rect is not positive, so use a
+        // 1x1 rect at the viewport origin; the callback draws no pixels.
+        let rect = egui::Rect::from_min_size(ui.ctx().content_rect().min, egui::vec2(1.0, 1.0));
+        ui.painter().add(egui::PaintCallback {
+            rect,
+            callback: Arc::new(callback),
+        });
     }
 
     /// mpv loaded the selected file: its frames may be shown now.
@@ -241,6 +286,7 @@ impl VideoSurface {
 
 impl Inner {
     fn draw(&mut self, info: &egui::PaintCallbackInfo, gl: &glow::Context) {
+        self.pending_idle_cleanup = false;
         if self.failed {
             return;
         }
@@ -778,5 +824,41 @@ mod tests {
             target.request();
             assert!(ctx.has_requested_repaint_for(&egui::ViewportId::ROOT));
         });
+    }
+
+    #[test]
+    fn release_if_idle_queues_callback_only_when_stopped_and_dirty() {
+        let _turn = crate::tests::instance_turn();
+        let ctx = egui::Context::default();
+        let mpv = crate::Mpv::new(&ctx, 1080, 0.0, Vec::new()).unwrap();
+        let surface = VideoSurface::new(
+            mpv.handle(),
+            Arc::new(|_| std::ptr::null()),
+            NativeDisplay::None,
+            ctx.clone(),
+        );
+
+        let callback_count = |surface: &VideoSurface| -> usize {
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                surface.release_if_idle(ui);
+            });
+            output.textures_delta.clear();
+            output
+                .shapes
+                .iter()
+                .filter(|shape| matches!(shape.shape, egui::Shape::Callback(_)))
+                .count()
+        };
+
+        // Fresh idle surface needs no GL cleanup pass.
+        assert_eq!(callback_count(&surface), 0);
+
+        // After `forget()`, an idle pass schedules one positive-rect callback.
+        surface.forget();
+        assert_eq!(callback_count(&surface), 1);
+
+        // Once frames are allowed again (new video loaded), idle cleanup does not queue.
+        surface.allow_frames();
+        assert_eq!(callback_count(&surface), 0);
     }
 }

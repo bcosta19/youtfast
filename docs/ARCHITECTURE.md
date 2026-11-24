@@ -59,7 +59,7 @@ All paths below are relative to [`crates/`](../crates/).
 | `youtfast-desktop` | `instance`: single instance; `diagnostics`: redacted logs; `updater`: verified release installation |
 | `youtfast-core` | `model`, `util`, `links`, `privacy`: shared types, formatting, URL parsing and controlled errors; no IO or drawing |
 | `youtfast-i18n` | Build script compiles catalogs from `assets/i18n` |
-| `youtfast-mpv` | `ffi`: client API 2.x; `Mpv`: player ownership/status; `render`: OpenGL video surface |
+| `youtfast-mpv` | `ffi`: client API 2.x; `Mpv`: player ownership/status; `render`: OpenGL video surface; `memory`: Linux/glibc allocator tuning and heap trimming |
 | `youtfast-appearance` | `theme`, `icons`, `desktop_font`, `coverage`: palette, transitions, installed fonts, the bundled emoji and fallback faces, colour emoji, and desktop integration |
 
 Large modules split into feature submodules under `crates/youtfast-ui/src/` (`widgets/`, `player/`, `library/`, `settings/`) and `crates/youtfast-desktop/src/updater/` and re-export their public interfaces from the parent module.
@@ -145,6 +145,7 @@ stateDiagram-v2
 |---|---|
 | Quality | `mpv::FORMAT` follows the selected quality; Auto is bounded to 1080p |
 | Buffer budget | Standard: 150 MiB ahead / 50 MiB behind; Compact: 50 / 20 MiB, selected by `Settings::playback_buffer` |
+| Memory reclamation | On Linux/glibc, `memory::configure_allocator` bounds per-thread arenas and `M_MMAP_THRESHOLD` (128 KiB), `Mpv` clears `ytdl_hook` JSON on `stop` and calls `malloc_trim(0)` on file end / idle, and `VideoSurface::release_if_idle` deletes the offscreen FBO and pumps `mpv_render_context_update` on the next idle frame |
 | GL lifetime | Create lazily with the GL context current; free in `App::on_exit` before mpv; dropping a surface never frees GL objects without a context |
 | Scrolling | Keep the framebuffer at the full video's physical size; restore egui's scissor before blitting |
 | Aspect | Size from `Status::video_aspect` (`video-out-params/aspect`, after autorotate) |

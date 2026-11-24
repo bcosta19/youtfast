@@ -12,12 +12,14 @@
 )]
 
 pub mod ffi;
+mod memory;
 mod render;
 
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::fmt;
 use std::sync::Arc;
 
+pub use memory::configure_allocator;
 pub use render::{NativeDisplay, VideoSurface};
 
 /// The streams mpv asks yt-dlp for: the best video with the best sound, or
@@ -375,6 +377,8 @@ pub struct Mpv {
     /// frames, each of its changes would otherwise wake a whole interface
     /// pass just to move the seek bar.
     position_polled: bool,
+    /// A stop or replacement started; trim the C heap once mpv reports idle.
+    trim_pending: bool,
 }
 
 /// How often the position is read while playing without a picture.
@@ -391,6 +395,7 @@ impl Mpv {
         volume: f64,
         captions: Vec<String>,
     ) -> Result<Self, Error> {
+        memory::configure_allocator();
         // SAFETY: plain constructor. It returns null when the locale's
         // LC_NUMERIC is not "C"; Rust programs keep "C" unless something
         // calls setlocale, which YouTFast does not.
@@ -529,6 +534,7 @@ impl Mpv {
             at_end: false,
             audio_only: false,
             position_polled: false,
+            trim_pending: false,
         })
     }
 
@@ -599,6 +605,9 @@ impl Mpv {
     /// Unloads the video when its last tab closes and discards pending playback events.
     pub fn stop(&mut self) -> Result<(), Error> {
         self.replace(&["stop"])?;
+        // Release ytdl_hook's cached extraction JSON (often several megabytes)
+        // when no video is open. Missing properties on older mpv builds are harmless.
+        let _ = self.command(&["del", "user-data/mpv/ytdl/json-subprocess-result"]);
         self.status.video_aspect = 0.0;
         // Nothing left for a signed-in retry to reload.
         self.current = None;
@@ -626,6 +635,7 @@ impl Mpv {
         self.status.position = 0.0;
         self.status.duration = 0.0;
         self.status.seekable = false;
+        self.trim_pending = true;
         self.command(args)?;
         // loadfile replace changes the playlist synchronously, while opening
         // and decoding happen later. IDs are unique for the mpv instance.
@@ -876,6 +886,17 @@ impl Mpv {
                     {
                         unsafe { self.apply_property(event.reply_userdata, property) };
                     }
+                    // After `stop()`, `playback_events.expected` is `None`;
+                    // trim once mpv signals it has finished unloading to idle.
+                    if event.reply_userdata == IDLE
+                        && self.trim_pending
+                        && self.playback_events.expected.is_none()
+                        && property.format == ffi::MPV_FORMAT_FLAG
+                        && unsafe { *(property.data as *const c_int) != 0 }
+                    {
+                        self.trim_pending = false;
+                        memory::trim_heap();
+                    }
                 }
                 ffi::MPV_EVENT_FILE_LOADED if self.playback_events.loaded() => {
                     self.status.idle = false;
@@ -890,6 +911,9 @@ impl Mpv {
                     self.status.buffering = false;
                 }
                 ffi::MPV_EVENT_END_FILE => {
+                    // Return freed demuxer/decoder pages even for superseded
+                    // loads (resolution switches and video changes).
+                    memory::trim_heap();
                     // SAFETY: mpv documents data as mpv_event_end_file here.
                     let end = unsafe { &*(event.data as *const ffi::mpv_event_end_file) };
                     if !self.playback_events.current(end.playlist_entry_id) {
@@ -1142,7 +1166,7 @@ mod tests {
     /// process's Lua script threads, and every live instance adds its own.
     static INSTANCE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    fn instance_turn() -> std::sync::MutexGuard<'static, ()> {
+    pub(crate) fn instance_turn() -> std::sync::MutexGuard<'static, ()> {
         INSTANCE
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -1537,5 +1561,142 @@ mod tests {
         server.join().unwrap();
 
         assert_eq!(outcome, Ok(()));
+    }
+
+    #[test]
+    fn stop_clears_ytdl_user_data_and_marks_idle() {
+        let _turn = instance_turn();
+        let mut player = Mpv::new(&egui::Context::default(), 1080, 0.0, Vec::new()).unwrap();
+        player.set_property("ao", "null").unwrap();
+        player
+            .set_property(
+                "user-data/mpv/ytdl/json-subprocess-result/stdout",
+                r#"{"id":"abc"}"#,
+            )
+            .unwrap();
+        assert_eq!(player.ytdl_json().as_deref(), Some(r#"{"id":"abc"}"#));
+
+        player.stop().unwrap();
+        for _ in 0..20 {
+            let _ = player.poll();
+            if !player.trim_pending {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(player.ytdl_json().is_none());
+        assert!(player.status().idle);
+    }
+
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    #[test]
+    fn repeated_load_reload_stop_keeps_retained_heap_bounded() {
+        #[repr(C)]
+        struct Mallinfo2 {
+            arena: usize,
+            ordblks: usize,
+            smblks: usize,
+            hblks: usize,
+            hblkhd: usize,
+            usmblks: usize,
+            fsmblks: usize,
+            uordblks: usize,
+            fordblks: usize,
+            keepcost: usize,
+        }
+        unsafe extern "C" {
+            fn mallinfo2() -> Mallinfo2;
+        }
+
+        let _turn = instance_turn();
+        let mut player = Mpv::new(&egui::Context::default(), 1080, 0.0, Vec::new()).unwrap();
+        player.set_property("ao", "null").unwrap();
+        player.set_property("vo", "null").unwrap();
+
+        // Stream a 4 MiB WAV in memory over loopback (no disk files) across
+        // repeated load -> reload -> stop cycles.
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+        let stop = StopOnDrop(Arc::new(AtomicBool::new(false)));
+        let server = {
+            let stop = Arc::clone(&stop.0);
+            std::thread::spawn(move || {
+                let data_bytes: u32 = 4 * 1024 * 1024;
+                let mut wav = Vec::with_capacity(WAV_HEADER_BYTES + data_bytes as usize);
+                wav.extend_from_slice(b"RIFF");
+                wav.extend_from_slice(&(36 + data_bytes).to_le_bytes());
+                wav.extend_from_slice(b"WAVEfmt ");
+                wav.extend_from_slice(&16u32.to_le_bytes());
+                wav.extend_from_slice(&1u16.to_le_bytes());
+                wav.extend_from_slice(&2u16.to_le_bytes());
+                wav.extend_from_slice(&48_000u32.to_le_bytes());
+                wav.extend_from_slice(&(48_000u32 * 4).to_le_bytes());
+                wav.extend_from_slice(&4u16.to_le_bytes());
+                wav.extend_from_slice(&16u16.to_le_bytes());
+                wav.extend_from_slice(b"data");
+                wav.extend_from_slice(&data_bytes.to_le_bytes());
+                wav.resize(WAV_HEADER_BYTES + data_bytes as usize, 0);
+                let head = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nContent-Length: {}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                    wav.len()
+                );
+                while !stop.load(Ordering::Relaxed) {
+                    let Ok((mut client, _)) = listener.accept() else {
+                        std::thread::sleep(Duration::from_millis(10));
+                        continue;
+                    };
+                    let timeout = Some(Duration::from_secs(5));
+                    let _ = client.set_nonblocking(false);
+                    let _ = client.set_read_timeout(timeout);
+                    let _ = client.set_write_timeout(timeout);
+                    read_request_head(&mut client);
+                    let _ = client
+                        .write_all(head.as_bytes())
+                        .and_then(|()| client.write_all(&wav));
+                }
+            })
+        };
+
+        let url = format!("lavf://http://{address}/stream.wav");
+        let wait_loaded = |player: &mut Mpv| {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while Instant::now() < deadline {
+                if player.poll().contains(&Event::Loaded) {
+                    return true;
+                }
+                std::thread::sleep(Duration::from_millis(15));
+            }
+            false
+        };
+
+        let mut retained_after_stop = Vec::new();
+        for _ in 0..4 {
+            player.load(&url, Some(1.0)).unwrap();
+            assert!(wait_loaded(&mut player), "initial load timed out");
+            player.reload(&url, 2.0, false).unwrap();
+            assert!(wait_loaded(&mut player), "reload timed out");
+            player.stop().unwrap();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while player.trim_pending && Instant::now() < deadline {
+                let _ = player.poll();
+                std::thread::sleep(Duration::from_millis(15));
+            }
+            // SAFETY: `mallinfo2` is a standard glibc introspection call.
+            let info = unsafe { mallinfo2() };
+            retained_after_stop.push(info.fordblks);
+        }
+
+        drop(player);
+        drop(stop);
+        server.join().unwrap();
+
+        // Retained freed heap should not climb unboundedly across cycles.
+        let first = retained_after_stop[0];
+        let last = *retained_after_stop.last().unwrap();
+        assert!(
+            last <= first + 16 * 1024 * 1024,
+            "retained freed heap grew across load/reload/stop cycles: {retained_after_stop:?}"
+        );
     }
 }

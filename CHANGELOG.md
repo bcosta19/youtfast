@@ -16,6 +16,8 @@ are the distribution record.
 
 - `curl -fsSL https://youtfast.pages.dev/install.sh | sh` on Arch no longer quits silently at pacman's `Proceed with installation? [Y/n]`: the question now reads its answer from the terminal instead of the piped script, and without a terminal the installer asks for `--yes`.
 - Marked members-only videos with a "Members only" badge on their thumbnails and on the watch page, instead of presenting them like any other video.
+- Prevented a worker panic when parsing YouTube metadata or dates containing multibyte UTF-8 characters (such as `ç`).
+- Reclaimed playback memory after resolution switches and closing video tabs instead of letting Linux RAM usage climb across repeated plays: tuned glibc's arena and mmap thresholds, trimmed freed heap pages on stop/unload, cleared mpv's cached yt-dlp JSON on stop, and released the video framebuffer and `vo_libmpv` state as soon as playback goes idle.
 
 ## [0.10.0] - 2026-11-22
 
