@@ -153,7 +153,10 @@ canale stesso.
 Le pagine dei canali includono un banner e l'ordinamento dei video. Le playlist
 mostrano la copertina, i metadati e l'elemento in riproduzione. Gli Shorts usano
 uno spazio verticale con controlli successivo/precedente e navigazione con la
-rotella. L'interfaccia parte in inglese.
+rotella. I video riservati ai membri mostrano il badge **Solo per membri** sulle
+miniature dei video normali (una stella dorata sulle miniature compatte) e sotto
+il titolo nella pagina del video quando YouTube fornisce il badge; le schede
+degli Shorts e lo scaffale degli Shorts non lo mostrano. L'interfaccia parte in inglese.
 Scegli English, Português (Brasil), Español, Français, Deutsch o Italiano in
 Impostazioni → Aspetto → Lingua; la modifica si applica subito e viene mantenuta
 tra un avvio e l'altro, anche per le notifiche desktop. Anche le impostazioni più

@@ -26,8 +26,10 @@ pub struct Video {
     #[serde(default)]
     pub live: bool,
     /// Behind a channel membership ("Members only" on YouTube).
-    #[serde(default)]
-    pub members_only: bool,
+    /// `None` when the source does not report membership status (links, RSS,
+    /// yt-dlp, Shorts, older library files); `Some(false)` when confirmed public.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub members_only: Option<bool>,
     /// When it was published, in Unix seconds, for ordering a feed.
     #[serde(default)]
     pub published_at: Option<i64>,
@@ -51,11 +53,16 @@ impl Video {
             duration: None,
             views: None,
             live: false,
-            members_only: false,
+            members_only: None,
             published_at: None,
             published: None,
             short: false,
         }
+    }
+
+    /// Whether YouTube marked this video as members-only.
+    pub fn is_members_only(&self) -> bool {
+        self.members_only == Some(true)
     }
 
     pub fn url(&self) -> String {
@@ -87,7 +94,7 @@ impl Video {
             .or_else(|| other.channel_avatar.clone());
         self.duration = self.duration.or(other.duration);
         self.views = self.views.or(other.views);
-        self.members_only |= other.members_only;
+        self.members_only = self.members_only.or(other.members_only);
         self.published_at = self.published_at.or(other.published_at);
     }
 }
@@ -661,8 +668,9 @@ pub struct Details {
     /// "2026-10-04", parsed from the date.
     pub published_date: Option<String>,
     pub live: bool,
-    /// Behind a channel membership ("Members only" on YouTube).
-    pub members_only: bool,
+    /// Behind a channel membership ("Members only" on YouTube); `None` when
+    /// the watch page omitted primary video metadata.
+    pub members_only: Option<bool>,
     pub description: Vec<Span>,
     pub chapters: Vec<Chapter>,
     /// The recommended videos.
@@ -1097,5 +1105,31 @@ mod tests {
             SponsorBehavior::AutoSkip
         );
         assert_eq!(SegmentAction::default(), SegmentAction::Skip);
+    }
+
+    #[test]
+    fn complete_from_preserves_confirmed_public_and_fills_unknown_membership() {
+        let mut confirmed_public = Video::from_id("a".into());
+        confirmed_public.members_only = Some(false);
+        let mut stale_members = Video::from_id("a".into());
+        stale_members.members_only = Some(true);
+        let unknown = Video::from_id("a".into());
+
+        // A fresh confirmed-public card does not inherit stale members-only from history.
+        let mut opened = confirmed_public.clone();
+        opened.complete_from(&stale_members);
+        assert_eq!(opened.members_only, Some(false));
+        assert!(!opened.is_members_only());
+
+        // An id-only open (`None`) fills from history (`Some(true)`).
+        let mut from_link = unknown.clone();
+        from_link.complete_from(&stale_members);
+        assert_eq!(from_link.members_only, Some(true));
+        assert!(from_link.is_members_only());
+
+        // An unknown source (`None`) does not clear `Some(true)`.
+        let mut kept = stale_members;
+        kept.complete_from(&unknown);
+        assert_eq!(kept.members_only, Some(true));
     }
 }

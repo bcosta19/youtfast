@@ -159,7 +159,10 @@ des Kanals.
 Kanalseiten enthalten ein Banner und eine Sortierung der Videos. Playlists zeigen
 ihr Titelbild, ihre Metadaten und das gerade abgespielte Element. Shorts nutzen
 eine Hochformat-Bühne mit Steuerung für Nächstes/Vorheriges und Navigation per
-Mausrad. Die Oberfläche startet auf Englisch. Wählen Sie English, Português
+Mausrad. Videos nur für Mitglieder zeigen das Abzeichen **Nur für Mitglieder**
+auf regulären Videovorschaubildern (einen goldenen Stern auf kompakten
+Vorschaubildern) sowie unter dem Titel auf der Wiedergabeseite, wenn YouTube das
+Abzeichen liefert; Shorts-Karten und das Shorts-Regal zeigen es nicht. Die Oberfläche startet auf Englisch. Wählen Sie English, Português
 (Brasil), Español, Français, Deutsch oder Italiano unter
 Einstellungen → Darstellung → Sprache; die Änderung gilt sofort und bleibt
 zwischen Starts erhalten, auch für Desktop-Benachrichtigungen. Ältere

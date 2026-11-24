@@ -17,7 +17,7 @@ pub use playlist::{playlist_card, playlist_card_height, playlist_row};
 pub use rich_text::{rich_text, spans_truncated};
 pub(crate) use video::{
     device_playlist_checkbox, meta, save_to_playlist_menu, thumbnail, thumbnail_hairline,
-    video_thumbnail,
+    video_accessible_label, video_thumbnail,
 };
 pub use video::{
     short_uv, video_card, video_card_height, video_interactions, video_row, video_row_large,

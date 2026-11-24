@@ -81,7 +81,7 @@ pub fn parse(xml: &str, fallback_channel_id: &str) -> Result<Vec<Video>, Error> 
             duration: None,
             views,
             live: false,
-            members_only: false,
+            members_only: None,
             published_at,
             published: None,
             short: false,

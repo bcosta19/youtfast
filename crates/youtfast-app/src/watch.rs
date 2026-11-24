@@ -94,6 +94,53 @@ impl State {
             }
         }
     }
+
+    /// Fills what a link-opened video lacks from stored history without
+    /// overriding fields already supplied by the caller.
+    pub(super) fn complete_from_history(&self, video: &mut Video) {
+        if let Some(known) = self
+            .library
+            .history
+            .iter()
+            .find(|watched| watched.video.id == video.id)
+        {
+            video.complete_from(&known.video);
+        }
+    }
+
+    /// Merges freshly fetched watch-page `Details` into `watching`, open tabs,
+    /// and the stored library. An authoritative membership flag replaces any
+    /// stale value from history.
+    pub(super) fn apply_watching_details(&mut self, details: &Details) -> bool {
+        let Some(watching) = self.watching.as_mut() else {
+            return false;
+        };
+        if watching.id != details.id {
+            return false;
+        }
+        let filled = Video {
+            id: details.id.clone(),
+            title: details.title.clone(),
+            channel: Some(details.channel.name.clone()),
+            channel_id: Some(details.channel.id.clone()),
+            channel_avatar: details.channel.avatar.clone(),
+            duration: None,
+            views: Some(details.views),
+            live: details.live,
+            members_only: details.members_only,
+            published_at: None,
+            published: details.published.clone(),
+            short: false,
+        };
+        watching.complete_from(&filled);
+        if let Some(members_only) = details.members_only {
+            watching.members_only = Some(members_only);
+        }
+        let watching = watching.clone();
+        self.video_tabs.update(&watching);
+        self.library.update_video(&watching);
+        true
+    }
 }
 
 impl App {
@@ -313,15 +360,7 @@ impl App {
         self.captions_pending = false;
         // A video opened from a link knows only its id; the history may know
         // more until yt-dlp answers.
-        if let Some(known) = self
-            .state
-            .library
-            .history
-            .iter()
-            .find(|watched| watched.video.id == video.id)
-        {
-            video.complete_from(&known.video);
-        }
+        self.state.complete_from_history(&mut video);
         self.state.video_tabs.open(video.clone());
         let start = self.state.library.resume_position(&video.id);
         self.state
@@ -553,27 +592,7 @@ impl App {
             );
         }
         // Complete what the watch page and the library know.
-        if let Some(watching) = self.state.watching.as_mut()
-            && watching.id == details.id
-        {
-            let filled = Video {
-                id: details.id.clone(),
-                title: details.title.clone(),
-                channel: Some(details.channel.name.clone()),
-                channel_id: Some(details.channel.id.clone()),
-                channel_avatar: details.channel.avatar.clone(),
-                duration: None,
-                views: Some(details.views),
-                live: details.live,
-                members_only: details.members_only,
-                published_at: None,
-                published: details.published.clone(),
-                short: false,
-            };
-            watching.complete_from(&filled);
-            let watching = watching.clone();
-            self.state.video_tabs.update(&watching);
-            self.state.library.update_video(&watching);
+        if self.state.apply_watching_details(&details) {
             self.save_library();
             self.sync_started_video_speed();
         }
@@ -1054,5 +1073,67 @@ mod tests {
         assert!(state.renew_comment_image("comment", true));
         assert!(!state.renew_comment_image("comment", false));
         assert!(state.renew_comment_image("other", false));
+    }
+
+    #[test]
+    fn stale_members_only_flag_clears_when_watch_details_or_public_card_arrives() {
+        let mut stale = Video::from_id("early000001".into());
+        stale.title = "Early Access".into();
+        stale.members_only = Some(true);
+
+        let mut state = State::default();
+        state.library.record_watch(stale.clone(), 100);
+        state.library.watch_later.push(stale.clone());
+
+        // Opening by link restores the historical flag until watch details arrive.
+        let mut by_link = Video::from_id("early000001".into());
+        state.complete_from_history(&mut by_link);
+        assert_eq!(by_link.members_only, Some(true));
+        state.video_tabs.open(by_link.clone());
+        state.watching = Some(by_link);
+
+        // Missing primary watch metadata (`None`) keeps the stored flag.
+        let unknown_details = Details {
+            id: "early000001".into(),
+            title: "Early Access".into(),
+            members_only: None,
+            ..Details::default()
+        };
+        assert!(state.apply_watching_details(&unknown_details));
+        assert_eq!(
+            state.watching.as_ref().and_then(|v| v.members_only),
+            Some(true)
+        );
+
+        // Fresh watch details confirming public (`Some(false)`) clear watching,
+        // tabs, history, and Watch later.
+        let public_details = Details {
+            id: "early000001".into(),
+            title: "Early Access".into(),
+            members_only: Some(false),
+            ..Details::default()
+        };
+        assert!(state.apply_watching_details(&public_details));
+        assert_eq!(
+            state.watching.as_ref().and_then(|v| v.members_only),
+            Some(false)
+        );
+        assert_eq!(state.library.history[0].video.members_only, Some(false));
+        assert_eq!(state.library.watch_later[0].members_only, Some(false));
+        assert_eq!(
+            state
+                .video_tabs
+                .videos()
+                .next()
+                .and_then(|v| v.members_only),
+            Some(false)
+        );
+
+        // Opening a confirmed-public card directly does not re-taint it from stale history.
+        state.library.history[0].video.members_only = Some(true);
+        let mut fresh_public_card = Video::from_id("early000001".into());
+        fresh_public_card.members_only = Some(false);
+        state.complete_from_history(&mut fresh_public_card);
+        assert_eq!(fresh_public_card.members_only, Some(false));
     }
 }

@@ -95,7 +95,7 @@ pub(super) fn from_renderer(renderer: &Value) -> Option<Video> {
         duration: text(renderer.get("lengthText")).and_then(|length| parse_length(&length)),
         views: text(renderer.get("viewCountText")).and_then(|views| parse_count(&views)),
         live,
-        members_only: members_only_badges(renderer.get("badges")),
+        members_only: Some(members_only_badges(renderer.get("badges"))),
         published_at: None,
         published: text(renderer.get("publishedTimeText")),
         short: false,

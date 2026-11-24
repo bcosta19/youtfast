@@ -668,6 +668,10 @@ fn paint_card_preview_strip(
     };
 
     let strip_resp = ui.interact(strip_rect, card_id.with("preview"), Sense::click());
+    let accessible_label = widgets::video_accessible_label(state, video, locale);
+    strip_resp.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), &accessible_label)
+    });
     if strip_resp.hovered() {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
     }
@@ -734,7 +738,7 @@ fn paint_card_preview_strip(
         actions.push(Action::Open(video.clone()));
     }
     strip_resp.hovered().then(|| {
-        let hover = if state.dearrow_replacement_title(video).is_some() && !video.title.is_empty() {
+        let base = if state.dearrow_replacement_title(video).is_some() && !video.title.is_empty() {
             trf(
                 locale,
                 "Original title: {title}",
@@ -742,6 +746,16 @@ fn paint_card_preview_strip(
             )
         } else {
             video.title.clone()
+        };
+        let hover = if video.is_members_only() {
+            let badge = tr(locale, "Members only");
+            if base.is_empty() {
+                badge.into_owned()
+            } else {
+                format!("{base} — {badge}")
+            }
+        } else {
+            base
         };
         strip_resp.clone().on_hover_text(hover);
     });
@@ -978,5 +992,117 @@ mod tests {
             out.textures_delta.clear();
         }
         assert_eq!(actions, [Action::SetHideWatched(false)]);
+    }
+
+    #[test]
+    fn subscriptions_preview_labels_and_tooltips_members_only_videos() {
+        for (locale, expected_badge) in [
+            (Locale::English, "Members only"),
+            (Locale::PortugueseBrazil, "Somente para membros"),
+        ] {
+            let ctx = egui::Context::default();
+            youtfast_appearance::theme::install_fonts(&ctx);
+            ctx.enable_accesskit();
+
+            let mut state = State {
+                view: View::Subscriptions,
+                account: AccountState::SignedIn(1),
+                source: Source::Account,
+                account_subscriptions: Listing::Ready(vec![Channel {
+                    id: "UC_mem".into(),
+                    name: "Members Channel".into(),
+                    avatar: None,
+                }]),
+                feed: Listing::Ready(vec![Video {
+                    title: "Exclusive Episode".into(),
+                    channel: Some("Members Channel".into()),
+                    channel_id: Some("UC_mem".into()),
+                    duration: Some(300.0),
+                    members_only: Some(true),
+                    published: Some("1 hour ago".into()),
+                    ..Video::from_id("mem_vid0001".into())
+                }]),
+                ..State::default()
+            };
+            state.settings.language = locale;
+
+            let mut preview_pos = None;
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(1200.0, 800.0))),
+                    ..Default::default()
+                },
+                |ui| subscriptions(ui, &state, &mut Vec::new()),
+            );
+            let has_star_circle = output.shapes.iter().any(|shape| {
+                matches!(
+                    &shape.shape,
+                    egui::Shape::Circle(circle)
+                        if circle.fill == Color32::from_black_alpha(210)
+                )
+            });
+            assert!(has_star_circle, "{locale:?}: expected compact star circle");
+            let has_gold_star = output.shapes.iter().any(|shape| {
+                matches!(
+                    &shape.shape,
+                    egui::Shape::Path(path) if path.fill == widgets::MEMBERS_GOLD
+                )
+            });
+            assert!(has_gold_star, "{locale:?}: expected compact gold star");
+
+            for shape in &output.shapes {
+                if let egui::Shape::Text(text) = &shape.shape
+                    && text.galley.text() == "Exclusive Episode"
+                {
+                    preview_pos = Some(Rect::from_min_size(text.pos, text.galley.size()).center());
+                }
+            }
+            let expected_label = format!("Exclusive Episode — {expected_badge}");
+            let tree = output.platform_output.accesskit_update.take().unwrap();
+            let has_accessible_label = tree.nodes.iter().any(|(_, node)| {
+                node.role() == egui::accesskit::Role::Button
+                    && node.label() == Some(expected_label.as_str())
+            });
+            assert!(
+                has_accessible_label,
+                "{locale:?}: missing accessible label {expected_label:?}"
+            );
+            output.textures_delta.clear();
+
+            let pos = preview_pos.expect("preview strip title");
+            let mut tooltip_texts = Vec::new();
+            for (idx, time) in [0.0, 1.0, 2.0].into_iter().enumerate() {
+                let events = if idx == 0 {
+                    vec![egui::Event::PointerMoved(pos)]
+                } else {
+                    Vec::new()
+                };
+                let mut out = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            vec2(1200.0, 800.0),
+                        )),
+                        events,
+                        time: Some(time),
+                        ..Default::default()
+                    },
+                    |ui| subscriptions(ui, &state, &mut Vec::new()),
+                );
+                tooltip_texts = out
+                    .shapes
+                    .iter()
+                    .filter_map(|shape| match &shape.shape {
+                        egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                        _ => None,
+                    })
+                    .collect();
+                out.textures_delta.clear();
+            }
+            assert!(
+                tooltip_texts.iter().any(|t| t == &expected_label),
+                "{locale:?}: tooltip {expected_label:?} missing in {tooltip_texts:?}"
+            );
+        }
     }
 }

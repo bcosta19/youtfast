@@ -240,13 +240,19 @@ public endpoints.
   it parsed the age's number as views and lost the age.
 - **Fix:** `lockup_channel_row` in
   `crates/youtfast-youtube/src/innertube/items.rs` finds the channel row by
-  its `UC…` browse endpoint, falling back to a first row that is neither age
-  nor views. `lockup_stats` classifies each part as age or schedule text, a
-  view or watching count, or another date wording, so no part is read as a
-  count merely because it starts with a number. `home::from_lockup`
+  its `UC…` browse endpoint, falling back to a single-part first row when a
+  later row carries stats and the first part is neither an age/schedule nor a
+  labeled view count. `lockup_stats` scans up to 32 non-channel metadata parts
+  in a single pass without collecting, classifying exact age/schedule strings,
+  labeled or bare counts, or another date wording, and `parse_relative_age`
+  uses checked multiplication and requires `"ago"`. `home::from_lockup`
   delegates to the canonical `items::from_lockup` instead of repeating the
   positional read.
-- **Tests:** `yt10_a_members_only_channel_lockup_keeps_its_age` in
+- **Tests:** `yt10_a_members_only_channel_lockup_keeps_its_age`,
+  `yt10_a_scheduled_card_keeps_its_date_and_views`,
+  `yt10_an_unlinked_channel_name_is_not_read_as_a_view_count`,
+  `yt10_unlinked_channel_names_like_premier_league_and_tech_reviews_are_preserved`,
+  and `yt10_oversized_relative_age_does_not_overflow` in
   `crates/youtfast-youtube/tests/youtube_api.rs`; the live check on
   @SamayRainaOfficial's Videos tab reads 11 of the first 30 cards as
   members-only, each with its age and without a view count.

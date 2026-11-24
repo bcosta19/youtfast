@@ -59,7 +59,7 @@ pub fn parse_details(page: &Value, id: &str) -> Details {
         .and_then(|vr| vr.get("isLive"))
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    let members_only = primary.is_some_and(|p| members_only_badges(p.get("badges")));
+    let members_only = primary.map(|p| members_only_badges(p.get("badges")));
 
     let likes = extract_like_count(page, primary).map(|n| n as u32);
 

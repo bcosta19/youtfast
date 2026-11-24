@@ -605,7 +605,8 @@ const MEMBERS_ONLY_LOCKUP: &str = r#"[{ "richItemRenderer": { "content": { "lock
 fn a_channel_lockup_keeps_the_members_only_badge() {
     let items = parse_videos(MEMBERS_ONLY_LOCKUP);
     assert_eq!(items.len(), 1);
-    assert!(items[0].members_only);
+    assert_eq!(items[0].members_only, Some(true));
+    assert!(items[0].is_members_only());
 }
 
 // YT-10: the badge shares the age's metadata row and the card has no view
@@ -670,20 +671,91 @@ fn yt10_an_unlinked_channel_name_is_not_read_as_a_view_count() {
     assert_eq!(video.channel_id, None);
     assert_eq!(video.views, None);
     assert_eq!(video.published.as_deref(), Some("2 months ago"));
-    assert!(video.members_only);
+    assert!(video.is_members_only());
+}
+
+#[test]
+fn yt10_unlinked_channel_names_like_premier_league_and_tech_reviews_are_preserved() {
+    for (channel_name, stats_parts) in [
+        ("Premier League", r#"["105K views", "4 hours ago"]"#),
+        ("Tech Reviews", r#"["105K views", "4 hours ago"]"#),
+        ("Bird Watching", r#"["2 months ago"]"#),
+        ("Will Smith", r#"["2 months ago"]"#),
+        ("5 Minute Crafts", r#"["10K views", "1 day ago"]"#),
+    ] {
+        let parts: Vec<String> = serde_json::from_str(stats_parts).unwrap();
+        let stats_json: Vec<serde_json::Value> = parts
+            .iter()
+            .map(|text| serde_json::json!({ "text": { "content": text } }))
+            .collect();
+        let json = serde_json::json!([{ "richItemRenderer": { "content": { "lockupViewModel": {
+            "contentId": "ggggggggggg",
+            "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+            "metadata": { "lockupMetadataViewModel": {
+                "title": { "content": "A video" },
+                "metadata": { "contentMetadataViewModel": { "metadataRows": [
+                    { "metadataParts": [ { "text": { "content": channel_name } } ] },
+                    { "metadataParts": stats_json }
+                ] } }
+            } }
+        } } } }])
+        .to_string();
+        let items = parse_videos(&json);
+        let video = &items[0];
+        assert_eq!(
+            video.channel.as_deref(),
+            Some(channel_name),
+            "lost unlinked channel name {channel_name}"
+        );
+        assert!(video.published.is_some());
+    }
+}
+
+#[test]
+fn yt10_oversized_relative_age_does_not_overflow() {
+    assert_eq!(
+        innertube::items::parse_relative_age("999999999999999999 years ago"),
+        None
+    );
+    assert_eq!(innertube::items::parse_relative_age("-5 days ago"), None);
+    assert_eq!(
+        innertube::items::parse_relative_age("5 Minute Crafts"),
+        None
+    );
+    assert!(innertube::items::parse_relative_age("Streamed 2 days ago").is_some());
+
+    let json = r#"[{ "richItemRenderer": { "content": { "lockupViewModel": {
+        "contentId": "hhhhhhhhhhh",
+        "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+        "metadata": { "lockupMetadataViewModel": {
+            "title": { "content": "An oversized age" },
+            "metadata": { "contentMetadataViewModel": { "metadataRows": [
+                { "metadataParts": [ { "text": { "content": "999999999999999999 years ago" } } ] }
+            ] } }
+        } }
+    } } } }]"#;
+    let items = parse_videos(json);
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].published_at, None);
+    assert_eq!(
+        items[0].published.as_deref(),
+        Some("999999999999999999 years ago")
+    );
 }
 
 #[test]
 fn a_stored_video_without_members_only_still_loads() {
     let video: youtfast_core::model::Video =
         serde_json::from_str(r#"{"id":"aaaaaaaaaaa","title":"Old card"}"#).unwrap();
-    assert!(!video.members_only);
+    assert_eq!(video.members_only, None);
+    assert!(!video.is_members_only());
 }
 
 #[test]
 fn an_ordinary_channel_lockup_is_not_members_only() {
     let items = parse_videos(CHANNEL_TAB_LOCKUP);
-    assert!(!items[0].members_only);
+    assert_eq!(items[0].members_only, Some(false));
+    assert!(!items[0].is_members_only());
 }
 
 #[test]
@@ -698,7 +770,8 @@ fn an_older_video_renderer_keeps_the_members_only_badge() {
     } }]"#;
     let items = parse_videos(json);
     assert_eq!(items.len(), 1);
-    assert!(items[0].members_only);
+    assert_eq!(items[0].members_only, Some(true));
+    assert!(items[0].is_members_only());
 }
 
 #[test]
@@ -722,8 +795,28 @@ fn a_watch_page_keeps_the_members_only_badge() {
         ] } } } }
     });
     let details = innertube::watch::parse_details(&page, "ddddddddddd");
-    assert!(details.members_only);
+    assert_eq!(details.members_only, Some(true));
     assert_eq!(details.title, "A members-only video");
+}
+
+#[test]
+fn a_watch_page_distinguishes_confirmed_public_from_missing_primary() {
+    let public_page = serde_json::json!({
+        "contents": { "twoColumnWatchNextResults": { "results": { "results": { "contents": [
+            { "videoPrimaryInfoRenderer": {
+                "title": { "runs": [ { "text": "Public video" } ] }
+            } }
+        ] } } } }
+    });
+    assert_eq!(
+        innertube::watch::parse_details(&public_page, "ddddddddddd").members_only,
+        Some(false)
+    );
+    let empty_page = serde_json::json!({});
+    assert_eq!(
+        innertube::watch::parse_details(&empty_page, "ddddddddddd").members_only,
+        None
+    );
 }
 
 #[test]
