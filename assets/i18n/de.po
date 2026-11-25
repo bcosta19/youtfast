@@ -2134,6 +2134,9 @@ msgstr "Keine aktive Tailscale-, NetBird- oder lokale Netzwerkadresse gefunden."
 msgid "Copy address"
 msgstr "Adresse kopieren"
 
+msgid "Local network"
+msgstr "Lokales Netzwerk"
+
 msgid "Address copied"
 msgstr "Adresse kopiert"
 

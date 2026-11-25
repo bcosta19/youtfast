@@ -404,8 +404,8 @@ pub struct State {
     pub sync_status: SyncStatus,
     /// Draft text for the Settings → History → Listen port field.
     pub sync_port_draft: String,
-    /// Reachable local Tailscale, NetBird, and LAN `ip:port` addresses.
-    pub sync_addresses: Vec<String>,
+    /// Reachable local VPN and LAN addresses for this computer.
+    pub sync_addresses: Vec<youtfast_storage::sync::LocalSyncAddress>,
 }
 
 /// Maximum number of recent searches kept in memory for the command palette.
@@ -1705,6 +1705,14 @@ impl App {
             } => {
                 if self.device_sync_is_current(generation) {
                     self.on_device_sync_completed(result, manual);
+                }
+            }
+            Event::DeviceSyncAddresses {
+                generation,
+                addresses,
+            } => {
+                if self.device_sync_is_current(generation) {
+                    self.state.sync_addresses = addresses;
                 }
             }
         }

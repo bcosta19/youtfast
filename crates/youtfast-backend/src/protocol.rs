@@ -488,6 +488,12 @@ pub enum Event {
         result: Result<Vec<youtfast_storage::sync::SyncSnapshot>, String>,
         manual: bool,
     },
+    /// Refined local addresses for device sync, with VPN identities confirmed
+    /// against Tailscale and NetBird status off the UI thread.
+    DeviceSyncAddresses {
+        generation: u64,
+        addresses: Vec<youtfast_storage::sync::LocalSyncAddress>,
+    },
 }
 
 impl Command {
@@ -584,6 +590,7 @@ impl Event {
                     | Self::CheckDeviceSync { .. }
                     | Self::DeviceSyncIncoming { .. }
                     | Self::DeviceSyncCompleted { .. }
+                    | Self::DeviceSyncAddresses { .. }
             )
     }
 }

@@ -418,7 +418,11 @@ local, la question ne contient que le port d'écoute et un code prouvant la
 clé, jamais la clé elle-même ; autorisez dans le pare-feu l'entrée TCP et UDP
 sur le **Port d'écoute**. Pour n'utiliser qu'un seul ordinateur, ou si aucune
 recherche ne l'atteint (le Flatpak ne peut pas exécuter les clients), indiquez
-son adresse (par exemple `100.64.0.2:38452`). Ajustez **Port d'écoute**
+son adresse (par exemple `100.64.0.2:38452`). Dans **Cet appareil**, chaque
+adresse affichée porte une icône pour le VPN détecté ou le réseau local. Cliquez
+sur l'adresse ou sur le bouton de copie à côté, puis collez-la dans **Adresse de
+l'autre appareil** sur l'autre ordinateur. La liste masque les ponts réseau
+connus des conteneurs et des machines virtuelles. Ajustez **Port d'écoute**
 (`1024`–`65535`, par défaut `38452`, le même sur tous les ordinateurs) ou
 **Synchroniser toutes les** si besoin. Les adresses IP publiques sont
 refusées, et les comptes YouTube, sessions, horodatages d'alertes et

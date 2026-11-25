@@ -98,6 +98,200 @@ pub fn is_private_or_mesh_ip(ip: IpAddr) -> bool {
     }
 }
 
+/// Which network or VPN carries a local sync address.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SyncNetwork {
+    Tailscale,
+    NetBird,
+    WireGuard,
+    ZeroTier,
+    Vpn,
+    LocalNetwork,
+}
+
+impl SyncNetwork {
+    /// Display name for tooltips and accessibility labels.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Tailscale => "Tailscale",
+            Self::NetBird => "NetBird",
+            Self::WireGuard => "WireGuard",
+            Self::ZeroTier => "ZeroTier",
+            Self::Vpn => "VPN",
+            Self::LocalNetwork => "Local network",
+        }
+    }
+}
+
+/// A reachable local address for device sync and its detected network.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct LocalSyncAddress {
+    pub ip: IpAddr,
+    pub network: SyncNetwork,
+}
+
+impl LocalSyncAddress {
+    /// Formats this address with `port` as `ip:port` (or `[ip]:port` for IPv6).
+    #[must_use]
+    pub fn endpoint(self, port: u16) -> String {
+        SocketAddr::new(self.ip, port).to_string()
+    }
+}
+
+/// Whether an interface name belongs to a local container or VM bridge that
+/// other computers cannot reach directly.
+#[must_use]
+pub fn is_container_interface(name: &str) -> bool {
+    let lower = name.trim().to_ascii_lowercase();
+    if lower.is_empty() {
+        return false;
+    }
+    if lower.starts_with("vethernet") {
+        return lower.contains("wsl")
+            || lower.contains("docker")
+            || lower.contains("default switch");
+    }
+    // Docker's default bridge names are `br-` plus 12 hex digits. A LAN
+    // bridge can also start with `br-` (for example, `br-lan`).
+    if lower
+        .strip_prefix("br-")
+        .is_some_and(|id| id.len() == 12 && id.bytes().all(|b| b.is_ascii_hexdigit()))
+    {
+        return true;
+    }
+    const PREFIXES: &[&str] = &[
+        "docker", "podman", "veth", "virbr", "lxc", "lxdbr", "incusbr", "cni", "flannel", "cali",
+        "cilium", "kube-", "vboxnet", "vmnet",
+    ];
+    PREFIXES.iter().any(|prefix| lower.starts_with(prefix))
+}
+
+/// Classifies a local IPv4 interface by its adapter name, point-to-point flag,
+/// and address range. On macOS, where VPN tunnels share `utunN` names,
+/// Tailscale and NetBird are refined by [`apply_mesh_identities`].
+#[must_use]
+pub fn classify_sync_interface(name: &str, ip: Ipv4Addr, is_p2p: bool) -> SyncNetwork {
+    let lower = name.trim().to_ascii_lowercase();
+    if lower.contains("tailscale") {
+        return SyncNetwork::Tailscale;
+    }
+    if lower.contains("netbird") || is_indexed_prefix(&lower, "wt") {
+        return SyncNetwork::NetBird;
+    }
+    if lower.contains("wireguard")
+        || lower == "wg"
+        || lower
+            .strip_prefix("wg")
+            .and_then(|rest| rest.as_bytes().first())
+            .is_some_and(|b| b.is_ascii_digit() || matches!(b, b'-' | b'_'))
+    {
+        return SyncNetwork::WireGuard;
+    }
+    if lower.contains("zerotier")
+        || lower
+            .strip_prefix("zt")
+            .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_alphanumeric()))
+    {
+        return SyncNetwork::ZeroTier;
+    }
+    if lower.contains("openvpn")
+        || lower.contains("mullvad")
+        || lower.contains("proton")
+        || lower.contains("nordlynx")
+        || lower.contains("nebula")
+        || lower.contains("headscale")
+        || lower.contains("vpn")
+        || is_indexed_prefix(&lower, "tun")
+        || is_indexed_prefix(&lower, "tap")
+        || is_indexed_prefix(&lower, "utun")
+        || is_indexed_prefix(&lower, "ppp")
+        || lower.starts_with("ipsec")
+        || is_p2p
+        || is_cgnat_mesh_v4(ip)
+    {
+        return SyncNetwork::Vpn;
+    }
+    SyncNetwork::LocalNetwork
+}
+
+fn is_indexed_prefix(name: &str, prefix: &str) -> bool {
+    name.strip_prefix(prefix)
+        .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
+}
+
+fn sort_sync_addresses(addresses: &mut Vec<LocalSyncAddress>) {
+    addresses.sort_by_key(|entry| (entry.ip, entry.network));
+    addresses.dedup_by_key(|entry| entry.ip);
+    addresses.sort_by_key(|entry| {
+        let ip_rank = match entry.ip {
+            IpAddr::V4(v4) => (
+                !is_cgnat_mesh_v4(v4),
+                !v4.octets().starts_with(&[192, 168]),
+                v4.octets()[0] != 10,
+            ),
+            IpAddr::V6(_) => (true, true, true),
+        };
+        (entry.network, ip_rank, entry.ip)
+    });
+}
+
+fn collect_sync_endpoints<'a>(
+    interfaces: impl IntoIterator<Item = (&'a str, IpAddr, bool, bool)>,
+) -> Vec<LocalSyncAddress> {
+    let mut addresses: Vec<LocalSyncAddress> = interfaces
+        .into_iter()
+        .filter_map(|(name, ip, is_loopback, is_p2p)| match ip {
+            IpAddr::V4(v4)
+                if !is_loopback
+                    && is_private_or_mesh_ip(IpAddr::V4(v4))
+                    && !is_container_interface(name) =>
+            {
+                Some(LocalSyncAddress {
+                    ip: IpAddr::V4(v4),
+                    network: classify_sync_interface(name, v4, is_p2p),
+                })
+            }
+            _ => None,
+        })
+        .collect();
+    sort_sync_addresses(&mut addresses);
+    addresses
+}
+
+/// Non-loopback local IPv4 addresses reachable over VPN or LAN, excluding
+/// container/VM bridges, classified by detected network and sorted with VPNs
+/// before RFC 1918 LAN addresses.
+#[must_use]
+pub fn local_sync_endpoints() -> Vec<LocalSyncAddress> {
+    let interfaces = if_addrs::get_if_addrs().unwrap_or_default();
+    collect_sync_endpoints(interfaces.iter().map(|interface| {
+        (
+            interface.name.as_str(),
+            interface.ip(),
+            interface.is_loopback(),
+            interface.is_p2p(),
+        )
+    }))
+}
+
+/// Refines [`LocalSyncAddress`] entries using local IPs reported by
+/// `tailscale status --json` and `netbird status --json`, then re-sorts them.
+pub fn apply_mesh_identities(
+    addresses: &mut Vec<LocalSyncAddress>,
+    tailscale_ips: &[IpAddr],
+    netbird_ips: &[IpAddr],
+) {
+    for entry in addresses.iter_mut() {
+        if tailscale_ips.contains(&entry.ip) {
+            entry.network = SyncNetwork::Tailscale;
+        } else if netbird_ips.contains(&entry.ip) {
+            entry.network = SyncNetwork::NetBird;
+        }
+    }
+    sort_sync_addresses(addresses);
+}
+
 /// Non-loopback local IPv4 addresses reachable over Tailscale, NetBird, or LAN,
 /// sorted with mesh addresses (`100.64.0.0/10`) first, then RFC 1918 LAN.
 pub fn local_sync_addresses() -> Vec<IpAddr> {
@@ -121,6 +315,57 @@ pub fn local_sync_addresses() -> Vec<IpAddr> {
     });
     addresses.dedup();
     addresses.into_iter().map(IpAddr::V4).collect()
+}
+
+/// This computer's own addresses from `tailscale status --json`, keeping only
+/// mesh and private addresses.
+#[must_use]
+pub fn tailscale_self_ips(json: &[u8]) -> Vec<IpAddr> {
+    #[derive(Deserialize)]
+    struct Status {
+        #[serde(rename = "Self", default)]
+        self_node: Option<SelfNode>,
+    }
+    #[derive(Deserialize)]
+    struct SelfNode {
+        #[serde(rename = "TailscaleIPs", default)]
+        ips: Option<Vec<IpAddr>>,
+    }
+    let Ok(status) = serde_json::from_slice::<Status>(json) else {
+        return Vec::new();
+    };
+    let mut found: Vec<IpAddr> = status
+        .self_node
+        .and_then(|node| node.ips)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|ip| is_private_or_mesh_ip(*ip))
+        .collect();
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// This computer's own address from `netbird status --json`, keeping only mesh
+/// and private addresses.
+#[must_use]
+pub fn netbird_self_ips(json: &[u8]) -> Vec<IpAddr> {
+    #[derive(Deserialize)]
+    struct Status {
+        #[serde(rename = "netbirdIp", default)]
+        ip: Option<String>,
+    }
+    let Ok(status) = serde_json::from_slice::<Status>(json) else {
+        return Vec::new();
+    };
+    status
+        .ip
+        .as_deref()
+        .and_then(|raw| raw.split('/').next())
+        .and_then(|raw| raw.parse::<IpAddr>().ok())
+        .filter(|ip| is_private_or_mesh_ip(*ip))
+        .into_iter()
+        .collect()
 }
 
 /// Online peers in `tailscale status --json`, one address each (IPv4 first),
@@ -963,10 +1208,12 @@ mod tests {
         }"#;
         let ips =
             |list: &[&str]| -> Vec<IpAddr> { list.iter().map(|ip| ip.parse().unwrap()).collect() };
+        assert_eq!(tailscale_self_ips(tailscale), ips(&["100.85.31.24"]));
         assert_eq!(
             tailscale_peer_ips(tailscale),
             ips(&["100.95.0.2", "fd7a:115c:a1e0::4"])
         );
+        assert!(tailscale_self_ips(br#"{"Self": null}"#).is_empty());
         assert!(tailscale_peer_ips(br#"{"Peer": null}"#).is_empty());
         assert!(tailscale_peer_ips(b"not json").is_empty());
 
@@ -979,11 +1226,203 @@ mod tests {
                 {"fqdn": "d.netbird.cloud", "status": "Connecting"}
             ]}
         }"#;
+        assert_eq!(netbird_self_ips(netbird), ips(&["100.90.0.1"]));
         assert_eq!(
             netbird_peer_ips(netbird),
             ips(&["100.90.0.2", "100.90.0.3"])
         );
+        assert!(netbird_self_ips(br#"{"netbirdIp": "8.8.8.8/32"}"#).is_empty());
         assert!(netbird_peer_ips(br#"{"peers": {"details": null}}"#).is_empty());
+    }
+
+    #[test]
+    fn container_filter_hides_virtual_bridges_and_keeps_real_lan_and_vpn_interfaces() {
+        for hidden in [
+            "docker0",
+            "docker_gwbridge",
+            "podman0",
+            "br-9f8a7b6c5d4e",
+            "BR-ABCDEF123456",
+            "veth12ab34",
+            "virbr0",
+            "lxcbr0",
+            "lxdbr0",
+            "incusbr0",
+            "cni0",
+            "flannel.1",
+            "cali12345",
+            "cilium_host",
+            "kube-ipvs0",
+            "vboxnet0",
+            "vmnet8",
+            "vEthernet (WSL (Hyper-V firewall))",
+            "vEthernet (DockerNAT)",
+            "vEthernet (Default Switch)",
+        ] {
+            assert!(
+                is_container_interface(hidden),
+                "{hidden} should be filtered as container/VM bridge"
+            );
+        }
+        for kept in [
+            "eth0",
+            "enp3s0",
+            "en0",
+            "wlan0",
+            "wlp2s0",
+            "br0",
+            "br-lan",
+            "br-0123456789az",
+            "br-abcd1234",
+            "Wi-Fi",
+            "Ethernet",
+            "tailscale0",
+            "Tailscale",
+            "wt0",
+            "NetBird",
+            "wg0",
+            "ztkl9ab123",
+            "utun4",
+            "vEthernet (External)",
+        ] {
+            assert!(
+                !is_container_interface(kept),
+                "{kept} should not be filtered"
+            );
+        }
+    }
+
+    #[test]
+    fn sync_interface_classification_and_mesh_refinement_identify_vpns_and_sort_them() {
+        let lan = Ipv4Addr::new(192, 168, 1, 20);
+        let mesh_ts = Ipv4Addr::new(100, 85, 31, 24);
+        let mesh_nb = Ipv4Addr::new(100, 90, 0, 1);
+        let wg_ip = Ipv4Addr::new(10, 10, 0, 2);
+        let zt_ip = Ipv4Addr::new(10, 147, 20, 5);
+        let ovpn_ip = Ipv4Addr::new(10, 8, 0, 4);
+
+        assert_eq!(
+            classify_sync_interface("tailscale0", mesh_ts, true),
+            SyncNetwork::Tailscale
+        );
+        assert_eq!(
+            classify_sync_interface("Tailscale", mesh_ts, true),
+            SyncNetwork::Tailscale
+        );
+        assert_eq!(
+            classify_sync_interface("wt0", mesh_nb, true),
+            SyncNetwork::NetBird
+        );
+        assert_eq!(
+            classify_sync_interface("NetBird", mesh_nb, true),
+            SyncNetwork::NetBird
+        );
+        assert_eq!(
+            classify_sync_interface("wg0", wg_ip, true),
+            SyncNetwork::WireGuard
+        );
+        assert_eq!(
+            classify_sync_interface("wg-home", wg_ip, true),
+            SyncNetwork::WireGuard
+        );
+        assert_eq!(
+            classify_sync_interface("WireGuard Tunnel", wg_ip, true),
+            SyncNetwork::WireGuard
+        );
+        assert_eq!(
+            classify_sync_interface("ztkl9ab123", zt_ip, false),
+            SyncNetwork::ZeroTier
+        );
+        assert_eq!(
+            classify_sync_interface("ZeroTier One [8056c2e21c000001]", zt_ip, false),
+            SyncNetwork::ZeroTier
+        );
+        assert_eq!(
+            classify_sync_interface("tun0", ovpn_ip, true),
+            SyncNetwork::Vpn
+        );
+        assert_eq!(
+            classify_sync_interface("utun4", mesh_ts, true),
+            SyncNetwork::Vpn
+        );
+        assert_eq!(
+            classify_sync_interface("wlp2s0", lan, false),
+            SyncNetwork::LocalNetwork
+        );
+        assert_eq!(
+            classify_sync_interface("Wi-Fi", lan, false),
+            SyncNetwork::LocalNetwork
+        );
+
+        let mut collected = collect_sync_endpoints([
+            ("lo", IpAddr::V4(Ipv4Addr::LOCALHOST), true, false),
+            (
+                "docker0",
+                IpAddr::V4(Ipv4Addr::new(172, 17, 0, 1)),
+                false,
+                false,
+            ),
+            (
+                "br-abcd1234ef56",
+                IpAddr::V4(Ipv4Addr::new(172, 18, 0, 1)),
+                false,
+                false,
+            ),
+            ("br-lan", IpAddr::V4(lan), false, false),
+            ("utun3", IpAddr::V4(mesh_nb), false, true),
+            ("utun4", IpAddr::V4(mesh_ts), false, true),
+            ("wg0", IpAddr::V4(wg_ip), false, true),
+            ("eth0", IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), false, false),
+        ]);
+        assert_eq!(
+            collected,
+            vec![
+                LocalSyncAddress {
+                    ip: IpAddr::V4(wg_ip),
+                    network: SyncNetwork::WireGuard,
+                },
+                LocalSyncAddress {
+                    ip: IpAddr::V4(mesh_ts),
+                    network: SyncNetwork::Vpn,
+                },
+                LocalSyncAddress {
+                    ip: IpAddr::V4(mesh_nb),
+                    network: SyncNetwork::Vpn,
+                },
+                LocalSyncAddress {
+                    ip: IpAddr::V4(lan),
+                    network: SyncNetwork::LocalNetwork,
+                },
+            ]
+        );
+
+        apply_mesh_identities(
+            &mut collected,
+            &[IpAddr::V4(mesh_ts)],
+            &[IpAddr::V4(mesh_nb)],
+        );
+        assert_eq!(
+            collected,
+            vec![
+                LocalSyncAddress {
+                    ip: IpAddr::V4(mesh_ts),
+                    network: SyncNetwork::Tailscale,
+                },
+                LocalSyncAddress {
+                    ip: IpAddr::V4(mesh_nb),
+                    network: SyncNetwork::NetBird,
+                },
+                LocalSyncAddress {
+                    ip: IpAddr::V4(wg_ip),
+                    network: SyncNetwork::WireGuard,
+                },
+                LocalSyncAddress {
+                    ip: IpAddr::V4(lan),
+                    network: SyncNetwork::LocalNetwork,
+                },
+            ]
+        );
+        assert_eq!(collected[0].endpoint(38452), "100.85.31.24:38452");
     }
 
     #[test]

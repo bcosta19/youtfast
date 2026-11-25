@@ -3,20 +3,16 @@
 use super::*;
 use youtfast_storage::sync::{
     MAX_PAIRING_KEY_CHARS, MAX_PEER_ADDRESS_CHARS, MIN_SYNC_PORT, SyncSnapshot,
-    generate_pairing_key, local_sync_addresses, normalize_pairing_key,
+    generate_pairing_key, local_sync_endpoints, normalize_pairing_key,
 };
 
 pub(super) const SYNC_DEBOUNCE: Duration = Duration::from_secs(2);
 
 impl State {
-    /// Refreshes the list of reachable Tailscale, NetBird, and local IPv4
-    /// `ip:port` endpoints shown for this computer in Settings.
+    /// Refreshes the list of reachable VPN and local IPv4 addresses shown for
+    /// this computer in Settings.
     pub fn refresh_sync_addresses(&mut self) {
-        let port = self.settings.device_sync.port;
-        self.sync_addresses = local_sync_addresses()
-            .into_iter()
-            .map(|ip| format!("{ip}:{port}"))
-            .collect();
+        self.sync_addresses = local_sync_endpoints();
     }
 }
 
@@ -63,7 +59,6 @@ impl App {
         }
         self.state.settings.device_sync.port = port;
         self.state.sync_port_draft = port.to_string();
-        self.state.refresh_sync_addresses();
         self.reconfigure_device_sync();
     }
 

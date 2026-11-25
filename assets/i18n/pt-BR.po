@@ -2172,6 +2172,9 @@ msgstr "Nenhum endereço ativo do Tailscale, NetBird ou rede local encontrado."
 msgid "Copy address"
 msgstr "Copiar endereço"
 
+msgid "Local network"
+msgstr "Rede local"
+
 msgid "Address copied"
 msgstr "Endereço copiado"
 

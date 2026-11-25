@@ -385,8 +385,11 @@ conhecidos param de responder. Na rede local, a pergunta leva só a porta de
 escuta e um código que prova a chave, nunca a própria chave; libere no
 firewall a entrada TCP e UDP na **Porta de escuta**. Para usar só um
 computador, ou quando nenhuma busca o alcança (o Flatpak não consegue executar
-os clientes), informe o endereço dele (como `100.64.0.2:38452`). Ajuste
-**Porta de escuta** (`1024`–`65535`, padrão `38452`, a mesma em todos os
+os clientes), informe o endereço dele (como `100.64.0.2:38452`). Em **Este
+dispositivo**, cada endereço exibido tem um ícone da VPN detectada ou da rede
+local. Clique no endereço ou no botão de copiar ao lado e cole em **Endereço do
+outro dispositivo** no outro computador. A lista oculta bridges conhecidas de
+contêineres e máquinas virtuais. Ajuste **Porta de escuta** (`1024`–`65535`, padrão `38452`, a mesma em todos os
 computadores) ou **Sincronizar a cada** se necessário. Endereços IP públicos
 são recusados, e contas do YouTube, sessões, horários de alertas e
 configurações permanecem em cada computador. Inicie uma sincronização
