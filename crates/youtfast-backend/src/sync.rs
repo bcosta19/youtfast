@@ -1056,7 +1056,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn disabling_sync_cancels_an_outbound_handshake_without_an_event() {
+    async fn disabling_sync_cancels_an_outbound_handshake_without_reporting_completion() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let (ctx, events) = test_context(Library::default());
         ctx.sync.active().settings = DeviceSync {
@@ -1077,7 +1077,14 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert!(events.try_recv().is_err());
+        // The manual sync can refresh local addresses before disabling it.
+        // That event is independent of the outbound handshake's completion.
+        while let Ok((_, event)) = events.try_recv() {
+            assert!(matches!(
+                event,
+                Event::DeviceSyncAddresses { generation: 0, .. }
+            ));
+        }
         assert_eq!(socket.read(&mut [0]).await.unwrap(), 0);
     }
 
