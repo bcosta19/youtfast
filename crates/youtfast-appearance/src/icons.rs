@@ -56,5 +56,11 @@ fastframe_icons::icons! {
         MiniPlayer => "picture-in-picture-2",
         Live => "radio",
         Cast => "cast",
+        Tailscale => "tailscale",
+        NetBird => "netbird",
+        WireGuard => "wireguard",
+        ZeroTier => "zerotier",
+        Vpn => "vpn",
+        Lan => "lan",
     }
 }

@@ -346,7 +346,11 @@ ones stop answering. On the local network, the question carries only the
 listen port and a code proving the key, never the key itself; allow incoming
 TCP and UDP on **Listen port** in the firewall. To use one computer only, or
 when no search can reach it (the Flatpak can't run the clients), enter its
-address (such as `100.64.0.2:38452`). Adjust **Listen port** (`1024`–`65535`,
+address (such as `100.64.0.2:38452`). Under **This device**, each displayed
+address has an icon for the detected VPN or local network. Click the address
+or its copy button, then paste it into **Other device address** on the other
+computer. Known container and VM bridges are hidden from this list.
+Adjust **Listen port** (`1024`–`65535`,
 default `38452`, the same on every computer) or **Sync every** if needed.
 Public IP addresses are refused, and YouTube accounts, sessions, alert
 timestamps, and settings stay on each computer. Trigger an immediate sync,

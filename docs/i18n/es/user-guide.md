@@ -398,7 +398,11 @@ solo lleva el puerto de escucha y un código que demuestra la clave, nunca la
 clave; permite en el cortafuegos la entrada TCP y UDP en el **Puerto de
 escucha**. Para usar un solo ordenador, o cuando ninguna búsqueda lo alcanza
 (el Flatpak no puede ejecutar los clientes), introduce su dirección (por
-ejemplo, `100.64.0.2:38452`). Ajusta **Puerto de escucha** (`1024`–`65535`,
+ejemplo, `100.64.0.2:38452`). En **Este dispositivo**, cada dirección mostrada
+tiene un icono de la VPN detectada o de la red local. Haz clic en la dirección
+o en el botón de copia que tiene al lado y pégala en **Dirección del otro
+dispositivo** en el otro ordenador. La lista oculta los puentes conocidos de
+contenedores y máquinas virtuales. Ajusta **Puerto de escucha** (`1024`–`65535`,
 predeterminado `38452`, el mismo en todos los ordenadores) o **Sincronizar
 cada** si hace falta. Se rechazan las direcciones IP públicas, y las cuentas de
 YouTube, sesiones, marcas de tiempo de alertas y ajustes permanecen en cada

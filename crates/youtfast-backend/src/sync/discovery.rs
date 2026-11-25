@@ -8,7 +8,9 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use tokio::io::AsyncReadExt;
-use youtfast_storage::sync::{netbird_peer_ips, tailscale_peer_ips};
+use youtfast_storage::sync::{
+    netbird_peer_ips, netbird_self_ips, tailscale_peer_ips, tailscale_self_ips,
+};
 
 const STATUS_TIMEOUT: Duration = Duration::from_secs(3);
 const OUTPUT_LIMIT: u64 = 4 * 1024 * 1024;
@@ -53,6 +55,20 @@ pub(super) async fn mesh_peers() -> Vec<IpAddr> {
     ips.sort();
     ips.dedup();
     ips
+}
+
+/// This computer's own mesh addresses reported by Tailscale and NetBird, so
+/// local VPN interfaces (including macOS `utunN`) can be identified accurately.
+pub(super) async fn local_mesh_ips() -> (Vec<IpAddr>, Vec<IpAddr>) {
+    let (tailscale, netbird) = tokio::join!(status(TAILSCALE), status(NETBIRD));
+    (
+        tailscale
+            .map(|json| tailscale_self_ips(&json))
+            .unwrap_or_default(),
+        netbird
+            .map(|json| netbird_self_ips(&json))
+            .unwrap_or_default(),
+    )
 }
 
 /// `status --json` from the first of `programs` that exists.

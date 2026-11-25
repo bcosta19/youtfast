@@ -6,13 +6,14 @@ use youtfast_i18n::{Locale, format as trf, gettext as tr, interpolate, ngettext}
 use super::{CONTROL_WIDTH, combo_width, setting_row, switch, switch_row};
 use crate::widgets;
 use youtfast_app::{Action, State, SyncStatus};
+use youtfast_appearance::icons::Icon;
 use youtfast_appearance::theme;
 use youtfast_core::model::{SponsorBehavior, SponsorCategory};
 use youtfast_core::util;
 use youtfast_storage::settings::{HistorySync, PlaybackBuffer};
 use youtfast_storage::sync::{
     ERR_PAIRING_KEY_INVALID, MAX_PAIRING_KEY_CHARS, MAX_PEER_ADDRESS_CHARS, MIN_SYNC_PORT,
-    normalize_pairing_key,
+    SyncNetwork, normalize_pairing_key,
 };
 
 /// How often the checks may run, in minutes.
@@ -498,6 +499,17 @@ pub(super) fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     });
 }
 
+fn sync_network_icon(network: SyncNetwork) -> Icon {
+    match network {
+        SyncNetwork::Tailscale => Icon::Tailscale,
+        SyncNetwork::NetBird => Icon::NetBird,
+        SyncNetwork::WireGuard => Icon::WireGuard,
+        SyncNetwork::ZeroTier => Icon::ZeroTier,
+        SyncNetwork::Vpn => Icon::Vpn,
+        SyncNetwork::LocalNetwork => Icon::Lan,
+    }
+}
+
 fn device_sync_card(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
     let palette = &state.palette;
@@ -523,39 +535,66 @@ fn device_sync_card(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 
         let card = widgets::on_card(palette);
         widgets::hairline_divider(ui, palette);
-        let addresses_text = if state.sync_addresses.is_empty() {
-            tr(
-                locale,
-                "No active Tailscale, NetBird, or local network address found.",
-            )
-            .into_owned()
-        } else {
-            state.sync_addresses.join(", ")
-        };
-        let copy_address = tr(locale, "Copy address");
-        let copy_addr_width = button_row_width(ui, &[copy_address.as_ref()]).max(CONTROL_WIDTH);
-        setting_row(
-            ui,
-            palette,
-            &tr(locale, "This device"),
-            &addresses_text,
-            copy_addr_width,
-            |ui| {
-                ui.add_enabled_ui(!state.sync_addresses.is_empty(), |ui| {
-                    if widgets::button(
-                        ui,
-                        &card,
-                        copy_address.as_ref(),
-                        widgets::ButtonStyle::Normal,
+        ui.vertical(|ui| {
+            ui.label(
+                RichText::new(tr(locale, "This device").as_ref())
+                    .font(theme::medium(14.5))
+                    .color(palette.text),
+            );
+            if state.sync_addresses.is_empty() {
+                ui.add_space(2.0);
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(
+                            tr(
+                                locale,
+                                "No active Tailscale, NetBird, or local network address found.",
+                            )
+                            .as_ref(),
+                        )
+                        .font(theme::regular(13.0))
+                        .color(palette.secondary),
                     )
-                    .clicked()
-                        && let Some(first) = state.sync_addresses.first()
-                    {
-                        actions.push(Action::CopySyncAddress(first.clone()));
-                    }
-                });
-            },
-        );
+                    .wrap(),
+                );
+            } else {
+                ui.add_space(6.0);
+                let copy_address = tr(locale, "Copy address");
+                ui.spacing_mut().item_spacing.y = 2.0;
+                for addr in &state.sync_addresses {
+                    let endpoint = addr.endpoint(sync.port);
+                    let network_label = tr(locale, addr.network.label());
+                    let copy_hint = format!("{copy_address} ({network_label})");
+                    let icon = sync_network_icon(addr.network);
+                    let icon_tint = if addr.network == SyncNetwork::LocalNetwork {
+                        palette.secondary
+                    } else {
+                        palette.text
+                    };
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 6.0;
+                        ui.add(icon.image(icon_tint, 15.0))
+                            .on_hover_text(network_label.as_ref());
+                        let ip_response = ui
+                            .add(
+                                egui::Label::new(
+                                    RichText::new(&endpoint)
+                                        .font(egui::FontId::monospace(13.0))
+                                        .color(palette.text),
+                                )
+                                .sense(egui::Sense::click()),
+                            )
+                            .on_hover_cursor(egui::CursorIcon::PointingHand)
+                            .on_hover_text(network_label.as_ref());
+                        let copy_clicked =
+                            widgets::icon_button(ui, Icon::Copy, 14.0, &copy_hint).clicked();
+                        if ip_response.clicked() || copy_clicked {
+                            actions.push(Action::CopySyncAddress(endpoint));
+                        }
+                    });
+                }
+            }
+        });
 
         widgets::hairline_divider(ui, palette);
         let new_key = tr(locale, "New key");
@@ -1455,7 +1494,16 @@ mod tests {
         theme::install_fonts(&ctx);
         let mut state = State {
             sync_port_draft: "38452".to_owned(),
-            sync_addresses: vec!["100.64.0.10:38452".to_owned()],
+            sync_addresses: vec![
+                youtfast_storage::sync::LocalSyncAddress {
+                    ip: "100.64.0.10".parse().unwrap(),
+                    network: SyncNetwork::Tailscale,
+                },
+                youtfast_storage::sync::LocalSyncAddress {
+                    ip: "192.168.1.25".parse().unwrap(),
+                    network: SyncNetwork::LocalNetwork,
+                },
+            ],
             sync_status: SyncStatus::Idle,
             ..Default::default()
         };
@@ -1473,12 +1521,14 @@ mod tests {
             |ui| history(ui, &state, &mut actions),
         );
         let mut positions = std::collections::HashMap::new();
+        let mut rects = std::collections::HashMap::new();
         let mut labels = Vec::new();
         for shape in &output.shapes {
             if let egui::Shape::Text(text) = &shape.shape {
                 let label = text.galley.text().to_owned();
-                let center = egui::Rect::from_min_size(text.pos, text.galley.size()).center();
-                positions.entry(label.clone()).or_insert(center);
+                let rect = egui::Rect::from_min_size(text.pos, text.galley.size());
+                positions.entry(label.clone()).or_insert(rect.center());
+                rects.entry(label.clone()).or_insert(rect);
                 labels.push(label);
             }
         }
@@ -1493,7 +1543,7 @@ mod tests {
             "Device sync",
             "This device",
             "100.64.0.10:38452",
-            "Copy address",
+            "192.168.1.25:38452",
             "Pairing key",
             "Copy key",
             "New key",
@@ -1510,10 +1560,20 @@ mod tests {
             );
         }
 
-        for target in ["Copy address", "New key", "Copy key", "30 min", "Sync now"] {
-            let pos = *positions
-                .get(target)
-                .unwrap_or_else(|| panic!("missing clickable text {target:?}"));
+        let lan_rect = *rects.get("192.168.1.25:38452").expect("LAN endpoint rect");
+        // The copy icon button sits immediately to the right of the endpoint text.
+        let lan_copy_btn = egui::pos2(lan_rect.right() + 20.0, lan_rect.center().y);
+        let click_targets = [
+            *positions
+                .get("100.64.0.10:38452")
+                .expect("Tailscale endpoint"),
+            lan_copy_btn,
+            *positions.get("New key").expect("New key"),
+            *positions.get("Copy key").expect("Copy key"),
+            *positions.get("30 min").expect("30 min"),
+            *positions.get("Sync now").expect("Sync now"),
+        ];
+        for pos in click_targets {
             let mut run = |events: Vec<egui::Event>| {
                 let mut out = ctx.run_ui(
                     egui::RawInput {
@@ -1542,6 +1602,7 @@ mod tests {
             actions,
             [
                 Action::CopySyncAddress("100.64.0.10:38452".to_owned()),
+                Action::CopySyncAddress("192.168.1.25:38452".to_owned()),
                 Action::GenerateDeviceSyncKey,
                 Action::CopySyncKey,
                 Action::SetDeviceSyncEvery(30),

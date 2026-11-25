@@ -8,6 +8,10 @@ are the distribution record.
 
 ## [Unreleased]
 
+### Added
+
+- **Device sync** marks each local address with a VPN or local network icon, hides known container and VM bridges, and lets you copy any displayed address with a click.
+
 ## [0.11.0] - 2026-11-24
 
 ### Added

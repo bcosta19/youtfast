@@ -404,8 +404,12 @@ enthält die Anfrage nur den Empfangsport und einen Code, der den Schlüssel
 belegt, nie den Schlüssel selbst; erlauben Sie in der Firewall eingehendes TCP
 und UDP auf dem **Empfangsport**. Um nur einen Computer zu verwenden oder wenn
 keine Suche ihn erreicht (das Flatpak kann die Clients nicht ausführen),
-tragen Sie dessen Adresse ein (zum Beispiel `100.64.0.2:38452`). Passen Sie bei
-Bedarf **Empfangsport** (`1024`–`65535`, Standard `38452`, auf allen Computern
+tragen Sie dessen Adresse ein (zum Beispiel `100.64.0.2:38452`). Unter
+**Dieses Gerät** hat jede angezeigte Adresse ein Symbol für das erkannte VPN
+oder das lokale Netzwerk. Klicken Sie auf die Adresse oder die Kopierschaltfläche
+daneben und fügen Sie sie auf dem anderen Computer unter **Adresse des anderen
+Geräts** ein. Die Liste blendet bekannte Netzwerkbrücken von Containern und
+virtuellen Maschinen aus. Passen Sie bei Bedarf **Empfangsport** (`1024`–`65535`, Standard `38452`, auf allen Computern
 gleich) oder **Synchronisieren alle** an. Öffentliche IP-Adressen werden
 abgelehnt; YouTube-Konten, Sitzungen, Benachrichtigungszeiten und
 Einstellungen bleiben auf jedem Computer lokal. Mit **Jetzt synchronisieren**

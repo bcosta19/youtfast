@@ -388,7 +388,11 @@ rete locale la domanda contiene solo la porta di ascolto e un codice che prova
 la chiave, mai la chiave stessa; consenti nel firewall l'ingresso TCP e UDP
 sulla **Porta di ascolto**. Per usare un solo computer, o quando nessuna
 ricerca lo raggiunge (il Flatpak non può eseguire i client), inserisci il suo
-indirizzo (ad esempio `100.64.0.2:38452`). Regola **Porta di ascolto**
+indirizzo (ad esempio `100.64.0.2:38452`). In **Questo dispositivo**, ogni
+indirizzo visualizzato ha un'icona per la VPN rilevata o per la rete locale.
+Fai clic sull'indirizzo o sul pulsante di copia accanto, poi incollalo in
+**Indirizzo dell'altro dispositivo** sull'altro computer. L'elenco nasconde i
+bridge noti di container e macchine virtuali. Regola **Porta di ascolto**
 (`1024`–`65535`, predefinita `38452`, la stessa su tutti i computer) o
 **Sincronizza ogni** se necessario. Gli indirizzi IP pubblici vengono
 rifiutati, mentre account YouTube, sessioni, orari degli avvisi e impostazioni

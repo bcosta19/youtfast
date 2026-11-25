@@ -19,8 +19,9 @@ use youtfast_storage::settings::DeviceSync;
 use youtfast_storage::sync::{
     ERR_INCOMPATIBLE_VERSION, ERR_INVALID_RESPONSE, ERR_LISTENER_FAILED, ERR_NO_PEERS_FOUND,
     ERR_PAIRING_KEY_INVALID, ERR_PRIVATE_ONLY, ERR_SIZE_LIMIT, ERR_UNREACHABLE, MIN_SYNC_PORT,
-    PAIRING_KEY_BYTES, SyncSnapshot, is_private_or_mesh_ip, local_sync_addresses,
-    normalize_pairing_key, parse_peer_target, parse_sync_bytes, to_sync_json_bytes,
+    PAIRING_KEY_BYTES, SyncSnapshot, apply_mesh_identities, is_private_or_mesh_ip,
+    local_sync_addresses, local_sync_endpoints, normalize_pairing_key, parse_peer_target,
+    parse_sync_bytes, to_sync_json_bytes,
 };
 
 mod discovery;
@@ -31,6 +32,8 @@ use transport::{PacketKind, SecurePeer};
 const MAX_CONCURRENT_INCOMING: usize = 4;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(4);
 const IO_TIMEOUT: Duration = Duration::from_secs(10);
+// Text fields reconfigure sync on every edit; only probe after they settle.
+const ADDRESS_REFRESH_DEBOUNCE: Duration = Duration::from_millis(500);
 /// How long a search of Tailscale, NetBird and the local network is reused
 /// by automatic syncs.
 const DISCOVERY_TTL: Duration = Duration::from_secs(10 * 60);
@@ -112,6 +115,27 @@ fn own_endpoints(port: u16) -> Vec<SocketAddr> {
         .collect()
 }
 
+async fn refresh_local_addresses(context: Context, generation: u64, delay: Duration) {
+    let work = async {
+        if !delay.is_zero() {
+            tokio::time::sleep(delay).await;
+        }
+        let (local, (tailscale, netbird)) = tokio::join!(
+            tokio::task::spawn_blocking(local_sync_endpoints),
+            discovery::local_mesh_ips(),
+        );
+        let mut addresses = local.unwrap_or_default();
+        apply_mesh_identities(&mut addresses, &tailscale, &netbird);
+        addresses
+    };
+    if let Some(addresses) = context.sync.while_current(generation, work).await {
+        context.send(Event::DeviceSyncAddresses {
+            generation,
+            addresses,
+        });
+    }
+}
+
 struct RunningListener {
     port: u16,
     shutdown: oneshot::Sender<()>,
@@ -179,6 +203,14 @@ pub(crate) async fn configure(context: &Context, next: DeviceSync, generation: u
         active.settings = next.clone();
         active.generation = generation;
         context.sync.generation.send_replace(generation);
+    }
+
+    if next.enabled {
+        tokio::spawn(refresh_local_addresses(
+            context.clone(),
+            generation,
+            ADDRESS_REFRESH_DEBOUNCE,
+        ));
     }
 
     {
@@ -383,6 +415,13 @@ pub(crate) async fn sync_now(context: &Context, manual: bool, generation: u64) {
             active.searched_at,
         )
     };
+    if manual {
+        tokio::spawn(refresh_local_addresses(
+            context.clone(),
+            generation,
+            Duration::ZERO,
+        ));
+    }
     let library = latest_library(&context.library_saves);
     let work = async {
         if settings.peer_address.trim().is_empty() {
@@ -1017,7 +1056,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn disabling_sync_cancels_an_outbound_handshake_without_an_event() {
+    async fn disabling_sync_cancels_an_outbound_handshake_without_reporting_completion() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let (ctx, events) = test_context(Library::default());
         ctx.sync.active().settings = DeviceSync {
@@ -1038,7 +1077,14 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert!(events.try_recv().is_err());
+        // The manual sync can refresh local addresses before disabling it.
+        // That event is independent of the outbound handshake's completion.
+        while let Ok((_, event)) = events.try_recv() {
+            assert!(matches!(
+                event,
+                Event::DeviceSyncAddresses { generation: 0, .. }
+            ));
+        }
         assert_eq!(socket.read(&mut [0]).await.unwrap(), 0);
     }
 
