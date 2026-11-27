@@ -252,7 +252,9 @@ forwarding duration and recency options to YouTube search), and the current
 time; `youtfast-logic::recommend` filters, scores and interleaves history and
 topic lanes without I/O or metadata lookups. The editor, settings sanitization
 and term parsing share the same character limit, and selected preset topics are
-deduplicated and bounded per refresh. Muted terms are never sent. Settings and
+deduplicated and bounded per refresh. Custom-interest searches require a separate
+opt-in when eligible watch history exists; the legacy opt-in only covers the
+absence of eligible history. Muted terms are never sent. Settings and
 account recommendations are not synced by this feature.
 
 ## Persistence and account isolation

@@ -162,6 +162,7 @@ pub struct Recommendations {
     pub interests: String,
     pub muted: String,
     pub search_interests: bool,
+    pub search_interests_with_history: bool,
 }
 
 fn read_recommendation_topics<'de, D: serde::Deserializer<'de>>(
@@ -489,7 +490,7 @@ impl Recommendations {
 
     /// Public YouTube search queries from selected preset topics and, when
     /// opted in, unique custom interests. Muted terms are never included.
-    pub fn topic_queries(&self) -> Vec<&str> {
+    pub fn topic_queries(&self, has_eligible_history: bool) -> Vec<&str> {
         let mut seen = Vec::new();
         let mut queries = Vec::new();
         for &topic in &self.topics {
@@ -501,7 +502,12 @@ impl Recommendations {
                 queries.push(topic.search_query());
             }
         }
-        if self.search_interests {
+        let search_interests = if has_eligible_history {
+            self.search_interests_with_history
+        } else {
+            self.search_interests
+        };
+        if search_interests {
             let mut seen_terms = Vec::new();
             let mut added = 0;
             for term in recommendation_terms(&self.interests) {
@@ -539,9 +545,12 @@ fn topic_search_is_opt_in_for_custom_terms_bounded_and_never_uses_muted_terms() 
         muted: "private".into(),
         ..Recommendations::default()
     };
-    assert!(preferences.topic_queries().is_empty());
+    assert!(preferences.topic_queries(false).is_empty());
     preferences.search_interests = true;
-    assert_eq!(preferences.topic_queries(), ["ciência", "rust", "filmes"]);
+    assert_eq!(
+        preferences.topic_queries(false),
+        ["ciência", "rust", "filmes"]
+    );
 
     preferences.topics = vec![
         RecommendationTopic::Computing,
@@ -563,7 +572,7 @@ fn topic_search_is_opt_in_for_custom_terms_bounded_and_never_uses_muted_terms() 
         ]
     );
     // Up to 4 preset topics plus custom terms capped at 5 total, never muted.
-    let queries = sanitized.topic_queries();
+    let queries = sanitized.topic_queries(false);
     assert_eq!(queries.len(), Recommendations::MAX_TOPIC_QUERIES);
     assert_eq!(queries[0], RecommendationTopic::Computing.search_query());
     assert_eq!(queries[3], RecommendationTopic::Music.search_query());
@@ -588,7 +597,7 @@ fn recommendation_topics_deserialize_tolerantly_and_deduplicate_terms() {
         [RecommendationTopic::Computing, RecommendationTopic::Science,]
     );
     assert_eq!(
-        settings.recommendations.topic_queries(),
+        settings.recommendations.topic_queries(false),
         [
             RecommendationTopic::Computing.search_query(),
             RecommendationTopic::Science.search_query(),
@@ -612,6 +621,21 @@ fn recommendation_topics_deserialize_tolerantly_and_deduplicate_terms() {
 
 #[cfg(test)]
 #[test]
+fn legacy_custom_search_consent_only_applies_without_eligible_history() {
+    let mut settings: Settings = serde_json::from_str(
+        r#"{"recommendations":{"topics":["computing"],"interests":"rust","search_interests":true}}"#,
+    )
+    .unwrap();
+    let preferences = &mut settings.recommendations;
+    let preset = RecommendationTopic::Computing.search_query();
+    assert_eq!(preferences.topic_queries(false), [preset, "rust"]);
+    assert_eq!(preferences.topic_queries(true), [preset]);
+    preferences.search_interests_with_history = true;
+    assert_eq!(preferences.topic_queries(true), [preset, "rust"]);
+}
+
+#[cfg(test)]
+#[test]
 fn recommendation_text_keeps_multibyte_characters_up_to_the_editor_limit() {
     let text = format!("{}ciência", "🦀".repeat(293));
     let oversized = format!("{text}x");
@@ -621,7 +645,7 @@ fn recommendation_text_keeps_multibyte_characters_up_to_the_editor_limit() {
         search_interests: true,
         ..Recommendations::default()
     };
-    assert_eq!(preferences.topic_queries(), [text.as_str()]);
+    assert_eq!(preferences.topic_queries(false), [text.as_str()]);
     assert_eq!(
         recommendation_terms(&preferences.muted).next(),
         Some(text.as_str())

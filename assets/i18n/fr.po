@@ -2302,8 +2302,11 @@ msgstr "Centres d’intérêt personnalisés (séparés par des virgules)"
 msgid "Muted title terms (comma-separated)"
 msgstr "Termes masqués dans les titres (séparés par des virgules)"
 
-msgid "Search YouTube for custom interests (signed out)"
-msgstr "Rechercher des centres d’intérêt personnalisés sur YouTube (sans compte)"
+msgid "Search YouTube for custom interests without watch history (signed out)"
+msgstr "Rechercher des centres d’intérêt personnalisés sur YouTube sans historique de visionnage (sans compte)"
+
+msgid "Search YouTube for custom interests with watch history (signed out)"
+msgstr "Rechercher des centres d’intérêt personnalisés sur YouTube avec un historique de visionnage (sans compte)"
 
 msgid "Apply"
 msgstr "Appliquer"

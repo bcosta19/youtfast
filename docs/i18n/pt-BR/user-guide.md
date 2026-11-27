@@ -533,11 +533,11 @@ desconhecida.
 
 Com a conta conectada, as recomendações do YouTube continuam sendo o padrão;
 ative **Usar ranking local em vez das recomendações do YouTube** para aplicar
-essas preferências ao feed. Você também pode ativar **Buscar interesses
-personalizados no YouTube (sem login)** para incluir até três interesses
-personalizados em buscas sem login junto com os tópicos escolhidos e o
-histórico (limitado a cinco buscas de tópicos no total a cada atualização). Os termos
-silenciados nunca saem do dispositivo.
+essas preferências ao feed. Ative **Buscar interesses personalizados no YouTube sem histórico de exibição (sem login)** para buscar interesses personalizados
+quando não houver histórico de exibição elegível. Ative **Buscar interesses personalizados no YouTube com histórico de exibição (sem login)** separadamente
+para buscá-los quando houver histórico elegível. Cada opção permite até três
+termos personalizados dentro do limite de cinco buscas de tópicos por
+atualização. Os termos silenciados nunca saem do dispositivo.
 
 ## Alertas de novos vídeos
 

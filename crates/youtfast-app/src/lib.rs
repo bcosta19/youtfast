@@ -635,7 +635,11 @@ impl State {
     /// Whether local For you has eligible watch history seeds or active topic queries.
     pub fn has_local_for_you_inputs(&self) -> bool {
         youtfast_logic::recommend::has_eligible_history(&self.library)
-            || !self.settings.recommendations.topic_queries().is_empty()
+            || !self
+                .settings
+                .recommendations
+                .topic_queries(false)
+                .is_empty()
     }
 
     /// The feed's videos home shows: For you's, or the first

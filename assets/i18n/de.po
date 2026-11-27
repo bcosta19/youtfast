@@ -2302,8 +2302,11 @@ msgstr "Eigene Interessen (durch Kommas getrennt)"
 msgid "Muted title terms (comma-separated)"
 msgstr "Stumme Titelbegriffe (durch Kommas getrennt)"
 
-msgid "Search YouTube for custom interests (signed out)"
-msgstr "Eigene Interessen auf YouTube suchen (ohne Anmeldung)"
+msgid "Search YouTube for custom interests without watch history (signed out)"
+msgstr "Eigene Interessen ohne Wiedergabeverlauf auf YouTube suchen (ohne Anmeldung)"
+
+msgid "Search YouTube for custom interests with watch history (signed out)"
+msgstr "Eigene Interessen mit Wiedergabeverlauf auf YouTube suchen (ohne Anmeldung)"
 
 msgid "Apply"
 msgstr "Anwenden"

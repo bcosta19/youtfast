@@ -476,10 +476,11 @@ duration filter excludes videos with unknown length.
 
 When signed in, YouTube's recommendations remain the default; enable **Use
 local ranking instead of YouTube recommendations** to apply these settings to
-your feed. You can also enable **Search YouTube for custom interests (signed
-out)** to include up to three custom interests in signed-out searches alongside
-any preset topics and watch history (capped at five topic searches per refresh).
-Muted terms never leave the device.
+your feed. Enable **Search YouTube for custom interests without watch history (signed out)** to search for custom interests if
+there is no eligible watch history. Enable **Search YouTube for custom interests with watch history (signed out)** separately to search
+for them when there is eligible history. Either allows up to three custom terms
+within the limit of five topic searches per refresh. Muted terms never leave the
+device.
 
 ## New-upload alerts
 

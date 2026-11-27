@@ -1090,7 +1090,7 @@ async fn local_recommendations(
 
     let now = youtfast_core::util::now();
     let queries: Vec<String> = preferences
-        .topic_queries()
+        .topic_queries(!seeds.is_empty())
         .into_iter()
         .map(str::to_owned)
         .collect();

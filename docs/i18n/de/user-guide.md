@@ -559,11 +559,11 @@ Titel aus. Der Dauerfilter schließt Videos mit unbekannter Dauer aus.
 
 Bei Anmeldung bleiben YouTube-Empfehlungen der Standard. Wählen Sie
 **Lokale Rangfolge statt YouTube-Empfehlungen verwenden**, um die Einstellungen
-auf den Feed anzuwenden. Optional können Sie **Eigene Interessen auf YouTube
-suchen (ohne Anmeldung)** aktivieren, um bis zu drei eigene Interessen neben
-gewählten Themen und Ihrem Verlauf in Suchen ohne Anmeldung einzubeziehen
-(insgesamt höchstens fünf Themensuchen pro Aktualisierung). Stumme Begriffe
-verlassen das Gerät nie.
+auf den Feed anzuwenden. Aktivieren Sie **Eigene Interessen ohne Wiedergabeverlauf auf YouTube suchen (ohne Anmeldung)**, um bei fehlendem geeignetem
+Wiedergabeverlauf nach eigenen Interessen zu suchen. Aktivieren Sie **Eigene Interessen mit Wiedergabeverlauf auf YouTube suchen (ohne Anmeldung)**
+separat für die Suche bei geeignetem Verlauf. Beide Optionen erlauben bis zu drei
+eigene Begriffe innerhalb der Grenze von fünf Themensuchen pro Aktualisierung.
+Stumme Begriffe verlassen das Gerät nie.
 
 ## Benachrichtigungen über neue Uploads
 

@@ -537,11 +537,11 @@ esclude i video di durata sconosciuta.
 
 Dopo l’accesso, i consigli di YouTube rimangono la scelta predefinita. Attiva
 **Usa la classifica locale invece dei consigli di YouTube** per applicare le
-impostazioni al feed. Puoi anche attivare **Cerca interessi personalizzati su
-YouTube (senza accesso)** per includere fino a tre interessi personalizzati
-nelle ricerche senza accesso insieme agli argomenti scelti e alla cronologia
-(con un limite di cinque ricerche di argomenti in totale a ogni aggiornamento). I
-termini silenziati non lasciano mai il dispositivo.
+impostazioni al feed. Attiva **Cerca interessi personalizzati su YouTube senza cronologia di visualizzazione (senza accesso)** per cercare interessi personalizzati in
+assenza di una cronologia di visualizzazione utilizzabile. Attiva separatamente
+**Cerca interessi personalizzati su YouTube con cronologia di visualizzazione (senza accesso)** per cercarli quando la cronologia è utilizzabile. Entrambe le opzioni
+consentono fino a tre termini personalizzati entro il limite di cinque ricerche
+di argomenti per aggiornamento. I termini silenziati non lasciano mai il dispositivo.
 
 ## Avvisi di nuovi caricamenti
 

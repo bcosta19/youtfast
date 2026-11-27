@@ -431,27 +431,29 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                                 submit_text = true;
                             }
                         }
-                        let mut search_interests = saved.search_interests;
-                        if ui
+                        let mut next = saved.clone();
+                        let search_without_history = ui
                             .checkbox(
-                                &mut search_interests,
-                                tr(locale, "Search YouTube for custom interests (signed out)"),
+                                &mut next.search_interests,
+                                tr(locale, "Search YouTube for custom interests without watch history (signed out)"),
                             )
-                            .changed()
-                        {
-                            let mut next = saved.clone();
-                            next.interests = interests_draft.clone();
-                            next.muted = muted_draft.clone();
-                            next.search_interests = search_interests;
-                            actions.push(Action::SetRecommendations(next));
-                        }
+                            .changed();
+                        let search_with_history = ui
+                            .checkbox(
+                                &mut next.search_interests_with_history,
+                                tr(locale, "Search YouTube for custom interests with watch history (signed out)"),
+                            )
+                            .changed();
                         let text_dirty =
                             interests_draft != saved.interests || muted_draft != saved.muted;
                         let apply_clicked = ui
                             .add_enabled(text_dirty, egui::Button::new(tr(locale, "Apply")))
                             .clicked();
-                        if (submit_text && text_dirty) || apply_clicked {
-                            let mut next = saved.clone();
+                        if search_without_history
+                            || search_with_history
+                            || (submit_text && text_dirty)
+                            || apply_clicked
+                        {
                             next.interests = interests_draft.clone();
                             next.muted = muted_draft.clone();
                             actions.push(Action::SetRecommendations(next));

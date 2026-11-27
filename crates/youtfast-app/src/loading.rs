@@ -450,7 +450,7 @@ impl App {
         let preferences = state.settings.recommendations.clone();
         let account = state.signed_in() && !preferences.prefer_local;
         let seeds = youtfast_logic::recommend::seeds_for_library(&state.library);
-        if seeds.is_empty() && !account && preferences.topic_queries().is_empty() {
+        if seeds.is_empty() && !account && preferences.topic_queries(false).is_empty() {
             self.state.for_you = Listing::Ready(Vec::new());
             return;
         }

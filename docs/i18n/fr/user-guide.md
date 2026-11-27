@@ -579,12 +579,11 @@ les vidéos dont la durée est inconnue.
 
 Lorsque vous êtes connecté, les recommandations YouTube restent la valeur par
 défaut. Activez **Utiliser le classement local au lieu des recommandations YouTube**
-pour appliquer ces réglages au flux. Vous pouvez aussi activer **Rechercher des
-centres d’intérêt personnalisés sur YouTube (sans compte)** pour inclure
-jusqu’à trois centres d’intérêt personnalisés dans des recherches sans compte
-en plus des sujets choisis et de votre historique (dans la limite de cinq
-recherches de sujets au total à chaque actualisation). Les termes masqués ne quittent
-jamais l’appareil.
+pour appliquer ces réglages au flux. Activez **Rechercher des centres d’intérêt personnalisés sur YouTube sans historique de visionnage (sans compte)** pour rechercher vos centres d’intérêt
+si aucun historique de visionnage n’est exploitable. Activez séparément **Rechercher des centres d’intérêt personnalisés sur YouTube avec un historique de visionnage (sans compte)**
+pour les rechercher quand un historique est exploitable. Chaque option permet
+jusqu’à trois termes personnalisés dans la limite de cinq recherches de sujets
+par actualisation. Les termes masqués ne quittent jamais l’appareil.
 
 ## Alertes de nouvelles vidéos
 

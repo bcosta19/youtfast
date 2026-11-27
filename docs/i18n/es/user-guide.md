@@ -548,11 +548,11 @@ duración excluye los vídeos cuya duración se desconoce.
 
 Con una sesión iniciada, las recomendaciones de YouTube siguen siendo la opción
 predeterminada. Activa **Usar la clasificación local en vez de las recomendaciones de YouTube**
-para aplicar los ajustes al feed. También puedes activar **Buscar intereses
-personalizados en YouTube (sin sesión)** para incluir hasta tres intereses
-personalizados en búsquedas sin sesión junto con los temas elegidos y tu
-historial (con un límite de cinco búsquedas de temas en total en cada actualización).
-Los términos silenciados nunca salen del dispositivo.
+para aplicar los ajustes al feed. Activa **Buscar intereses personalizados en YouTube sin historial de reproducción (sin sesión)** para buscar intereses personalizados
+si no hay un historial de reproducción apto. Activa **Buscar intereses personalizados en YouTube con historial de reproducción (sin sesión)** por separado para
+buscarlos cuando sí lo haya. Ambas opciones permiten hasta tres términos propios
+dentro del límite de cinco búsquedas de temas por actualización. Los términos
+silenciados nunca salen del dispositivo.
 
 ## Avisos de nuevas subidas
 
