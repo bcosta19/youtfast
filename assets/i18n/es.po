@@ -2257,14 +2257,59 @@ msgstr "Vídeos recientes"
 msgid "Fewer views"
 msgstr "Menos visualizaciones"
 
-msgid "Interests (comma-separated)"
-msgstr "Intereses (separados por comas)"
+msgid "Topics"
+msgstr "Temas"
+
+msgid "Computing & Tech"
+msgstr "Informática y tecnología"
+
+msgid "Science"
+msgstr "Ciencia"
+
+msgid "Gaming"
+msgstr "Videojuegos"
+
+msgid "Music"
+msgstr "Música"
+
+msgid "Film & TV"
+msgstr "Cine y televisión"
+
+msgid "News & World"
+msgstr "Noticias y actualidad"
+
+msgid "History & Culture"
+msgstr "Historia y cultura"
+
+msgid "Finance & Business"
+msgstr "Finanzas y negocios"
+
+msgid "Education"
+msgstr "Educación"
+
+msgid "Design & Art"
+msgstr "Diseño y arte"
+
+msgid "Sports"
+msgstr "Deportes"
+
+msgid "Podcasts & Talks"
+msgstr "Pódcasts y charlas"
+
+msgid "The first four selected topics fetch videos from YouTube; additional topics boost matching titles locally."
+msgstr "Los cuatro primeros temas seleccionados buscan vídeos en YouTube; los adicionales refuerzan los títulos coincidentes de forma local."
+
+msgid "Custom interests & muted terms"
+msgstr "Intereses personalizados y términos silenciados"
+
+msgid "Custom interests (comma-separated)"
+msgstr "Intereses personalizados (separados por comas)"
 
 msgid "Muted title terms (comma-separated)"
 msgstr "Términos silenciados en títulos (separados por comas)"
 
-msgid "Search YouTube for up to three interests when there is no eligible watch history"
-msgstr "Buscar hasta tres intereses en YouTube si no hay historial apto"
+msgid "Search YouTube for custom interests (signed out)"
+msgstr "Buscar intereses personalizados en YouTube (sin sesión)"
 
 msgid "Apply"
 msgstr "Aplicar"
@@ -2275,8 +2320,8 @@ msgstr "Restaurar valores predeterminados"
 msgid "Ranked on this device"
 msgstr "Clasificado en este dispositivo"
 
-msgid "Watch a few videos or enable topic search to get recommendations"
-msgstr "Mira algunos vídeos o activa la búsqueda por intereses para recibir recomendaciones"
+msgid "Watch a few videos or select topics to get recommendations"
+msgstr "Mira algunos vídeos o selecciona temas para recibir recomendaciones"
 
 msgid "Interface style"
 msgstr "Estilo de la interfaz"

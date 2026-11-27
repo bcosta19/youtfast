@@ -450,7 +450,7 @@ impl App {
         let preferences = state.settings.recommendations.clone();
         let account = state.signed_in() && !preferences.prefer_local;
         let seeds = youtfast_logic::recommend::seeds_for_library(&state.library);
-        if seeds.is_empty() && !account && preferences.initial_queries().next().is_none() {
+        if seeds.is_empty() && !account && preferences.topic_queries().is_empty() {
             self.state.for_you = Listing::Ready(Vec::new());
             return;
         }
@@ -1235,6 +1235,14 @@ mod tests {
         state.settings.recommendations.interests = "rust".into();
         assert!(!state.has_local_for_you_inputs());
         state.settings.recommendations.search_interests = true;
+        assert!(state.has_local_for_you_inputs());
+
+        state.settings.recommendations.search_interests = false;
+        assert!(!state.has_local_for_you_inputs());
+        state
+            .settings
+            .recommendations
+            .toggle_topic(youtfast_storage::settings::RecommendationTopic::Computing);
         assert!(state.has_local_for_you_inputs());
     }
 

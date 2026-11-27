@@ -2257,14 +2257,59 @@ msgstr "Neue Uploads"
 msgid "Fewer views"
 msgstr "Weniger Aufrufe"
 
-msgid "Interests (comma-separated)"
-msgstr "Interessen (durch Kommas getrennt)"
+msgid "Topics"
+msgstr "Themen"
+
+msgid "Computing & Tech"
+msgstr "Informatik & Technik"
+
+msgid "Science"
+msgstr "Wissenschaft"
+
+msgid "Gaming"
+msgstr "Gaming"
+
+msgid "Music"
+msgstr "Musik"
+
+msgid "Film & TV"
+msgstr "Film & Serien"
+
+msgid "News & World"
+msgstr "Nachrichten & Welt"
+
+msgid "History & Culture"
+msgstr "Geschichte & Kultur"
+
+msgid "Finance & Business"
+msgstr "Finanzen & Wirtschaft"
+
+msgid "Education"
+msgstr "Bildung"
+
+msgid "Design & Art"
+msgstr "Design & Kunst"
+
+msgid "Sports"
+msgstr "Sport"
+
+msgid "Podcasts & Talks"
+msgstr "Podcasts & Gespräche"
+
+msgid "The first four selected topics fetch videos from YouTube; additional topics boost matching titles locally."
+msgstr "Die ersten vier ausgewählten Themen suchen Videos auf YouTube; weitere Themen werten passende Titel lokal auf."
+
+msgid "Custom interests & muted terms"
+msgstr "Eigene Interessen und stumme Begriffe"
+
+msgid "Custom interests (comma-separated)"
+msgstr "Eigene Interessen (durch Kommas getrennt)"
 
 msgid "Muted title terms (comma-separated)"
 msgstr "Stumme Titelbegriffe (durch Kommas getrennt)"
 
-msgid "Search YouTube for up to three interests when there is no eligible watch history"
-msgstr "Ohne geeigneten Wiedergabeverlauf bis zu drei Interessen auf YouTube suchen"
+msgid "Search YouTube for custom interests (signed out)"
+msgstr "Eigene Interessen auf YouTube suchen (ohne Anmeldung)"
 
 msgid "Apply"
 msgstr "Anwenden"
@@ -2275,8 +2320,8 @@ msgstr "Auf Standardwerte zurücksetzen"
 msgid "Ranked on this device"
 msgstr "Auf diesem Gerät sortiert"
 
-msgid "Watch a few videos or enable topic search to get recommendations"
-msgstr "Für Empfehlungen einige Videos ansehen oder die Themensuche aktivieren"
+msgid "Watch a few videos or select topics to get recommendations"
+msgstr "Für Empfehlungen einige Videos ansehen oder Themen auswählen"
 
 msgid "Interface style"
 msgstr "Oberflächenstil"

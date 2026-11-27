@@ -13,7 +13,7 @@ use youtfast_core::model::{FeedFilter, Fetch, Listing, Video, View};
 use youtfast_core::util;
 use youtfast_storage::settings::{
     RecommendationChannels as Channels, RecommendationDuration as Duration,
-    RecommendationPriority as Priority, Recommendations,
+    RecommendationPriority as Priority, RecommendationTopic, Recommendations,
 };
 
 pub fn home(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
@@ -224,7 +224,7 @@ fn for_you(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             tr(
                 locale,
                 if !state.has_local_for_you_inputs() {
-                    "Watch a few videos or enable topic search to get recommendations"
+                    "Watch a few videos or select topics to get recommendations"
                 } else {
                     "No video matches this filter"
                 },
@@ -292,103 +292,193 @@ fn for_you(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 
 fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
+    let saved = &state.settings.recommendations;
     egui::CollapsingHeader::new(tr(locale, "Local recommendation settings"))
         .id_salt("local recommendation settings")
         .show(ui, |ui| {
-            let id = ui.id().with("recommendation draft");
-            let saved = &state.settings.recommendations;
-            let mut draft = ui
-                .data_mut(|data| data.get_temp::<(Recommendations, Recommendations)>(id))
-                .filter(|(last_saved, _)| last_saved == saved)
-                .map_or_else(|| saved.clone(), |(_, draft)| draft);
-
             if state.signed_in() {
-                ui.checkbox(
-                    &mut draft.prefer_local,
-                    tr(
-                        locale,
-                        "Use local ranking instead of YouTube recommendations",
-                    ),
-                );
-            }
-            ui.add_enabled_ui(
-                !state.signed_in() || draft.prefer_local || !state.for_you_from_account,
-                |ui| {
-                    ui.horizontal_wrapped(|ui| {
-                        recommendation_choice(
-                            ui,
-                            locale,
-                            "Duration",
-                            &mut draft.duration,
-                            &[
-                                (Duration::Any, "Any duration"),
-                                (Duration::Short, "Under 5 minutes"),
-                                (Duration::Medium, "5–20 minutes"),
-                                (Duration::Long, "Over 20 minutes"),
-                            ],
-                        );
-                        recommendation_choice(
-                            ui,
-                            locale,
-                            "Channels",
-                            &mut draft.channels,
-                            &[
-                                (Channels::Balanced, "Balanced"),
-                                (Channels::Discover, "Discover new channels"),
-                                (Channels::Familiar, "Favor familiar channels"),
-                            ],
-                        );
-                        recommendation_choice(
-                            ui,
-                            locale,
-                            "Ranking priority",
-                            &mut draft.priority,
-                            &[
-                                (Priority::Balanced, "Balanced"),
-                                (Priority::Recent, "Recent uploads"),
-                                (Priority::FewerViews, "Fewer views"),
-                            ],
-                        );
-                    });
-                    for (label, value) in [
-                        ("Interests (comma-separated)", &mut draft.interests),
-                        ("Muted title terms (comma-separated)", &mut draft.muted),
-                    ] {
-                        let label = ui.label(tr(locale, label));
-                        ui.add(
-                            egui::TextEdit::singleline(value).char_limit(Recommendations::MAX_TEXT_CHARS),
-                        )
-                        .labelled_by(label.id);
-                    }
-                    ui.checkbox(
-                        &mut draft.search_interests,
+                let mut prefer_local = saved.prefer_local;
+                if ui
+                    .checkbox(
+                        &mut prefer_local,
                         tr(
                             locale,
-                            "Search YouTube for up to three interests when there is no eligible watch history",
+                            "Use local ranking instead of YouTube recommendations",
                         ),
-                    );
-                },
-            );
-            ui.horizontal(|ui| {
-                if ui
-                    .add_enabled(draft != *saved, egui::Button::new(tr(locale, "Apply")))
-                    .clicked()
-                {
-                    actions.push(Action::SetRecommendations(draft.clone()));
-                }
-                let defaults = Recommendations::default();
-                if ui
-                    .add_enabled(
-                        draft != defaults || *saved != defaults,
-                        egui::Button::new(tr(locale, "Reset to defaults")),
                     )
-                    .clicked()
+                    .changed()
                 {
-                    draft = defaults;
-                    actions.push(Action::SetRecommendations(draft.clone()));
+                    let mut next = saved.clone();
+                    next.prefer_local = prefer_local;
+                    actions.push(Action::SetRecommendations(next));
                 }
+            }
+            let local_fallback =
+                matches!(state.for_you, Listing::Ready(_)) && !state.for_you_from_account;
+            let local_active = !state.signed_in() || saved.prefer_local || local_fallback;
+            let text_id = ui.id().with("recommendation text draft");
+            let saved_text = (saved.interests.clone(), saved.muted.clone());
+            let (mut interests_draft, mut muted_draft) = ui
+                .data_mut(|data| data.get_temp::<((String, String), (String, String))>(text_id))
+                .filter(|(last_saved, _)| last_saved == &saved_text)
+                .map_or_else(|| saved_text.clone(), |(_, draft)| draft);
+            let mut reset_draft = false;
+
+            ui.add_enabled_ui(local_active, |ui| {
+                ui.label(
+                    RichText::new(tr(locale, "Topics").as_ref())
+                        .font(theme::medium(13.0))
+                        .color(state.palette.secondary),
+                );
+                ui.add_space(4.0);
+                ui.horizontal_wrapped(|ui| {
+                    for &topic in RecommendationTopic::ALL {
+                        let selected = saved.topics.contains(&topic);
+                        if widgets::toggle_chip(
+                            ui,
+                            &state.palette,
+                            tr(locale, topic.label()).as_ref(),
+                            selected,
+                        )
+                        .clicked()
+                        {
+                            let mut next = saved.clone();
+                            next.toggle_topic(topic);
+                            actions.push(Action::SetRecommendations(next));
+                        }
+                    }
+                });
+                if saved.topics.len() > Recommendations::MAX_PRESET_TOPIC_QUERIES {
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(
+                            tr(
+                                locale,
+                                "The first four selected topics fetch videos from YouTube; additional topics boost matching titles locally.",
+                            )
+                            .as_ref(),
+                        )
+                        .font(theme::regular(12.0))
+                        .color(state.palette.secondary),
+                    );
+                }
+                ui.add_space(8.0);
+
+                let mut next_choices = saved.clone();
+                let mut choices_changed = false;
+                ui.horizontal_wrapped(|ui| {
+                    choices_changed |= recommendation_choice(
+                        ui,
+                        locale,
+                        "Duration",
+                        &mut next_choices.duration,
+                        &[
+                            (Duration::Any, "Any duration"),
+                            (Duration::Short, "Under 5 minutes"),
+                            (Duration::Medium, "5–20 minutes"),
+                            (Duration::Long, "Over 20 minutes"),
+                        ],
+                    );
+                    choices_changed |= recommendation_choice(
+                        ui,
+                        locale,
+                        "Channels",
+                        &mut next_choices.channels,
+                        &[
+                            (Channels::Balanced, "Balanced"),
+                            (Channels::Discover, "Discover new channels"),
+                            (Channels::Familiar, "Favor familiar channels"),
+                        ],
+                    );
+                    choices_changed |= recommendation_choice(
+                        ui,
+                        locale,
+                        "Ranking priority",
+                        &mut next_choices.priority,
+                        &[
+                            (Priority::Balanced, "Balanced"),
+                            (Priority::Recent, "Recent uploads"),
+                            (Priority::FewerViews, "Fewer views"),
+                        ],
+                    );
+                });
+                if choices_changed {
+                    actions.push(Action::SetRecommendations(next_choices));
+                }
+                ui.add_space(4.0);
+
+                let has_custom_text =
+                    !saved.interests.trim().is_empty() || !saved.muted.trim().is_empty();
+                egui::CollapsingHeader::new(tr(locale, "Custom interests & muted terms"))
+                    .id_salt("recommendation custom filters")
+                    .default_open(has_custom_text)
+                    .show(ui, |ui| {
+                        let mut submit_text = false;
+                        for (label, value) in [
+                            ("Custom interests (comma-separated)", &mut interests_draft),
+                            ("Muted title terms (comma-separated)", &mut muted_draft),
+                        ] {
+                            let label = ui.label(tr(locale, label));
+                            let response = ui
+                                .add(
+                                    egui::TextEdit::singleline(value)
+                                        .char_limit(Recommendations::MAX_TEXT_CHARS),
+                                )
+                                .labelled_by(label.id);
+                            if response.lost_focus()
+                                && ui.input(|input| input.key_pressed(egui::Key::Enter))
+                            {
+                                submit_text = true;
+                            }
+                        }
+                        let mut search_interests = saved.search_interests;
+                        if ui
+                            .checkbox(
+                                &mut search_interests,
+                                tr(locale, "Search YouTube for custom interests (signed out)"),
+                            )
+                            .changed()
+                        {
+                            let mut next = saved.clone();
+                            next.interests = interests_draft.clone();
+                            next.muted = muted_draft.clone();
+                            next.search_interests = search_interests;
+                            actions.push(Action::SetRecommendations(next));
+                        }
+                        let text_dirty =
+                            interests_draft != saved.interests || muted_draft != saved.muted;
+                        let apply_clicked = ui
+                            .add_enabled(text_dirty, egui::Button::new(tr(locale, "Apply")))
+                            .clicked();
+                        if (submit_text && text_dirty) || apply_clicked {
+                            let mut next = saved.clone();
+                            next.interests = interests_draft.clone();
+                            next.muted = muted_draft.clone();
+                            actions.push(Action::SetRecommendations(next));
+                        }
+                    });
             });
-            ui.data_mut(|data| data.insert_temp(id, (saved.clone(), draft)));
+
+            let defaults = Recommendations::default();
+            let text_dirty = interests_draft != saved.interests || muted_draft != saved.muted;
+            ui.add_space(4.0);
+            if ui
+                .add_enabled(
+                    *saved != defaults || text_dirty,
+                    egui::Button::new(tr(locale, "Reset to defaults")),
+                )
+                .clicked()
+            {
+                reset_draft = true;
+                actions.push(Action::SetRecommendations(defaults));
+            }
+            if reset_draft {
+                interests_draft.clear();
+                muted_draft.clear();
+            }
+            ui.data_mut(|data| {
+                data.insert_temp(text_id, (saved_text, (interests_draft, muted_draft)));
+            });
         });
     ui.add_space(8.0);
 }
@@ -399,7 +489,8 @@ fn recommendation_choice<T: Copy + PartialEq>(
     label: &'static str,
     current: &mut T,
     choices: &[(T, &'static str)],
-) {
+) -> bool {
+    let before = *current;
     let selected = choices
         .iter()
         .find(|(value, _)| value == current)
@@ -411,6 +502,7 @@ fn recommendation_choice<T: Copy + PartialEq>(
                 ui.selectable_value(current, value, tr(locale, label));
             }
         });
+    *current != before
 }
 
 /// One card of the feed's grid.
@@ -812,5 +904,313 @@ mod tests {
             out.textures_delta.clear();
         }
         assert_eq!(actions, [Action::SetHideWatched(false)]);
+    }
+
+    #[test]
+    fn clicking_a_preset_topic_chip_applies_recommendations_immediately() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let state = State::default();
+
+        // First expand the Local recommendation settings header.
+        let mut header_pos = None;
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                ..Default::default()
+            },
+            |ui| recommendation_controls(ui, &state, &mut Vec::new()),
+        );
+        for shape in &output.shapes {
+            if let egui::Shape::Text(text) = &shape.shape
+                && text.galley.text() == "Local recommendation settings"
+            {
+                header_pos = Some(Rect::from_min_size(text.pos, text.galley.size()).center());
+            }
+        }
+        output.textures_delta.clear();
+        let header_pos = header_pos.expect("Local recommendation settings header");
+        for pressed in [true, false] {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                    events: vec![
+                        egui::Event::PointerMoved(header_pos),
+                        egui::Event::PointerButton {
+                            pos: header_pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| recommendation_controls(ui, &state, &mut Vec::new()),
+            );
+            out.textures_delta.clear();
+        }
+
+        // Locate the "Computing & Tech" topic chip and click it.
+        let mut chip_pos = None;
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                ..Default::default()
+            },
+            |ui| recommendation_controls(ui, &state, &mut Vec::new()),
+        );
+        for shape in &output.shapes {
+            if let egui::Shape::Text(text) = &shape.shape
+                && text.galley.text() == "Computing & Tech"
+            {
+                chip_pos = Some(Rect::from_min_size(text.pos, text.galley.size()).center());
+            }
+        }
+        output.textures_delta.clear();
+        let pos = chip_pos.expect("Computing & Tech topic chip");
+        let mut actions = Vec::new();
+        for pressed in [true, false] {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                    events: vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| recommendation_controls(ui, &state, &mut actions),
+            );
+            out.textures_delta.clear();
+        }
+        let expected = Recommendations {
+            topics: vec![RecommendationTopic::Computing],
+            ..Recommendations::default()
+        };
+        assert_eq!(actions, [Action::SetRecommendations(expected)]);
+    }
+
+    fn find_text_center(shapes: &[egui::epaint::ClippedShape], needle: &str) -> Option<egui::Pos2> {
+        fn visit(shape: &egui::Shape, needle: &str) -> Option<egui::Pos2> {
+            match shape {
+                egui::Shape::Text(text) if text.galley.text() == needle => {
+                    Some(Rect::from_min_size(text.pos, text.galley.size()).center())
+                }
+                egui::Shape::Vec(children) => {
+                    children.iter().find_map(|child| visit(child, needle))
+                }
+                _ => None,
+            }
+        }
+        shapes
+            .iter()
+            .find_map(|clipped| visit(&clipped.shape, needle))
+    }
+
+    #[test]
+    fn enter_in_custom_interests_submits_and_keeps_apply_button_rendered() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let mut state = State::default();
+        state.settings.recommendations.interests = "rust".into();
+
+        // Expand Local recommendation settings (Custom interests opens by default because interests is nonempty).
+        let mut out = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                time: Some(0.0),
+                ..Default::default()
+            },
+            |ui| recommendation_controls(ui, &state, &mut Vec::new()),
+        );
+        let header_pos =
+            find_text_center(&out.shapes, "Local recommendation settings").expect("header");
+        out.textures_delta.clear();
+        for (step, pressed) in [true, false].into_iter().enumerate() {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                    time: Some(0.1 * (step as f64 + 1.0)),
+                    events: vec![
+                        egui::Event::PointerMoved(header_pos),
+                        egui::Event::PointerButton {
+                            pos: header_pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| recommendation_controls(ui, &state, &mut Vec::new()),
+            );
+            out.textures_delta.clear();
+        }
+
+        // Let the collapsing animation settle so the nested custom-filters TextEdit is fully open.
+        let mut out = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                time: Some(2.0),
+                ..Default::default()
+            },
+            |ui| recommendation_controls(ui, &state, &mut Vec::new()),
+        );
+        let input_pos = find_text_center(&out.shapes, "rust").expect("interests text input");
+        out.textures_delta.clear();
+        for (step, pressed) in [true, false].into_iter().enumerate() {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                    time: Some(2.1 + 0.1 * step as f64),
+                    events: vec![
+                        egui::Event::PointerMoved(input_pos),
+                        egui::Event::PointerButton {
+                            pos: input_pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| recommendation_controls(ui, &state, &mut Vec::new()),
+            );
+            out.textures_delta.clear();
+        }
+        let mut out = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                time: Some(2.4),
+                events: vec![egui::Event::Text(", linux".into())],
+                ..Default::default()
+            },
+            |ui| recommendation_controls(ui, &state, &mut Vec::new()),
+        );
+        out.textures_delta.clear();
+
+        let mut actions = Vec::new();
+        let mut out = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                time: Some(2.5),
+                events: vec![egui::Event::Key {
+                    key: egui::Key::Enter,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+                ..Default::default()
+            },
+            |ui| recommendation_controls(ui, &state, &mut actions),
+        );
+        let has_apply = find_text_center(&out.shapes, "Apply").is_some();
+        out.textures_delta.clear();
+        assert!(
+            has_apply,
+            "Apply button must still render on the Enter frame"
+        );
+        assert_eq!(actions.len(), 1);
+        let Action::SetRecommendations(updated) = &actions[0] else {
+            panic!("expected SetRecommendations");
+        };
+        assert!(updated.interests.contains("linux"));
+    }
+
+    #[test]
+    fn signed_in_loading_account_feed_keeps_local_topic_chips_disabled() {
+        let ctx = egui::Context::default();
+        youtfast_appearance::theme::install_fonts(&ctx);
+        let state = State {
+            account: AccountState::SignedIn(1),
+            for_you: Listing::Loading,
+            for_you_from_account: false,
+            ..State::default()
+        };
+
+        let mut header_pos = None;
+        let mut out = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                ..Default::default()
+            },
+            |ui| recommendation_controls(ui, &state, &mut Vec::new()),
+        );
+        for shape in &out.shapes {
+            if let egui::Shape::Text(text) = &shape.shape
+                && text.galley.text() == "Local recommendation settings"
+            {
+                header_pos = Some(Rect::from_min_size(text.pos, text.galley.size()).center());
+            }
+        }
+        out.textures_delta.clear();
+        let header_pos = header_pos.expect("header");
+        for pressed in [true, false] {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                    events: vec![
+                        egui::Event::PointerMoved(header_pos),
+                        egui::Event::PointerButton {
+                            pos: header_pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| recommendation_controls(ui, &state, &mut Vec::new()),
+            );
+            out.textures_delta.clear();
+        }
+
+        let mut chip_pos = None;
+        let mut out = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                ..Default::default()
+            },
+            |ui| recommendation_controls(ui, &state, &mut Vec::new()),
+        );
+        for shape in &out.shapes {
+            if let egui::Shape::Text(text) = &shape.shape
+                && text.galley.text() == "Computing & Tech"
+            {
+                chip_pos = Some(Rect::from_min_size(text.pos, text.galley.size()).center());
+            }
+        }
+        out.textures_delta.clear();
+        let pos = chip_pos.expect("Computing & Tech chip");
+        let mut actions = Vec::new();
+        for pressed in [true, false] {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
+                    events: vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ui| recommendation_controls(ui, &state, &mut actions),
+            );
+            out.textures_delta.clear();
+        }
+        assert!(
+            actions.is_empty(),
+            "disabled chip must not emit SetRecommendations while account feed is loading"
+        );
     }
 }

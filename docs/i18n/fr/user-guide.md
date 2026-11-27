@@ -562,23 +562,29 @@ empêcher un aperçu ou la lecture.
 
 ## Recommandations locales
 
-Dans **Accueil → Pour vous**, ouvrez les **Réglages des recommandations locales**
-et cliquez sur **Appliquer** pour enregistrer et recharger. Choisissez une
-durée, favorisez les chaînes connues ou découvrez-en de nouvelles, ou donnez
-la priorité aux vidéos récentes ou moins vues. Séparez les centres d’intérêt
-et les termes masqués par des virgules, dans la limite de 300 caractères par
-champ. La casse est ignorée : les centres
-d’intérêt favorisent les titres ou noms de chaînes correspondants, et les
+Dans **Accueil → Pour vous**, ouvrez **Réglages des recommandations locales**.
+Cliquez sur n’importe quelle pastille **Sujets** ou modifiez la durée, le choix
+de chaînes ou la priorité de classement pour enregistrer et recharger
+automatiquement. Les sujets sélectionnés récupèrent des vidéos publiques sur
+YouTube via une recherche séparée sans compte — en transmettant vos filtres de
+durée et de fraîcheur à YouTube — et les alternent avec votre historique de
+visionnage afin qu’une seule chaîne suivie n’écrase pas vos sujets choisis.
+Ouvrez **Centres d’intérêt personnalisés et termes masqués** pour saisir des
+centres d’intérêt ou des termes masqués séparés par des virgules (jusqu’à
+300 caractères par champ), puis appuyez sur Entrée ou cliquez sur **Appliquer**.
+La casse est ignorée : les sujets choisis et les centres d’intérêt
+personnalisés favorisent les titres ou noms de chaînes correspondants, et les
 termes masqués cachent les titres correspondants. Le filtre de durée exclut
 les vidéos dont la durée est inconnue.
 
 Lorsque vous êtes connecté, les recommandations YouTube restent la valeur par
 défaut. Activez **Utiliser le classement local au lieu des recommandations YouTube**
-pour appliquer ces réglages au flux. Sans historique admissible sur l’appareil,
-vous pouvez autoriser l’envoi de trois centres d’intérêt au plus à YouTube
-dans des recherches sans compte. Après avoir regardé une première vidéo
-admissible, revenez à l’Accueil : les recommandations locales se mettent à jour
-à partir de votre historique. Les termes masqués ne quittent jamais l’appareil.
+pour appliquer ces réglages au flux. Vous pouvez aussi activer **Rechercher des
+centres d’intérêt personnalisés sur YouTube (sans compte)** pour inclure
+jusqu’à trois centres d’intérêt personnalisés dans des recherches sans compte
+en plus des sujets choisis et de votre historique (dans la limite de cinq
+recherches de sujets au total à chaque actualisation). Les termes masqués ne quittent
+jamais l’appareil.
 
 ## Alertes de nouvelles vidéos
 

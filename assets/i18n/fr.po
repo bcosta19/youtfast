@@ -2257,14 +2257,59 @@ msgstr "Vidéos récentes"
 msgid "Fewer views"
 msgstr "Moins de vues"
 
-msgid "Interests (comma-separated)"
-msgstr "Centres d’intérêt (séparés par des virgules)"
+msgid "Topics"
+msgstr "Sujets"
+
+msgid "Computing & Tech"
+msgstr "Informatique et technologie"
+
+msgid "Science"
+msgstr "Sciences"
+
+msgid "Gaming"
+msgstr "Jeux vidéo"
+
+msgid "Music"
+msgstr "Musique"
+
+msgid "Film & TV"
+msgstr "Cinéma et séries"
+
+msgid "News & World"
+msgstr "Actualités et monde"
+
+msgid "History & Culture"
+msgstr "Histoire et culture"
+
+msgid "Finance & Business"
+msgstr "Finance et entreprise"
+
+msgid "Education"
+msgstr "Éducation"
+
+msgid "Design & Art"
+msgstr "Design et art"
+
+msgid "Sports"
+msgstr "Sports"
+
+msgid "Podcasts & Talks"
+msgstr "Podcasts et discussions"
+
+msgid "The first four selected topics fetch videos from YouTube; additional topics boost matching titles locally."
+msgstr "Les quatre premiers sujets sélectionnés recherchent des vidéos sur YouTube ; les suivants favorisent localement les titres correspondants."
+
+msgid "Custom interests & muted terms"
+msgstr "Centres d’intérêt personnalisés et termes masqués"
+
+msgid "Custom interests (comma-separated)"
+msgstr "Centres d’intérêt personnalisés (séparés par des virgules)"
 
 msgid "Muted title terms (comma-separated)"
 msgstr "Termes masqués dans les titres (séparés par des virgules)"
 
-msgid "Search YouTube for up to three interests when there is no eligible watch history"
-msgstr "Rechercher jusqu’à trois centres d’intérêt sur YouTube en l’absence d’un historique admissible"
+msgid "Search YouTube for custom interests (signed out)"
+msgstr "Rechercher des centres d’intérêt personnalisés sur YouTube (sans compte)"
 
 msgid "Apply"
 msgstr "Appliquer"
@@ -2275,8 +2320,8 @@ msgstr "Rétablir les valeurs par défaut"
 msgid "Ranked on this device"
 msgstr "Classé sur cet appareil"
 
-msgid "Watch a few videos or enable topic search to get recommendations"
-msgstr "Regardez quelques vidéos ou activez la recherche par sujet pour obtenir des recommandations"
+msgid "Watch a few videos or select topics to get recommendations"
+msgstr "Regardez quelques vidéos ou sélectionnez des sujets pour obtenir des recommandations"
 
 msgid "Interface style"
 msgstr "Style de l'interface"

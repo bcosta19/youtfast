@@ -245,13 +245,15 @@ feed is a fallback or an explicit choice. The app sends a settings snapshot
 with each request and invalidates the current For you generation when the
 preferences change. A device library import or the first eligible watch
 invalidates a local result or a pending first page, but preserves ready account
-recommendations and their pagination. The backend supplies candidates and the
-current time; `youtfast-logic::recommend` filters and scores cards without I/O
-or metadata lookups. The editor, settings sanitization and term parsing share
-the same character limit. When no eligible history exists, an opt-in can send
-up to three configured interests to YouTube using a separate signed-out client.
-Muted terms are never sent. Settings and account recommendations are not synced
-by this feature.
+recommendations and their pagination. The backend supplies history-related
+candidates, public topic-search candidates (when preset topics are selected or
+custom-interest search is opted in, using a separate signed-out client and
+forwarding duration and recency options to YouTube search), and the current
+time; `youtfast-logic::recommend` filters, scores and interleaves history and
+topic lanes without I/O or metadata lookups. The editor, settings sanitization
+and term parsing share the same character limit, and selected preset topics are
+deduplicated and bounded per refresh. Muted terms are never sent. Settings and
+account recommendations are not synced by this feature.
 
 ## Persistence and account isolation
 
@@ -387,7 +389,7 @@ flowchart LR
 | Character coverage | `coverage` puts the bundled monochrome Noto Emoji right behind the interface face, a 14-glyph OpenMoji subset for Unicode 16/17 (`tools/emoji_supplement.py`) after Noto, and the bundled Noto fallback (`tools/fonts.py`) last in every family, to cover emoji through Unicode 17, "small caps", styled letters, symbols and common kaomoji without relying on installed fonts for those glyphs; `App::new` adds fastframe-emoji's plugin, which paints the platform's colour emoji over the monochrome glyphs (not in the demo) |
 | Media controls | `now_playing` maps desktop commands to `Action`; Linux uses MPRIS; `SeekBy` is milliseconds and `SetVolume` is 0..1 |
 | Notifications | Popup and full page share a visit snapshot and mark-seen action; new arrivals join the open snapshot; `logic::alerts` compares seen/notified stamps, backend schedules checks and off-thread notifications |
-| Local recommendations | `logic::recommend` ranks related videos from recent history when account recommendations are unavailable |
+| Local recommendations | `logic::recommend` blends history-related videos with optional signed-out topic searches (preset chips and opted-in custom terms) when account recommendations are unavailable or overridden |
 | Rich text | `widgets` uses glyph logical rectangles for links; `Action::OpenUrl` enforces scheme restrictions; eframe's `links` feature is required |
 | Idle rendering | `hover_fade` / `press_fade` request frames only during animation, using the style's `animation_time` |
 | Shared page layout | Settings and Account use the same centered column/cards; index position and scroll selection remain view state in egui memory |

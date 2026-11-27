@@ -632,15 +632,10 @@ impl State {
             && (!self.settings.hide_watched || !self.library.watched(&video.id))
     }
 
-    /// Whether local For you has eligible watch history seeds or opted-in topic queries.
+    /// Whether local For you has eligible watch history seeds or active topic queries.
     pub fn has_local_for_you_inputs(&self) -> bool {
         youtfast_logic::recommend::has_eligible_history(&self.library)
-            || self
-                .settings
-                .recommendations
-                .initial_queries()
-                .next()
-                .is_some()
+            || !self.settings.recommendations.topic_queries().is_empty()
     }
 
     /// The feed's videos home shows: For you's, or the first
@@ -1353,6 +1348,7 @@ impl App {
         let mut settings =
             Settings::load(&dirs.settings()).context("could not safely load the settings")?;
         settings.device_sync = settings.device_sync.clone().sanitized();
+        settings.recommendations = settings.recommendations.clone().sanitized();
         // The quality eframe's storage kept before the settings file
         // existed moves over once.
         if !dirs.settings().exists()

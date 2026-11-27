@@ -1010,81 +1010,165 @@ async fn writer<T: Clone + Send + Sync + 'static>(
     }
 }
 
-/// The seeds' related videos, asked for together, ranked. A seed whose
-/// details fail is skipped unless every lookup fails.
+/// Maps local recommendation duration and priority preferences onto YouTube
+/// search options so topic discovery fetches matching candidates directly.
+fn topic_search_options(
+    preferences: &youtfast_storage::settings::Recommendations,
+) -> innertube::SearchOptions {
+    use youtfast_storage::settings::{RecommendationDuration, RecommendationPriority};
+    let length = match preferences.duration {
+        RecommendationDuration::Any => innertube::SearchLength::Any,
+        RecommendationDuration::Short => innertube::SearchLength::Short,
+        RecommendationDuration::Medium => innertube::SearchLength::Medium,
+        RecommendationDuration::Long => innertube::SearchLength::Long,
+    };
+    let date = match preferences.priority {
+        RecommendationPriority::Recent => innertube::SearchDate::Month,
+        RecommendationPriority::Balanced | RecommendationPriority::FewerViews => {
+            innertube::SearchDate::Any
+        }
+    };
+    innertube::SearchOptions {
+        kind: innertube::SearchKind::Videos,
+        order: innertube::SearchOrder::Relevance,
+        date,
+        length,
+        live: false,
+    }
+}
+
+/// Drops a strict upload-date filter when a narrow topic query returns nothing,
+/// keeping the chosen duration constraint intact.
+fn relaxed_topic_search_options(
+    options: innertube::SearchOptions,
+) -> Option<innertube::SearchOptions> {
+    (options.date != innertube::SearchDate::Any).then_some(innertube::SearchOptions {
+        date: innertube::SearchDate::Any,
+        ..options
+    })
+}
+
+async fn fetch_topic_videos(
+    public: &Client,
+    query: &str,
+    options: innertube::SearchOptions,
+) -> Result<Vec<Video>, String> {
+    let extract = |(items, _): (PageItems, Option<innertube::More>)| match items {
+        PageItems::Videos(mut videos) => {
+            videos.truncate(25);
+            videos
+        }
+        _ => Vec::new(),
+    };
+    let videos = innertube::search_filtered(public, query, options)
+        .await
+        .map(extract)?;
+    if videos.is_empty()
+        && let Some(fallback) = relaxed_topic_search_options(options)
+    {
+        return innertube::search_filtered(public, query, fallback)
+            .await
+            .map(extract);
+    }
+    Ok(videos)
+}
+
+enum LocalCandidateBatch {
+    History(f64, Result<Vec<Video>, String>),
+    Topic(usize, Result<Vec<Video>, String>),
+}
+
+/// The seeds' related videos and any active topic searches, asked for together
+/// and ranked/interleaved. A failing source is skipped unless every lookup fails.
 async fn local_recommendations(
     rp: &Client,
     seeds: Vec<youtfast_logic::recommend::Seed>,
     taste: &youtfast_logic::recommend::Taste,
     preferences: &youtfast_storage::settings::Recommendations,
 ) -> Result<Vec<Video>, String> {
-    use youtfast_logic::recommend::rank_with;
+    use youtfast_logic::recommend::rank_combined;
 
     let now = youtfast_core::util::now();
-    let from_topics = seeds.is_empty();
+    let queries: Vec<String> = preferences
+        .topic_queries()
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    if seeds.is_empty() && queries.is_empty() {
+        return Ok(Vec::new());
+    }
+
     let mut tasks = tokio::task::JoinSet::new();
-    if from_topics {
-        let mut queries = preferences.initial_queries().peekable();
-        if queries.peek().is_none() {
-            return Ok(Vec::new());
-        }
-        // The opted-in topics are public searches, even when an account is active.
-        let public =
-            Client::default_client().map_err(|_| "Could not start topic search".to_owned())?;
-        for (index, query) in queries.enumerate() {
-            let public = public.clone();
-            let query = query.to_owned();
-            let weight = 1.0 / (1.0 + index as f64 * 0.15);
-            tasks.spawn(async move {
-                let videos = innertube::search_filtered(
-                    &public,
-                    &query,
-                    innertube::SearchOptions::default(),
-                )
-                .await
-                .map(|(items, _)| match items {
-                    PageItems::Videos(mut videos) => {
-                        videos.truncate(25);
-                        videos
-                    }
-                    _ => Vec::new(),
-                });
-                (weight, videos)
-            });
-        }
-    } else {
-        for seed in seeds {
-            let rp = rp.clone();
-            tasks.spawn(async move {
-                let related = innertube::details(&rp, &seed.id)
-                    .await
-                    .map(|details| details.related);
-                (seed.weight, related)
-            });
+    let mut failure = None;
+    if !queries.is_empty() {
+        // Selected preset topics and opted-in custom terms always use a
+        // separate signed-out client, even when an account is active.
+        match Client::default_client() {
+            Ok(public) => {
+                let search_options = topic_search_options(preferences);
+                for (index, query) in queries.into_iter().enumerate() {
+                    let public = public.clone();
+                    tasks.spawn(async move {
+                        let videos = fetch_topic_videos(&public, &query, search_options).await;
+                        LocalCandidateBatch::Topic(index, videos)
+                    });
+                }
+            }
+            Err(_) => {
+                failure = Some("Could not start topic search".to_owned());
+            }
         }
     }
-    let mut related = Vec::new();
-    let mut failure = None;
+    for seed in seeds {
+        let rp = rp.clone();
+        tasks.spawn(async move {
+            let related = innertube::details(&rp, &seed.id)
+                .await
+                .map(|details| details.related);
+            LocalCandidateBatch::History(seed.weight, related)
+        });
+    }
+
+    let mut history_related = Vec::new();
+    let mut topic_batches = Vec::new();
     while let Some(done) = tasks.join_next().await {
         match done {
-            Ok((weight, Ok(videos))) => related.push((weight, videos)),
-            Ok((_, Err(error))) => {
-                if !from_topics {
-                    log::warn!("a seed's related videos failed: {error}");
-                }
+            Ok(LocalCandidateBatch::History(weight, Ok(videos))) => {
+                history_related.push((weight, videos));
+            }
+            Ok(LocalCandidateBatch::History(_, Err(error))) => {
+                log::warn!("a seed's related videos failed: {error}");
+                failure = Some(error);
+            }
+            Ok(LocalCandidateBatch::Topic(index, Ok(videos))) => {
+                topic_batches.push((index, videos));
+            }
+            Ok(LocalCandidateBatch::Topic(_, Err(error))) => {
                 failure = Some(error);
             }
             Err(error) => log::warn!("a seed's lookup stopped: {error}"),
         }
     }
-    if related.is_empty()
+    if history_related.is_empty()
+        && topic_batches.is_empty()
         && let Some(error) = failure
     {
         return Err(error);
     }
-    // The order the answers came in is not the seeds': keep it stable.
-    related.sort_by(|a, b| b.0.total_cmp(&a.0));
-    Ok(rank_with(&related, taste, preferences, now))
+    // The order the answers came in is not the seeds' or topics': keep both stable.
+    history_related.sort_by(|a, b| b.0.total_cmp(&a.0));
+    topic_batches.sort_by_key(|(index, _)| *index);
+    let topic_lists: Vec<Vec<Video>> = topic_batches
+        .into_iter()
+        .map(|(_, videos)| videos)
+        .collect();
+    Ok(rank_combined(
+        &history_related,
+        &topic_lists,
+        taste,
+        preferences,
+        now,
+    ))
 }
 
 async fn load(context: &Context, request: Request) -> Result<Payload, String> {
@@ -2065,5 +2149,37 @@ mod tests {
                 if answered == url && bytes.as_ref() == png.as_slice()
         ));
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn topic_search_options_forward_duration_and_recency_to_youtube() {
+        use youtfast_storage::settings::{
+            RecommendationDuration, RecommendationPriority, Recommendations,
+        };
+
+        let defaults = topic_search_options(&Recommendations::default());
+        assert_eq!(defaults.kind, innertube::SearchKind::Videos);
+        assert_eq!(defaults.length, innertube::SearchLength::Any);
+        assert_eq!(defaults.date, innertube::SearchDate::Any);
+        assert_eq!(defaults.order, innertube::SearchOrder::Relevance);
+
+        let long_recent = topic_search_options(&Recommendations {
+            duration: RecommendationDuration::Long,
+            priority: RecommendationPriority::Recent,
+            ..Recommendations::default()
+        });
+        assert_eq!(long_recent.length, innertube::SearchLength::Long);
+        assert_eq!(long_recent.date, innertube::SearchDate::Month);
+        assert_eq!(long_recent.order, innertube::SearchOrder::Relevance);
+        let relaxed = relaxed_topic_search_options(long_recent).expect("recent date relaxes");
+        assert_eq!(relaxed.length, innertube::SearchLength::Long);
+        assert_eq!(relaxed.date, innertube::SearchDate::Any);
+        assert_eq!(relaxed_topic_search_options(defaults), None);
+
+        let short = topic_search_options(&Recommendations {
+            duration: RecommendationDuration::Short,
+            ..Recommendations::default()
+        });
+        assert_eq!(short.length, innertube::SearchLength::Short);
     }
 }

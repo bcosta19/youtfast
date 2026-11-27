@@ -11,6 +11,7 @@ are the distribution record.
 ### Added
 
 - **Device sync** marks each local address with a VPN or local network icon, hides known container and VM bridges, and lets you copy any displayed address with a click.
+- **Local recommendations** on Home → **For you** now offer twelve clickable **Topics** chips that auto-apply alongside duration, channel discovery/familiarity, and ranking priority selectors, blending signed-out YouTube topic searches (forwarding duration and recency filters) with device watch history and interleaving them fairly while keeping custom interests and muted terms under a secondary collapsible section.
 
 ## [0.11.0] - 2026-11-24
 

@@ -543,23 +543,27 @@ oder Wiedergabe dennoch verhindern.
 
 ## Lokale Empfehlungen
 
-Öffnen Sie unter **Startseite → Für dich** die **Lokale Empfehlungseinstellungen**
-und wählen Sie **Anwenden**, um zu speichern und neu zu laden. Wählen Sie
-eine Dauer, bevorzugen Sie bekannte Kanäle oder entdecken Sie neue, oder
-priorisieren Sie neue bzw. weniger häufig aufgerufene Videos. Trennen Sie
-Interessen und stumme Titelbegriffe durch Kommas. Pro Feld sind bis zu 300
-Zeichen möglich. Groß- und Kleinschreibung spielt keine Rolle: Interessen
-werten passende Titel oder Kanalnamen auf,
-stumme Begriffe blenden passende Titel aus. Der Dauerfilter schließt Videos
-mit unbekannter Dauer aus.
+Öffnen Sie unter **Startseite → Für dich** die **Lokale Empfehlungseinstellungen**.
+Klicken Sie auf einen beliebigen **Themen**-Chip oder ändern Sie Dauer,
+Kanalauswahl oder Priorität der Rangfolge, um automatisch zu speichern und neu
+zu laden. Ausgewählte Themen holen öffentliche YouTube-Kandidaten über eine
+getrennte Suche ohne Anmeldung — inklusive Ihres gewählten Dauer- und
+Aktualitätsfilters — und mischen sie mit Ihrem Wiedergabeverlauf, sodass ein
+einzelner verfolgter Kanal Ihre gewählten Themen nicht verdrängt. Öffnen Sie
+**Eigene Interessen und stumme Begriffe**, um eigene Interessen oder stumme
+Titelbegriffe durch Kommas getrennt einzugeben (bis zu 300 Zeichen pro Feld),
+und drücken Sie die Eingabetaste oder wählen Sie **Anwenden**. Groß- und
+Kleinschreibung spielt keine Rolle: gewählte Themen und eigene Interessen
+werten passende Titel oder Kanalnamen auf, stumme Begriffe blenden passende
+Titel aus. Der Dauerfilter schließt Videos mit unbekannter Dauer aus.
 
 Bei Anmeldung bleiben YouTube-Empfehlungen der Standard. Wählen Sie
 **Lokale Rangfolge statt YouTube-Empfehlungen verwenden**, um die Einstellungen
-auf den Feed anzuwenden. Ohne geeigneten Wiedergabeverlauf auf dem Gerät
-können Sie erlauben, bis zu drei Interessen für Suchen ohne Anmeldung an
-YouTube zu senden. Sobald Sie das erste geeignete Video angesehen haben,
-werden die lokalen Empfehlungen bei der Rückkehr zur Startseite anhand Ihres
-Verlaufs aktualisiert. Stumme Begriffe verlassen das Gerät nie.
+auf den Feed anzuwenden. Optional können Sie **Eigene Interessen auf YouTube
+suchen (ohne Anmeldung)** aktivieren, um bis zu drei eigene Interessen neben
+gewählten Themen und Ihrem Verlauf in Suchen ohne Anmeldung einzubeziehen
+(insgesamt höchstens fünf Themensuchen pro Aktualisierung). Stumme Begriffe
+verlassen das Gerät nie.
 
 ## Benachrichtigungen über neue Uploads
 

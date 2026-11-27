@@ -157,9 +157,270 @@ pub struct Recommendations {
     pub duration: RecommendationDuration,
     pub channels: RecommendationChannels,
     pub priority: RecommendationPriority,
+    #[serde(default, deserialize_with = "read_recommendation_topics")]
+    pub topics: Vec<RecommendationTopic>,
     pub interests: String,
     pub muted: String,
     pub search_interests: bool,
+}
+
+fn read_recommendation_topics<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<RecommendationTopic>, D::Error> {
+    let values = Vec::<serde_json::Value>::deserialize(deserializer)?;
+    let mut unique = Vec::with_capacity(values.len());
+    for value in values {
+        if let Ok(topic) = serde_json::from_value::<RecommendationTopic>(value)
+            && !unique.contains(&topic)
+        {
+            unique.push(topic);
+        }
+    }
+    Ok(unique)
+}
+
+/// Preset topic categories users can toggle for local recommendation discovery.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecommendationTopic {
+    Computing,
+    Science,
+    Gaming,
+    Music,
+    FilmAndTv,
+    News,
+    History,
+    Finance,
+    Education,
+    DesignAndArt,
+    Sports,
+    Podcasts,
+}
+
+impl RecommendationTopic {
+    pub const ALL: &'static [Self] = &[
+        Self::Computing,
+        Self::Science,
+        Self::Gaming,
+        Self::Music,
+        Self::FilmAndTv,
+        Self::News,
+        Self::History,
+        Self::Finance,
+        Self::Education,
+        Self::DesignAndArt,
+        Self::Sports,
+        Self::Podcasts,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Computing => "Computing & Tech",
+            Self::Science => "Science",
+            Self::Gaming => "Gaming",
+            Self::Music => "Music",
+            Self::FilmAndTv => "Film & TV",
+            Self::News => "News & World",
+            Self::History => "History & Culture",
+            Self::Finance => "Finance & Business",
+            Self::Education => "Education",
+            Self::DesignAndArt => "Design & Art",
+            Self::Sports => "Sports",
+            Self::Podcasts => "Podcasts & Talks",
+        }
+    }
+
+    /// Public YouTube search query used when this preset topic is active.
+    pub fn search_query(self) -> &'static str {
+        match self {
+            Self::Computing => "computer science programming technology",
+            Self::Science => "science physics astronomy documentary",
+            Self::Gaming => "video games review analysis gameplay",
+            Self::Music => "music live session album review",
+            Self::FilmAndTv => "film cinema movie review video essay",
+            Self::News => "world news analysis geopolitics",
+            Self::History => "history documentary civilization",
+            Self::Finance => "finance economics investing business",
+            Self::Education => "educational lecture explainer course",
+            Self::DesignAndArt => "design illustration photography art",
+            Self::Sports => "sports analysis highlights",
+            Self::Podcasts => "podcast interview conversation",
+        }
+    }
+
+    /// Lowercase keywords used locally to boost matching titles and channels.
+    pub fn keywords(self) -> &'static [&'static str] {
+        match self {
+            Self::Computing => &[
+                "tech",
+                "comput",
+                "program",
+                "coding",
+                "software",
+                "linux",
+                "rust",
+                "python",
+                "javascript",
+                "typescript",
+                "hardware",
+                "cpu",
+                "gpu",
+                "ai",
+                "dev",
+                "server",
+                "cyber",
+                "algorithm",
+                "kernel",
+                "open source",
+                "tecnologia",
+                "desenvolvimento",
+            ],
+            Self::Science => &[
+                "science",
+                "ciência",
+                "ciencia",
+                "physics",
+                "física",
+                "fisica",
+                "astronomy",
+                "biology",
+                "chemistry",
+                "quantum",
+                "cosmos",
+                "nasa",
+                "engineering",
+                "engenharia",
+                "space",
+            ],
+            Self::Gaming => &[
+                "game",
+                "gaming",
+                "gameplay",
+                "jogo",
+                "jogos",
+                "esports",
+                "speedrun",
+                "playthrough",
+                "nintendo",
+                "playstation",
+                "xbox",
+                "steam",
+                "rpg",
+                "indie",
+            ],
+            Self::Music => &[
+                "music",
+                "música",
+                "musica",
+                "song",
+                "album",
+                "guitar",
+                "piano",
+                "synth",
+                "concert",
+                "band",
+                "live session",
+                "soundtrack",
+                "audio",
+            ],
+            Self::FilmAndTv => &[
+                "movie",
+                "film",
+                "cinema",
+                "filme",
+                "série",
+                "series",
+                "anime",
+                "documentary",
+                "director",
+                "screenplay",
+                "trailer",
+                "video essay",
+            ],
+            Self::News => &[
+                "news",
+                "notícia",
+                "noticia",
+                "journal",
+                "geopolitic",
+                "politics",
+                "política",
+                "atualidades",
+                "breaking",
+                "report",
+            ],
+            Self::History => &[
+                "history",
+                "história",
+                "historia",
+                "ancient",
+                "medieval",
+                "empire",
+                "civilization",
+                "archaeology",
+                "historical",
+                "war",
+            ],
+            Self::Finance => &[
+                "finance", "finança", "invest", "economy", "economia", "business", "market",
+                "stock", "startup", "money", "negócio",
+            ],
+            Self::Education => &[
+                "lecture",
+                "course",
+                "curso",
+                "aula",
+                "tutorial",
+                "explained",
+                "explicado",
+                "education",
+                "educação",
+                "how it works",
+                "learn",
+            ],
+            Self::DesignAndArt => &[
+                "design",
+                "art",
+                "arte",
+                "drawing",
+                "illustration",
+                "photo",
+                "ui",
+                "ux",
+                "architecture",
+                "animation",
+                "3d",
+                "blender",
+            ],
+            Self::Sports => &[
+                "sport",
+                "esporte",
+                "football",
+                "futebol",
+                "soccer",
+                "basketball",
+                "nba",
+                "f1",
+                "formula 1",
+                "tennis",
+                "ufc",
+                "mma",
+                "olympic",
+                "cycling",
+            ],
+            Self::Podcasts => &[
+                "podcast",
+                "interview",
+                "entrevista",
+                "conversation",
+                "debate",
+                "episode",
+                "roundtable",
+                "keynote",
+                "talk",
+            ],
+        }
+    }
 }
 
 macro_rules! recommendation_choices {
@@ -194,31 +455,76 @@ recommendation_choices!(RecommendationPriority {
 impl Recommendations {
     /// Maximum Unicode scalar values per text field, as in the editor.
     pub const MAX_TEXT_CHARS: usize = 300;
+    /// Maximum selected preset topics sent as public searches per refresh.
+    pub const MAX_PRESET_TOPIC_QUERIES: usize = 4;
+    /// Maximum opted-in custom interest terms sent as public searches.
+    pub const MAX_CUSTOM_INTEREST_QUERIES: usize = 3;
+    /// Overall cap on public topic searches per refresh.
+    pub const MAX_TOPIC_QUERIES: usize = 5;
 
-    /// Clamps user-edited text fields to [`Self::MAX_TEXT_CHARS`].
+    /// Clamps user-edited text fields to [`Self::MAX_TEXT_CHARS`] and
+    /// deduplicates selected preset topics while preserving selection order.
     pub fn sanitized(mut self) -> Self {
         for value in [&mut self.interests, &mut self.muted] {
-            value.truncate(bounded_recommendation_text(value).len());
+            value.truncate(truncate_chars(value, Self::MAX_TEXT_CHARS).len());
         }
+        let mut unique = Vec::with_capacity(self.topics.len());
+        for topic in self.topics {
+            if !unique.contains(&topic) {
+                unique.push(topic);
+            }
+        }
+        self.topics = unique;
         self
     }
 
-    /// Only explicit, bounded topic searches may be sent to YouTube.
-    pub fn initial_queries(&self) -> impl Iterator<Item = &str> {
-        recommendation_terms(&self.interests).take(if self.search_interests { 3 } else { 0 })
+    /// Toggles a preset topic in place, removing all occurrences if present.
+    pub fn toggle_topic(&mut self, topic: RecommendationTopic) {
+        let before = self.topics.len();
+        self.topics.retain(|&item| item != topic);
+        if self.topics.len() == before {
+            self.topics.push(topic);
+        }
     }
-}
 
-fn bounded_recommendation_text(input: &str) -> &str {
-    input
-        .char_indices()
-        .nth(Recommendations::MAX_TEXT_CHARS)
-        .map_or(input, |(end, _)| &input[..end])
+    /// Public YouTube search queries from selected preset topics and, when
+    /// opted in, unique custom interests. Muted terms are never included.
+    pub fn topic_queries(&self) -> Vec<&str> {
+        let mut seen = Vec::new();
+        let mut queries = Vec::new();
+        for &topic in &self.topics {
+            if seen.len() >= Self::MAX_PRESET_TOPIC_QUERIES {
+                break;
+            }
+            if !seen.contains(&topic) {
+                seen.push(topic);
+                queries.push(topic.search_query());
+            }
+        }
+        if self.search_interests {
+            let mut seen_terms = Vec::new();
+            let mut added = 0;
+            for term in recommendation_terms(&self.interests) {
+                if added >= Self::MAX_CUSTOM_INTEREST_QUERIES
+                    || queries.len() >= Self::MAX_TOPIC_QUERIES
+                {
+                    break;
+                }
+                let key = term.to_lowercase();
+                if !seen_terms.contains(&key) {
+                    seen_terms.push(key);
+                    queries.push(term);
+                    added += 1;
+                }
+            }
+        }
+        queries
+    }
 }
 
 /// Reads the nonempty, comma-separated terms within the editor's text limit.
 pub fn recommendation_terms(input: &str) -> impl Iterator<Item = &str> {
-    bounded_recommendation_text(input)
+    truncate_chars(input, Recommendations::MAX_TEXT_CHARS)
         .split(',')
         .map(str::trim)
         .filter(|term| !term.is_empty())
@@ -227,22 +533,81 @@ pub fn recommendation_terms(input: &str) -> impl Iterator<Item = &str> {
 
 #[cfg(test)]
 #[test]
-fn topic_search_is_opt_in_bounded_and_never_uses_muted_terms() {
+fn topic_search_is_opt_in_for_custom_terms_bounded_and_never_uses_muted_terms() {
     let mut preferences = Recommendations {
         interests: " , ciência, rust, filmes, história ".into(),
         muted: "private".into(),
         ..Recommendations::default()
     };
-    assert_eq!(preferences.initial_queries().next(), None);
+    assert!(preferences.topic_queries().is_empty());
     preferences.search_interests = true;
+    assert_eq!(preferences.topic_queries(), ["ciência", "rust", "filmes"]);
+
+    preferences.topics = vec![
+        RecommendationTopic::Computing,
+        RecommendationTopic::Computing,
+        RecommendationTopic::Science,
+        RecommendationTopic::Gaming,
+        RecommendationTopic::Music,
+        RecommendationTopic::History,
+    ];
+    let sanitized = preferences.clone().sanitized();
     assert_eq!(
-        preferences.initial_queries().collect::<Vec<_>>(),
-        ["ciência", "rust", "filmes"]
+        sanitized.topics,
+        [
+            RecommendationTopic::Computing,
+            RecommendationTopic::Science,
+            RecommendationTopic::Gaming,
+            RecommendationTopic::Music,
+            RecommendationTopic::History,
+        ]
     );
+    // Up to 4 preset topics plus custom terms capped at 5 total, never muted.
+    let queries = sanitized.topic_queries();
+    assert_eq!(queries.len(), Recommendations::MAX_TOPIC_QUERIES);
+    assert_eq!(queries[0], RecommendationTopic::Computing.search_query());
+    assert_eq!(queries[3], RecommendationTopic::Music.search_query());
+    assert_eq!(queries[4], "ciência");
+    assert!(!queries.contains(&"private"));
+
     assert_eq!(
         serde_json::from_str::<Recommendations>("{}").unwrap(),
         Recommendations::default()
     );
+}
+
+#[cfg(test)]
+#[test]
+fn recommendation_topics_deserialize_tolerantly_and_deduplicate_terms() {
+    let settings: Settings = serde_json::from_str(
+        r#"{"recommendations":{"topics":["computing","future_topic",42,"computing","science"],"interests":"rust, Rust, python, linux","search_interests":true}}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        settings.recommendations.topics,
+        [RecommendationTopic::Computing, RecommendationTopic::Science,]
+    );
+    assert_eq!(
+        settings.recommendations.topic_queries(),
+        [
+            RecommendationTopic::Computing.search_query(),
+            RecommendationTopic::Science.search_query(),
+            "rust",
+            "python",
+            "linux",
+        ]
+    );
+
+    let mut dup = Recommendations {
+        topics: vec![
+            RecommendationTopic::Computing,
+            RecommendationTopic::Science,
+            RecommendationTopic::Computing,
+        ],
+        ..Recommendations::default()
+    };
+    dup.toggle_topic(RecommendationTopic::Computing);
+    assert_eq!(dup.topics, [RecommendationTopic::Science]);
 }
 
 #[cfg(test)]
@@ -256,7 +621,7 @@ fn recommendation_text_keeps_multibyte_characters_up_to_the_editor_limit() {
         search_interests: true,
         ..Recommendations::default()
     };
-    assert_eq!(preferences.initial_queries().next(), Some(text.as_str()));
+    assert_eq!(preferences.topic_queries(), [text.as_str()]);
     assert_eq!(
         recommendation_terms(&preferences.muted).next(),
         Some(text.as_str())

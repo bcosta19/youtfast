@@ -462,20 +462,24 @@ unusable source may still prevent a preview or playback.
 
 ## Local recommendations
 
-On **Home → For you**, open **Local recommendation settings** and select
-**Apply** to save and reload. Choose a duration, favor familiar channels or
-discover new ones, or prioritize recent uploads or fewer views. Enter interests
-and muted title terms separated by commas, up to 300 characters per field.
-Matching ignores case: interests
-boost matches in titles or channel names, and muted terms hide matching
-titles. A duration filter excludes videos with unknown length.
+On **Home → For you**, open **Local recommendation settings**. Click any
+preset **Topics** chip or change the duration, channel preference, or ranking
+priority to save and reload automatically. Selected preset topics fetch public
+YouTube candidates in a separate signed-out search — passing your chosen
+duration and recency filter to YouTube — and interleave them with your watch
+history so one watched channel does not crowd out your chosen topics. Open
+**Custom interests & muted terms** to enter comma-separated interests or muted
+title terms (up to 300 characters per field) and press Enter or select
+**Apply**. Matching ignores case: preset topics and custom interests boost
+matching titles or channel names, and muted terms hide matching titles. A
+duration filter excludes videos with unknown length.
 
 When signed in, YouTube's recommendations remain the default; enable **Use
 local ranking instead of YouTube recommendations** to apply these settings to
-your feed. If there is no eligible device watch history, you can opt in to
-send up to three interests to YouTube in signed-out searches. After your first
-eligible watch, returning to Home refreshes local recommendations from your
-history instead. Muted terms never leave the device.
+your feed. You can also enable **Search YouTube for custom interests (signed
+out)** to include up to three custom interests in signed-out searches alongside
+any preset topics and watch history (capped at five topic searches per refresh).
+Muted terms never leave the device.
 
 ## New-upload alerts
 
