@@ -496,8 +496,8 @@ fn matches_duration(video: &Video, duration: RecommendationDuration) -> bool {
     };
     match duration {
         RecommendationDuration::Any => true,
-        RecommendationDuration::Short => seconds < 300.0,
-        RecommendationDuration::Medium => (300.0..=1200.0).contains(&seconds),
+        RecommendationDuration::Short => seconds < 240.0,
+        RecommendationDuration::Medium => (240.0..=1200.0).contains(&seconds),
         RecommendationDuration::Long => seconds > 1200.0,
     }
 }
@@ -649,8 +649,9 @@ mod tests {
             vec![
                 make("muted", "ÁUDIO promocional", Some(600.0)),
                 make("unknown", "Unknown", None),
-                make("short", "Short", Some(299.0)),
-                make("five", "Five", Some(300.0)),
+                make("short", "Short", Some(239.0)),
+                make("four", "Four", Some(240.0)),
+                make("four-thirty", "Four thirty", Some(270.0)),
                 make("twenty", "Twenty", Some(1200.0)),
                 make("long", "Long", Some(1201.0)),
             ],
@@ -664,7 +665,16 @@ mod tests {
             .into_iter()
             .map(|video| video.id)
             .collect();
-        assert_eq!(ids, ["five", "twenty"]);
+        assert_eq!(ids, ["four", "four-thirty", "twenty"]);
+        let short = Recommendations {
+            duration: RecommendationDuration::Short,
+            ..preferences
+        };
+        let ids: Vec<_> = rank_with(&related, &Taste::default(), &short, 0)
+            .into_iter()
+            .map(|video| video.id)
+            .collect();
+        assert_eq!(ids, ["short"]);
     }
 
     #[test]

@@ -374,8 +374,8 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                         &mut next_choices.duration,
                         &[
                             (Duration::Any, "Any duration"),
-                            (Duration::Short, "Under 5 minutes"),
-                            (Duration::Medium, "5–20 minutes"),
+                            (Duration::Short, "Under 4 minutes"),
+                            (Duration::Medium, "4–20 minutes"),
                             (Duration::Long, "Over 20 minutes"),
                         ],
                     );

@@ -2233,12 +2233,6 @@ msgstr "Utiliser le classement local au lieu des recommandations YouTube"
 msgid "Duration"
 msgstr "Durée"
 
-msgid "Under 5 minutes"
-msgstr "Moins de 5 minutes"
-
-msgid "5–20 minutes"
-msgstr "5 à 20 minutes"
-
 msgid "Balanced"
 msgstr "Équilibré"
 
