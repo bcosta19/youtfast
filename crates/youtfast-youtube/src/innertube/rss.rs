@@ -8,8 +8,13 @@ pub async fn fetch(client: &Client, channel_id: &str) -> Result<Vec<Video>, Erro
         "https://www.youtube.com/feeds/videos.xml?channel_id={}",
         super::client::urlencoded(channel_id)
     );
-    match client.get_text(&url).await {
-        Ok(xml) => parse(&xml, channel_id),
+    match client.get(&url).await {
+        Ok((response, permit)) => {
+            let videos = parse(&response.text().await?, channel_id)?;
+            permit.success();
+            Ok(videos)
+        }
+        Err(Error::RateLimited) => Err(Error::RateLimited),
         Err(err) => {
             if let Ok((_, mut videos, _)) = super::channel::channel_tab(
                 client,

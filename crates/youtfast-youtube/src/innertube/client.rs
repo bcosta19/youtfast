@@ -626,6 +626,32 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn an_open_circuit_prevents_rss_network_requests() {
+        use crate::innertube::{RssCache, feed, rss};
+        use youtfast_core::model::Channel;
+
+        let (rp, proxy) = paused_client_with_local_proxy();
+        let channel = Channel {
+            id: "UCsynthetic".into(),
+            ..Channel::default()
+        };
+        assert_eq!(
+            rss::fetch(&rp, &channel.id).await.unwrap_err(),
+            Error::RateLimited
+        );
+        assert_eq!(
+            feed(&rp, vec![channel], false, &RssCache::default())
+                .await
+                .unwrap_err(),
+            YOUTUBE_RATE_LIMITED
+        );
+        assert_eq!(
+            proxy.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+    }
+
     fn paused_client_with_local_proxy() -> (Client, std::net::TcpListener) {
         let proxy = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         proxy.set_nonblocking(true).unwrap();

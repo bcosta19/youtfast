@@ -13,7 +13,7 @@ use tokio::task::JoinSet;
 use youtfast_core::model::{
     Channel, ChannelHeader, ChannelMeta, ChannelTab, HistoryRow, PlaylistSummary, Video,
 };
-use youtfast_core::util;
+use youtfast_core::{privacy::YOUTUBE_RATE_LIMITED, util};
 
 pub mod channel;
 pub mod client;
@@ -130,6 +130,7 @@ pub async fn feed(
     account: bool,
     cache: &RssCache,
 ) -> Result<(Vec<Video>, Option<More>), String> {
+    rp.check_paused().map_err(text)?;
     let mut videos = Vec::new();
     let mut problems = Vec::new();
     let mut more = None;
@@ -159,6 +160,7 @@ pub async fn feed(
                 });
                 videos.extend(sub_videos);
             }
+            Err(Error::RateLimited) => return Err(YOUTUBE_RATE_LIMITED.into()),
             Err(error) => problems.push(format!("your account's feed: {}", text(error))),
         }
     }
@@ -184,6 +186,7 @@ pub async fn feed(
         }
     });
     let mut failed_channels = 0;
+    let mut limited = false;
     while let Some(joined) = tasks.join_next().await {
         match joined {
             Ok((channel, Ok(videos_of_channel))) => {
@@ -193,6 +196,7 @@ pub async fn feed(
                     .insert(channel.id, (now, videos_of_channel.clone()));
                 videos.extend(videos_of_channel);
             }
+            Ok((_, Err(Error::RateLimited))) => limited = true,
             Ok((channel, Err(error))) => {
                 log::warn!(
                     "could not read the feed of {}: {}",
@@ -206,6 +210,9 @@ pub async fn feed(
                 failed_channels += 1;
             }
         }
+    }
+    if limited && videos.is_empty() {
+        return Err(YOUTUBE_RATE_LIMITED.into());
     }
     if failed_channels > 0 {
         problems.push(format!("{failed_channels} channels could not be read"));
