@@ -295,6 +295,7 @@ fn for_you(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
 #[derive(Clone, Copy, Default)]
 struct RecommendationPanelState {
     open: bool,
+    custom_open: Option<bool>,
 }
 
 fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
@@ -418,6 +419,7 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                 recommendation_divider(ui, hairline);
                 ui.add_space(12.0);
             }
+
             let local_fallback = state.for_you_source == Some(Source::Device);
             let local_active = !state.signed_in() || saved.prefer_local || local_fallback;
 
@@ -518,69 +520,131 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                     )
                     .as_ref(),
                 );
-                ui.add_space(4.0);
 
+                ui.add_space(12.0);
+                recommendation_divider(ui, hairline);
+                ui.add_space(10.0);
+
+                // Secondary custom interests & muted terms section
                 let has_custom_text =
                     !saved.interests.trim().is_empty() || !saved.muted.trim().is_empty();
-                egui::CollapsingHeader::new(tr(locale, "Custom interests & muted terms"))
-                    .id_salt("recommendation custom filters")
-                    .default_open(has_custom_text)
-                    .show(ui, |ui| {
-                        let mut submit_text = false;
-                        for (label, value) in [
-                            ("Custom interests (comma-separated)", &mut interests_draft),
-                            ("Muted title terms (comma-separated)", &mut muted_draft),
-                        ] {
-                            let label = ui.label(tr(locale, label));
-                            let response = ui
-                                .add(
-                                    egui::TextEdit::singleline(value)
-                                        .char_limit(Recommendations::MAX_TEXT_CHARS),
-                                )
-                                .labelled_by(label.id);
-                            if response.lost_focus()
-                                && ui.input(|input| input.key_pressed(egui::Key::Enter))
-                            {
-                                submit_text = true;
-                            }
-                        }
-                        let mut next = saved.clone();
-                        let search_without_history = recommendation_switch_row(
+                let custom_open = *panel.custom_open.get_or_insert(has_custom_text);
+                if recommendation_subtoggle(
+                    ui,
+                    palette,
+                    tr(locale, "Custom interests & muted terms").as_ref(),
+                    custom_open,
+                )
+                .clicked()
+                {
+                    panel.custom_open = Some(!custom_open);
+                }
+
+                if panel.custom_open.unwrap_or(false) {
+                    ui.add_space(10.0);
+                    let mut submit_text = false;
+                    let avail = ui.available_width();
+                    if avail >= 560.0 {
+                        let col_gap = 16.0;
+                        let col_w = ((avail - col_gap) / 2.0).floor();
+                        ui.horizontal_top(|ui| {
+                            ui.spacing_mut().item_spacing.x = col_gap;
+                            submit_text |= recommendation_text_field(
+                                ui,
+                                palette,
+                                panel_id.with("custom-interests"),
+                                tr(locale, "Custom interests (comma-separated)").as_ref(),
+                                &mut interests_draft,
+                                col_w,
+                            );
+                            submit_text |= recommendation_text_field(
+                                ui,
+                                palette,
+                                panel_id.with("muted-terms"),
+                                tr(locale, "Muted title terms (comma-separated)").as_ref(),
+                                &mut muted_draft,
+                                col_w,
+                            );
+                        });
+                    } else {
+                        submit_text |= recommendation_text_field(
                             ui,
                             palette,
-                            tr(
-                                locale,
-                                "Search YouTube for custom interests without watch history (signed out)",
-                            )
-                            .as_ref(),
-                            &mut next.search_interests,
+                            panel_id.with("custom-interests"),
+                            tr(locale, "Custom interests (comma-separated)").as_ref(),
+                            &mut interests_draft,
+                            avail,
                         );
-                        ui.add_space(6.0);
-                        let search_with_history = recommendation_switch_row(
+                        ui.add_space(8.0);
+                        submit_text |= recommendation_text_field(
                             ui,
                             palette,
-                            tr(
-                                locale,
-                                "Search YouTube for custom interests with watch history (signed out)",
-                            )
-                            .as_ref(),
-                            &mut next.search_interests_with_history,
+                            panel_id.with("muted-terms"),
+                            tr(locale, "Muted title terms (comma-separated)").as_ref(),
+                            &mut muted_draft,
+                            avail,
                         );
-                        let text_dirty =
-                            interests_draft != saved.interests || muted_draft != saved.muted;
-                        let apply_clicked = ui
-                            .add_enabled(text_dirty, egui::Button::new(tr(locale, "Apply")))
-                            .clicked();
-                        if search_without_history
-                            || search_with_history
-                            || (submit_text && text_dirty)
-                            || apply_clicked
-                        {
-                            next.interests = interests_draft.clone();
-                            next.muted = muted_draft.clone();
-                            actions.push(Action::SetRecommendations(next));
-                        }
-                    });
+                    }
+
+                    ui.add_space(12.0);
+                    let mut next = saved.clone();
+                    let search_without_history = recommendation_switch_row(
+                        ui,
+                        palette,
+                        tr(
+                            locale,
+                            "Search YouTube for custom interests without watch history (signed out)",
+                        )
+                        .as_ref(),
+                        &mut next.search_interests,
+                    );
+                    ui.add_space(6.0);
+                    let search_with_history = recommendation_switch_row(
+                        ui,
+                        palette,
+                        tr(
+                            locale,
+                            "Search YouTube for custom interests with watch history (signed out)",
+                        )
+                        .as_ref(),
+                        &mut next.search_interests_with_history,
+                    );
+
+                    ui.add_space(10.0);
+                    let text_dirty =
+                        interests_draft != saved.interests || muted_draft != saved.muted;
+                    let apply_clicked = ui
+                        .horizontal(|ui| {
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                let style = if text_dirty {
+                                    widgets::ButtonStyle::Primary
+                                } else {
+                                    widgets::ButtonStyle::Normal
+                                };
+                                ui.add_enabled_ui(text_dirty, |ui| {
+                                    widgets::button(
+                                        ui,
+                                        palette,
+                                        tr(locale, "Apply").as_ref(),
+                                        style,
+                                    )
+                                })
+                                .inner
+                                .clicked()
+                            })
+                            .inner
+                        })
+                        .inner;
+                    if search_without_history
+                        || search_with_history
+                        || (submit_text && text_dirty)
+                        || apply_clicked
+                    {
+                        next.interests = interests_draft.clone();
+                        next.muted = muted_draft.clone();
+                        actions.push(Action::SetRecommendations(next));
+                    }
+                }
             });
         });
 
@@ -627,6 +691,65 @@ fn recommendation_header_toggle(
         ),
         galley,
         palette.text,
+    );
+    response
+}
+
+fn recommendation_subtoggle(
+    ui: &mut Ui,
+    palette: &theme::Palette,
+    title: &str,
+    open: bool,
+) -> egui::Response {
+    let icon_size = 14.0;
+    let gap = 6.0;
+    let galley = ui.painter().layout_no_wrap(
+        title.to_owned(),
+        theme::semibold(13.0),
+        Color32::PLACEHOLDER,
+    );
+    let (rect, response) = ui.allocate_exact_size(
+        vec2(
+            icon_size + gap + galley.size().x + 4.0,
+            galley.size().y.max(24.0),
+        ),
+        Sense::click(),
+    );
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), open, title)
+    });
+    if ui.is_enabled() && response.hovered() {
+        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+    }
+    let hover = widgets::hover_fade(ui, &response);
+    let color = if ui.is_enabled() {
+        widgets::mix(
+            palette.secondary,
+            palette.text,
+            if open { 0.7 } else { hover },
+        )
+    } else {
+        palette.dim
+    };
+    let icon = if open {
+        Icon::ChevronUp
+    } else {
+        Icon::ChevronDown
+    };
+    icon.image(color, icon_size).paint_at(
+        ui,
+        Rect::from_center_size(
+            pos2(rect.left() + icon_size / 2.0, rect.center().y),
+            vec2(icon_size, icon_size),
+        ),
+    );
+    ui.painter().galley_with_override_text_color(
+        pos2(
+            rect.left() + icon_size + gap,
+            rect.center().y - galley.size().y / 2.0,
+        ),
+        galley,
+        color,
     );
     response
 }
@@ -698,6 +821,44 @@ fn recommendation_switch_row(
         }
     });
     toggled
+}
+
+fn recommendation_text_field(
+    ui: &mut Ui,
+    palette: &theme::Palette,
+    id: egui::Id,
+    label: &str,
+    value: &mut String,
+    width: f32,
+) -> bool {
+    let mut submitted = false;
+    ui.vertical(|ui| {
+        ui.set_width(width);
+        let label_resp = ui.label(
+            RichText::new(label)
+                .font(theme::medium(12.5))
+                .color(palette.secondary),
+        );
+        ui.add_space(4.0);
+        let response = widgets::text_input(
+            ui,
+            palette,
+            value,
+            widgets::TextInputConfig {
+                id,
+                width,
+                hint: "",
+                password: false,
+                monospace: false,
+                char_limit: Some(Recommendations::MAX_TEXT_CHARS),
+            },
+        )
+        .labelled_by(label_resp.id);
+        if response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter)) {
+            submitted = true;
+        }
+    });
+    submitted
 }
 
 fn recommendation_summary(locale: youtfast_i18n::Locale, saved: &Recommendations) -> String {
