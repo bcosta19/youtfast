@@ -894,7 +894,9 @@ pub fn sanitize_sidebar(entries: Vec<SidebarEntry>) -> Vec<SidebarEntry> {
 fn read_sidebar<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<SidebarEntry>, D::Error> {
-    let values = Vec::<serde_json::Value>::deserialize(deserializer)?;
+    let serde_json::Value::Array(values) = serde_json::Value::deserialize(deserializer)? else {
+        return Ok(Vec::new());
+    };
     Ok(sanitize_sidebar(
         values
             .into_iter()
@@ -911,7 +913,9 @@ fn read_playback_speed<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Res
 fn read_channel_speeds<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<ChannelSpeed>, D::Error> {
-    let values = Vec::<serde_json::Value>::deserialize(deserializer)?;
+    let serde_json::Value::Array(values) = serde_json::Value::deserialize(deserializer)? else {
+        return Ok(Vec::new());
+    };
     let mut clean: Vec<ChannelSpeed> = Vec::new();
     for value in values {
         if let Ok(entry) = serde_json::from_value::<ChannelSpeed>(value)
@@ -1367,6 +1371,28 @@ mod tests {
         // A file from before the setting loads the default.
         let parsed: Settings = serde_json::from_str(r#"{"volume": 40.0}"#).unwrap();
         assert_eq!(parsed.sidebar, default_sidebar());
+    }
+
+    #[test]
+    fn non_array_sidebar_does_not_discard_other_settings() {
+        let parsed: Settings = serde_json::from_value(serde_json::json!({
+            "sidebar": null,
+            "hide_watched": true,
+        }))
+        .unwrap();
+        assert!(parsed.hide_watched);
+        assert_eq!(sanitize_sidebar(parsed.sidebar), default_sidebar());
+    }
+
+    #[test]
+    fn non_array_channel_speeds_do_not_discard_other_settings() {
+        let parsed: Settings = serde_json::from_value(serde_json::json!({
+            "channel_speeds": {"UC_one": 1.5},
+            "hide_watched": true,
+        }))
+        .unwrap();
+        assert!(parsed.hide_watched);
+        assert!(parsed.channel_speeds.is_empty());
     }
 
     #[test]
