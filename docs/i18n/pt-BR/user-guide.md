@@ -523,7 +523,9 @@ automaticamente após uma breve pausa. Os
 tópicos selecionados buscam candidatos públicos no YouTube em uma pesquisa
 separada sem login — repassando seu filtro de duração e de vídeos recentes ao
 YouTube — e os intercalam com o seu histórico assistido, para que um único
-canal acompanhado não domine os tópicos escolhidos. Abra **Interesses
+canal acompanhado não domine os tópicos escolhidos. Apenas os quatro primeiros
+tópicos predefinidos que você selecionar disparam buscas; os demais apenas
+favorecem títulos ou nomes de canais correspondentes no ranking local. Abra **Interesses
 personalizados e termos silenciados** para informar interesses ou termos
 silenciados separados por vírgula (até 300 caracteres por campo) e pressione
 Enter ou selecione **Aplicar**. A busca por correspondências ignora maiúsculas

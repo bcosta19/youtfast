@@ -568,7 +568,9 @@ de chaînes ou la priorité de classement pour enregistrer aussitôt les réglag
 et recharger automatiquement après une courte pause. Les sujets sélectionnés récupèrent des vidéos publiques sur
 YouTube via une recherche séparée sans compte — en transmettant vos filtres de
 durée et de fraîcheur à YouTube — et les alternent avec votre historique de
-visionnage afin qu’une seule chaîne suivie n’écrase pas vos sujets choisis.
+visionnage afin qu’une seule chaîne suivie n’écrase pas vos sujets choisis. Seuls les quatre premiers sujets prédéfinis
+sélectionnés déclenchent des recherches. Les suivants favorisent uniquement les
+titres ou noms de chaînes correspondants dans le classement local.
 Ouvrez **Centres d’intérêt personnalisés et termes masqués** pour saisir des
 centres d’intérêt ou des termes masqués séparés par des virgules (jusqu’à
 300 caractères par champ), puis appuyez sur Entrée ou cliquez sur **Appliquer**.

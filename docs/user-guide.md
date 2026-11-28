@@ -467,7 +467,9 @@ preset **Topics** chip or change the duration, channel preference, or ranking
 priority to save immediately and reload automatically after a short pause. Selected preset topics fetch public
 YouTube candidates in a separate signed-out search — passing your chosen
 duration and recency filter to YouTube — and interleave them with your watch
-history so one watched channel does not crowd out your chosen topics. Open
+history so one watched channel does not crowd out your chosen topics. Only the first four
+preset topics you select trigger searches; additional preset topics only boost
+matching titles or channel names in local ranking. Open
 **Custom interests & muted terms** to enter comma-separated interests or muted
 title terms (up to 300 characters per field) and press Enter or select
 **Apply**. Matching ignores case: preset topics and custom interests boost

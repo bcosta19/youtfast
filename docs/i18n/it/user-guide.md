@@ -528,7 +528,9 @@ una breve pausa. Gli
 argomenti selezionati recuperano candidati pubblici da YouTube tramite una
 ricerca separata senza accesso — inoltrando a YouTube i filtri di durata e
 recentezza scelti — e li alternano alla tua cronologia, così che un solo canale
-seguito non oscuri gli argomenti scelti. Apri **Interessi personalizzati e
+seguito non oscuri gli argomenti scelti. Solo i primi quattro argomenti predefiniti
+selezionati avviano ricerche; gli altri favoriscono solo i titoli o i nomi dei
+canali corrispondenti nella classifica locale. Apri **Interessi personalizzati e
 termini silenziati** per inserire interessi o termini silenziati separati da
 virgole (fino a 300 caratteri per campo) e premi Invio o seleziona **Applica**.
 Maiuscole e minuscole sono equivalenti: argomenti selezionati e interessi

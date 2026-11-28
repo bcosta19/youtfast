@@ -549,7 +549,9 @@ Kanalauswahl oder Priorität der Rangfolge. Änderungen werden sofort gespeicher
 der Feed lädt nach einer kurzen Pause automatisch neu. Ausgewählte Themen holen öffentliche YouTube-Kandidaten über eine
 getrennte Suche ohne Anmeldung — inklusive Ihres gewählten Dauer- und
 Aktualitätsfilters — und mischen sie mit Ihrem Wiedergabeverlauf, sodass ein
-einzelner verfolgter Kanal Ihre gewählten Themen nicht verdrängt. Öffnen Sie
+einzelner verfolgter Kanal Ihre gewählten Themen nicht verdrängt. Nur die ersten vier
+ausgewählten vordefinierten Themen lösen Suchen aus. Weitere Themen werten nur
+passende Titel oder Kanalnamen in der lokalen Rangfolge auf. Öffnen Sie
 **Eigene Interessen und stumme Begriffe**, um eigene Interessen oder stumme
 Titelbegriffe durch Kommas getrennt einzugeben (bis zu 300 Zeichen pro Feld),
 und drücken Sie die Eingabetaste oder wählen Sie **Anwenden**. Groß- und

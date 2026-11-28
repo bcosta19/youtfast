@@ -539,7 +539,9 @@ tras una breve pausa. Los
 temas seleccionados buscan candidatos públicos en YouTube mediante una búsqueda
 separada sin sesión — enviando a YouTube tus filtros de duración y de vídeos
 recientes — y los intercalan con tu historial para que un solo canal seguido no
-eclipse los temas elegidos. Abre **Intereses personalizados y términos
+eclipse los temas elegidos. Solo los primeros cuatro temas predefinidos que
+elijas activan búsquedas; los demás solo favorecen títulos o nombres de canales
+coincidentes en la clasificación local. Abre **Intereses personalizados y términos
 silenciados** para escribir intereses o términos silenciados separados por
 comas (hasta 300 caracteres por campo) y pulsa Intro o selecciona **Aplicar**.
 No se distingue entre mayúsculas y minúsculas: los temas seleccionados y los
