@@ -400,16 +400,16 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
 
             if state.signed_in() {
                 let mut prefer_local = saved.prefer_local;
-                if ui
-                    .checkbox(
-                        &mut prefer_local,
-                        tr(
-                            locale,
-                            "Use local ranking instead of YouTube recommendations",
-                        ),
+                if recommendation_switch_row(
+                    ui,
+                    palette,
+                    tr(
+                        locale,
+                        "Use local ranking instead of YouTube recommendations",
                     )
-                    .changed()
-                {
+                    .as_ref(),
+                    &mut prefer_local,
+                ) {
                     let mut next = saved.clone();
                     next.prefer_local = prefer_local;
                     actions.push(Action::SetRecommendations(next));
@@ -537,18 +537,27 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                             }
                         }
                         let mut next = saved.clone();
-                        let search_without_history = ui
-                            .checkbox(
-                                &mut next.search_interests,
-                                tr(locale, "Search YouTube for custom interests without watch history (signed out)"),
+                        let search_without_history = recommendation_switch_row(
+                            ui,
+                            palette,
+                            tr(
+                                locale,
+                                "Search YouTube for custom interests without watch history (signed out)",
                             )
-                            .changed();
-                        let search_with_history = ui
-                            .checkbox(
-                                &mut next.search_interests_with_history,
-                                tr(locale, "Search YouTube for custom interests with watch history (signed out)"),
+                            .as_ref(),
+                            &mut next.search_interests,
+                        );
+                        ui.add_space(6.0);
+                        let search_with_history = recommendation_switch_row(
+                            ui,
+                            palette,
+                            tr(
+                                locale,
+                                "Search YouTube for custom interests with watch history (signed out)",
                             )
-                            .changed();
+                            .as_ref(),
+                            &mut next.search_interests_with_history,
+                        );
                         let text_dirty =
                             interests_draft != saved.interests || muted_draft != saved.muted;
                         let apply_clicked = ui
@@ -617,6 +626,51 @@ fn recommendation_header_toggle(
 fn recommendation_divider(ui: &mut Ui, color: Color32) {
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
     ui.painter().rect_filled(rect, CornerRadius::ZERO, color);
+}
+
+fn recommendation_switch_row(
+    ui: &mut Ui,
+    palette: &theme::Palette,
+    label: &str,
+    value: &mut bool,
+) -> bool {
+    let mut toggled = false;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 10.0;
+        let (rect, response) = ui.allocate_exact_size(vec2(36.0, 20.0), Sense::click());
+        let enabled = ui.is_enabled();
+        response.widget_info(|| {
+            egui::WidgetInfo::selected(egui::WidgetType::Checkbox, enabled, *value, label)
+        });
+        if enabled && response.hovered() {
+            ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+        }
+        let hover = widgets::hover_fade(ui, &response);
+        let off = widgets::mix(palette.surface_active, palette.outline, hover);
+        widgets::paint_switch(ui, rect, &response, *value, off, palette.accent);
+        if response.clicked() {
+            *value = !*value;
+            toggled = true;
+        }
+        let text_color = if enabled { palette.text } else { palette.dim };
+        let label_resp = ui.add(
+            egui::Label::new(
+                RichText::new(label)
+                    .font(theme::regular(13.0))
+                    .color(text_color),
+            )
+            .wrap()
+            .sense(Sense::click()),
+        );
+        if enabled && label_resp.hovered() {
+            ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+        }
+        if enabled && label_resp.clicked() {
+            *value = !*value;
+            toggled = true;
+        }
+    });
+    toggled
 }
 
 fn recommendation_summary(locale: youtfast_i18n::Locale, saved: &Recommendations) -> String {
