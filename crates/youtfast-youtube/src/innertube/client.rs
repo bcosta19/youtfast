@@ -449,6 +449,18 @@ pub(super) fn limiting_status(code: u16, message: &str) -> bool {
         || (code == 403 && (message.contains("rate limit") || message.contains("quota")))
 }
 
+/// InnerTube can describe a bot check inside an otherwise successful HTTP response.
+pub fn response_reports_limit(code: u16, value: &Value) -> bool {
+    ["/error/message", "/playabilityStatus/reason"]
+        .into_iter()
+        .any(|field| {
+            value
+                .pointer(field)
+                .and_then(Value::as_str)
+                .is_some_and(|text| limiting_status(code, text))
+        })
+}
+
 fn retry_delay(response: &reqwest::Response) -> Option<Duration> {
     retry_after(
         response.headers().get("retry-after")?.to_str().ok()?,
@@ -514,14 +526,9 @@ async fn read_json(response: reqwest::Response, permit: RequestPermit) -> Result
         .ok()
         .and_then(|v| v.pointer("/error/message"))
         .and_then(Value::as_str);
-    let reason = json
+    if json
         .as_ref()
-        .ok()
-        .and_then(|v| v.pointer("/playabilityStatus/reason"))
-        .and_then(Value::as_str);
-    if message
-        .or(reason)
-        .is_some_and(|text| limiting_status(status.as_u16(), text))
+        .is_ok_and(|value| response_reports_limit(status.as_u16(), value))
         || (!status.is_success() && limiting_status(status.as_u16(), &text))
     {
         return Err(limited(permit, delay));
