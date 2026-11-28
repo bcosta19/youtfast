@@ -1,7 +1,9 @@
 //! The Home page: subscription feed grid, For you recommendations, and Shorts shelf.
 
 use egui::text::LayoutJob;
-use egui::{Color32, CornerRadius, Rect, RichText, Sense, Stroke, Ui, pos2, vec2};
+use egui::{
+    Align, Color32, CornerRadius, CursorIcon, Layout, Rect, RichText, Sense, Stroke, Ui, pos2, vec2,
+};
 use youtfast_i18n::{format as trf, gettext as tr};
 
 use super::CARD_WIDTH;
@@ -290,12 +292,112 @@ fn for_you(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     }
 }
 
+#[derive(Clone, Copy, Default)]
+struct RecommendationPanelState {
+    open: bool,
+}
+
 fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
     let locale = state.settings.language;
+    let palette = &state.palette;
     let saved = &state.settings.recommendations;
-    egui::CollapsingHeader::new(tr(locale, "Local recommendation settings"))
-        .id_salt("local recommendation settings")
+    let defaults = Recommendations::default();
+
+    let panel_id = egui::Id::new("local recommendation settings panel");
+    let mut panel = ui
+        .ctx()
+        .data(|data| data.get_temp::<RecommendationPanelState>(panel_id))
+        .unwrap_or_default();
+
+    let text_id = panel_id.with("recommendation text draft");
+    let saved_text = (saved.interests.clone(), saved.muted.clone());
+    let (mut interests_draft, mut muted_draft) = ui
+        .data_mut(|data| data.get_temp::<((String, String), (String, String))>(text_id))
+        .filter(|(last_saved, _)| last_saved == &saved_text)
+        .map_or_else(|| saved_text.clone(), |(_, draft)| draft);
+    let text_dirty = interests_draft != saved.interests || muted_draft != saved.muted;
+    let has_active_filters = *saved != defaults;
+
+    let hairline = if palette.dark {
+        Color32::from_white_alpha(20)
+    } else {
+        Color32::from_black_alpha(18)
+    };
+
+    egui::Frame::new()
+        .fill(palette.panel)
+        .corner_radius(CornerRadius::same(RADIUS + 4))
+        .stroke(Stroke::new(1.0, hairline))
+        .inner_margin(egui::Margin::symmetric(16, 12))
         .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+
+            // Header bar: accent pip, title, optional compact summary when collapsed,
+            // plus Reset to defaults (when open) and chevron toggle on the right.
+            ui.horizontal(|ui| {
+                let header_title = tr(locale, "Local recommendation settings");
+                let toggle_resp = recommendation_header_toggle(
+                    ui,
+                    palette,
+                    header_title.as_ref(),
+                    panel.open || has_active_filters,
+                    panel.open,
+                );
+                if toggle_resp.clicked() {
+                    panel.open = !panel.open;
+                }
+
+                if !panel.open && has_active_filters {
+                    let summary = recommendation_summary(locale, saved);
+                    if !summary.is_empty() {
+                        ui.add_space(4.0);
+                        ui.label(
+                            RichText::new(summary)
+                                .font(theme::regular(12.5))
+                                .color(palette.secondary),
+                        );
+                    }
+                }
+
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let chevron = if panel.open {
+                        Icon::ChevronUp
+                    } else {
+                        Icon::ChevronDown
+                    };
+                    if widgets::icon_button(ui, chevron, 16.0, header_title.as_ref()).clicked() {
+                        panel.open = !panel.open;
+                    }
+                    if panel.open {
+                        let can_reset = has_active_filters || text_dirty;
+                        if ui
+                            .add_enabled_ui(can_reset, |ui| {
+                                widgets::button(
+                                    ui,
+                                    palette,
+                                    tr(locale, "Reset to defaults").as_ref(),
+                                    widgets::ButtonStyle::Normal,
+                                )
+                            })
+                            .inner
+                            .clicked()
+                        {
+                            interests_draft.clear();
+                            muted_draft.clear();
+                            actions.push(Action::SetRecommendations(defaults.clone()));
+                        }
+                    }
+                });
+            });
+
+            if !panel.open {
+                return;
+            }
+
+            ui.add_space(10.0);
+            recommendation_divider(ui, hairline);
+            ui.add_space(12.0);
+
             if state.signed_in() {
                 let mut prefer_local = saved.prefer_local;
                 if ui
@@ -312,29 +414,28 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                     next.prefer_local = prefer_local;
                     actions.push(Action::SetRecommendations(next));
                 }
+                ui.add_space(10.0);
+                recommendation_divider(ui, hairline);
+                ui.add_space(12.0);
             }
             let local_fallback = state.for_you_source == Some(Source::Device);
             let local_active = !state.signed_in() || saved.prefer_local || local_fallback;
-            let text_id = ui.id().with("recommendation text draft");
-            let saved_text = (saved.interests.clone(), saved.muted.clone());
-            let (mut interests_draft, mut muted_draft) = ui
-                .data_mut(|data| data.get_temp::<((String, String), (String, String))>(text_id))
-                .filter(|(last_saved, _)| last_saved == &saved_text)
-                .map_or_else(|| saved_text.clone(), |(_, draft)| draft);
 
             ui.add_enabled_ui(local_active, |ui| {
+                // Topics section
                 ui.label(
                     RichText::new(tr(locale, "Topics").as_ref())
-                        .font(theme::medium(13.0))
-                        .color(state.palette.secondary),
+                        .font(theme::semibold(12.5))
+                        .color(palette.secondary),
                 );
-                ui.add_space(4.0);
+                ui.add_space(6.0);
                 ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
                     for &topic in RecommendationTopic::ALL {
                         let selected = saved.topics.contains(&topic);
                         if widgets::toggle_chip(
                             ui,
-                            &state.palette,
+                            palette,
                             tr(locale, topic.label()).as_ref(),
                             selected,
                         )
@@ -357,7 +458,7 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                             .as_ref(),
                         )
                         .font(theme::regular(12.0))
-                        .color(state.palette.secondary),
+                        .color(palette.secondary),
                     );
                 }
                 ui.add_space(8.0);
@@ -407,7 +508,7 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                         tr(locale, "Select a topic to fetch new videos that match this duration. History-based results are only filtered.").as_ref(),
                     )
                     .font(theme::regular(12.0))
-                    .color(state.palette.secondary),
+                    .color(palette.secondary),
                 );
                 ui.add_space(4.0);
 
@@ -464,26 +565,94 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                         }
                     });
             });
-
-            let defaults = Recommendations::default();
-            let text_dirty = interests_draft != saved.interests || muted_draft != saved.muted;
-            ui.add_space(4.0);
-            if ui
-                .add_enabled(
-                    *saved != defaults || text_dirty,
-                    egui::Button::new(tr(locale, "Reset to defaults")),
-                )
-                .clicked()
-            {
-                interests_draft.clear();
-                muted_draft.clear();
-                actions.push(Action::SetRecommendations(defaults));
-            }
-            ui.data_mut(|data| {
-                data.insert_temp(text_id, (saved_text, (interests_draft, muted_draft)));
-            });
         });
-    ui.add_space(8.0);
+
+    ui.data_mut(|data| {
+        data.insert_temp(text_id, (saved_text, (interests_draft, muted_draft)));
+    });
+    ui.ctx().data_mut(|data| data.insert_temp(panel_id, panel));
+    ui.add_space(12.0);
+}
+
+fn recommendation_header_toggle(
+    ui: &mut Ui,
+    palette: &theme::Palette,
+    title: &str,
+    accent_active: bool,
+    open: bool,
+) -> egui::Response {
+    let galley = ui
+        .painter()
+        .layout_no_wrap(title.to_owned(), theme::semibold(14.5), palette.text);
+    let pip_w = 3.5;
+    let pip_gap = 9.0;
+    let width = pip_w + pip_gap + galley.size().x + 4.0;
+    let height = galley.size().y.max(24.0);
+    let (rect, response) = ui.allocate_exact_size(vec2(width, height), Sense::click());
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), open, title)
+    });
+    if response.hovered() {
+        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+    }
+    let pip_color = if accent_active {
+        palette.accent
+    } else {
+        palette.outline
+    };
+    let pip_rect = Rect::from_min_size(pos2(rect.left(), rect.center().y - 7.5), vec2(pip_w, 15.0));
+    ui.painter()
+        .rect_filled(pip_rect, CornerRadius::same(2), pip_color);
+    ui.painter().galley(
+        pos2(
+            rect.left() + pip_w + pip_gap,
+            rect.center().y - galley.size().y / 2.0,
+        ),
+        galley,
+        palette.text,
+    );
+    response
+}
+
+fn recommendation_divider(ui: &mut Ui, color: Color32) {
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
+    ui.painter().rect_filled(rect, CornerRadius::ZERO, color);
+}
+
+fn recommendation_summary(locale: youtfast_i18n::Locale, saved: &Recommendations) -> String {
+    let mut parts = Vec::new();
+    for topic in saved.topics.iter().take(3) {
+        parts.push(tr(locale, topic.label()).into_owned());
+    }
+    if saved.topics.len() > 3 {
+        parts.push(format!("+{}", saved.topics.len() - 3));
+    }
+    if saved.duration != Duration::Any {
+        let label = match saved.duration {
+            Duration::Any => "",
+            Duration::Short => "Under 4 minutes",
+            Duration::Medium => "4–20 minutes",
+            Duration::Long => "Over 20 minutes",
+        };
+        parts.push(tr(locale, label).into_owned());
+    }
+    if saved.channels != Channels::Balanced {
+        let label = match saved.channels {
+            Channels::Balanced => "",
+            Channels::Discover => "Discover new channels",
+            Channels::Familiar => "Favor familiar channels",
+        };
+        parts.push(tr(locale, label).into_owned());
+    }
+    if saved.priority != Priority::Balanced {
+        let label = match saved.priority {
+            Priority::Balanced => "",
+            Priority::Recent => "Recent uploads",
+            Priority::FewerViews => "Fewer views",
+        };
+        parts.push(tr(locale, label).into_owned());
+    }
+    parts.join(" · ")
 }
 
 fn recommendation_choice<T: Copy + PartialEq>(
