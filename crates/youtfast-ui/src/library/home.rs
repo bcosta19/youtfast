@@ -448,25 +448,27 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                     }
                 });
                 if saved.topics.len() > Recommendations::MAX_PRESET_TOPIC_QUERIES {
-                    ui.add_space(4.0);
-                    ui.label(
-                        RichText::new(
-                            tr(
-                                locale,
-                                "The first four selected topics fetch videos from YouTube; additional topics boost matching titles locally.",
-                            )
-                            .as_ref(),
+                    ui.add_space(6.0);
+                    recommendation_hint(
+                        ui,
+                        palette,
+                        tr(
+                            locale,
+                            "The first four selected topics fetch videos from YouTube; additional topics boost matching titles locally.",
                         )
-                        .font(theme::regular(12.0))
-                        .color(palette.secondary),
+                        .as_ref(),
                     );
                 }
-                ui.add_space(8.0);
 
+                ui.add_space(14.0);
+
+                // Ranking & duration segmented filters with clear stacked headings
                 let mut next_choices = saved.clone();
                 ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = vec2(18.0, 12.0);
                     recommendation_choice(
                         ui,
+                        palette,
                         locale,
                         "Duration",
                         &mut next_choices.duration,
@@ -479,6 +481,7 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                     );
                     recommendation_choice(
                         ui,
+                        palette,
                         locale,
                         "Channels",
                         &mut next_choices.channels,
@@ -490,6 +493,7 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                     );
                     recommendation_choice(
                         ui,
+                        palette,
                         locale,
                         "Ranking priority",
                         &mut next_choices.priority,
@@ -503,12 +507,16 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                 if &next_choices != saved {
                     actions.push(Action::SetRecommendations(next_choices));
                 }
-                ui.label(
-                    RichText::new(
-                        tr(locale, "Select a topic to fetch new videos that match this duration. History-based results are only filtered.").as_ref(),
+
+                ui.add_space(8.0);
+                recommendation_hint(
+                    ui,
+                    palette,
+                    tr(
+                        locale,
+                        "Select a topic to fetch new videos that match this duration. History-based results are only filtered.",
                     )
-                    .font(theme::regular(12.0))
-                    .color(palette.secondary),
+                    .as_ref(),
                 );
                 ui.add_space(4.0);
 
@@ -628,6 +636,25 @@ fn recommendation_divider(ui: &mut Ui, color: Color32) {
     ui.painter().rect_filled(rect, CornerRadius::ZERO, color);
 }
 
+fn recommendation_hint(ui: &mut Ui, palette: &theme::Palette, text: &str) {
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        let (icon_rect, _) = ui.allocate_exact_size(vec2(14.0, 16.0), Sense::hover());
+        Icon::Info.image(palette.secondary, 13.0).paint_at(
+            ui,
+            Rect::from_center_size(icon_rect.center(), vec2(13.0, 13.0)),
+        );
+        ui.add(
+            egui::Label::new(
+                RichText::new(text)
+                    .font(theme::regular(12.0))
+                    .color(palette.secondary),
+            )
+            .wrap(),
+        );
+    });
+}
+
 fn recommendation_switch_row(
     ui: &mut Ui,
     palette: &theme::Palette,
@@ -711,22 +738,62 @@ fn recommendation_summary(locale: youtfast_i18n::Locale, saved: &Recommendations
 
 fn recommendation_choice<T: Copy + PartialEq>(
     ui: &mut Ui,
+    palette: &theme::Palette,
     locale: youtfast_i18n::Locale,
     label: &'static str,
     current: &mut T,
     choices: &[(T, &'static str)],
 ) {
+    let translated: Vec<String> = choices
+        .iter()
+        .map(|(_, text)| tr(locale, text).into_owned())
+        .collect();
     let selected = choices
         .iter()
-        .find(|(value, _)| value == current)
-        .map_or("", |(_, label)| *label);
-    egui::ComboBox::new(label, tr(locale, label))
-        .selected_text(tr(locale, selected))
-        .show_ui(ui, |ui| {
-            for &(value, label) in choices {
-                ui.selectable_value(current, value, tr(locale, label));
+        .position(|(value, _)| value == current)
+        .unwrap_or(0);
+    // Estimate segmented control width so narrow viewports fall back cleanly.
+    let estimated_width: f32 = translated
+        .iter()
+        .map(|text| {
+            let w = ui
+                .painter()
+                .layout_no_wrap(text.clone(), theme::semibold(13.0), palette.text)
+                .size()
+                .x;
+            (w + 20.0).max(52.0)
+        })
+        .sum::<f32>()
+        + 6.0;
+
+    ui.vertical(|ui| {
+        ui.label(
+            RichText::new(tr(locale, label).as_ref())
+                .font(theme::semibold(12.0))
+                .color(palette.secondary),
+        );
+        ui.add_space(4.0);
+        if ui.available_width() >= estimated_width {
+            let refs: Vec<&str> = translated.iter().map(String::as_str).collect();
+            if let Some(chosen) = widgets::segmented_control(
+                ui,
+                palette,
+                egui::Id::new(("recommendation-choice", label)),
+                &refs,
+                selected,
+            ) {
+                *current = choices[chosen].0;
             }
-        });
+        } else {
+            egui::ComboBox::from_id_salt(("recommendation-choice-combo", label))
+                .selected_text(translated[selected].as_str())
+                .show_ui(ui, |ui| {
+                    for ((value, _), text) in choices.iter().zip(&translated) {
+                        ui.selectable_value(current, *value, text.as_str());
+                    }
+                });
+        }
+    });
 }
 
 /// One card of the feed's grid.
