@@ -168,7 +168,9 @@ pub struct Recommendations {
 fn read_recommendation_topics<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<RecommendationTopic>, D::Error> {
-    let values = Vec::<serde_json::Value>::deserialize(deserializer)?;
+    let serde_json::Value::Array(values) = serde_json::Value::deserialize(deserializer)? else {
+        return Ok(Vec::new());
+    };
     let mut unique = Vec::with_capacity(values.len());
     for value in values {
         if let Ok(topic) = serde_json::from_value::<RecommendationTopic>(value)
@@ -617,6 +619,21 @@ fn recommendation_topics_deserialize_tolerantly_and_deduplicate_terms() {
     };
     dup.toggle_topic(RecommendationTopic::Computing);
     assert_eq!(dup.topics, [RecommendationTopic::Science]);
+}
+
+#[cfg(test)]
+#[test]
+fn non_array_recommendation_topics_do_not_discard_other_settings() {
+    for topics in [serde_json::Value::Null, serde_json::json!("science")] {
+        let settings: Settings = serde_json::from_value(serde_json::json!({
+            "hide_watched": true,
+            "recommendations": {"topics": topics, "interests": "rust"}
+        }))
+        .unwrap();
+        assert!(settings.hide_watched);
+        assert_eq!(settings.recommendations.interests, "rust");
+        assert!(settings.recommendations.topics.is_empty());
+    }
 }
 
 #[cfg(test)]
