@@ -604,8 +604,11 @@ impl App {
     /// Shows more of Home's feed or of the page's list, asking for the
     /// next page when the rows here run out.
     pub(super) fn load_more(&mut self, allow_probe: bool) {
-        let can_request =
-            allow_probe || self.backend.youtube_gate().status() == YouTubeRequestStatus::Ready;
+        let can_request = allow_probe
+            || self.backend.youtube_gate().status().allows(
+                youtfast_youtube::backoff::RequestIntent::Background,
+                Instant::now(),
+            );
         if self.state.view == View::Home && self.state.feed_filter == FeedFilter::ForYou {
             if can_request
                 && !matches!(self.state.for_you_more_state, Fetch::Loading)

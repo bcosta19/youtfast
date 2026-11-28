@@ -19,7 +19,20 @@ pub enum Status {
     #[default]
     Ready,
     PausedUntil(Instant),
-    Probing,
+    Probing {
+        previous_deadline: Instant,
+    },
+}
+
+impl Status {
+    /// A preflight only; acquiring the probe still requires `RequestGate::begin`.
+    pub fn allows(self, intent: RequestIntent, now: Instant) -> bool {
+        match self {
+            Self::Ready => true,
+            Self::PausedUntil(until) => intent == RequestIntent::UserInitiated && now >= until,
+            Self::Probing { .. } => false,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -30,21 +43,16 @@ struct Circuit {
     status: Status,
     generation: u64,
     delay: Duration,
-    expired_deadline: Option<Instant>,
 }
 
 impl Circuit {
     fn begin(&mut self, now: Instant, intent: RequestIntent) -> Result<u64, Paused> {
-        match self.status {
-            Status::Ready => (),
-            Status::PausedUntil(until)
-                if now >= until && intent == RequestIntent::UserInitiated =>
-            {
-                self.generation += 1;
-                self.expired_deadline = Some(until);
-                self.status = Status::Probing;
-            }
-            _ => return Err(Paused),
+        if !self.status.allows(intent, now) {
+            return Err(Paused);
+        }
+        if let Status::PausedUntil(previous_deadline) = self.status {
+            self.generation += 1;
+            self.status = Status::Probing { previous_deadline };
         }
         Ok(self.generation)
     }
@@ -64,20 +72,21 @@ impl Circuit {
         }
         self.delay = (self.delay * 2).clamp(INITIAL, MAX);
         self.status = Status::PausedUntil((now + self.delay).max(retry_until.unwrap_or(now)));
-        self.expired_deadline = None;
     }
 
     fn finish(&mut self, request: u64, success: bool) {
-        if request != self.generation || self.status != Status::Probing {
+        let Status::Probing { previous_deadline } = self.status else {
+            return;
+        };
+        if request != self.generation {
             return;
         }
         self.status = if success {
             self.delay = Duration::ZERO;
             Status::Ready
         } else {
-            Status::PausedUntil(self.expired_deadline.expect("probe has a prior deadline"))
+            Status::PausedUntil(previous_deadline)
         };
-        self.expired_deadline = None;
     }
 }
 
@@ -124,7 +133,7 @@ impl RequestGate {
     pub fn begin_at(&self, intent: RequestIntent, now: Instant) -> Result<RequestPermit, Paused> {
         let (generation, probe) = self.update(|circuit| {
             let generation = circuit.begin(now, intent)?;
-            Ok((generation, circuit.status == Status::Probing))
+            Ok((generation, matches!(circuit.status, Status::Probing { .. })))
         })?;
         Ok(RequestPermit {
             gate: self.clone(),
@@ -206,6 +215,26 @@ mod tests {
     use RequestIntent::{Background, UserInitiated};
 
     #[test]
+    fn preflight_allows_only_user_intent_at_an_expired_deadline() {
+        let now = Instant::now();
+        let future = now + Duration::from_secs(1);
+        for intent in [Background, UserInitiated] {
+            assert!(Status::Ready.allows(intent, now));
+            assert!(!Status::PausedUntil(future).allows(intent, now));
+            assert_eq!(
+                Status::PausedUntil(now).allows(intent, now),
+                intent == UserInitiated
+            );
+            assert!(
+                !Status::Probing {
+                    previous_deadline: now
+                }
+                .allows(intent, now)
+            );
+        }
+    }
+
+    #[test]
     fn only_one_explicit_request_probes_after_the_cooldown_and_success_resets_it() {
         let mut circuit = Circuit::default();
         let now = Instant::now();
@@ -222,7 +251,12 @@ mod tests {
         let probe = circuit.begin(until, UserInitiated).unwrap();
         assert!(circuit.begin(until, UserInitiated).is_err());
         circuit.finish(first, true);
-        assert_eq!(circuit.status, Status::Probing);
+        assert_eq!(
+            circuit.status,
+            Status::Probing {
+                previous_deadline: until
+            }
+        );
         circuit.finish(probe, true);
         assert_eq!(circuit.status, Status::Ready);
         let next = circuit.begin(until, Background).unwrap();
@@ -262,7 +296,12 @@ mod tests {
         assert_eq!(circuit.status, Status::PausedUntil(until));
         let probe = circuit.begin(until, UserInitiated).unwrap();
         circuit.limited(parallel, until, None);
-        assert_eq!(circuit.status, Status::Probing);
+        assert_eq!(
+            circuit.status,
+            Status::Probing {
+                previous_deadline: until
+            }
+        );
         circuit.finish(probe, false);
         assert!(circuit.begin(until, Background).is_err());
         assert!(circuit.begin(until, UserInitiated).is_ok());

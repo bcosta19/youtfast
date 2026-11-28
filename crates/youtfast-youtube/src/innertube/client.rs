@@ -176,17 +176,11 @@ impl Client {
     }
 
     pub fn check_paused(&self) -> Result<(), Error> {
-        use crate::backoff::Status;
-        match self.gate.status() {
-            Status::Ready => Ok(()),
-            Status::PausedUntil(until)
-                if self.intent(false) == RequestIntent::UserInitiated
-                    && std::time::Instant::now() >= until =>
-            {
-                Ok(())
-            }
-            _ => Err(Error::RateLimited),
-        }
+        self.gate
+            .status()
+            .allows(self.intent(false), std::time::Instant::now())
+            .then_some(())
+            .ok_or(Error::RateLimited)
     }
 
     /// Sets the session cookie after checking it with YouTube's account menu.

@@ -1089,7 +1089,7 @@ mod tests {
         let current = player.load_id();
         let mut second = start_probe(current, deadline);
         second.as_mut().unwrap().loaded(stale);
-        assert!(gate.status() == Status::Probing);
+        assert!(matches!(gate.status(), Status::Probing { .. }));
         second.as_mut().unwrap().loaded(current);
         assert_eq!(gate.status(), Status::Ready);
         assert!(!PlaybackRequest::cancel_if_expired(

@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use egui::{Context, Frame, Margin, Ui};
 use youtfast_app::{State, YouTubeRequestStatus};
 use youtfast_i18n::{Locale, format as trf, gettext as tr};
+use youtfast_youtube::backoff::RequestIntent;
 
 const PAUSE: &str = "YouTube requests are paused to avoid a longer block.";
 const RETRY_IN: &str = "Try again in {minutes} min";
@@ -29,12 +30,12 @@ fn minutes_left(status: YouTubeRequestStatus, now: Instant) -> Option<(u64, Dura
 }
 
 pub(super) fn retry_enabled(status: YouTubeRequestStatus, now: Instant) -> bool {
-    status != YouTubeRequestStatus::Probing && minutes_left(status, now).is_none()
+    status.allows(RequestIntent::UserInitiated, now)
 }
 
 pub(super) fn retry_hint(ctx: &Context, state: &State, now: Instant) -> Option<String> {
     let locale = state.settings.language;
-    if state.youtube_requests == YouTubeRequestStatus::Probing {
+    if matches!(state.youtube_requests, YouTubeRequestStatus::Probing { .. }) {
         return Some(tr(locale, CHECKING).into_owned());
     }
     let (minutes, repaint_after) = minutes_left(state.youtube_requests, now)?;
@@ -70,7 +71,7 @@ pub(super) fn show(ui: &mut Ui, state: &State) {
     let locale = state.settings.language;
     let message = match state.youtube_requests {
         YouTubeRequestStatus::Ready => return,
-        YouTubeRequestStatus::Probing => tr(locale, CHECKING).into_owned(),
+        YouTubeRequestStatus::Probing { .. } => tr(locale, CHECKING).into_owned(),
         YouTubeRequestStatus::PausedUntil(_) => {
             let hint = retry_hint(ui.ctx(), state, Instant::now());
             let ending = hint
@@ -110,7 +111,12 @@ mod tests {
         );
         assert!(!retry_enabled(status, now));
         assert!(retry_enabled(status, until));
-        assert!(!retry_enabled(YouTubeRequestStatus::Probing, until));
+        assert!(!retry_enabled(
+            YouTubeRequestStatus::Probing {
+                previous_deadline: until
+            },
+            until
+        ));
     }
 
     #[test]
