@@ -243,7 +243,8 @@ and module tests; format-change records and live-check instructions live in
 Home requests account recommendations by default when signed in. The device
 feed is a fallback or an explicit choice. The app sends a settings snapshot
 with each request and invalidates the current For you generation when the
-preferences change. A device library import or the first eligible watch
+preferences change. Preference edits persist immediately and revoke pending
+topic searches; the app refreshes after a 600 ms pause. A device library import or the first eligible watch
 invalidates a local result or a pending first page, but preserves ready account
 recommendations and their pagination. The backend supplies history-related
 candidates, public topic-search candidates (when preset topics are selected or

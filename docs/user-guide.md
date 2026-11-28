@@ -464,7 +464,7 @@ unusable source may still prevent a preview or playback.
 
 On **Home → For you**, open **Local recommendation settings**. Click any
 preset **Topics** chip or change the duration, channel preference, or ranking
-priority to save and reload automatically. Selected preset topics fetch public
+priority to save immediately and reload automatically after a short pause. Selected preset topics fetch public
 YouTube candidates in a separate signed-out search — passing your chosen
 duration and recency filter to YouTube — and interleave them with your watch
 history so one watched channel does not crowd out your chosen topics. Open

@@ -1257,6 +1257,7 @@ pub struct App {
     generation: u64,
     generations: HashMap<Slot, u64>,
     topic_search_consent: Option<TopicSearchConsent>,
+    for_you_refresh: loading::ForYouRefresh,
     /// The generation the details/comments requests of the video being
     /// watched were sent with; a later `open` drops their answers.
     details_generation: u64,
@@ -1430,6 +1431,7 @@ impl App {
             local_playback_generation: 0,
             generations: HashMap::new(),
             topic_search_consent: None,
+            for_you_refresh: loading::ForYouRefresh::default(),
             details_generation: 0,
             playing_generation: 0,
             playback_report: history_sync::PlaybackReport::default(),
@@ -2238,7 +2240,7 @@ impl App {
             Action::LoadSaveTargets => self.load_save_targets(),
             Action::SetSaved { playlist, saved } => self.set_saved(playlist, saved),
             Action::SetShareAtTime(on) => self.state.share_at_time = on,
-            Action::SetRecommendations(preferences) => self.set_recommendations(preferences),
+            Action::SetRecommendations(preferences) => self.set_recommendations(ctx, preferences),
             Action::SetFeedFilter(filter) => {
                 self.state.feed_filter = filter;
                 self.load_visible_for_you();
@@ -2593,6 +2595,7 @@ impl eframe::App for App {
         // A pending EOF may schedule autoplay; closing PiP must cancel it
         // before the playback tick can start another video.
         self.poll();
+        self.tick_for_you_refresh(ctx);
         for action in self.state.pip_bridge.take_actions() {
             self.apply(ctx, action);
         }

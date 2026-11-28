@@ -523,7 +523,8 @@ impedire un'anteprima o la riproduzione.
 
 In **Home → Per te**, apri **Impostazioni dei consigli locali**. Fai clic su
 qualsiasi chip di **Argomenti** oppure cambia durata, preferenza per i canali o
-priorità della classifica per salvare e ricaricare automaticamente. Gli
+priorità della classifica per salvare subito e ricaricare automaticamente dopo
+una breve pausa. Gli
 argomenti selezionati recuperano candidati pubblici da YouTube tramite una
 ricerca separata senza accesso — inoltrando a YouTube i filtri di durata e
 recentezza scelti — e li alternano alla tua cronologia, così che un solo canale

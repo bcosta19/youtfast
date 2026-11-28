@@ -269,6 +269,30 @@ impl State {
     }
 }
 
+#[derive(Default)]
+pub(super) struct ForYouRefresh(Option<f64>);
+
+impl ForYouRefresh {
+    const DELAY: Duration = Duration::from_millis(600);
+
+    fn schedule(&mut self, now: f64) {
+        self.0 = Some(now + Self::DELAY.as_secs_f64());
+    }
+
+    fn pending(&self) -> bool {
+        self.0.is_some()
+    }
+
+    fn remaining(&mut self, now: f64) -> Option<Duration> {
+        let seconds = self.0? - now;
+        if seconds <= 0.0 {
+            self.0 = None;
+            return Some(Duration::ZERO);
+        }
+        Some(Duration::from_secs_f64(seconds))
+    }
+}
+
 impl App {
     /// Loads what a view shows: always when `force`d (Refresh, a new
     /// sign-in), otherwise only what is not there yet or failed.
@@ -295,7 +319,7 @@ impl App {
                 }
             }
             View::Home if force || stale(&state.feed) || stale(&state.for_you) => {
-                if force || stale(&state.for_you) {
+                if force || (!self.for_you_refresh.pending() && stale(&state.for_you)) {
                     self.load_for_you();
                 }
                 if !force && !stale(&self.state.feed) {
@@ -446,6 +470,7 @@ impl App {
     /// Asks for Home's For you: the account's when signed in, with this
     /// computer's history as the seeds either way, in case it has none.
     fn load_for_you(&mut self) {
+        self.for_you_refresh = ForYouRefresh::default();
         self.revoke_topic_search();
         let state = &self.state;
         let preferences = state.settings.recommendations.clone();
@@ -479,6 +504,7 @@ impl App {
 
     pub(super) fn set_recommendations(
         &mut self,
+        ctx: &egui::Context,
         preferences: youtfast_storage::settings::Recommendations,
     ) {
         let preferences = preferences.sanitized();
@@ -491,7 +517,19 @@ impl App {
         // A source switch must discard even a ready account feed.
         self.state.for_you_from_account = false;
         self.state.invalidate_local_for_you(&mut self.generations);
-        self.load_visible_for_you();
+        self.for_you_refresh.schedule(ctx.input(|input| input.time));
+        ctx.request_repaint_after(ForYouRefresh::DELAY);
+    }
+
+    pub(super) fn tick_for_you_refresh(&mut self, ctx: &egui::Context) {
+        match self
+            .for_you_refresh
+            .remaining(ctx.input(|input| input.time))
+        {
+            Some(Duration::ZERO) => self.load_visible_for_you(),
+            Some(delay) => ctx.request_repaint_after(delay),
+            None => {}
+        }
     }
 
     pub(super) fn save_feed_filters(&mut self) {
@@ -501,7 +539,8 @@ impl App {
     }
 
     pub(super) fn load_visible_for_you(&mut self) {
-        if self.state.view == View::Home
+        if !self.for_you_refresh.pending()
+            && self.state.view == View::Home
             && self.state.feed_filter == FeedFilter::ForYou
             && matches!(self.state.for_you, Listing::Idle)
         {
@@ -1224,6 +1263,20 @@ mod tests {
             assert!(matches!(state.for_you, Listing::Loading));
             assert_eq!(generations.get(&Slot::ForYou), Some(&2));
         }
+    }
+
+    #[test]
+    fn for_you_refresh_waits_for_a_pause_and_fires_once() {
+        let mut refresh = ForYouRefresh::default();
+        assert_eq!(refresh.remaining(0.0), None);
+        refresh.schedule(0.0);
+        assert_eq!(refresh.remaining(0.0), Some(ForYouRefresh::DELAY));
+        refresh.schedule(0.4);
+        assert!(refresh.remaining(0.6).is_some_and(|delay| !delay.is_zero()));
+        assert!(refresh.pending());
+        assert_eq!(refresh.remaining(1.0), Some(Duration::ZERO));
+        assert!(!refresh.pending());
+        assert_eq!(refresh.remaining(2.0), None);
     }
 
     #[test]

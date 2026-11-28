@@ -518,7 +518,8 @@ prévia ou a reprodução.
 
 Em **Início → Para você**, abra **Preferências de recomendações locais**.
 Clique em qualquer chip de **Tópicos** ou altere a duração, a preferência de
-canais ou a prioridade do ranking para salvar e recarregar automaticamente. Os
+canais ou a prioridade do ranking para salvar imediatamente e recarregar
+automaticamente após uma breve pausa. Os
 tópicos selecionados buscam candidatos públicos no YouTube em uma pesquisa
 separada sem login — repassando seu filtro de duração e de vídeos recentes ao
 YouTube — e os intercalam com o seu histórico assistido, para que um único

@@ -545,8 +545,8 @@ oder Wiedergabe dennoch verhindern.
 
 Öffnen Sie unter **Startseite → Für dich** die **Lokale Empfehlungseinstellungen**.
 Klicken Sie auf einen beliebigen **Themen**-Chip oder ändern Sie Dauer,
-Kanalauswahl oder Priorität der Rangfolge, um automatisch zu speichern und neu
-zu laden. Ausgewählte Themen holen öffentliche YouTube-Kandidaten über eine
+Kanalauswahl oder Priorität der Rangfolge. Änderungen werden sofort gespeichert;
+der Feed lädt nach einer kurzen Pause automatisch neu. Ausgewählte Themen holen öffentliche YouTube-Kandidaten über eine
 getrennte Suche ohne Anmeldung — inklusive Ihres gewählten Dauer- und
 Aktualitätsfilters — und mischen sie mit Ihrem Wiedergabeverlauf, sodass ein
 einzelner verfolgter Kanal Ihre gewählten Themen nicht verdrängt. Öffnen Sie

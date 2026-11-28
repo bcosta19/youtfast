@@ -534,7 +534,8 @@ vista previa o la reproducción.
 
 En **Inicio → Para ti**, abre **Ajustes de recomendaciones locales**. Haz clic
 en cualquier ficha de **Temas** o cambia la duración, la preferencia de canales
-o la prioridad de clasificación para guardar y recargar automáticamente. Los
+o la prioridad de clasificación para guardar al instante y recargar automáticamente
+tras una breve pausa. Los
 temas seleccionados buscan candidatos públicos en YouTube mediante una búsqueda
 separada sin sesión — enviando a YouTube tus filtros de duración y de vídeos
 recientes — y los intercalan con tu historial para que un solo canal seguido no

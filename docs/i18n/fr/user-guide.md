@@ -564,8 +564,8 @@ empêcher un aperçu ou la lecture.
 
 Dans **Accueil → Pour vous**, ouvrez **Réglages des recommandations locales**.
 Cliquez sur n’importe quelle pastille **Sujets** ou modifiez la durée, le choix
-de chaînes ou la priorité de classement pour enregistrer et recharger
-automatiquement. Les sujets sélectionnés récupèrent des vidéos publiques sur
+de chaînes ou la priorité de classement pour enregistrer aussitôt les réglages
+et recharger automatiquement après une courte pause. Les sujets sélectionnés récupèrent des vidéos publiques sur
 YouTube via une recherche séparée sans compte — en transmettant vos filtres de
 durée et de fraîcheur à YouTube — et les alternent avec votre historique de
 visionnage afin qu’une seule chaîne suivie n’écrase pas vos sujets choisis.
