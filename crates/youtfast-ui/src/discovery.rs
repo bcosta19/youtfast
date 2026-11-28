@@ -100,11 +100,10 @@ pub fn other_results(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                         library::channel_rows_content(ui, state, channels, false, actions);
                         widgets::more_row(
                             ui,
-                            &state.palette,
+                            state,
                             &state.results_more_state,
                             state.results_more.is_some(),
                             actions,
-                            locale,
                         );
                     });
             }
@@ -147,11 +146,10 @@ pub fn other_results(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                         );
                         widgets::more_row(
                             ui,
-                            &state.palette,
+                            state,
                             &state.results_more_state,
                             state.results_more.is_some(),
                             actions,
-                            locale,
                         );
                     });
             }

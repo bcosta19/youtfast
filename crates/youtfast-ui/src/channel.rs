@@ -359,7 +359,7 @@ fn videos(ui: &mut Ui, state: &State, tab: &ChannelTab, actions: &mut Vec<Action
                         }
                         // The last card visible asks for the next page.
                         if index == videos.len() - 1 && ui.is_rect_visible(response.rect) {
-                            actions.push(Action::LoadMore);
+                            actions.push(Action::PrefetchMore);
                         }
                         widgets::video_interactions(ui, &response, state, video, actions);
                     }
@@ -373,15 +373,12 @@ fn videos(ui: &mut Ui, state: &State, tab: &ChannelTab, actions: &mut Vec<Action
 
 /// The tab's paged list's tail: the page on its way, Retry, or Load more.
 fn more_row(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
-    let locale = state.settings.language;
-
     widgets::more_row(
         ui,
-        &state.palette,
+        state,
         &state.page_more_state,
         state.page_more.is_some(),
         actions,
-        locale,
     );
 }
 
@@ -420,7 +417,7 @@ fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                         response.clone().scroll_to_me(None);
                     }
                     if index == playlists.len() - 1 && ui.is_rect_visible(response.rect) {
-                        actions.push(Action::LoadMore);
+                        actions.push(Action::PrefetchMore);
                     }
                     if response.clicked() {
                         actions.push(Action::OpenPlaylist {

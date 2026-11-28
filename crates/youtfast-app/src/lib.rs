@@ -2278,7 +2278,8 @@ impl App {
             }
             Action::SetAlertsEvery(minutes) => self.set_alerts_every(minutes),
             Action::SetChannelQuery(text) => self.state.channel_query = text,
-            Action::LoadMore => self.load_more(),
+            Action::LoadMore => self.load_more(true),
+            Action::PrefetchMore => self.load_more(false),
             Action::SetSpeed(speed) => self.set_speed(speed),
             Action::SetTemporarySpeed(speed) => self.set_temporary_speed(speed),
             Action::SetRememberChannelSpeed(remember) => self.set_remember_channel_speed(remember),

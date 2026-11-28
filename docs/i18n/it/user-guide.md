@@ -633,9 +633,10 @@ più recenti all'avvio e ogni 12 ore mentre è aperto:
 
 Se YouTube limita le richieste o ti chiede di dimostrare che non sei un bot,
 YouTFast mette in pausa le nuove richieste a YouTube per evitare un blocco più
-lungo. L'avviso mostra quanto tempo manca e il pulsante **Riprova** nella pagina
-del video è disattivato durante l'attesa. Al termine del conto alla rovescia,
-riprova la riproduzione, apri un video o invia una ricerca: una sola richiesta
+lungo. L'avviso mostra quanto tempo manca. **Riprova** e **Carica altro** sono
+disattivati se richiedono di contattare YouTube, ma puoi visualizzare le righe
+già caricate. Al termine del conto alla rovescia, riprova la riproduzione o il
+caricamento di un elenco, apri un video o invia una ricerca: una sola richiesta
 verificherà se YouTube è tornato ad accettarle. Le richieste in background
 riprendono solo dopo una verifica riuscita. L'attesa inizia da due minuti e si
 allunga se YouTube continua a rifiutare la verifica.

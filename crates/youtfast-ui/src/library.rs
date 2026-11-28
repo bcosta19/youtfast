@@ -227,7 +227,7 @@ pub(super) fn video_card_grid(
                 },
             );
             if let Some((more_state, has_more)) = more {
-                widgets::more_row(ui, palette, more_state, has_more, actions, locale);
+                widgets::more_row(ui, state, more_state, has_more, actions);
             }
         });
 }

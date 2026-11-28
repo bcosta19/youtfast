@@ -631,9 +631,10 @@ mais novas ao iniciar e a cada 12 horas enquanto estiver aberto:
 
 Se o YouTube limitar as solicitações ou pedir que você prove que não é um robô,
 o YouTFast pausa novas solicitações ao YouTube para evitar um bloqueio mais
-longo. O aviso mostra quanto tempo falta, e o botão **Tentar novamente** na
-página do vídeo fica desativado durante a espera. Quando a contagem terminar,
-tente reproduzir novamente, abra um vídeo ou envie uma busca para que uma
+longo. O aviso mostra quanto tempo falta. **Tentar novamente** e **Carregar
+mais** ficam desativados quando precisam acessar o YouTube, mas você ainda
+pode exibir as linhas já carregadas. Quando a contagem terminar, tente
+reproduzir ou carregar uma lista de novo, abra um vídeo ou envie uma busca para que uma
 solicitação verifique se o YouTube voltou a aceitá-las. As solicitações em
 segundo plano só são retomadas após uma verificação bem-sucedida. A espera
 começa em dois minutos e aumenta se o YouTube continuar recusando a verificação.

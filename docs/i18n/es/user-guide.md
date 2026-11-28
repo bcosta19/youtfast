@@ -648,9 +648,10 @@ nuevas al iniciar y cada 12 horas mientras esté abierto:
 
 Si YouTube limita las solicitudes o te pide que demuestres que no eres un bot,
 YouTFast pone en pausa las nuevas solicitudes a YouTube para evitar un bloqueo
-más largo. El aviso muestra cuánto tiempo queda y el botón **Reintentar** de la
-página del vídeo está desactivado durante la espera. Cuando termine la cuenta
-atrás, reintenta la reproducción, abre un vídeo o envía una búsqueda para que
+más largo. El aviso muestra cuánto tiempo queda. **Reintentar** y **Cargar más**
+se desactivan cuando necesitan contactar con YouTube, pero puedes mostrar las
+filas ya cargadas. Cuando termine la cuenta atrás, reintenta la reproducción o
+una lista, abre un vídeo o envía una búsqueda para que
 una solicitud compruebe si YouTube vuelve a aceptarlas. Las solicitudes en
 segundo plano solo se reanudan si la comprobación tiene éxito. La espera
 empieza en dos minutos y aumenta si YouTube sigue rechazando la comprobación.

@@ -665,10 +665,12 @@ alle 12 Stunden im laufenden Betrieb auf neuere stabile Versionen:
 
 Wenn YouTube Anfragen begrenzt oder Sie auffordert, zu bestätigen, dass Sie
 kein Bot sind, pausiert YouTFast neue YouTube-Anfragen, um eine längere Sperre
-zu vermeiden. Der Hinweis zeigt die verbleibende Zeit an. Währenddessen ist
-**Erneut versuchen** auf der Videoseite deaktiviert. Nach Ablauf des Countdowns
-können Sie die Wiedergabe erneut versuchen, ein Video öffnen oder eine Suche
-absenden. Dann prüft eine Anfrage, ob YouTube wieder Anfragen zulässt.
+zu vermeiden. Der Hinweis zeigt die verbleibende Zeit an. **Erneut versuchen**
+und **Mehr laden** sind deaktiviert, wenn sie YouTube kontaktieren würden.
+Bereits geladene Zeilen können Sie weiterhin einblenden. Nach Ablauf des
+Countdowns können Sie die Wiedergabe oder eine Liste erneut laden, ein Video
+öffnen oder eine Suche absenden. Dann prüft eine Anfrage, ob YouTube wieder
+Anfragen zulässt.
 Hintergrundanfragen werden erst nach einer erfolgreichen Prüfung fortgesetzt.
 Die Wartezeit beträgt zunächst zwei Minuten und verlängert sich, wenn YouTube
 die Prüfung weiterhin ablehnt.

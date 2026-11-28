@@ -568,8 +568,9 @@ every 12 hours while open:
 
 If YouTube limits requests or asks you to prove you are not a bot, YouTFast
 pauses new YouTube requests to avoid a longer block. The notice shows how much
-time is left, and **Retry** on the watch page is disabled while you wait. When
-the countdown ends, retry playback, open a video, or submit a search so one
+time is left. **Retry** and **Load more** are disabled where they would
+contact YouTube, but you can still reveal rows already loaded. When the
+countdown ends, retry playback or a listing, open a video, or submit a search so one
 request can check whether YouTube is accepting requests again. Background
 requests resume only after a successful check. This starts with a two-minute
 wait and gets longer if YouTube still refuses the check.

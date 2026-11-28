@@ -258,7 +258,9 @@ or playback retry can claim the single probe. A listing load and all its
 children share one authorization; RSS and local recommendation fan-out wait
 for the first probe to finish, then start the remaining requests only if the
 circuit is ready. Autoplay, automatic refreshes,
-suggestions, prefetch and auto-loaded watch panes never probe. A successful
+suggestions, prefetch and auto-loaded watch panes never probe. Explicit
+listing pagination can probe, unlike automatic pagination; revealing
+already-loaded rows remains local. A successful
 probe closes the circuit; an inconclusive or cancelled probe releases the
 slot for another deliberate attempt, not for background traffic. A playback
 probe cancels its own mpv load after 45 seconds without a terminal result. A probe

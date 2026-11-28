@@ -193,11 +193,10 @@ fn subscription_body(
         if with_more {
             widgets::more_row(
                 ui,
-                &state.palette,
+                state,
                 &state.subscriptions_more_state,
                 state.subscriptions_more.is_some(),
                 actions,
-                locale,
             );
         }
     };

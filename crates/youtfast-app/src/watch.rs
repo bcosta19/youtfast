@@ -658,6 +658,7 @@ impl App {
                 key: CommentsKey::ImageRefresh { comment, old_url },
                 video_id,
                 token: token.clone(),
+                allow_probe: false,
                 visitor_data: self.state.comments_visitor_data.clone(),
             });
         }
@@ -686,6 +687,7 @@ impl App {
                 key: CommentsKey::Top,
                 video_id,
                 token,
+                allow_probe: true,
                 visitor_data: self.state.comments_visitor_data.clone(),
             });
         }
@@ -712,6 +714,7 @@ impl App {
                     key: CommentsKey::Replies(id),
                     video_id,
                     token,
+                    allow_probe: false,
                     visitor_data: self.state.comments_visitor_data.clone(),
                 });
             } else {
@@ -749,6 +752,7 @@ impl App {
                 key: CommentsKey::Top,
                 video_id: details.id.clone(),
                 token,
+                allow_probe: false,
                 visitor_data: details.visitor_data.clone(),
             });
         }

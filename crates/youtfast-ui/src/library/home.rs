@@ -194,14 +194,26 @@ pub(super) fn feed_grid(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                         ui.add_space(8.0);
                         start = end;
                     }
-                    widgets::more_row(
-                        ui,
-                        &state.palette,
-                        &state.feed_more_state,
-                        state.feed_more.is_some() || state.feed_shown < state.feed.items().len(),
-                        actions,
-                        locale,
-                    );
+                    if state.feed_shown < state.feed.items().len() {
+                        if widgets::button(
+                            ui,
+                            &state.palette,
+                            &tr(locale, "Load more"),
+                            widgets::ButtonStyle::Normal,
+                        )
+                        .clicked()
+                        {
+                            actions.push(Action::LoadMore);
+                        }
+                    } else {
+                        widgets::more_row(
+                            ui,
+                            state,
+                            &state.feed_more_state,
+                            state.feed_more.is_some(),
+                            actions,
+                        );
+                    }
                 });
         }
     }
@@ -278,11 +290,10 @@ fn for_you(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     {
                         widgets::more_row(
                             ui,
-                            &state.palette,
+                            state,
                             &state.for_you_more_state,
                             state.for_you_more.is_some(),
                             actions,
-                            locale,
                         );
                     }
                 });
@@ -432,7 +443,7 @@ fn feed_card(
         response.clone().scroll_to_me(None);
     }
     if index == videos.len() - 1 && ui.is_rect_visible(response.rect) {
-        actions.push(Action::LoadMore);
+        actions.push(Action::PrefetchMore);
     }
     widgets::video_interactions(ui, &response, state, video, actions);
 }

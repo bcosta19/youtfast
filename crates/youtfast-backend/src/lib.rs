@@ -552,10 +552,15 @@ async fn handle(command: Command, context: Context) {
             key,
             video_id,
             token,
+            allow_probe,
             visitor_data,
         } => {
-            let result =
-                innertube::comments(&context.rp, &token, visitor_data.as_deref(), &video_id).await;
+            let rp = if allow_probe {
+                context.rp.for_user_request()
+            } else {
+                context.rp.clone()
+            };
+            let result = innertube::comments(&rp, &token, visitor_data.as_deref(), &video_id).await;
             if let Err(error) = &result {
                 log::warn!("loading comments failed: {error}");
             }

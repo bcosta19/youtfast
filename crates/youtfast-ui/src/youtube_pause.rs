@@ -46,6 +46,26 @@ fn countdown(locale: Locale, minutes: u64) -> String {
     trf(locale, RETRY_IN, &[("minutes", minutes.to_string())])
 }
 
+pub(super) fn request_button(ui: &mut Ui, state: &State, label: &'static str) -> bool {
+    let now = Instant::now();
+    let label = tr(state.settings.language, label);
+    let clicked = ui
+        .add_enabled_ui(retry_enabled(state.youtube_requests, now), |ui| {
+            super::widgets::button(
+                ui,
+                &state.palette,
+                &label,
+                super::widgets::ButtonStyle::Normal,
+            )
+        })
+        .inner
+        .clicked();
+    if let Some(hint) = retry_hint(ui.ctx(), state, now) {
+        ui.label(hint);
+    }
+    clicked
+}
+
 pub(super) fn show(ui: &mut Ui, state: &State) {
     let locale = state.settings.language;
     let message = match state.youtube_requests {

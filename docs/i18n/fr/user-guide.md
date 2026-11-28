@@ -686,9 +686,10 @@ l'application est ouverte :
 
 Si YouTube limite les requêtes ou vous demande de confirmer que vous n'êtes pas
 un robot, YouTFast suspend les nouvelles requêtes à YouTube pour éviter un
-blocage plus long. L'avis indique le temps restant, et le bouton **Réessayer**
-sur la page de la vidéo est désactivé pendant l'attente. À la fin du compte à
-rebours, relancez la lecture, ouvrez une vidéo ou lancez une recherche pour
+blocage plus long. L'avis indique le temps restant. **Réessayer** et **Charger
+plus** sont désactivés s'ils nécessitent une requête à YouTube, mais les lignes
+déjà chargées restent accessibles. À la fin du compte à rebours, relancez la
+lecture ou le chargement d'une liste, ouvrez une vidéo ou lancez une recherche pour
 qu'une requête vérifie si YouTube les accepte de nouveau. Les requêtes en
 arrière-plan ne reprennent qu'après une vérification réussie. L'attente dure
 d'abord deux minutes et s'allonge si YouTube refuse encore la vérification.

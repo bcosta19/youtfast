@@ -246,6 +246,7 @@ pub enum Command {
         key: CommentsKey,
         video_id: String,
         token: String,
+        allow_probe: bool,
         visitor_data: Option<String>,
     },
     ImportTakeout {

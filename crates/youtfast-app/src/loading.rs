@@ -589,7 +589,7 @@ impl App {
     }
 
     /// Asks for the next page of what a slot shows.
-    fn send_continuation(&mut self, slot: Slot, request: Request) {
+    fn send_continuation(&mut self, slot: Slot, request: Request, allow_probe: bool) {
         // The slot's generation, not the latest anywhere: a request on
         // another slot must not strand this one.
         let generation = self.generations.get(&slot).copied().unwrap_or(0);
@@ -597,19 +597,22 @@ impl App {
             slot,
             generation,
             request,
-            allow_probe: false,
+            allow_probe,
         });
     }
 
     /// Shows more of Home's feed or of the page's list, asking for the
     /// next page when the rows here run out.
-    pub(super) fn load_more(&mut self) {
+    pub(super) fn load_more(&mut self, allow_probe: bool) {
+        let can_request =
+            allow_probe || self.backend.youtube_gate().status() == YouTubeRequestStatus::Ready;
         if self.state.view == View::Home && self.state.feed_filter == FeedFilter::ForYou {
-            if !matches!(self.state.for_you_more_state, Fetch::Loading)
+            if can_request
+                && !matches!(self.state.for_you_more_state, Fetch::Loading)
                 && let Some(more) = self.state.for_you_more.clone()
             {
                 self.state.for_you_more_state = Fetch::Loading;
-                self.send_continuation(Slot::ForYou, Request::MoreVideos(more));
+                self.send_continuation(Slot::ForYou, Request::MoreVideos(more), allow_probe);
             }
             return;
         }
@@ -618,12 +621,16 @@ impl App {
             if self.state.feed_shown < len {
                 // More rows are already here; draw them.
                 self.state.feed_shown += 40;
-            } else if !matches!(self.state.feed_more_state, Fetch::Loading)
+            } else if can_request
+                && !matches!(self.state.feed_more_state, Fetch::Loading)
                 && let Some(more) = self.state.feed_more.clone()
             {
                 self.state.feed_more_state = Fetch::Loading;
-                self.send_continuation(Slot::Feed, Request::MoreFeed(more));
+                self.send_continuation(Slot::Feed, Request::MoreFeed(more), allow_probe);
             }
+            return;
+        }
+        if !can_request {
             return;
         }
         let Some((slot, request)) = self.continuation() else {
@@ -642,7 +649,7 @@ impl App {
             _ => return,
         };
         *state = Fetch::Loading;
-        self.send_continuation(slot, request);
+        self.send_continuation(slot, request, allow_probe);
     }
 
     /// The continuation of the list the page on screen shows: the slot

@@ -206,6 +206,7 @@ pub enum Action {
     SetChannelQuery(String),
     /// The next page of the current channel tab's list.
     LoadMore,
+    PrefetchMore,
     /// 0.25 to 2.
     SetSpeed(f64),
     /// Temporary 2× hold and its restore; never persisted.
