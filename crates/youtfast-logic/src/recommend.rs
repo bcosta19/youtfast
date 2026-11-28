@@ -284,7 +284,7 @@ fn rank_topics(
                 .map(|(place, video)| {
                     let base = 1.0 / (1.0 + place as f64 * 0.15);
                     let mult = channel_multiplier(video, taste, preferences.channels)
-                        * custom_interest_multiplier(video, interests)
+                        * topic_multiplier(video, &preferences.topics, interests)
                         * priority_multiplier(video, preferences.priority, now);
                     (base * mult, video.clone())
                 })
@@ -488,10 +488,6 @@ fn matches_topic_text(text: &str, topics: &[RecommendationTopic], interests: &[S
     matches_terms_lower(&lower, interests) || matches_preset_keywords_lower(&lower, topics)
 }
 
-fn custom_interest_multiplier(video: &Video, interests: &[String]) -> f64 {
-    topic_multiplier(video, &[], interests)
-}
-
 fn topic_multiplier(video: &Video, topics: &[RecommendationTopic], interests: &[String]) -> f64 {
     let matched = matches_topic_text(&video.title, topics, interests)
         || video
@@ -689,6 +685,46 @@ mod tests {
             .map(|video| video.id)
             .collect();
         assert_eq!(ids, ["short"]);
+    }
+
+    #[test]
+    fn topic_lanes_boost_presets_beyond_the_search_limit() {
+        let mut preferences = Recommendations {
+            topics: vec![
+                RecommendationTopic::Computing,
+                RecommendationTopic::Science,
+                RecommendationTopic::Gaming,
+                RecommendationTopic::Music,
+            ],
+            ..Recommendations::default()
+        };
+        let candidates = [vec![
+            Video {
+                title: "Unrelated".into(),
+                ..video("unrelated", "UCa")
+            },
+            Video {
+                title: "Ancient civilization".into(),
+                ..video("history", "UCb")
+            },
+        ]];
+        let queries = preferences
+            .topic_queries(false)
+            .into_iter()
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        let taste = Taste::default();
+        assert_eq!(
+            rank_combined(&[], &candidates, &taste, &preferences, 0)[0].id,
+            "unrelated"
+        );
+
+        preferences.topics.push(RecommendationTopic::History);
+        assert_eq!(preferences.topic_queries(false), queries);
+        assert_eq!(
+            rank_combined(&[], &candidates, &taste, &preferences, 0)[0].id,
+            "history"
+        );
     }
 
     #[test]
