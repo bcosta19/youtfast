@@ -2233,12 +2233,6 @@ msgstr "Usa la classifica locale invece dei consigli di YouTube"
 msgid "Duration"
 msgstr "Durata"
 
-msgid "Under 5 minutes"
-msgstr "Meno di 5 minuti"
-
-msgid "5–20 minutes"
-msgstr "5–20 minuti"
-
 msgid "Balanced"
 msgstr "Bilanciato"
 
@@ -2257,14 +2251,62 @@ msgstr "Video recenti"
 msgid "Fewer views"
 msgstr "Meno visualizzazioni"
 
-msgid "Interests (comma-separated)"
-msgstr "Interessi (separati da virgole)"
+msgid "Topics"
+msgstr "Argomenti"
+
+msgid "Computing & Tech"
+msgstr "Informatica e tecnologia"
+
+msgid "Science"
+msgstr "Scienza"
+
+msgid "Gaming"
+msgstr "Videogiochi"
+
+msgid "Music"
+msgstr "Musica"
+
+msgid "Film & TV"
+msgstr "Cinema e TV"
+
+msgid "News & World"
+msgstr "Notizie e mondo"
+
+msgid "History & Culture"
+msgstr "Storia e cultura"
+
+msgid "Finance & Business"
+msgstr "Finanza e affari"
+
+msgid "Education"
+msgstr "Istruzione"
+
+msgid "Design & Art"
+msgstr "Design e arte"
+
+msgid "Sports"
+msgstr "Sport"
+
+msgid "Podcasts & Talks"
+msgstr "Podcast e interviste"
+
+msgid "The first four selected topics fetch videos from YouTube; additional topics boost matching titles locally."
+msgstr "I primi quattro argomenti selezionati cercano video su YouTube; gli altri favoriscono localmente i titoli corrispondenti."
+
+msgid "Custom interests & muted terms"
+msgstr "Interessi personalizzati e termini silenziati"
+
+msgid "Custom interests (comma-separated)"
+msgstr "Interessi personalizzati (separati da virgole)"
 
 msgid "Muted title terms (comma-separated)"
 msgstr "Termini silenziati nei titoli (separati da virgole)"
 
-msgid "Search YouTube for up to three interests when there is no eligible watch history"
-msgstr "Cerca fino a tre interessi su YouTube se non c’è una cronologia idonea"
+msgid "Search YouTube for custom interests without watch history (signed out)"
+msgstr "Cerca interessi personalizzati su YouTube senza cronologia di visualizzazione (senza accesso)"
+
+msgid "Search YouTube for custom interests with watch history (signed out)"
+msgstr "Cerca interessi personalizzati su YouTube con cronologia di visualizzazione (senza accesso)"
 
 msgid "Apply"
 msgstr "Applica"
@@ -2275,8 +2317,8 @@ msgstr "Ripristina valori predefiniti"
 msgid "Ranked on this device"
 msgstr "Ordinati su questo dispositivo"
 
-msgid "Watch a few videos or enable topic search to get recommendations"
-msgstr "Guarda alcuni video o attiva la ricerca per argomento per ricevere consigli"
+msgid "Watch a few videos or select topics to get recommendations"
+msgstr "Guarda alcuni video o seleziona degli argomenti per ricevere consigli"
 
 msgid "Interface style"
 msgstr "Stile dell'interfaccia"
@@ -2319,3 +2361,6 @@ msgstr "Elevazione tonale delle superfici tinta dal colore d'accento con conteni
 
 msgid "Low-stimulation warm paper and ink tones designed for comfortable long reading sessions."
 msgstr "Toni caldi di carta e inchiostro a bassa stimolazione visiva, pensati per lunghe sessioni confortevoli."
+
+msgid "Select a topic to fetch new videos that match this duration. History-based results are only filtered."
+msgstr "Scegli un argomento per trovare nuovi video di questa durata. I risultati basati sulla cronologia vengono solo filtrati."

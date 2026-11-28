@@ -532,22 +532,32 @@ vista previa o la reproducción.
 
 ## Recomendaciones locales
 
-En **Inicio → Para ti**, abre **Ajustes de recomendaciones locales** y pulsa
-**Aplicar** para guardar y recargar. Elige la duración, prioriza canales
-conocidos o descubre otros nuevos, o da prioridad a vídeos recientes o con
-menos visualizaciones. Separa con comas los intereses y los términos
-silenciados, con un máximo de 300 caracteres por campo. No se distingue
-entre mayúsculas y minúsculas: los intereses
-favorecen títulos o nombres de canales coincidentes y los términos
-silenciados ocultan los títulos coincidentes. El filtro de duración excluye
-los vídeos cuya duración se desconoce.
+En **Inicio → Para ti**, abre **Ajustes de recomendaciones locales**. Haz clic
+en cualquier ficha de **Temas** o cambia la duración, la preferencia de canales
+o la prioridad de clasificación para guardar al instante y recargar automáticamente
+tras una breve pausa. Los
+temas seleccionados buscan candidatos públicos en YouTube mediante una búsqueda
+separada sin sesión — enviando a YouTube tus filtros de duración y de vídeos
+recientes — y los intercalan con tu historial para que un solo canal seguido no
+eclipse los temas elegidos. Solo los primeros cuatro temas predefinidos que
+elijas activan búsquedas; los demás solo favorecen títulos o nombres de canales
+coincidentes en la clasificación local. Abre **Intereses personalizados y términos
+silenciados** para escribir intereses o términos silenciados separados por
+comas (hasta 300 caracteres por campo) y pulsa Intro o selecciona **Aplicar**.
+No se distingue entre mayúsculas y minúsculas: los temas seleccionados y los
+intereses personalizados favorecen títulos o nombres de canales coincidentes, y
+los términos silenciados ocultan los títulos coincidentes. El filtro de
+duración excluye los vídeos cuya duración se desconoce. La duración solo filtra
+los vídeos existentes basados en el historial. Elige un tema (o activa la
+búsqueda de intereses personalizados) para obtener vídeos nuevos con la
+duración elegida.
 
 Con una sesión iniciada, las recomendaciones de YouTube siguen siendo la opción
 predeterminada. Activa **Usar la clasificación local en vez de las recomendaciones de YouTube**
-para aplicar los ajustes al feed. Si no hay historial apto en el dispositivo,
-puedes autorizar el envío de hasta tres intereses a YouTube en búsquedas sin
-sesión iniciada. Tras ver el primer vídeo apto, al volver a Inicio, las
-recomendaciones locales se actualizan a partir de tu historial. Los términos
+para aplicar los ajustes al feed. Activa **Buscar intereses personalizados en YouTube sin historial de reproducción (sin sesión)** para buscar intereses personalizados
+si no hay un historial de reproducción apto. Activa **Buscar intereses personalizados en YouTube con historial de reproducción (sin sesión)** por separado para
+buscarlos cuando sí lo haya. Ambas opciones permiten hasta tres términos propios
+dentro del límite de cinco búsquedas de temas por actualización. Los términos
 silenciados nunca salen del dispositivo.
 
 ## Avisos de nuevas subidas

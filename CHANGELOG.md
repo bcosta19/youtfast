@@ -11,6 +11,11 @@ are the distribution record.
 ### Added
 
 - **Device sync** marks each local address with a VPN or local network icon, hides known container and VM bridges, and lets you copy any displayed address with a click.
+- **Local recommendations** on Home → **For you** now offer twelve clickable **Topics** chips that auto-apply alongside duration, channel discovery/familiarity, and ranking priority selectors, blending signed-out YouTube topic searches (forwarding duration and recency filters) with device watch history and interleaving them fairly while keeping custom interests and muted terms under a secondary collapsible section. Searching for custom interests when eligible watch history exists requires a separate opt-in.
+
+### Changed
+
+- **Local recommendations** space out YouTube lookups and reuse recent candidates in memory, so changing local ranking preferences uses cached candidates only. Retry and manual refresh can fetch missing candidates, including a previously failed date fallback. Slow sources no longer discard usable recommendations that have already loaded. Signed-in users can adjust the device fallback without reloading their account feed.
 
 ## [0.11.0] - 2026-11-24
 

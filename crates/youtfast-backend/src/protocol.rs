@@ -40,6 +40,29 @@ impl DeArrowConsent {
     }
 }
 
+/// Each For you load authorizes topic searches only until it is superseded.
+#[derive(Clone)]
+pub struct TopicSearchConsent(tokio::sync::watch::Sender<bool>);
+
+impl TopicSearchConsent {
+    pub fn granted() -> Self {
+        Self(tokio::sync::watch::channel(true).0)
+    }
+
+    pub fn revoke(self) {
+        self.0.send_replace(false);
+    }
+
+    /// Whether the load still authorizes topic searches and their results.
+    pub fn is_current(&self) -> bool {
+        *self.0.borrow()
+    }
+
+    pub(super) async fn revoked(&self) {
+        let _ = self.0.subscribe().wait_for(|&current| !current).await;
+    }
+}
+
 /// The list a request fills. One request per slot is current; an answer
 /// to an older one is dropped (see `App::generations`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -123,9 +146,12 @@ pub enum Request {
     /// it has some, else the seeds' related videos ranked by the taste.
     ForYou {
         account: bool,
+        /// Local ranking edits must not fetch any missing candidate pages.
+        cache_only: bool,
         seeds: Vec<youtfast_logic::recommend::Seed>,
         taste: youtfast_logic::recommend::Taste,
         preferences: youtfast_storage::settings::Recommendations,
+        topic_search_consent: TopicSearchConsent,
     },
 }
 
