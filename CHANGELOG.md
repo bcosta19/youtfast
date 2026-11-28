@@ -12,6 +12,10 @@ are the distribution record.
 
 - **Device sync** marks each local address with a VPN or local network icon, hides known container and VM bridges, and lets you copy any displayed address with a click.
 
+### Fixed
+
+- Pause new YouTube requests after rate limits or bot checks instead of repeatedly retrying. The app shows the cooldown, and one deliberate request can check the connection after it ends.
+
 ## [0.11.0] - 2026-11-24
 
 ### Added

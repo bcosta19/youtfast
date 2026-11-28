@@ -684,6 +684,20 @@ l'application est ouverte :
 
 ## Aide
 
+Si YouTube limite les requêtes ou vous demande de confirmer que vous n'êtes pas
+un robot, YouTFast suspend les nouvelles requêtes à YouTube pour éviter un
+blocage plus long. L'avis indique le temps restant, et le bouton **Réessayer**
+sur la page de la vidéo est désactivé pendant l'attente. À la fin du compte à
+rebours, relancez la lecture, ouvrez une vidéo ou lancez une recherche pour
+qu'une requête vérifie si YouTube les accepte de nouveau. Les requêtes en
+arrière-plan ne reprennent qu'après une vérification réussie. L'attente dure
+d'abord deux minutes et s'allonge si YouTube refuse encore la vérification.
+
+Attendre laisse à YouTube le temps de lever la limite temporaire. Si l'essai
+suivant échoue encore, utiliser un autre réseau peut aider : la limite peut
+s'appliquer à une adresse IP publique partagée. Changer de réseau ne permet
+pas d'ignorer le compte à rebours de l'application.
+
 YouTube refuse les flux d'une vidéo pendant quelques secondes après les avoir
 fournis (jusqu'à leur heure `available_at`). libmpv 0.42+ (avec Lua) attend
 cette heure ; avec une libmpv plus ancienne, YouTFast réessaie d'ouvrir le flux

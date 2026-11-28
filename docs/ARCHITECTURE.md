@@ -53,7 +53,7 @@ All paths below are relative to [`crates/`](../crates/).
 | `youtfast-app` | `App`, `State`, `Action`; `loading`, `watch`, `accounts`, `notifications`, `player`, `images`, `dearrow`, `device_sync`, `now_playing` |
 | `youtfast-backend` | `src/lib.rs`: runtime, request scheduling and persistence writers; `protocol`: `Command`, `Event`, `Slot`; `sync`: direct peer-to-peer device library listener and client |
 | `youtfast-cast` | `src/lib.rs`: Google Cast adapter; `dial`: discovery/app lifecycle; `lounge`: YouTube on TV transport |
-| `youtfast-youtube` | `innertube`: data/account API; `ytdlp`: extraction JSON; `extras`: captions/storyboards; `thumbs`: bounded image cache; `sponsorblock`: segments; `dearrow`: community titles/thumbnails |
+| `youtfast-youtube` | `backoff`: shared request circuit; `innertube`: data/account API; `ytdlp`: extraction JSON; `extras`: captions/storyboards; `thumbs`: bounded image cache; `sponsorblock`: segments; `dearrow`: community titles/thumbnails |
 | `youtfast-logic` | `alerts`, `history`, `recommend`, `video_tabs`: pure decisions over application data |
 | `youtfast-storage` | `library`, `settings`, `account`, `takeout`, `backup`, `sync`, `paths`: persistence, credentials, imports, exports and device sync |
 | `youtfast-desktop` | `instance`: single instance; `diagnostics`: redacted logs; `updater`: verified release installation |
@@ -110,7 +110,8 @@ flowchart TB
     Hook --> Extract[yt-dlp extracts signed out]
     Extract --> Result{Extraction accepted?}
     Result -->|Yes| Wait[Wait for format available_at:<br/>mpv 0.42 hook, or ffmpeg retrying 403]
-    Result -->|Refused| Account{Browser account available?}
+    Result -->|Bot check or 429| Cooldown[Pause new YouTube requests]
+    Result -->|Age restriction or unavailable| Account{Browser account available?}
     Account -->|Yes, once| Retry[Retry via cookies-from-browser]
     Retry --> Wait
     Account -->|No, or cookies.txt account| Error[Controlled playback error]
@@ -122,7 +123,8 @@ flowchart TB
     FBO --> Blit[egui_glow callback blits inside the video rectangle]
 ```
 
-A failed retry also ends in the playback error. `account::ytdl_browser` supplies
+A failed retry also ends in the playback error. Bot checks and rate limits
+never trigger the signed-in fallback. `account::ytdl_browser` supplies
 the browser/profile and Linux keyring selection; account cookies are not
 attached to normal extraction. Updating yt-dlp can fix extraction without an
 application release. `ytdlp::ytdl_loaded` reads the hook's extraction JSON.
@@ -237,6 +239,33 @@ body exposed. Playback extraction remains independent of history reporting.
 Response-format fixtures belong in [`tests/youtube_api.rs`](../crates/youtfast-youtube/tests/youtube_api.rs)
 and module tests; format-change records and live-check instructions live in
 [youtube-api-format.md](youtube-api-format.md).
+
+### YouTube request pause
+
+`youtfast-youtube::backoff` holds one in-memory circuit for the process. The
+backend shares it across fresh session clients and signed-out topic searches;
+account epochs still gate private results. InnerTube POSTs and GETs (including
+RSS, timed text and watch metadata) acquire permits before sending; new mpv
+loads, reloads and signed-in fallbacks use the same gate synchronously through
+`Backend`. A YouTube HTTP 429, bot check, Google `/sorry` redirect or an mpv
+`BotCheck` / `RateLimited` opens it. Existing requests can finish, but their
+successes do not clear the pause. The delay doubles from 2 to 4, 8, 16 and 32
+minutes, then caps the local backoff at 60 minutes; a longer `Retry-After`
+header wins.
+
+Once the deadline expires, an explicit search or listing refresh, video open
+or playback retry can claim the single probe. Autoplay, automatic refreshes,
+suggestions, prefetch and auto-loaded watch panes never probe. A successful
+probe closes the circuit; an inconclusive or cancelled probe releases the
+slot for another deliberate attempt, not for background traffic. A probe
+that hits the limit opens the circuit for the longer delay. The backend
+sends account-independent status events to the app; the views only render the
+notice, countdown and Retry availability from that state.
+
+Storyboard sprite downloads obey the same pause. Ordinary thumbnails keep
+their own backoff; `i.ytimg.com` cache misses also pause if that CDN has
+returned a 429 and the shared circuit is not ready. Cache hits are never
+paused, and unrelated services such as GitHub release checks are unaffected.
 
 ## Local recommendations
 

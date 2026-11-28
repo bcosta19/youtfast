@@ -663,6 +663,21 @@ alle 12 Stunden im laufenden Betrieb auf neuere stabile Versionen:
 
 ## Hilfe
 
+Wenn YouTube Anfragen begrenzt oder Sie auffordert, zu bestätigen, dass Sie
+kein Bot sind, pausiert YouTFast neue YouTube-Anfragen, um eine längere Sperre
+zu vermeiden. Der Hinweis zeigt die verbleibende Zeit an. Währenddessen ist
+**Erneut versuchen** auf der Videoseite deaktiviert. Nach Ablauf des Countdowns
+können Sie die Wiedergabe erneut versuchen, ein Video öffnen oder eine Suche
+absenden. Dann prüft eine Anfrage, ob YouTube wieder Anfragen zulässt.
+Hintergrundanfragen werden erst nach einer erfolgreichen Prüfung fortgesetzt.
+Die Wartezeit beträgt zunächst zwei Minuten und verlängert sich, wenn YouTube
+die Prüfung weiterhin ablehnt.
+
+Abwarten gibt YouTube Zeit, die vorübergehende Begrenzung aufzuheben. Falls der
+nächste Versuch ebenfalls blockiert wird, kann ein anderes Netz helfen: Die
+Begrenzung kann für eine gemeinsam genutzte öffentliche IP-Adresse gelten.
+Ein Netzwechsel überspringt den Countdown der App nicht.
+
 YouTube verweigert die Streams eines Videos einige Sekunden lang, nachdem es sie
 ausgegeben hat (bis zu ihrem Zeitpunkt `available_at`). libmpv 0.42+ (mit Lua)
 wartet diesen Zeitpunkt ab; mit älterem libmpv versucht YouTFast den
