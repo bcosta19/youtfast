@@ -252,7 +252,9 @@ candidates, public topic-search candidates (when preset topics are selected or
 custom-interest search is opted in, using a separate signed-out client and
 forwarding duration and recency options to YouTube search), and the current
 time. Seed lookups, topic searches and their date fallbacks share a backend
-budget of three concurrent requests, with starts spaced by 200 ms.
+budget of three concurrent requests, with starts spaced by 200 ms. The
+backend stops starting misses when one HTTP timeout no longer fits, then
+ranks completed batches before the load watchdog.
 The backend keeps up to 64 successful, unranked candidate pages in memory
 for 30 minutes, evicting the oldest first. Seed pages are keyed by video ID
 and session epoch and cleared on account changes. Signed-out topic pages are

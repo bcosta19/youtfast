@@ -24,15 +24,27 @@ impl Default for RecommendationRequests {
 }
 
 impl RecommendationRequests {
-    pub(super) async fn fetch<T>(&self, request: impl Future<Output = T>) -> T {
-        let _turn = self.turns.acquire().await.expect("semaphore never closes");
-        {
+    pub(super) async fn fetch<T>(
+        &self,
+        latest_start: Instant,
+        request: impl Future<Output = Result<T, String>>,
+    ) -> Result<T, String> {
+        let acquire_turn = async {
+            let turn = self.turns.acquire().await.expect("semaphore never closes");
             let mut last_start = self.last_start.lock().await;
             if let Some(last_start) = *last_start {
                 tokio::time::sleep_until(last_start + START_SPACING).await;
             }
-            *last_start = Some(Instant::now());
-        }
+            let now = Instant::now();
+            if now >= latest_start {
+                return Err(super::LOAD_OVERDUE.to_owned());
+            }
+            *last_start = Some(now);
+            Ok(turn)
+        };
+        let _turn = tokio::time::timeout_at(latest_start, acquire_turn)
+            .await
+            .map_err(|_| super::LOAD_OVERDUE.to_owned())??;
         request.await
     }
 }
@@ -62,7 +74,11 @@ mod tests {
             SearchOptions::default(),
             &consent,
             |videos| !videos.is_empty(),
-            |_| requests.fetch(async { panic!("revoked search started") }),
+            |_| {
+                requests.fetch(Instant::now() + Duration::from_secs(5), async {
+                    panic!("revoked search started")
+                })
+            },
         );
         tokio::pin!(search);
         tokio::select! {
@@ -91,14 +107,16 @@ mod tests {
             );
             tasks.spawn(async move {
                 requests
-                    .fetch(async {
+                    .fetch(Instant::now() + Duration::from_secs(5), async {
                         let active = in_flight.fetch_add(1, Ordering::SeqCst) + 1;
                         assert!(active <= 3);
                         starts.send((Instant::now(), active)).unwrap();
                         finish.acquire().await.unwrap().forget();
                         in_flight.fetch_sub(1, Ordering::SeqCst);
+                        Ok(())
                     })
-                    .await;
+                    .await
+                    .unwrap();
             });
         }
         drop(starts);

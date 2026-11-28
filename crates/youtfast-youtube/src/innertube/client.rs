@@ -22,7 +22,8 @@ const WEB_CLIENT_VERSION: &str = "2.20261015.01.00";
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const ORIGIN: &str = "https://www.youtube.com";
 const REFERER: &str = "https://www.youtube.com/";
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(25);
+/// Upper bound for one InnerTube HTTP request.
+pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(25);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AuthError {

@@ -9,9 +9,11 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc;
+use std::time::Duration;
 
 use tokio::sync::mpsc as async_mpsc;
 use tokio::sync::watch;
+use tokio::time::Instant;
 
 use youtfast_core::model::{AccountSource, PageItems, Video};
 use youtfast_storage::library::Account;
@@ -352,12 +354,14 @@ async fn dispatch(ordered: bool, task: impl Future<Output = ()> + Send + 'static
 
 /// A load may not outlive this: a request that never answers shows the
 /// listing as failed, with a fixed message, rather than a spinner forever.
-const LOAD_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
+const LOAD_DEADLINE: Duration = Duration::from_secs(60);
+/// Leave time to rank and deliver the completed candidate batches.
+const RECOMMENDATION_RANK_BUDGET: Duration = Duration::from_secs(1);
 
 /// The deadline of a load. The feed has none: it reads the RSS of every device
 /// subscription, eight at a time, so a cold cache of a large Takeout outgrows
 /// any fixed minute, and each channel already answers its own failure.
-fn deadline_of(request: &Request) -> Option<std::time::Duration> {
+fn deadline_of(request: &Request) -> Option<Duration> {
     match request {
         Request::Feed { .. } => None,
         _ => Some(LOAD_DEADLINE),
@@ -394,14 +398,14 @@ impl Drop for AbortOnDrop {
 /// deadline), so a superseded slot's load stops with its watcher's abort.
 async fn watched<R: Send + 'static>(
     future: impl Future<Output = Result<R, String>> + Send + 'static,
-    deadline: Option<std::time::Duration>,
+    deadline: Option<Instant>,
 ) -> Result<R, String> {
     let load_task = tokio::spawn(future);
     // A named `let` keeps it alive to the end of the scope, when the abort of
     // an unfinished load (also one stopped by the deadline) is asked for.
     let _watcher = AbortOnDrop(load_task.abort_handle());
     let outcome = match deadline {
-        Some(deadline) => tokio::time::timeout(deadline, load_task).await,
+        Some(deadline) => tokio::time::timeout_at(deadline, load_task).await,
         None => Ok(load_task.await),
     };
     match outcome {
@@ -460,12 +464,16 @@ async fn handle(command: Command, context: Context) {
             let worker = context.clone();
             let loader = context.clone();
             log::debug!("loading {slot:?} started");
-            let deadline = deadline_of(&request);
+            let deadline = deadline_of(&request).map(|duration| Instant::now() + duration);
             let task = tokio::spawn(async move {
                 // Watched: a load that never answers still answers the
                 // interface, and so does a panic where builds unwind
                 // (`watched`).
-                let result = watched(async move { load(&loader, request).await }, deadline).await;
+                let result = watched(
+                    async move { load(&loader, request, deadline).await },
+                    deadline,
+                )
+                .await;
                 if let Err(error) = &result {
                     log::warn!("loading {slot:?} failed: {error}");
                 }
@@ -1064,10 +1072,11 @@ async fn fetch_recommendation_candidate(
     requests: Arc<RecommendationRequests>,
     consent: TopicSearchConsent,
     key: CandidateKey,
+    latest_start: Instant,
 ) -> Result<Vec<Video>, String> {
     match key {
         CandidateKey::Seed { id, .. } => requests
-            .fetch(innertube::details(&rp, &id))
+            .fetch(latest_start, innertube::details(&rp, &id))
             .await
             .map(|details| details.related),
         CandidateKey::Topic { query, options } => {
@@ -1079,7 +1088,7 @@ async fn fetch_recommendation_candidate(
                 .as_ref()
                 .map_err(Clone::clone)?;
             let (items, _) = requests
-                .fetch(async {
+                .fetch(latest_start, async {
                     // Waiting for the limiter does not authorize a search.
                     if !consent.is_current() {
                         return Err("Topic search authorization was revoked".to_owned());
@@ -1160,6 +1169,7 @@ async fn local_recommendations<F, Fut>(
     taste: youtfast_logic::recommend::Taste,
     preferences: &youtfast_storage::settings::Recommendations,
     topic_search_consent: &TopicSearchConsent,
+    deadline: Instant,
     fetch: F,
 ) -> Result<Vec<Video>, String>
 where
@@ -1207,7 +1217,15 @@ where
         });
     }
 
-    rank_local_candidates(tasks, &taste, preferences, now, topic_search_consent).await
+    rank_local_candidates(
+        tasks,
+        &taste,
+        preferences,
+        now,
+        topic_search_consent,
+        deadline,
+    )
+    .await
 }
 
 struct LocalCandidates {
@@ -1219,12 +1237,21 @@ struct LocalCandidates {
 
 async fn collect_local_candidates(
     mut tasks: tokio::task::JoinSet<LocalCandidateBatch>,
+    deadline: Instant,
 ) -> LocalCandidates {
     let mut failure = None;
     let mut topic_failure = None;
     let mut history_related = Vec::new();
     let mut topic_batches = Vec::new();
-    while let Some(done) = tasks.join_next().await {
+    loop {
+        let done = match tokio::time::timeout_at(deadline, tasks.join_next()).await {
+            Ok(Some(done)) => done,
+            Ok(None) => break,
+            Err(_) => {
+                failure.get_or_insert_with(|| LOAD_OVERDUE.to_owned());
+                break;
+            }
+        };
         match done {
             Ok(LocalCandidateBatch::History(weight, Ok(videos))) => {
                 history_related.push((weight, videos));
@@ -1262,8 +1289,9 @@ async fn rank_local_candidates(
     preferences: &youtfast_storage::settings::Recommendations,
     now: i64,
     topic_search_consent: &TopicSearchConsent,
+    deadline: Instant,
 ) -> Result<Vec<Video>, String> {
-    let mut candidates = collect_local_candidates(tasks).await;
+    let mut candidates = collect_local_candidates(tasks, deadline).await;
     if !topic_search_consent.is_current() {
         candidates.topics.clear();
     } else if candidates.topic_failure.is_some() {
@@ -1284,7 +1312,11 @@ async fn rank_local_candidates(
     Ok(videos)
 }
 
-async fn load(context: &Context, request: Request) -> Result<Payload, String> {
+async fn load(
+    context: &Context,
+    request: Request,
+    deadline: Option<Instant>,
+) -> Result<Payload, String> {
     let rp = &context.rp;
     let text = innertube::text;
     Ok(match request {
@@ -1347,6 +1379,9 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
             let requests = context.recommendation_requests.clone();
             let public = Arc::default();
             let consent = topic_search_consent.clone();
+            let candidate_deadline =
+                deadline.expect("For you has a deadline") - RECOMMENDATION_RANK_BUDGET;
+            let latest_start = candidate_deadline - innertube::client::REQUEST_TIMEOUT;
             Payload::ForYou {
                 videos: local_recommendations(
                     &CandidateLookup {
@@ -1358,6 +1393,7 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
                     taste,
                     &preferences,
                     &topic_search_consent,
+                    candidate_deadline,
                     move |key| {
                         fetch_recommendation_candidate(
                             rp.clone(),
@@ -1365,6 +1401,7 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
                             requests.clone(),
                             consent.clone(),
                             key,
+                            latest_start,
                         )
                     },
                 )
@@ -1646,7 +1683,7 @@ mod tests {
     async fn a_load_that_panics_still_answers_with_a_controlled_failure() {
         let answer: Result<(), String> = watched(
             async { panic!("a synthetic panic") },
-            Some(std::time::Duration::from_secs(1)),
+            Some(Instant::now() + Duration::from_secs(1)),
         )
         .await;
         assert_eq!(answer.unwrap_err(), LOAD_NO_ANSWER);
@@ -1656,7 +1693,7 @@ mod tests {
     async fn an_overdue_load_answers_with_the_deadline_failure() {
         let answer = watched(
             std::future::pending::<Result<(), String>>(),
-            Some(std::time::Duration::from_millis(5)),
+            Some(Instant::now() + Duration::from_millis(5)),
         )
         .await;
         assert_eq!(answer.unwrap_err(), LOAD_OVERDUE);
@@ -1666,7 +1703,7 @@ mod tests {
     async fn a_normal_load_passes_its_answer_through() {
         let answer = watched(
             async { Ok::<u8, String>(7) },
-            Some(std::time::Duration::from_secs(1)),
+            Some(Instant::now() + Duration::from_secs(1)),
         )
         .await;
         assert_eq!(answer, Ok(7));
@@ -1676,7 +1713,7 @@ mod tests {
     async fn a_failing_load_keeps_its_own_controlled_text() {
         let answer = watched(
             async { Err::<u8, String>("the feed is gone".into()) },
-            Some(std::time::Duration::from_secs(1)),
+            Some(Instant::now() + Duration::from_secs(1)),
         )
         .await;
         assert_eq!(answer.unwrap_err(), "the feed is gone");
@@ -2316,12 +2353,93 @@ mod tests {
                 &preferences,
                 0,
                 &TopicSearchConsent::granted(),
+                Instant::now() + LOAD_DEADLINE,
             )
             .await;
             if usable {
                 assert_eq!(result.unwrap()[0].id, "usable");
             } else {
                 assert_eq!(result.unwrap_err(), ERROR);
+            }
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn local_recommendations_rank_the_fast_topic_when_seeds_use_the_budget() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use youtfast_logic::recommend::{Seed, Taste};
+        use youtfast_storage::settings::{RecommendationTopic, Recommendations};
+
+        for usable in [true, false] {
+            let deadline = Instant::now() + LOAD_DEADLINE;
+            let candidate_deadline = deadline - RECOMMENDATION_RANK_BUDGET;
+            let latest_start = candidate_deadline - innertube::client::REQUEST_TIMEOUT;
+            let requests = Arc::new(RecommendationRequests::default());
+            let topic_done = Arc::new(tokio::sync::Semaphore::new(0));
+            let seed_starts = Arc::new(AtomicUsize::new(0));
+            let starts = seed_starts.clone();
+            let seeds = (0..8)
+                .map(|id| Seed {
+                    id: id.to_string(),
+                    weight: 1.0,
+                })
+                .collect();
+            let result = watched(
+                async move {
+                    local_recommendations(
+                        &CandidateLookup::default(),
+                        seeds,
+                        Taste::default(),
+                        &Recommendations {
+                            topics: vec![RecommendationTopic::Science],
+                            ..Recommendations::default()
+                        },
+                        &TopicSearchConsent::granted(),
+                        candidate_deadline,
+                        move |key| {
+                            let (requests, topic_done, seed_starts) =
+                                (requests.clone(), topic_done.clone(), starts.clone());
+                            async move {
+                                if matches!(key, CandidateKey::Topic { .. }) {
+                                    return requests
+                                        .fetch(latest_start, async {
+                                            topic_done.add_permits(8);
+                                            Ok(if usable {
+                                                vec![Video::from_id("fast-topic".into())]
+                                            } else {
+                                                Vec::new()
+                                            })
+                                        })
+                                        .await;
+                                }
+                                topic_done.acquire().await.unwrap().forget();
+                                requests
+                                    .fetch(latest_start, async {
+                                        seed_starts.fetch_add(1, Ordering::SeqCst);
+                                        std::future::pending().await
+                                    })
+                                    .await
+                            }
+                        },
+                    )
+                    .await
+                },
+                Some(deadline),
+            )
+            .await;
+            assert!(
+                Instant::now() < deadline,
+                "must finish before the outer watchdog"
+            );
+            assert_eq!(
+                seed_starts.load(Ordering::SeqCst),
+                3,
+                "no queued seed may start late"
+            );
+            if usable {
+                assert_eq!(result.unwrap()[0].id, "fast-topic");
+            } else {
+                assert_eq!(result.unwrap_err(), LOAD_OVERDUE);
             }
         }
     }
@@ -2461,6 +2579,7 @@ mod tests {
             Taste::default(),
             &preferences,
             &TopicSearchConsent::granted(),
+            Instant::now() + LOAD_DEADLINE,
             fetch.clone(),
         )
         .await
@@ -2481,6 +2600,7 @@ mod tests {
             Taste::default(),
             &preferences,
             &TopicSearchConsent::granted(),
+            Instant::now() + LOAD_DEADLINE,
             fetch,
         )
         .await
@@ -2526,6 +2646,7 @@ mod tests {
             Taste::default(),
             &preferences,
             &TopicSearchConsent::granted(),
+            Instant::now() + LOAD_DEADLINE,
             fetch.clone(),
         )
         .await
@@ -2539,6 +2660,7 @@ mod tests {
             Taste::default(),
             &preferences,
             &TopicSearchConsent::granted(),
+            Instant::now() + LOAD_DEADLINE,
             fetch.clone(),
         )
         .await
@@ -2574,6 +2696,7 @@ mod tests {
             Taste::default(),
             &preferences,
             &revoked,
+            Instant::now() + LOAD_DEADLINE,
             fetch,
         )
         .await
@@ -2642,7 +2765,7 @@ mod tests {
         };
         let consent = TopicSearchConsent::granted();
         let initial = local_recommendations(
-            &candidates, Vec::new(), Taste::default(), &preferences, &consent, |key| {
+            &candidates, Vec::new(), Taste::default(), &preferences, &consent, Instant::now() + LOAD_DEADLINE, |key| {
                 assert!(matches!(key, CandidateKey::Topic { options, .. } if options.date == innertube::SearchDate::Month));
                 let mut promo = Video::from_id("promo".into());
                 promo.title = "Promo".into();
@@ -2664,6 +2787,7 @@ mod tests {
             Taste::default(),
             &preferences,
             &consent,
+            Instant::now() + LOAD_DEADLINE,
             ranking_only,
         )
         .await
@@ -2687,6 +2811,7 @@ mod tests {
             Taste::default(),
             &preferences,
             &consent,
+            Instant::now() + LOAD_DEADLINE,
             ranking_only,
         )
         .await
