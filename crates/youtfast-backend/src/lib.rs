@@ -218,7 +218,7 @@ impl Backend {
                             for (_, task) in context.loads.lock().unwrap().drain() {
                                 task.abort();
                             }
-                            match Client::with_gate(innertube::http(), context.rp.gate().clone()) {
+                            match context.rp.fresh_session() {
                                 Ok(client) => context.rp = client,
                                 Err(_) => {
                                     innertube::sign_out(&context.rp).await;

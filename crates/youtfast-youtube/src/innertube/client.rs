@@ -146,6 +146,12 @@ impl Client {
         }
     }
 
+    /// A new account session permanently shares this client's request gate.
+    pub fn fresh_session(&self) -> Result<Self, Error> {
+        Self::with_gate(super::http(), self.gate.clone())
+    }
+
+    /// A signed-out client for the same load, sharing admission but no identity.
     pub fn public_client(&self) -> Self {
         Self {
             cookie: Arc::new(RwLock::new(None)),
@@ -642,6 +648,30 @@ mod tests {
         drop(first);
         assert_eq!(user.begin_request().err(), Some(Error::RateLimited));
         assert!(rp.for_user_request().begin_request().is_ok());
+    }
+
+    #[tokio::test]
+    async fn public_clients_and_fresh_sessions_share_the_pause_without_inheriting_cookies() {
+        let (rp, proxy) = paused_client_with_local_proxy();
+        *rp.cookie.write().unwrap() = Some("SAPISID=synthetic".into());
+        *rp.visitor_data.write().unwrap() = Some("synthetic-visitor".into());
+        let public = rp.public_client();
+        let fresh = rp.fresh_session().unwrap();
+        for client in [&public, &fresh] {
+            assert!(client.cookie.read().unwrap().is_none());
+            assert!(client.visitor_data.read().unwrap().is_none());
+            assert_eq!(client.check_paused(), Err(Error::RateLimited));
+        }
+        assert_eq!(
+            public
+                .post_raw("search", &json!({"query":"synthetic"}), false, None)
+                .await,
+            Err(Error::RateLimited)
+        );
+        assert_eq!(
+            proxy.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
     }
 
     #[tokio::test]

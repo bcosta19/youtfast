@@ -243,8 +243,11 @@ and module tests; format-change records and live-check instructions live in
 ### YouTube request pause
 
 `youtfast-youtube::backoff` holds one in-memory circuit for the process. The
-backend shares it across fresh session clients and signed-out topic searches;
-account epochs still gate private results. InnerTube POSTs and GETs (including
+backend creates the gate once. Every YouTube-bound client must be derived from
+that gate: use `rp.public_client()` for signed-out work such as topic searches,
+`rp.fresh_session()` for account changes, and pass the same gate to other
+YouTube transports. Never create an independent `Client::default_client()` for
+a backend feature. Account epochs still gate private results. InnerTube POSTs and GETs (including
 RSS, timed text and watch metadata) acquire permits before sending; new mpv
 loads, reloads and signed-in fallbacks use the same gate synchronously through
 `Backend`. A YouTube HTTP 429, bot check, Google `/sorry` redirect or an mpv
@@ -257,19 +260,18 @@ Once the deadline expires, an explicit search or listing refresh, video open
 or playback retry can claim the single probe. A listing load and all its
 children share one authorization; RSS and local recommendation fan-out wait
 for the first probe to finish, then start the remaining requests only if the
-circuit is ready. Autoplay, automatic refreshes,
-suggestions, prefetch and auto-loaded watch panes never probe. Explicit
-listing pagination can probe, unlike automatic pagination; revealing
-already-loaded rows remains local. A successful
-probe closes the circuit; an inconclusive or cancelled probe releases the
-slot for another deliberate attempt, not for background traffic. A playback
-probe cancels its own mpv load after 45 seconds without a terminal result. A probe
-that hits the limit opens the circuit for the longer delay. After a playback
+circuit is ready. Autoplay, automatic refreshes, suggestions, prefetch and
+auto-loaded watch panes never probe. Explicit listing pagination can probe,
+unlike automatic pagination; revealing already-loaded rows remains local.
+A successful probe closes the circuit; an inconclusive or cancelled probe
+releases the slot for another deliberate attempt, not for background traffic.
+A playback probe cancels its own mpv load after 45 seconds without a terminal
+result. A probe that hits the limit opens the circuit for the longer delay. After a playback
 bot check, the next admitted manual probe of that video uses the configured
 browser session if available. A recognized age restriction proves the probe
 reached YouTube and closes the circuit; its signed-in fallback retains the
-intent of the original open. The backend
-sends account-independent status events to the app; the views only render the
+intent of the original open. The backend sends account-independent status
+events to the app; the views only render the
 notice, countdown and Retry availability from that state.
 
 Thumbnails, avatars and storyboard sprites on YouTube's CDN obey the main
