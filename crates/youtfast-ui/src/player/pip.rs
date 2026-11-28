@@ -111,6 +111,7 @@ fn show_pip_contents(
             audio_only: snapshot.audio_only,
             thumbnail: snapshot.thumbnail.as_deref(),
             player_error: snapshot.player_error.as_deref(),
+            retry_hint: None,
             demo_synthetic_images: snapshot.demo_synthetic_images,
         },
         status,

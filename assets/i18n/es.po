@@ -2319,3 +2319,15 @@ msgstr "Elevación tonal de superficies teñida por el color de acento con conte
 
 msgid "Low-stimulation warm paper and ink tones designed for comfortable long reading sessions."
 msgstr "Tonos cálidos de papel y tinta de baja estimulación visual, pensados para sesiones largas y cómodas."
+
+msgid "YouTube requests are paused to avoid a longer block."
+msgstr "Las solicitudes a YouTube están en pausa para evitar un bloqueo más largo."
+
+msgid "Try again in {minutes} min"
+msgstr "Vuelve a intentarlo en {minutes} min"
+
+msgid "Retry to check the connection."
+msgstr "Vuelve a intentarlo para comprobar la conexión."
+
+msgid "Checking whether YouTube requests can resume…"
+msgstr "Comprobando si se pueden reanudar las solicitudes a YouTube…"

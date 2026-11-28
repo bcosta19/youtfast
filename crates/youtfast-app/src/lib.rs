@@ -30,6 +30,7 @@ use youtfast_youtube::ytdlp;
 
 pub use action::Action;
 pub use watch::failure_message;
+pub use youtfast_backend::YouTubeRequestStatus;
 
 /// Draws one frame of the views and collects the actions they push: the
 /// interface's `ui::frame`. The application calls it without depending on
@@ -240,7 +241,7 @@ pub struct State {
     pub up_next: Vec<Video>,
     /// Shown over the video in place of the picture.
     pub player_error: Option<String>,
-    pub youtube_requests: youtfast_backend::YouTubeRequestStatus,
+    pub youtube_requests: YouTubeRequestStatus,
     pub fullscreen: bool,
     /// Whether only audio is being streamed and decoded. Kept only for the
     /// current playback, not between runs.

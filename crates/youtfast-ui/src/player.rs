@@ -273,7 +273,10 @@ pub fn player(
         .ctx()
         .data(|data| data.get_temp::<PendingClick>(click_id()));
     let time = ui.input(|input| input.time);
-    if response.double_clicked() && !held_speed {
+    if state.player_error.is_some() {
+        ui.ctx()
+            .data_mut(|data| data.remove::<PendingClick>(click_id()));
+    } else if response.double_clicked() && !held_speed {
         ui.ctx()
             .data_mut(|data| data.remove::<PendingClick>(click_id()));
         actions.push(Action::ToggleFullscreen);
@@ -330,7 +333,13 @@ pub fn player(
     let mut retry = ui.new_child(UiBuilder::new().max_rect(retry_button));
     if state.player_error.is_some()
         && retry
-            .add(egui::Button::new(tr(locale, "Retry")).min_size(retry_button.size()))
+            .add_enabled(
+                crate::youtube_pause::retry_enabled(
+                    state.youtube_requests,
+                    std::time::Instant::now(),
+                ),
+                egui::Button::new(tr(locale, "Retry")).min_size(retry_button.size()),
+            )
             .clicked()
     {
         actions.push(Action::RetryPlayback);
@@ -1039,29 +1048,41 @@ mod tests {
         );
 
         let retry = pos2(400.0, 225.0 + 52.0);
-        for pressed in [true, false] {
-            draw(
-                &ctx,
-                &mut state,
-                &status,
-                vec![
-                    egui::Event::PointerMoved(retry),
-                    egui::Event::PointerButton {
-                        pos: retry,
-                        button: egui::PointerButton::Primary,
-                        pressed,
-                        modifiers: egui::Modifiers::NONE,
-                    },
-                ],
-                &mut actions,
+        state.youtube_requests = youtfast_app::YouTubeRequestStatus::PausedUntil(
+            std::time::Instant::now() + Duration::from_secs(120),
+        );
+        for enabled in [false, true] {
+            actions.clear();
+            if enabled {
+                state.youtube_requests =
+                    youtfast_app::YouTubeRequestStatus::PausedUntil(std::time::Instant::now());
+            }
+            draw(&ctx, &mut state, &status, Vec::new(), &mut actions);
+            for pressed in [true, false] {
+                draw(
+                    &ctx,
+                    &mut state,
+                    &status,
+                    vec![
+                        egui::Event::PointerMoved(retry),
+                        egui::Event::PointerButton {
+                            pos: retry,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    &mut actions,
+                );
+            }
+            assert_eq!(
+                actions
+                    .iter()
+                    .any(|action| matches!(action, Action::RetryPlayback)),
+                enabled,
+                "Retry should become clickable at the cooldown deadline: {actions:?}",
             );
         }
-        assert!(
-            actions
-                .iter()
-                .any(|action| matches!(action, Action::RetryPlayback)),
-            "clicking the retry overlay must still retry: {actions:?}"
-        );
     }
 
     #[test]
