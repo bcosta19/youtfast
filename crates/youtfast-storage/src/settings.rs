@@ -511,20 +511,20 @@ impl Recommendations {
         };
         if search_interests {
             let mut seen_terms = Vec::new();
-            let mut added = 0;
-            for term in recommendation_terms(&self.interests) {
-                if added >= Self::MAX_CUSTOM_INTEREST_QUERIES
-                    || queries.len() >= Self::MAX_TOPIC_QUERIES
-                {
-                    break;
-                }
-                let key = term.to_lowercase();
-                if !seen_terms.contains(&key) {
-                    seen_terms.push(key);
-                    queries.push(term);
-                    added += 1;
-                }
-            }
+            let limit =
+                Self::MAX_CUSTOM_INTEREST_QUERIES.min(Self::MAX_TOPIC_QUERIES - queries.len());
+            queries.extend(
+                recommendation_terms(&self.interests)
+                    .filter(|term| {
+                        let key = term.to_lowercase();
+                        if seen_terms.contains(&key) {
+                            return false;
+                        }
+                        seen_terms.push(key);
+                        true
+                    })
+                    .take(limit),
+            );
         }
         queries
     }
