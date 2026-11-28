@@ -9,7 +9,7 @@ use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 
 use youtfast_appearance::theme::{self, Palette};
 use youtfast_backend::{
-    Backend, Command, CommentsKey, Event, Payload, Request, SignInMethod, Slot,
+    Backend, Command, CommentsKey, Event, Payload, Request, SignInMethod, Slot, TopicSearchConsent,
 };
 use youtfast_core::model::{
     AccountSource, Channel, ChannelAbout, ChannelHeader, ChannelMeta, ChannelTab, CommentRow,
@@ -184,8 +184,8 @@ pub struct State {
     pub for_you: Listing<Video>,
     pub for_you_more: Option<innertube::More>,
     pub for_you_more_state: Fetch<()>,
-    /// For you came from the account, not from this computer's history.
-    pub for_you_from_account: bool,
+    /// Source of the last For you result, retained during a local reload.
+    pub for_you_source: Option<Source>,
     /// When the feed last landed; one fresh enough already is the
     /// alerts check's answer.
     pub feed_loaded_at: Option<i64>,
@@ -634,15 +634,14 @@ impl State {
             && (!self.settings.hide_watched || !self.library.watched(&video.id))
     }
 
-    /// Whether local For you has eligible watch history seeds or opted-in topic queries.
+    /// Whether local For you has eligible watch history seeds or active topic queries.
     pub fn has_local_for_you_inputs(&self) -> bool {
         youtfast_logic::recommend::has_eligible_history(&self.library)
-            || self
+            || !self
                 .settings
                 .recommendations
-                .initial_queries()
-                .next()
-                .is_some()
+                .topic_queries(false)
+                .is_empty()
     }
 
     /// The feed's videos home shows: For you's, or the first
@@ -1262,6 +1261,8 @@ pub struct App {
     /// answer to an older request is dropped.
     generation: u64,
     generations: HashMap<Slot, u64>,
+    topic_search: loading::ForYouTopicSearch,
+    for_you_refresh: loading::ForYouRefresh,
     /// The generation the details/comments requests of the video being
     /// watched were sent with; a later `open` drops their answers.
     details_generation: u64,
@@ -1358,6 +1359,7 @@ impl App {
         let mut settings =
             Settings::load(&dirs.settings()).context("could not safely load the settings")?;
         settings.device_sync = settings.device_sync.clone().sanitized();
+        settings.recommendations = settings.recommendations.clone().sanitized();
         // The quality eframe's storage kept before the settings file
         // existed moves over once.
         if !dirs.settings().exists()
@@ -1433,6 +1435,8 @@ impl App {
             cast_worker: None,
             local_playback_generation: 0,
             generations: HashMap::new(),
+            topic_search: loading::ForYouTopicSearch::default(),
+            for_you_refresh: loading::ForYouRefresh::default(),
             details_generation: 0,
             playing_generation: 0,
             playback_request: None,
@@ -1977,8 +1981,9 @@ impl App {
                 self.state.reset_cursor();
             }
             Action::RemoveHistory(id) => {
-                self.state.library.remove_history(&id);
-                self.save_library();
+                if self.state.library.remove_history(&id) {
+                    self.save_feed_filters();
+                }
             }
             Action::PlayPlaylist => {
                 if let Some(video) = self.state.page_videos.items().first().cloned() {
@@ -2245,7 +2250,7 @@ impl App {
             Action::LoadSaveTargets => self.load_save_targets(),
             Action::SetSaved { playlist, saved } => self.set_saved(playlist, saved),
             Action::SetShareAtTime(on) => self.state.share_at_time = on,
-            Action::SetRecommendations(preferences) => self.set_recommendations(preferences),
+            Action::SetRecommendations(preferences) => self.set_recommendations(ctx, preferences),
             Action::SetFeedFilter(filter) => {
                 self.state.feed_filter = filter;
                 self.load_visible_for_you();
@@ -2601,6 +2606,7 @@ impl eframe::App for App {
         // A pending EOF may schedule autoplay; closing PiP must cancel it
         // before the playback tick can start another video.
         self.poll();
+        self.tick_for_you_refresh(ctx);
         for action in self.state.pip_bridge.take_actions() {
             self.apply(ctx, action);
         }

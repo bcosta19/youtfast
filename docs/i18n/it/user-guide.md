@@ -521,21 +521,32 @@ impedire un'anteprima o la riproduzione.
 
 ## Consigli locali
 
-In **Home → Per te**, apri **Impostazioni dei consigli locali** e seleziona
-**Applica** per salvare e ricaricare. Scegli una durata, privilegia i canali
-conosciuti o scoprine di nuovi, oppure dai priorità ai video recenti o con
-meno visualizzazioni. Separa con virgole gli interessi e i termini silenziati,
-fino a 300 caratteri per campo. Maiuscole e minuscole sono equivalenti: gli interessi favoriscono i titoli o
-i nomi dei canali corrispondenti e i termini silenziati nascondono i titoli
-corrispondenti. Il filtro per durata esclude i video di durata sconosciuta.
+In **Home → Per te**, apri **Impostazioni dei consigli locali**. Fai clic su
+qualsiasi chip di **Argomenti** oppure cambia durata, preferenza per i canali o
+priorità della classifica per salvare subito e ricaricare automaticamente dopo
+una breve pausa. Gli
+argomenti selezionati recuperano candidati pubblici da YouTube tramite una
+ricerca separata senza accesso — inoltrando a YouTube i filtri di durata e
+recentezza scelti — e li alternano alla tua cronologia, così che un solo canale
+seguito non oscuri gli argomenti scelti. Solo i primi quattro argomenti predefiniti
+selezionati avviano ricerche; gli altri favoriscono solo i titoli o i nomi dei
+canali corrispondenti nella classifica locale. Apri **Interessi personalizzati e
+termini silenziati** per inserire interessi o termini silenziati separati da
+virgole (fino a 300 caratteri per campo) e premi Invio o seleziona **Applica**.
+Maiuscole e minuscole sono equivalenti: argomenti selezionati e interessi
+personalizzati favoriscono i titoli o i nomi dei canali corrispondenti, e i
+termini silenziati nascondono i titoli corrispondenti. Il filtro per durata
+esclude i video di durata sconosciuta. La durata filtra solo i video già suggeriti
+in base alla cronologia. Scegli un argomento (o attiva la ricerca di interessi
+personalizzati) per trovare nuovi video della durata selezionata.
 
 Dopo l’accesso, i consigli di YouTube rimangono la scelta predefinita. Attiva
 **Usa la classifica locale invece dei consigli di YouTube** per applicare le
-impostazioni al feed. Se sul dispositivo non c’è una cronologia idonea, puoi
-autorizzare l’invio di un massimo di tre interessi a YouTube con ricerche
-senza accesso. Dopo aver guardato il primo video idoneo, tornando alla Home
-i consigli locali si aggiornano in base alla cronologia. I termini silenziati
-non lasciano mai il dispositivo.
+impostazioni al feed. Attiva **Cerca interessi personalizzati su YouTube senza cronologia di visualizzazione (senza accesso)** per cercare interessi personalizzati in
+assenza di una cronologia di visualizzazione utilizzabile. Attiva separatamente
+**Cerca interessi personalizzati su YouTube con cronologia di visualizzazione (senza accesso)** per cercarli quando la cronologia è utilizzabile. Entrambe le opzioni
+consentono fino a tre termini personalizzati entro il limite di cinque ricerche
+di argomenti per aggiornamento. I termini silenziati non lasciano mai il dispositivo.
 
 ## Avvisi di nuovi caricamenti
 

@@ -516,23 +516,33 @@ prévia ou a reprodução.
 
 ## Recomendações locais
 
-Em **Início → Para você**, abra **Preferências de recomendações locais** e
-selecione **Aplicar** para salvar e recarregar. Escolha uma duração, priorize
-canais conhecidos ou descubra novos, ou dê preferência a vídeos recentes ou
-com menos visualizações. Separe os interesses e termos silenciados por
-vírgula, com até 300 caracteres por campo. A busca por correspondências
-ignora maiúsculas e minúsculas:
-interesses favorecem títulos ou nomes de canais correspondentes, e termos
-silenciados ocultam títulos correspondentes. O filtro de duração exclui
-vídeos de duração desconhecida.
+Em **Início → Para você**, abra **Preferências de recomendações locais**.
+Clique em qualquer chip de **Tópicos** ou altere a duração, a preferência de
+canais ou a prioridade do ranking para salvar imediatamente e recarregar
+automaticamente após uma breve pausa. Os
+tópicos selecionados buscam candidatos públicos no YouTube em uma pesquisa
+separada sem login — repassando seu filtro de duração e de vídeos recentes ao
+YouTube — e os intercalam com o seu histórico assistido, para que um único
+canal acompanhado não domine os tópicos escolhidos. Apenas os quatro primeiros
+tópicos predefinidos que você selecionar disparam buscas; os demais apenas
+favorecem títulos ou nomes de canais correspondentes no ranking local. Abra **Interesses
+personalizados e termos silenciados** para informar interesses ou termos
+silenciados separados por vírgula (até 300 caracteres por campo) e pressione
+Enter ou selecione **Aplicar**. A busca por correspondências ignora maiúsculas
+e minúsculas: tópicos pré-selecionados e interesses personalizados favorecem
+títulos ou nomes de canais correspondentes, e termos silenciados ocultam
+títulos correspondentes. O filtro de duração exclui vídeos de duração
+desconhecida. A duração só filtra os vídeos já sugeridos com base no histórico.
+Selecione um tópico (ou ative a busca por interesses personalizados) para buscar
+novos vídeos com a duração escolhida.
 
 Com a conta conectada, as recomendações do YouTube continuam sendo o padrão;
 ative **Usar ranking local em vez das recomendações do YouTube** para aplicar
-essas preferências ao feed. Sem histórico elegível no dispositivo, você pode
-autorizar o envio de até três interesses ao YouTube em buscas sem login. Depois
-que você assistir ao primeiro vídeo elegível, as recomendações locais passam a
-usar seu histórico ao voltar para Início. Os termos silenciados nunca saem do
-dispositivo.
+essas preferências ao feed. Ative **Buscar interesses personalizados no YouTube sem histórico de exibição (sem login)** para buscar interesses personalizados
+quando não houver histórico de exibição elegível. Ative **Buscar interesses personalizados no YouTube com histórico de exibição (sem login)** separadamente
+para buscá-los quando houver histórico elegível. Cada opção permite até três
+termos personalizados dentro do limite de cinco buscas de tópicos por
+atualização. Os termos silenciados nunca saem do dispositivo.
 
 ## Alertas de novos vídeos
 

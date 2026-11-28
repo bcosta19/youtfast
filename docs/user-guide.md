@@ -462,20 +462,29 @@ unusable source may still prevent a preview or playback.
 
 ## Local recommendations
 
-On **Home → For you**, open **Local recommendation settings** and select
-**Apply** to save and reload. Choose a duration, favor familiar channels or
-discover new ones, or prioritize recent uploads or fewer views. Enter interests
-and muted title terms separated by commas, up to 300 characters per field.
-Matching ignores case: interests
-boost matches in titles or channel names, and muted terms hide matching
-titles. A duration filter excludes videos with unknown length.
+On **Home → For you**, open **Local recommendation settings**. Click any
+preset **Topics** chip or change the duration, channel preference, or ranking
+priority to save immediately and reload automatically after a short pause. Selected preset topics fetch public
+YouTube candidates in a separate signed-out search — passing your chosen
+duration and recency filter to YouTube — and interleave them with your watch
+history so one watched channel does not crowd out your chosen topics. Only the first four
+preset topics you select trigger searches; additional preset topics only boost
+matching titles or channel names in local ranking. Open
+**Custom interests & muted terms** to enter comma-separated interests or muted
+title terms (up to 300 characters per field) and press Enter or select
+**Apply**. Matching ignores case: preset topics and custom interests boost
+matching titles or channel names, and muted terms hide matching titles. A
+duration filter excludes videos with unknown length. Duration only filters
+existing history-based candidates. Select a topic (or opt in to a custom-interest
+search) to fetch new candidates matching the selected duration.
 
 When signed in, YouTube's recommendations remain the default; enable **Use
 local ranking instead of YouTube recommendations** to apply these settings to
-your feed. If there is no eligible device watch history, you can opt in to
-send up to three interests to YouTube in signed-out searches. After your first
-eligible watch, returning to Home refreshes local recommendations from your
-history instead. Muted terms never leave the device.
+your feed. Enable **Search YouTube for custom interests without watch history (signed out)** to search for custom interests if
+there is no eligible watch history. Enable **Search YouTube for custom interests with watch history (signed out)** separately to search
+for them when there is eligible history. Either allows up to three custom terms
+within the limit of five topic searches per refresh. Muted terms never leave the
+device.
 
 ## New-upload alerts
 

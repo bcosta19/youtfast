@@ -2233,12 +2233,6 @@ msgstr "Lokale Rangfolge statt YouTube-Empfehlungen verwenden"
 msgid "Duration"
 msgstr "Dauer"
 
-msgid "Under 5 minutes"
-msgstr "Unter 5 Minuten"
-
-msgid "5–20 minutes"
-msgstr "5–20 Minuten"
-
 msgid "Balanced"
 msgstr "Ausgewogen"
 
@@ -2257,14 +2251,62 @@ msgstr "Neue Uploads"
 msgid "Fewer views"
 msgstr "Weniger Aufrufe"
 
-msgid "Interests (comma-separated)"
-msgstr "Interessen (durch Kommas getrennt)"
+msgid "Topics"
+msgstr "Themen"
+
+msgid "Computing & Tech"
+msgstr "Informatik & Technik"
+
+msgid "Science"
+msgstr "Wissenschaft"
+
+msgid "Gaming"
+msgstr "Gaming"
+
+msgid "Music"
+msgstr "Musik"
+
+msgid "Film & TV"
+msgstr "Film & Serien"
+
+msgid "News & World"
+msgstr "Nachrichten & Welt"
+
+msgid "History & Culture"
+msgstr "Geschichte & Kultur"
+
+msgid "Finance & Business"
+msgstr "Finanzen & Wirtschaft"
+
+msgid "Education"
+msgstr "Bildung"
+
+msgid "Design & Art"
+msgstr "Design & Kunst"
+
+msgid "Sports"
+msgstr "Sport"
+
+msgid "Podcasts & Talks"
+msgstr "Podcasts & Gespräche"
+
+msgid "The first four selected topics fetch videos from YouTube; additional topics boost matching titles locally."
+msgstr "Die ersten vier ausgewählten Themen suchen Videos auf YouTube; weitere Themen werten passende Titel lokal auf."
+
+msgid "Custom interests & muted terms"
+msgstr "Eigene Interessen und stumme Begriffe"
+
+msgid "Custom interests (comma-separated)"
+msgstr "Eigene Interessen (durch Kommas getrennt)"
 
 msgid "Muted title terms (comma-separated)"
 msgstr "Stumme Titelbegriffe (durch Kommas getrennt)"
 
-msgid "Search YouTube for up to three interests when there is no eligible watch history"
-msgstr "Ohne geeigneten Wiedergabeverlauf bis zu drei Interessen auf YouTube suchen"
+msgid "Search YouTube for custom interests without watch history (signed out)"
+msgstr "Eigene Interessen ohne Wiedergabeverlauf auf YouTube suchen (ohne Anmeldung)"
+
+msgid "Search YouTube for custom interests with watch history (signed out)"
+msgstr "Eigene Interessen mit Wiedergabeverlauf auf YouTube suchen (ohne Anmeldung)"
 
 msgid "Apply"
 msgstr "Anwenden"
@@ -2275,8 +2317,8 @@ msgstr "Auf Standardwerte zurücksetzen"
 msgid "Ranked on this device"
 msgstr "Auf diesem Gerät sortiert"
 
-msgid "Watch a few videos or enable topic search to get recommendations"
-msgstr "Für Empfehlungen einige Videos ansehen oder die Themensuche aktivieren"
+msgid "Watch a few videos or select topics to get recommendations"
+msgstr "Für Empfehlungen einige Videos ansehen oder Themen auswählen"
 
 msgid "Interface style"
 msgstr "Oberflächenstil"
@@ -2319,6 +2361,9 @@ msgstr "Tonale Flächenabstufung mit Akzentfarbtönung und großzügig abgerunde
 
 msgid "Low-stimulation warm paper and ink tones designed for comfortable long reading sessions."
 msgstr "Reizarme warme Papier- und Tintentöne für angenehme lange Lese- und Sehsitzungen."
+
+msgid "Select a topic to fetch new videos that match this duration. History-based results are only filtered."
+msgstr "Wählen Sie ein Thema, um neue Videos mit dieser Dauer abzurufen. Ergebnisse aus dem Verlauf werden nur gefiltert."
 
 msgid "YouTube requests are paused to avoid a longer block."
 msgstr "YouTube-Anfragen sind pausiert, um eine längere Sperre zu vermeiden."

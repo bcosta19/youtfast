@@ -156,6 +156,7 @@ impl App {
         if !outcome.changed {
             return;
         }
+        self.recheck_topic_search_history();
         self.library_revision.set(self.library_revision.get() + 1);
         // Save merged library directly without re-marking sync_dirty_since.
         self.backend
@@ -166,7 +167,7 @@ impl App {
         }
         if outcome.subscriptions_changed
             || outcome.filters_changed
-            || (outcome.history_changed && !self.state.for_you_from_account)
+            || (outcome.history_changed && self.state.for_you_source != Some(Source::Account))
         {
             self.state.invalidate_local_for_you(&mut self.generations);
             self.load_visible_for_you();
