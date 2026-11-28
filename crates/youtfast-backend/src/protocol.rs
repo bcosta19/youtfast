@@ -53,7 +53,8 @@ impl TopicSearchConsent {
         self.0.send_replace(false);
     }
 
-    pub(super) fn is_current(&self) -> bool {
+    /// Whether the load still authorizes topic searches and their results.
+    pub fn is_current(&self) -> bool {
         *self.0.borrow()
     }
 

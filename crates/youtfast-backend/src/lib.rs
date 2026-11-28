@@ -1062,6 +1062,7 @@ async fn fetch_recommendation_candidate(
     rp: Client,
     public: Arc<std::sync::OnceLock<Result<Client, String>>>,
     requests: Arc<RecommendationRequests>,
+    consent: TopicSearchConsent,
     key: CandidateKey,
 ) -> Result<Vec<Video>, String> {
     match key {
@@ -1078,7 +1079,13 @@ async fn fetch_recommendation_candidate(
                 .as_ref()
                 .map_err(Clone::clone)?;
             let (items, _) = requests
-                .fetch(innertube::search_filtered(public, &query, options))
+                .fetch(async {
+                    // Waiting for the limiter does not authorize a search.
+                    if !consent.is_current() {
+                        return Err("Topic search authorization was revoked".to_owned());
+                    }
+                    innertube::search_filtered(public, &query, options).await
+                })
                 .await?;
             Ok(match items {
                 PageItems::Videos(mut videos) => {
@@ -1331,6 +1338,7 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
             let rp = rp.clone();
             let requests = context.recommendation_requests.clone();
             let public = Arc::default();
+            let consent = topic_search_consent.clone();
             Payload::ForYou {
                 videos: local_recommendations(
                     &context.recommendation_cache,
@@ -1344,6 +1352,7 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
                             rp.clone(),
                             Arc::clone(&public),
                             requests.clone(),
+                            consent.clone(),
                             key,
                         )
                     },

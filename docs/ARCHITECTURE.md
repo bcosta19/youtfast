@@ -246,7 +246,8 @@ with each request and invalidates the current For you generation when the
 preferences change. Preference edits persist immediately and revoke pending
 topic searches; the app refreshes after a 600 ms pause. A device library import or the first eligible watch
 invalidates a local result or a pending first page, but preserves ready account
-recommendations and their pagination. The backend supplies history-related
+recommendations and their pagination. A change in eligible-history state
+also revokes pending topic searches even when For you is offscreen. The backend supplies history-related
 candidates, public topic-search candidates (when preset topics are selected or
 custom-interest search is opted in, using a separate signed-out client and
 forwarding duration and recency options to YouTube search), and the current

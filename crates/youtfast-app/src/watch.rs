@@ -250,6 +250,7 @@ impl App {
                 let watching = watching.clone();
                 self.state.video_tabs.update(&watching);
                 self.state.library.update_video(&watching);
+                self.recheck_topic_search_history();
                 self.save_library();
                 self.sync_started_video_speed();
             }
@@ -375,6 +376,7 @@ impl App {
         let start = self.state.library.resume_position(&video.id);
         self.state
             .record_watch_for_feed(video.clone(), util::now(), &mut self.generations);
+        self.recheck_topic_search_history();
         self.save_library();
 
         self.state.view = View::Watch;
@@ -603,6 +605,7 @@ impl App {
         }
         // Complete what the watch page and the library know.
         if self.state.apply_watching_details(&details) {
+            self.recheck_topic_search_history();
             self.save_library();
             self.sync_started_video_speed();
         }

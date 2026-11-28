@@ -1256,7 +1256,7 @@ pub struct App {
     /// answer to an older request is dropped.
     generation: u64,
     generations: HashMap<Slot, u64>,
-    topic_search_consent: Option<TopicSearchConsent>,
+    topic_search: loading::ForYouTopicSearch,
     for_you_refresh: loading::ForYouRefresh,
     /// The generation the details/comments requests of the video being
     /// watched were sent with; a later `open` drops their answers.
@@ -1430,7 +1430,7 @@ impl App {
             cast_worker: None,
             local_playback_generation: 0,
             generations: HashMap::new(),
-            topic_search_consent: None,
+            topic_search: loading::ForYouTopicSearch::default(),
             for_you_refresh: loading::ForYouRefresh::default(),
             details_generation: 0,
             playing_generation: 0,
@@ -1972,8 +1972,9 @@ impl App {
                 self.state.reset_cursor();
             }
             Action::RemoveHistory(id) => {
-                self.state.library.remove_history(&id);
-                self.save_library();
+                if self.state.library.remove_history(&id) {
+                    self.save_feed_filters();
+                }
             }
             Action::PlayPlaylist => {
                 if let Some(video) = self.state.page_videos.items().first().cloned() {

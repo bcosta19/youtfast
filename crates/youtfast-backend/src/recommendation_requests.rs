@@ -44,6 +44,38 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[tokio::test]
+    async fn revoked_topic_search_waiting_for_a_turn_never_starts() {
+        use crate::{RecommendationCache, TopicSearchConsent, search_topic_pages};
+        use youtfast_youtube::innertube::SearchOptions;
+
+        let requests = RecommendationRequests::default();
+        let all_turns = requests
+            .turns
+            .acquire_many(MAX_IN_FLIGHT as u32)
+            .await
+            .unwrap();
+        let consent = TopicSearchConsent::granted();
+        let cache = RecommendationCache::default();
+        let search = search_topic_pages(
+            &cache,
+            "synthetic",
+            SearchOptions::default(),
+            &consent,
+            |videos| !videos.is_empty(),
+            |_| requests.fetch(async { panic!("revoked search started") }),
+        );
+        tokio::pin!(search);
+        tokio::select! {
+            biased;
+            _ = &mut search => panic!("search should wait for a turn"),
+            () = tokio::task::yield_now() => {}
+        }
+        consent.clone().revoke();
+        drop(all_turns);
+        assert!(search.await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
     async fn recommendation_requests_limit_in_flight_and_space_starts() {
         let requests = Arc::new(RecommendationRequests::default());
         let (starts, mut started) = tokio::sync::mpsc::unbounded_channel();

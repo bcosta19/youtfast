@@ -246,7 +246,7 @@ impl State {
         generations.remove(&Slot::ForYou);
     }
 
-    /// The first eligible watch supersedes an empty or topic-seeded local feed.
+    /// A change in eligible-history state supersedes the current local feed.
     pub(super) fn record_watch_for_feed(
         &mut self,
         video: Video,
@@ -257,7 +257,7 @@ impl State {
 
         let had_eligible_history = has_eligible_history(&self.library);
         self.library.record_watch(video, now);
-        if !had_eligible_history && has_eligible_history(&self.library) {
+        if had_eligible_history != has_eligible_history(&self.library) {
             self.invalidate_local_for_you(generations);
         }
     }
@@ -266,6 +266,33 @@ impl State {
         // Device playlists own the page rows and never request a remote page.
         slot != Slot::Page
             || !matches!(&self.page, Some(Page::Playlist { id, .. }) if DevicePlaylist::is_local_id(id))
+    }
+}
+
+#[derive(Default)]
+pub(super) struct ForYouTopicSearch(Option<(bool, TopicSearchConsent)>);
+
+impl ForYouTopicSearch {
+    fn grant(&mut self, has_eligible_history: bool) -> TopicSearchConsent {
+        let consent = TopicSearchConsent::granted();
+        self.0 = Some((has_eligible_history, consent.clone()));
+        consent
+    }
+
+    fn revoke(&mut self) {
+        if let Some((_, consent)) = self.0.take() {
+            consent.revoke();
+        }
+    }
+
+    fn recheck_history(&mut self, library: &Library) -> bool {
+        let changed = self.0.as_ref().is_some_and(|(had_history, _)| {
+            *had_history != youtfast_logic::recommend::has_eligible_history(library)
+        });
+        if changed {
+            self.revoke();
+        }
+        changed
     }
 }
 
@@ -482,8 +509,7 @@ impl App {
             return;
         }
         let taste = youtfast_logic::recommend::taste_for_library(&state.library);
-        let topic_search_consent = TopicSearchConsent::granted();
-        self.topic_search_consent = Some(topic_search_consent.clone());
+        let topic_search_consent = self.topic_search.grant(!seeds.is_empty());
         self.request(
             Slot::ForYou,
             Request::ForYou {
@@ -497,8 +523,12 @@ impl App {
     }
 
     pub(super) fn revoke_topic_search(&mut self) {
-        if let Some(consent) = self.topic_search_consent.take() {
-            consent.revoke();
+        self.topic_search.revoke();
+    }
+
+    pub(super) fn recheck_topic_search_history(&mut self) {
+        if self.topic_search.recheck_history(&self.state.library) {
+            self.state.invalidate_local_for_you(&mut self.generations);
         }
     }
 
@@ -533,6 +563,7 @@ impl App {
     }
 
     pub(super) fn save_feed_filters(&mut self) {
+        self.recheck_topic_search_history();
         self.save_library();
         self.state.invalidate_local_for_you(&mut self.generations);
         self.load_visible_for_you();
@@ -748,6 +779,7 @@ impl App {
         ) {
             return;
         }
+        self.recheck_topic_search_history();
         self.save_library();
         self.load(self.state.view, false);
     }
@@ -1263,6 +1295,27 @@ mod tests {
             assert!(matches!(state.for_you, Listing::Loading));
             assert_eq!(generations.get(&Slot::ForYou), Some(&2));
         }
+    }
+
+    #[test]
+    fn topic_search_consent_tracks_both_eligible_history_transitions_offscreen() {
+        let mut state = State {
+            view: View::Watch,
+            for_you: Listing::Loading,
+            ..State::default()
+        };
+        let mut search = ForYouTopicSearch::default();
+        let pending_month = search.grant(false);
+        let mut generations = HashMap::from([(Slot::ForYou, 1)]);
+        state.record_watch_for_feed(Video::from_id("first-watch".into()), 1, &mut generations);
+        assert!(search.recheck_history(&state.library));
+        assert!(!pending_month.is_current());
+
+        let pending_with_history = search.grant(true);
+        assert!(!search.recheck_history(&state.library));
+        state.library.remove_history("first-watch");
+        assert!(search.recheck_history(&state.library));
+        assert!(!pending_with_history.is_current());
     }
 
     #[test]

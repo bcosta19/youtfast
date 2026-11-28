@@ -156,6 +156,7 @@ impl App {
         if !outcome.changed {
             return;
         }
+        self.recheck_topic_search_history();
         self.library_revision.set(self.library_revision.get() + 1);
         // Save merged library directly without re-marking sync_dirty_since.
         self.backend
