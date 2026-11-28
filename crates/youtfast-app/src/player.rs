@@ -369,16 +369,30 @@ impl App {
         let Some(video) = &self.state.watching else {
             return;
         };
+        let Some(player) = &mut self.player else {
+            return;
+        };
+        let request = match self.backend.begin_playback(true) {
+            Ok(request) => request,
+            Err(message) => {
+                self.state.player_error = Some(message.into());
+                return;
+            }
+        };
         if let Some(surface) = &self.surface {
             surface.forget();
         }
-        if let Some(player) = &mut self.player {
-            let position = player.status().position.max(0.0);
-            self.state.player_error = player
-                .reload(&video.url(), position, false)
-                .err()
-                .map(|error| error.to_string());
-        }
+        let result = if self.playback_deferred {
+            self.playback_deferred = false;
+            let start = (!video.live)
+                .then(|| self.state.library.resume_position(&video.id))
+                .flatten();
+            player.load(&video.url(), start)
+        } else {
+            player.reload(&video.url(), player.status().position.max(0.0), false)
+        };
+        self.state.player_error = result.err().map(|error| error.to_string());
+        self.playback_request = self.state.player_error.is_none().then_some(request);
     }
 
     pub(super) fn toggle_loop(&mut self) {
@@ -567,7 +581,7 @@ impl App {
     pub(super) fn play_next(&mut self) {
         let next = self.state.next_video().cloned();
         match next {
-            Some(video) => self.advance(video),
+            Some(video) => self.advance(video, true),
             None => self.show_osd("No video up next".to_owned()),
         }
     }
@@ -575,7 +589,7 @@ impl App {
     pub(super) fn play_previous(&mut self) {
         let previous = self.state.previous_video().cloned();
         if let Some(video) = previous {
-            self.advance(video);
+            self.advance(video, true);
         }
     }
 
@@ -775,7 +789,7 @@ impl App {
                 // A source may have changed while the countdown was visible.
                 self.state.refresh_autoplay();
                 if let Some((video, _)) = self.state.autoplay.take() {
-                    self.advance(video);
+                    self.advance(video, false);
                 }
             } else {
                 // The countdown's seconds tick down on screen.

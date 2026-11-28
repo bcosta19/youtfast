@@ -129,6 +129,11 @@ pub struct RequestPermit {
 
 impl RequestPermit {
     pub fn success(mut self) {
+        self.mark_success();
+    }
+
+    /// An already loaded stream can still report a limiting failure.
+    pub fn mark_success(&mut self) {
         self.gate
             .update(|circuit| circuit.finish(self.generation, true));
         self.pending = false;

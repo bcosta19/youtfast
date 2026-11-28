@@ -167,6 +167,9 @@ impl App {
                     );
                 }
                 mpv::Event::Loaded => {
+                    if let Some(request) = &mut self.playback_request {
+                        request.mark_success();
+                    }
                     self.state.player_error = None;
                     self.captions_pending = self.state.settings.captions.is_some();
                     if let Some(surface) = &self.surface {
@@ -174,20 +177,16 @@ impl App {
                     }
                 }
                 mpv::Event::Failed(failure) => {
-                    // What the session can fix is tried again with it.
-                    let fixable = matches!(
+                    if let Some(request) = self.playback_request.take()
+                        && playback_was_limited(failure)
+                    {
+                        request.limited(None);
+                    }
+                    // A connection limit must not trigger another extraction.
+                    let retried = matches!(
                         failure,
-                        mpv::Failure::BotCheck
-                            | mpv::Failure::AgeRestricted
-                            | mpv::Failure::Unavailable
-                    );
-                    let retried = fixable
-                        && self.player.as_mut().is_some_and(|player| {
-                            player.retry_signed_in().unwrap_or_else(|error| {
-                                log::warn!("mpv: {error}");
-                                false
-                            })
-                        });
+                        mpv::Failure::AgeRestricted | mpv::Failure::Unavailable
+                    ) && self.retry_signed_in_playback();
                     if retried {
                         log::info!("refused signed out ({failure:?}); trying signed in");
                     } else {
@@ -196,7 +195,7 @@ impl App {
                     }
                 }
                 mpv::Event::Idle => {
-                    if self.state.watching.is_none()
+                    if (self.state.watching.is_none() || self.playback_deferred)
                         && let Some(surface) = &self.surface
                     {
                         surface.release_renderer();
@@ -313,6 +312,8 @@ impl App {
         {
             log::warn!("mpv: {error}");
         }
+        self.playback_request = None;
+        self.playback_deferred = false;
         self.playback_report.cancel();
         self.playing_generation += 1;
         self.reset_watch_panes();
@@ -323,7 +324,19 @@ impl App {
         ctx.request_repaint();
     }
 
-    pub(super) fn open(&mut self, mut video: Video) {
+    pub(super) fn open(&mut self, video: Video) {
+        self.open_with_intent(video, true);
+    }
+
+    pub(super) fn open_with_intent(&mut self, mut video: Video, allow_probe: bool) {
+        let admission = self
+            .player
+            .as_ref()
+            .map(|_| self.backend.begin_playback(allow_probe));
+        if !allow_probe && matches!(admission, Some(Err(_))) {
+            return;
+        }
+        self.playback_deferred = false;
         self.local_playback_generation += 1;
         log::debug!("opening video");
         self.playback_report = history_sync::PlaybackReport::default();
@@ -412,10 +425,23 @@ impl App {
             if let Err(error) = player.set_speed(initial_speed) {
                 log::warn!("mpv: {error}");
             }
-            self.state.player_error = player
-                .load(&video.url(), start)
-                .err()
-                .map(|error| error.to_string());
+            match admission.expect("playback admission requires a player") {
+                Ok(request) => {
+                    self.state.player_error = player
+                        .load(&video.url(), start)
+                        .err()
+                        .map(|error| error.to_string());
+                    self.playback_request = self.state.player_error.is_none().then_some(request);
+                }
+                Err(message) => {
+                    if let Err(error) = player.stop() {
+                        log::warn!("mpv: {error}");
+                    }
+                    self.playback_request = None;
+                    self.playback_deferred = true;
+                    self.state.player_error = Some(message.into());
+                }
+            }
         }
         let id = video.id.clone();
         self.state.watching = Some(video);
@@ -649,6 +675,40 @@ impl App {
         player.set_cookies_from_browser(browser);
     }
 
+    fn retry_signed_in_playback(&mut self) -> bool {
+        let Ok(request) = self.backend.begin_playback(false) else {
+            return false;
+        };
+        let retried = self.player.as_mut().is_some_and(|player| {
+            player.retry_signed_in().unwrap_or_else(|error| {
+                log::warn!("mpv: {error}");
+                false
+            })
+        });
+        self.playback_request = retried.then_some(request);
+        retried
+    }
+
+    fn reload_playback(&mut self) {
+        let (Some(player), Some(video)) = (&mut self.player, &self.state.watching) else {
+            return;
+        };
+        let status = player.status();
+        if status.idle {
+            return;
+        }
+        let Ok(request) = self.backend.begin_playback(false) else {
+            return;
+        };
+        self.playback_request = match player.reload(&video.url(), status.position, status.paused) {
+            Ok(()) => Some(request),
+            Err(error) => {
+                log::warn!("mpv: {error}");
+                None
+            }
+        };
+    }
+
     pub(super) fn toggle_audio_only(&mut self) {
         self.set_audio_only(!self.state.audio_only);
     }
@@ -675,16 +735,7 @@ impl App {
             log::warn!("mpv: {error}");
             return;
         }
-        let (idle, position, paused) = {
-            let status = player.status();
-            (status.idle, status.position, status.paused)
-        };
-        if let Some(video) = &self.state.watching
-            && !idle
-            && let Err(error) = player.reload(&video.url(), position, paused)
-        {
-            log::warn!("mpv: {error}");
-        }
+        self.reload_playback();
     }
 
     /// Bounds the streams from now on, and reloads the video being watched
@@ -713,16 +764,7 @@ impl App {
             log::warn!("mpv: {error}");
             return;
         }
-        let (idle, position, paused) = {
-            let status = player.status();
-            (status.idle, status.position, status.paused)
-        };
-        if let Some(video) = &self.state.watching
-            && !idle
-            && let Err(error) = player.reload(&video.url(), position, paused)
-        {
-            log::warn!("mpv: {error}");
-        }
+        self.reload_playback();
     }
 
     /// Back to the watch page of the video playing, from the mini player
@@ -806,6 +848,10 @@ impl App {
     }
 }
 
+fn playback_was_limited(failure: mpv::Failure) -> bool {
+    matches!(failure, mpv::Failure::BotCheck | mpv::Failure::RateLimited)
+}
+
 /// What the watch page says when a video could not play.
 pub fn failure_message(failure: mpv::Failure) -> &'static str {
     match failure {
@@ -882,6 +928,15 @@ fn visible_videos(state: &State, opening: &Video) -> Vec<Video> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mpv_bot_check_and_429_are_connection_limits_not_generic_playback_failures() {
+        assert!(playback_was_limited(mpv::Failure::BotCheck));
+        assert!(playback_was_limited(mpv::Failure::RateLimited));
+        assert!(!playback_was_limited(mpv::Failure::Forbidden));
+        assert!(!playback_was_limited(mpv::Failure::AgeRestricted));
+        assert!(!playback_was_limited(mpv::Failure::YtdlFailed));
+    }
 
     #[test]
     fn advancing_from_the_home_shorts_shelf_skips_filtered_shorts() {

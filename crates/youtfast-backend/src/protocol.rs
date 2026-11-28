@@ -353,6 +353,7 @@ pub enum SignInMethod {
 }
 
 pub enum Event {
+    YouTubeRequests(super::YouTubeRequestStatus),
     HistoryMarked,
     PlayingPlaylist {
         generation: u64,
@@ -577,7 +578,8 @@ impl Event {
         epoch == current
             || matches!(
                 self,
-                Self::Imported { .. }
+                Self::YouTubeRequests(_)
+                    | Self::Imported { .. }
                     | Self::ImportMerged { .. }
                     | Self::Notice(_)
                     | Self::CheckAlerts

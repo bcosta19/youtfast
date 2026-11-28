@@ -240,6 +240,7 @@ pub struct State {
     pub up_next: Vec<Video>,
     /// Shown over the video in place of the picture.
     pub player_error: Option<String>,
+    pub youtube_requests: youtfast_backend::YouTubeRequestStatus,
     pub fullscreen: bool,
     /// Whether only audio is being streamed and decoded. Kept only for the
     /// current playback, not between runs.
@@ -1252,6 +1253,8 @@ pub struct App {
     dirs: Dirs,
     /// `None` when mpv could not start; `state.player_error` says why.
     player: Option<Mpv>,
+    playback_request: Option<youtfast_youtube::backoff::RequestPermit>,
+    playback_deferred: bool,
     surface: Option<VideoSurface>,
     /// Bumped by every request; each slot remembers its latest, so a late
     /// answer to an older request is dropped.
@@ -1430,6 +1433,8 @@ impl App {
             generations: HashMap::new(),
             details_generation: 0,
             playing_generation: 0,
+            playback_request: None,
+            playback_deferred: false,
             playback_report: history_sync::PlaybackReport::default(),
             playback_tick: Instant::now(),
             details_cache: util::Recent::new(DETAILS_KEPT),
@@ -1522,6 +1527,7 @@ impl App {
 
     fn handle(&mut self, event: Event) {
         match event {
+            Event::YouTubeRequests(status) => self.state.youtube_requests = status,
             Event::HistoryMarked => {
                 self.state.history_needs_refresh = true;
             }

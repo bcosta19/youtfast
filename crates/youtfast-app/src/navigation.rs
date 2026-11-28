@@ -265,12 +265,12 @@ impl App {
     }
     /// Advancing a playing list must not replace its origin with the page
     /// currently browsed underneath the mini player.
-    pub(super) fn advance(&mut self, video: Video) {
+    pub(super) fn advance(&mut self, video: Video, allow_probe: bool) {
         let browsing = (self.state.view != View::Watch
             && (!self.state.mini_closed || self.state.pip_open))
             .then_some(self.state.view);
         self.state.view = View::Watch;
-        self.open(video);
+        self.open_with_intent(video, allow_probe);
         if let Some(view) = browsing {
             self.state.view = view;
         }

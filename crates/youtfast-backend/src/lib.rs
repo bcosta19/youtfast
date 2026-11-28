@@ -19,6 +19,7 @@ use youtfast_storage::library::Library;
 use youtfast_storage::paths::Dirs;
 use youtfast_storage::settings::Settings;
 use youtfast_storage::{account, backup, paths, takeout};
+use youtfast_youtube::backoff::{RequestGate, RequestIntent, RequestPermit};
 use youtfast_youtube::innertube::{self, Client};
 
 mod protocol;
@@ -26,6 +27,7 @@ mod sync;
 pub use protocol::{
     Command, CommentsKey, DeArrowConsent, Event, Payload, Request, SignInMethod, Slot,
 };
+pub use youtfast_youtube::backoff::Status as YouTubeRequestStatus;
 
 #[derive(Default)]
 struct SaveGate(std::sync::Mutex<bool>);
@@ -52,6 +54,7 @@ pub struct Backend {
     commands: async_mpsc::UnboundedSender<(u64, Command)>,
     events: mpsc::Receiver<(u64, Event)>,
     epoch: std::cell::Cell<u64>,
+    youtube_gate: RequestGate,
     waker: egui::Context,
     library_saves: Arc<watch::Sender<Option<Library>>>,
     settings_saves: Arc<watch::Sender<Option<Settings>>>,
@@ -151,6 +154,7 @@ impl Backend {
             commands,
             events,
             epoch: std::cell::Cell::new(0),
+            youtube_gate: context.rp.gate().clone(),
             waker: context.waker.clone(),
             library_saves: context.library_saves.clone(),
             settings_saves: context.settings_saves.clone(),
@@ -190,6 +194,17 @@ impl Backend {
                         writer_settings_gate,
                         Settings::save,
                     ));
+                    let mut youtube_status = context.rp.gate().subscribe();
+                    let youtube_context = context.clone();
+                    tokio::spawn(async move {
+                        loop {
+                            let status = *youtube_status.borrow_and_update();
+                            youtube_context.send(Event::YouTubeRequests(status));
+                            if youtube_status.changed().await.is_err() {
+                                break;
+                            }
+                        }
+                    });
                     let mut writes = AccountWrites::default();
                     while let Some((epoch, command)) = incoming.recv().await {
                         if command.changes_session() || matches!(command, Command::RemoveAccount(_))
@@ -235,6 +250,19 @@ impl Backend {
 
     pub fn session_epoch(&self) -> u64 {
         self.epoch.get()
+    }
+
+    /// mpv starts on the interface thread; admission must be synchronous
+    /// with the other transports, without waiting for the runtime.
+    pub fn begin_playback(&self, allow_probe: bool) -> Result<RequestPermit, &'static str> {
+        let intent = if allow_probe {
+            RequestIntent::UserInitiated
+        } else {
+            RequestIntent::Background
+        };
+        self.youtube_gate
+            .begin(intent)
+            .map_err(|_| youtfast_core::privacy::YOUTUBE_RATE_LIMITED)
     }
 
     pub fn context(&self) -> &egui::Context {
@@ -1683,6 +1711,7 @@ mod tests {
                 commands,
                 events,
                 epoch: std::cell::Cell::new(epoch),
+                youtube_gate: RequestGate::default(),
                 waker: egui::Context::default(),
                 library_saves: Arc::new(watch::channel(None).0),
                 settings_saves: Arc::new(watch::channel(None).0),
@@ -1692,6 +1721,21 @@ mod tests {
             outgoing,
             incoming,
         )
+    }
+
+    #[test]
+    fn a_playback_limit_pauses_inner_tube_even_across_session_epochs() {
+        let (backend, outgoing, _) = scoped_backend(7);
+        let rp = Client::with_gate(innertube::http(), backend.youtube_gate.clone()).unwrap();
+        backend.begin_playback(true).unwrap().limited(None);
+        let status = backend.youtube_gate.status();
+        outgoing.send((6, Event::YouTubeRequests(status))).unwrap();
+        assert!(matches!(
+            backend.poll().as_slice(),
+            [Event::YouTubeRequests(YouTubeRequestStatus::PausedUntil(_))]
+        ));
+        assert!(backend.begin_playback(true).is_err());
+        assert_eq!(rp.check_paused(), Err(innertube::Error::RateLimited));
     }
 
     #[test]
