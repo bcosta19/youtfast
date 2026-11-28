@@ -1256,6 +1256,7 @@ pub struct App {
     player: Option<Mpv>,
     playback_request: Option<watch::PlaybackRequest>,
     playback_deferred: bool,
+    bot_checked_videos: HashSet<String>,
     surface: Option<VideoSurface>,
     /// Bumped by every request; each slot remembers its latest, so a late
     /// answer to an older request is dropped.
@@ -1436,6 +1437,7 @@ impl App {
             playing_generation: 0,
             playback_request: None,
             playback_deferred: false,
+            bot_checked_videos: HashSet::new(),
             playback_report: history_sync::PlaybackReport::default(),
             playback_tick: Instant::now(),
             details_cache: util::Recent::new(DETAILS_KEPT),

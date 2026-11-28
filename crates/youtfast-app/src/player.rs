@@ -382,12 +382,20 @@ impl App {
         if let Some(surface) = &self.surface {
             surface.forget();
         }
+        let signed_in =
+            watch::take_bot_check_retry(&mut self.bot_checked_videos, &video.id, &request, player);
         let result = if self.playback_deferred {
             self.playback_deferred = false;
             let start = (!video.live)
                 .then(|| self.state.library.resume_position(&video.id))
                 .flatten();
-            player.load(&video.url(), start)
+            player.load_with_browser_session(&video.url(), start, signed_in)
+        } else if signed_in {
+            player.load_with_browser_session(
+                &video.url(),
+                Some(player.status().position.max(0.0)),
+                true,
+            )
         } else {
             player.reload(&video.url(), player.status().position.max(0.0), false)
         };

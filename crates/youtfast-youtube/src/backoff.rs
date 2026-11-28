@@ -131,6 +131,7 @@ impl RequestGate {
             generation,
             pending: true,
             probe,
+            intent,
         })
     }
 }
@@ -142,9 +143,14 @@ pub struct RequestPermit {
     generation: u64,
     pending: bool,
     probe: bool,
+    intent: RequestIntent,
 }
 
 impl RequestPermit {
+    pub fn intent(&self) -> RequestIntent {
+        self.intent
+    }
+
     pub fn is_probe(&self) -> bool {
         self.probe
     }

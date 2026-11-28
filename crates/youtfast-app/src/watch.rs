@@ -1,7 +1,7 @@
 //! The watch page: the video playing, its details and its comments.
 
 use super::*;
-use youtfast_youtube::backoff::RequestPermit;
+use youtfast_youtube::backoff::{RequestIntent, RequestPermit};
 
 const PLAYBACK_PROBE_TIMEOUT: Duration = Duration::from_secs(45);
 
@@ -49,6 +49,24 @@ impl PlaybackRequest {
             self.deadline = None;
         }
     }
+    fn failed(self, failure: mpv::Failure) -> RequestIntent {
+        let intent = self.permit.intent();
+        if playback_was_limited(failure) {
+            self.permit.limited(None);
+        } else if failure == mpv::Failure::AgeRestricted {
+            self.permit.success();
+        }
+        intent
+    }
+}
+
+pub(super) fn take_bot_check_retry(
+    bot_checked: &mut HashSet<String>,
+    video: &str,
+    permit: &RequestPermit,
+    player: &Mpv,
+) -> bool {
+    permit.is_probe() && player.has_browser_session() && bot_checked.remove(video)
 }
 
 impl State {
@@ -244,23 +262,24 @@ impl App {
                     }
                 }
                 mpv::Event::Failed(load, failure) => {
-                    if self
+                    let Some(request) = self
                         .playback_request
-                        .as_ref()
-                        .is_some_and(|request| request.load != load)
-                    {
+                        .take_if(|request| request.load == load)
+                    else {
                         continue;
-                    }
-                    if let Some(request) = self.playback_request.take()
-                        && playback_was_limited(failure)
+                    };
+                    let intent = request.failed(failure);
+                    if failure == mpv::Failure::BotCheck
+                        && let Some(video) = &self.state.watching
                     {
-                        request.permit.limited(None);
+                        self.bot_checked_videos.insert(video.id.clone());
                     }
-                    // A connection limit must not trigger another extraction.
+                    // Bot checks wait for a later explicit probe. An age
+                    // restriction already proved YouTube answered this probe.
                     let retried = matches!(
                         failure,
                         mpv::Failure::AgeRestricted | mpv::Failure::Unavailable
-                    ) && self.retry_signed_in_playback();
+                    ) && self.retry_signed_in_playback(intent);
                     if retried {
                         log::info!("refused signed out ({failure:?}); trying signed in");
                     } else {
@@ -501,8 +520,14 @@ impl App {
             }
             match admission.expect("playback admission requires a player") {
                 Ok(request) => {
+                    let signed_in = take_bot_check_retry(
+                        &mut self.bot_checked_videos,
+                        &video.id,
+                        &request,
+                        player,
+                    );
                     self.state.player_error = player
-                        .load(&video.url(), start)
+                        .load_with_browser_session(&video.url(), start, signed_in)
                         .err()
                         .map(|error| error.to_string());
                     self.playback_request = self.state.player_error.is_none().then(|| {
@@ -756,8 +781,11 @@ impl App {
         player.set_cookies_from_browser(browser);
     }
 
-    fn retry_signed_in_playback(&mut self) -> bool {
-        let Ok(request) = self.backend.begin_playback(false) else {
+    fn retry_signed_in_playback(&mut self, intent: RequestIntent) -> bool {
+        let Ok(request) = self
+            .backend
+            .begin_playback(intent == RequestIntent::UserInitiated)
+        else {
             return false;
         };
         let Some(player) = &mut self.player else {
@@ -1065,6 +1093,81 @@ mod tests {
             &mut player,
             deadline + PLAYBACK_PROBE_TIMEOUT
         ));
+    }
+
+    #[test]
+    fn only_an_admitted_probe_for_the_bot_checked_video_uses_the_browser() {
+        use youtfast_youtube::backoff::{RequestGate, Status};
+
+        let ctx = egui::Context::default();
+        let mut player = Mpv::new(&ctx, 1080, 0.0, Vec::new()).unwrap();
+        let gate = RequestGate::default();
+        let initial = gate.begin(RequestIntent::Background).unwrap();
+        let mut checked = HashSet::from(["synthetic"].map(str::to_owned));
+        player.set_cookies_from_browser(Some("firefox:synthetic".into()));
+        assert!(!take_bot_check_retry(
+            &mut checked,
+            "synthetic",
+            &initial,
+            &player
+        ));
+        initial.limited(None);
+        assert!(gate.begin(RequestIntent::UserInitiated).is_err());
+        assert!(checked.contains("synthetic"));
+        let Status::PausedUntil(now) = gate.status() else {
+            panic!("expected pause")
+        };
+        let probe = gate.begin_at(RequestIntent::UserInitiated, now).unwrap();
+        assert!(!take_bot_check_retry(
+            &mut checked,
+            "unrelated",
+            &probe,
+            &player
+        ));
+        player.set_cookies_from_browser(None);
+        assert!(!take_bot_check_retry(
+            &mut checked,
+            "synthetic",
+            &probe,
+            &player
+        ));
+        player.set_cookies_from_browser(Some("firefox:synthetic".into()));
+        assert!(take_bot_check_retry(
+            &mut checked,
+            "synthetic",
+            &probe,
+            &player
+        ));
+        assert!(!take_bot_check_retry(
+            &mut checked,
+            "synthetic",
+            &probe,
+            &player
+        ));
+    }
+
+    #[test]
+    fn age_restriction_completes_the_probe_and_carries_the_original_intent() {
+        use youtfast_youtube::backoff::{RequestGate, Status};
+
+        let ctx = egui::Context::default();
+        let gate = RequestGate::default();
+        gate.begin(RequestIntent::Background).unwrap().limited(None);
+        let Status::PausedUntil(now) = gate.status() else {
+            panic!("expected pause")
+        };
+        let probe = gate.begin_at(RequestIntent::UserInitiated, now).unwrap();
+        let request = PlaybackRequest::new(mpv::LoadId::default(), probe, now, &ctx);
+        let fallback_intent = request.failed(mpv::Failure::AgeRestricted);
+        assert_eq!(fallback_intent, RequestIntent::UserInitiated);
+        assert_eq!(gate.status(), Status::Ready);
+        assert!(!gate.begin_at(fallback_intent, now).unwrap().is_probe());
+        let background = gate.begin_at(RequestIntent::Background, now).unwrap();
+        let request = PlaybackRequest::new(mpv::LoadId::default(), background, now, &ctx);
+        assert_eq!(
+            request.failed(mpv::Failure::AgeRestricted),
+            RequestIntent::Background
+        );
     }
 
     #[test]

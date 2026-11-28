@@ -565,11 +565,38 @@ impl Mpv {
     /// only, which hand out little more than one 360p stream without a PO
     /// token. [`Mpv::retry_signed_in`] covers what needs the session.
     pub fn load(&mut self, url: &str, start: Option<f64>) -> Result<(), Error> {
+        self.load_with_browser_session(url, start, false)
+    }
+
+    pub fn has_browser_session(&self) -> bool {
+        self.cookies_from_browser.is_some()
+    }
+
+    /// Opens a fresh load using the configured browser session when requested.
+    pub fn load_with_browser_session(
+        &mut self,
+        url: &str,
+        start: Option<f64>,
+        signed_in: bool,
+    ) -> Result<(), Error> {
         self.current = Some((url.to_owned(), start));
-        self.signed_in = false;
-        match start {
-            Some(start) => self.load_with(url, &format!("start={start:.3}"))?,
-            None => self.replace(&["loadfile", url, "replace"])?,
+        self.signed_in = signed_in && self.has_browser_session();
+        match (
+            start,
+            self.cookies_from_browser
+                .as_deref()
+                .filter(|_| self.signed_in),
+        ) {
+            (start, Some(browser)) => self.load_with(
+                url,
+                &format!(
+                    "start={:.3},{}",
+                    start.unwrap_or(0.0),
+                    session_option(browser)
+                ),
+            )?,
+            (Some(start), None) => self.load_with(url, &format!("start={start:.3}"))?,
+            (None, None) => self.replace(&["loadfile", url, "replace"])?,
         }
         // Clear after `replace` drains earlier observations, so the previous
         // video's queued aspect cannot be applied to this load.
@@ -578,22 +605,16 @@ impl Mpv {
     }
 
     /// Loads the last video again through the browser's session, once,
-    /// after YouTube refused it signed out (a bot check, an age limit, a
-    /// private video). False when there is no session or it was tried.
+    /// after YouTube refused it signed out (an age limit or a private video). False when there is no session or it was tried.
     pub fn retry_signed_in(&mut self) -> Result<bool, Error> {
-        let (Some(browser), Some((url, start)), false) = (
-            self.cookies_from_browser.as_deref(),
+        let (true, Some((url, start)), false) = (
+            self.has_browser_session(),
             self.current.clone(),
             self.signed_in,
         ) else {
             return Ok(false);
         };
-        self.signed_in = true;
-        let mut options = format!("start={:.3}", start.unwrap_or(0.0));
-        options.push(',');
-        options.push_str(&session_option(browser));
-        self.load_with(&url, &options)?;
-        self.set_paused(false)?;
+        self.load_with_browser_session(&url, start, true)?;
         Ok(true)
     }
 
@@ -1418,6 +1439,24 @@ mod tests {
         assert!(!cover_art.has_video, "cover art is not a video picture");
 
         assert!(!Tracks::from_track_list("not json").has_video);
+    }
+
+    #[test]
+    fn an_explicit_browser_session_load_uses_signed_in_mode_only_when_configured() {
+        let _turn = instance_turn();
+        let mut player = Mpv::new(&egui::Context::default(), 1080, 0.0, Vec::new()).unwrap();
+        player
+            .load_with_browser_session("memory://synthetic", None, true)
+            .unwrap();
+        assert!(!player.signed_in);
+        player.set_cookies_from_browser(Some("synthetic-browser".into()));
+        player
+            .load_with_browser_session("memory://synthetic", None, true)
+            .unwrap();
+        assert!(player.signed_in);
+        assert!(!player.retry_signed_in().unwrap());
+        player.load("memory://synthetic", None).unwrap();
+        assert!(!player.signed_in);
     }
 
     #[test]
