@@ -1073,50 +1073,67 @@ async fn local_recommendations(
 
     let now = youtfast_core::util::now();
     let from_topics = seeds.is_empty();
-    let mut tasks = tokio::task::JoinSet::new();
-    if from_topics {
-        let mut queries = preferences.initial_queries().peekable();
-        if queries.peek().is_none() {
-            return Ok(Vec::new());
-        }
+    let (client, work): (_, Vec<_>) = if from_topics {
         // The opted-in topics are public searches, even when an account is active.
-        rp.check_paused().map_err(innertube::text)?;
-        let public = rp.public_client();
-        for (index, query) in queries.enumerate() {
-            let public = public.clone();
-            let query = query.to_owned();
-            let weight = 1.0 / (1.0 + index as f64 * 0.15);
-            tasks.spawn(async move {
-                let videos = innertube::search_filtered(
-                    &public,
-                    &query,
-                    innertube::SearchOptions::default(),
-                )
-                .await
-                .map(|(items, _)| match items {
-                    PageItems::Videos(mut videos) => {
-                        videos.truncate(25);
-                        videos
-                    }
-                    _ => Vec::new(),
-                });
-                (weight, videos)
-            });
-        }
+        (
+            rp.public_client(),
+            preferences
+                .initial_queries()
+                .enumerate()
+                .map(|(index, query)| (1.0 / (1.0 + index as f64 * 0.15), query.to_owned()))
+                .collect(),
+        )
     } else {
-        rp.check_paused().map_err(innertube::text)?;
-        for seed in seeds {
-            let rp = rp.clone();
-            tasks.spawn(async move {
-                let related = innertube::details(&rp, &seed.id)
-                    .await
-                    .map(|details| details.related);
-                (seed.weight, related)
-            });
-        }
+        (
+            rp.clone(),
+            seeds
+                .into_iter()
+                .map(|seed| (seed.weight, seed.id))
+                .collect(),
+        )
+    };
+    if work.is_empty() {
+        return Ok(Vec::new());
     }
+    rp.check_paused().map_err(innertube::text)?;
+    let lookup = |(weight, subject): (f64, String)| {
+        let client = client.clone();
+        async move {
+            let videos = if from_topics {
+                innertube::search_filtered(&client, &subject, innertube::SearchOptions::default())
+                    .await
+                    .map(|(items, _)| match items {
+                        PageItems::Videos(mut videos) => {
+                            videos.truncate(25);
+                            videos
+                        }
+                        _ => Vec::new(),
+                    })
+            } else {
+                innertube::details(&client, &subject)
+                    .await
+                    .map(|details| details.related)
+            };
+            (weight, videos)
+        }
+    };
     let mut related = Vec::new();
     let mut failure = None;
+    let mut work = work.into_iter();
+    if client.gate().status() != YouTubeRequestStatus::Ready
+        && let Some(first) = work.next()
+    {
+        let (weight, result) = lookup(first).await;
+        client.check_paused().map_err(innertube::text)?;
+        match result {
+            Ok(videos) => related.push((weight, videos)),
+            Err(error) => failure = Some(error),
+        }
+    }
+    let mut tasks = tokio::task::JoinSet::new();
+    for item in work {
+        tasks.spawn(lookup(item));
+    }
     while let Some(done) = tasks.join_next().await {
         match done {
             Ok((weight, Ok(videos))) => related.push((weight, videos)),

@@ -5,6 +5,7 @@
 //! written to disk or logs.
 
 use std::fmt;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -103,7 +104,7 @@ pub struct Client {
     http: reqwest::Client,
     no_redirect: reqwest::Client,
     gate: RequestGate,
-    intent: RequestIntent,
+    user_authorization: Option<Arc<AtomicBool>>,
     cookie: Arc<RwLock<Option<String>>>,
     visitor_data: Arc<RwLock<Option<String>>>,
 }
@@ -124,7 +125,7 @@ impl Client {
             http,
             no_redirect,
             gate,
-            intent: RequestIntent::Background,
+            user_authorization: None,
             cookie: Arc::new(RwLock::new(None)),
             visitor_data: Arc::new(RwLock::new(None)),
         })
@@ -140,7 +141,7 @@ impl Client {
 
     pub fn for_user_request(&self) -> Self {
         Self {
-            intent: RequestIntent::UserInitiated,
+            user_authorization: Some(Arc::new(AtomicBool::new(true))),
             ..self.clone()
         }
     }
@@ -153,8 +154,25 @@ impl Client {
         }
     }
 
+    fn intent(&self, consume: bool) -> RequestIntent {
+        let authorized = self.user_authorization.as_ref().is_some_and(|available| {
+            if consume {
+                available.swap(false, Ordering::Relaxed)
+            } else {
+                available.load(Ordering::Relaxed)
+            }
+        });
+        if authorized {
+            RequestIntent::UserInitiated
+        } else {
+            RequestIntent::Background
+        }
+    }
+
     fn begin_request(&self) -> Result<RequestPermit, Error> {
-        self.gate.begin(self.intent).map_err(|_| Error::RateLimited)
+        self.gate
+            .begin(self.intent(true))
+            .map_err(|_| Error::RateLimited)
     }
 
     pub fn check_paused(&self) -> Result<(), Error> {
@@ -162,7 +180,7 @@ impl Client {
         match self.gate.status() {
             Status::Ready => Ok(()),
             Status::PausedUntil(until)
-                if self.intent == RequestIntent::UserInitiated
+                if self.intent(false) == RequestIntent::UserInitiated
                     && std::time::Instant::now() >= until =>
             {
                 Ok(())
@@ -610,6 +628,20 @@ pub fn urlencoded(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn one_load_spends_one_probe_authorization_across_client_clones() {
+        let (rp, _proxy) = paused_client_with_local_proxy();
+        rp.gate().elapse_pause();
+        let user = rp.for_user_request();
+        let child = user.public_client().clone();
+        assert!(user.check_paused().is_ok());
+        let first = child.begin_request().unwrap();
+        assert!(first.is_probe());
+        drop(first);
+        assert_eq!(user.begin_request().err(), Some(Error::RateLimited));
+        assert!(rp.for_user_request().begin_request().is_ok());
+    }
 
     #[tokio::test]
     async fn an_open_circuit_prevents_recommendation_network_requests() {

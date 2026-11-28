@@ -101,6 +101,14 @@ impl RequestGate {
         result
     }
 
+    #[cfg(test)]
+    pub(crate) fn elapse_pause(&self) {
+        self.update(|circuit| {
+            assert!(matches!(circuit.status, Status::PausedUntil(_)));
+            circuit.status = Status::PausedUntil(Instant::now());
+        });
+    }
+
     pub fn status(&self) -> Status {
         *self.0.status.borrow()
     }

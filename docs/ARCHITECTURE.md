@@ -254,7 +254,10 @@ minutes, then caps the local backoff at 60 minutes; a longer `Retry-After`
 header wins.
 
 Once the deadline expires, an explicit search or listing refresh, video open
-or playback retry can claim the single probe. Autoplay, automatic refreshes,
+or playback retry can claim the single probe. A listing load and all its
+children share one authorization; RSS and local recommendation fan-out wait
+for the first probe to finish, then start the remaining requests only if the
+circuit is ready. Autoplay, automatic refreshes,
 suggestions, prefetch and auto-loaded watch panes never probe. A successful
 probe closes the circuit; an inconclusive or cancelled probe releases the
 slot for another deliberate attempt, not for background traffic. A playback

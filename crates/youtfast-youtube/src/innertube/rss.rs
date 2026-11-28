@@ -8,6 +8,14 @@ pub async fn fetch(client: &Client, channel_id: &str) -> Result<Vec<Video>, Erro
         "https://www.youtube.com/feeds/videos.xml?channel_id={}",
         super::client::urlencoded(channel_id)
     );
+    fetch_url(client, channel_id, url).await
+}
+
+pub(super) async fn fetch_url(
+    client: &Client,
+    channel_id: &str,
+    url: String,
+) -> Result<Vec<Video>, Error> {
     match client.get(&url).await {
         Ok((response, permit)) => {
             let videos = parse(&response.text().await?, channel_id)?;
