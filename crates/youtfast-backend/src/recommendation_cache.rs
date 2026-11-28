@@ -1,7 +1,6 @@
 //! In-memory candidate pages, before any local filtering or ranking.
 
 use std::collections::VecDeque;
-use std::future::Future;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -39,14 +38,7 @@ struct CandidatePage {
 }
 
 impl CandidatePages {
-    fn current(&self, key: &CandidateKey) -> bool {
-        !matches!(key, CandidateKey::Seed { epoch, .. } if *epoch != self.epoch)
-    }
-
     fn get(&self, key: &CandidateKey, now: Instant) -> Option<Vec<Video>> {
-        if !self.current(key) {
-            return None;
-        }
         self.pages
             .iter()
             .find(|page| &page.key == key && now.duration_since(page.stored_at) < CANDIDATE_TTL)
@@ -55,7 +47,7 @@ impl CandidatePages {
 
     fn insert(&mut self, key: CandidateKey, videos: Vec<Video>, now: Instant) {
         // An aborted old load may still be finishing when the epoch changes.
-        if !self.current(&key) {
+        if matches!(&key, CandidateKey::Seed { epoch, .. } if *epoch != self.epoch) {
             return;
         }
         self.pages
@@ -84,17 +76,8 @@ impl RecommendationCache {
         self.0.lock().unwrap().get(key, Instant::now())
     }
 
-    pub(super) async fn fetch_and_store<F: Future<Output = Result<Vec<Video>, String>>>(
-        &self,
-        key: CandidateKey,
-        fetch: impl FnOnce(CandidateKey) -> F,
-    ) -> Result<Vec<Video>, String> {
-        let videos = fetch(key.clone()).await?;
-        self.0
-            .lock()
-            .unwrap()
-            .insert(key, videos.clone(), Instant::now());
-        Ok(videos)
+    pub(super) fn store(&self, key: CandidateKey, videos: Vec<Video>) {
+        self.0.lock().unwrap().insert(key, videos, Instant::now());
     }
 }
 
@@ -168,53 +151,23 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn candidate_cache_clears_seeds_and_rejects_old_epoch_inserts() {
+    #[test]
+    fn candidate_cache_clears_seeds_and_rejects_old_epoch_inserts() {
         let cache = RecommendationCache::default();
         let old_seed = seed(0, "same");
         let new_seed = seed(1, "same");
         let topic = topic("cats", SearchDate::Any, SearchLength::Any);
         for key in [&old_seed, &topic] {
-            cache
-                .fetch_and_store(key.clone(), |_| std::future::ready(Ok(Vec::new())))
-                .await
-                .unwrap();
+            cache.store(key.clone(), Vec::new());
         }
         assert!(cache.get(&old_seed).is_some());
         cache.advance_session(1);
-        assert!(
-            cache
-                .0
-                .lock()
-                .unwrap()
-                .pages
-                .iter()
-                .all(|page| page.key != old_seed)
-        );
+        assert!(cache.get(&old_seed).is_none());
         assert!(cache.get(&topic).is_some());
         assert!(cache.get(&new_seed).is_none());
-        cache
-            .fetch_and_store(old_seed.clone(), |_| std::future::ready(Ok(Vec::new())))
-            .await
-            .unwrap();
-        assert_eq!(cache.0.lock().unwrap().pages.len(), 1);
-        cache
-            .fetch_and_store(new_seed.clone(), |_| std::future::ready(Ok(Vec::new())))
-            .await
-            .unwrap();
+        cache.store(old_seed.clone(), Vec::new());
+        assert!(cache.get(&old_seed).is_none());
+        cache.store(new_seed.clone(), Vec::new());
         assert!(cache.get(&new_seed).is_some());
-    }
-
-    #[tokio::test]
-    async fn candidate_cache_does_not_keep_errors() {
-        let cache = RecommendationCache::default();
-        let key = seed(0, "seed");
-        assert!(
-            cache
-                .fetch_and_store(key.clone(), |_| std::future::ready(Err("failed".into())))
-                .await
-                .is_err()
-        );
-        assert!(cache.get(&key).is_none());
     }
 }

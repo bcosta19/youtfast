@@ -1123,7 +1123,11 @@ impl CandidateLookup {
         match self.cache.get(&key) {
             Some(videos) => Ok(videos),
             None if self.cache_only => Ok(Vec::new()),
-            None => self.cache.fetch_and_store(key, fetch).await,
+            None => {
+                let videos = fetch(key.clone()).await?;
+                self.cache.store(key, videos.clone());
+                Ok(videos)
+            }
         }
     }
 }
@@ -2709,6 +2713,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn candidate_lookup_does_not_store_errors() {
+        let candidates = CandidateLookup::default();
+        let key = CandidateKey::Seed {
+            epoch: 0,
+            id: "seed".into(),
+        };
+        let result = candidates
+            .get_or_fetch(key.clone(), |_| std::future::ready(Err("failed".into())))
+            .await;
+        assert_eq!(result.unwrap_err(), "failed");
+        assert!(candidates.cache.get(&key).is_none());
+    }
+
+    #[tokio::test]
     async fn explicit_retry_fetches_an_uncached_fallback_after_it_failed() {
         use innertube::{SearchDate, SearchOptions};
 
@@ -2800,11 +2818,7 @@ mod tests {
         };
         candidates
             .cache
-            .fetch_and_store(fallback, |_| {
-                std::future::ready(Ok(vec![Video::from_id("cached_any".into())]))
-            })
-            .await
-            .unwrap();
+            .store(fallback, vec![Video::from_id("cached_any".into())]);
         let reranked = local_recommendations(
             &candidates,
             Vec::new(),
