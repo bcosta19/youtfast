@@ -405,6 +405,13 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                 if choices_changed {
                     actions.push(Action::SetRecommendations(next_choices));
                 }
+                ui.label(
+                    RichText::new(
+                        tr(locale, "Select a topic to fetch new videos that match this duration. History-based results are only filtered.").as_ref(),
+                    )
+                    .font(theme::regular(12.0))
+                    .color(state.palette.secondary),
+                );
                 ui.add_space(4.0);
 
                 let has_custom_text =
@@ -1063,6 +1070,11 @@ mod tests {
             },
             |ui| recommendation_controls(ui, &state, &mut Vec::new()),
         );
+        assert!(find_text_center(
+            &out.shapes,
+            "Select a topic to fetch new videos that match this duration. History-based results are only filtered.",
+        )
+        .is_some());
         let input_pos = find_text_center(&out.shapes, "rust").expect("interests text input");
         out.textures_delta.clear();
         for (step, pressed) in [true, false].into_iter().enumerate() {

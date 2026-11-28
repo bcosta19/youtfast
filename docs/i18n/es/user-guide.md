@@ -544,7 +544,10 @@ comas (hasta 300 caracteres por campo) y pulsa Intro o selecciona **Aplicar**.
 No se distingue entre mayúsculas y minúsculas: los temas seleccionados y los
 intereses personalizados favorecen títulos o nombres de canales coincidentes, y
 los términos silenciados ocultan los títulos coincidentes. El filtro de
-duración excluye los vídeos cuya duración se desconoce.
+duración excluye los vídeos cuya duración se desconoce. La duración solo filtra
+los vídeos existentes basados en el historial. Elige un tema (o activa la
+búsqueda de intereses personalizados) para obtener vídeos nuevos con la
+duración elegida.
 
 Con una sesión iniciada, las recomendaciones de YouTube siguen siendo la opción
 predeterminada. Activa **Usar la clasificación local en vez de las recomendaciones de YouTube**

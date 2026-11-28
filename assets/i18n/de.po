@@ -2361,3 +2361,6 @@ msgstr "Tonale Flächenabstufung mit Akzentfarbtönung und großzügig abgerunde
 
 msgid "Low-stimulation warm paper and ink tones designed for comfortable long reading sessions."
 msgstr "Reizarme warme Papier- und Tintentöne für angenehme lange Lese- und Sehsitzungen."
+
+msgid "Select a topic to fetch new videos that match this duration. History-based results are only filtered."
+msgstr "Wählen Sie ein Thema, um neue Videos mit dieser Dauer abzurufen. Ergebnisse aus dem Verlauf werden nur gefiltert."

@@ -2399,3 +2399,6 @@ msgstr "Elevação tonal de superfícies tingida pela cor de destaque com contê
 
 msgid "Low-stimulation warm paper and ink tones designed for comfortable long reading sessions."
 msgstr "Tons quentes de papel e tinta de baixo estímulo visual, pensados para sessões longas e confortáveis."
+
+msgid "Select a topic to fetch new videos that match this duration. History-based results are only filtered."
+msgstr "Selecione um tópico para buscar novos vídeos com essa duração. Os resultados baseados no histórico são apenas filtrados."

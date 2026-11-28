@@ -529,7 +529,9 @@ Enter ou selecione **Aplicar**. A busca por correspondências ignora maiúsculas
 e minúsculas: tópicos pré-selecionados e interesses personalizados favorecem
 títulos ou nomes de canais correspondentes, e termos silenciados ocultam
 títulos correspondentes. O filtro de duração exclui vídeos de duração
-desconhecida.
+desconhecida. A duração só filtra os vídeos já sugeridos com base no histórico.
+Selecione um tópico (ou ative a busca por interesses personalizados) para buscar
+novos vídeos com a duração escolhida.
 
 Com a conta conectada, as recomendações do YouTube continuam sendo o padrão;
 ative **Usar ranking local em vez das recomendações do YouTube** para aplicar

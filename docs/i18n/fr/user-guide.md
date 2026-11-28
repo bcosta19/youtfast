@@ -575,7 +575,10 @@ centres d’intérêt ou des termes masqués séparés par des virgules (jusqu�
 La casse est ignorée : les sujets choisis et les centres d’intérêt
 personnalisés favorisent les titres ou noms de chaînes correspondants, et les
 termes masqués cachent les titres correspondants. Le filtre de durée exclut
-les vidéos dont la durée est inconnue.
+les vidéos dont la durée est inconnue. La durée ne fait que filtrer les vidéos
+déjà proposées à partir de l’historique. Choisissez un sujet (ou activez la
+recherche de centres d’intérêt personnalisés) pour obtenir de nouvelles vidéos
+correspondant à la durée choisie.
 
 Lorsque vous êtes connecté, les recommandations YouTube restent la valeur par
 défaut. Activez **Utiliser le classement local au lieu des recommandations YouTube**

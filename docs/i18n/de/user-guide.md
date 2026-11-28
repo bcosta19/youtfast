@@ -555,7 +555,10 @@ Titelbegriffe durch Kommas getrennt einzugeben (bis zu 300 Zeichen pro Feld),
 und drücken Sie die Eingabetaste oder wählen Sie **Anwenden**. Groß- und
 Kleinschreibung spielt keine Rolle: gewählte Themen und eigene Interessen
 werten passende Titel oder Kanalnamen auf, stumme Begriffe blenden passende
-Titel aus. Der Dauerfilter schließt Videos mit unbekannter Dauer aus.
+Titel aus. Der Dauerfilter schließt Videos mit unbekannter Dauer aus. Die Dauer
+filtert nur vorhandene Vorschläge aus dem Verlauf. Wählen Sie ein Thema (oder
+erlauben Sie die Suche nach eigenen Interessen), um neue Vorschläge mit der
+gewählten Dauer abzurufen.
 
 Bei Anmeldung bleiben YouTube-Empfehlungen der Standard. Wählen Sie
 **Lokale Rangfolge statt YouTube-Empfehlungen verwenden**, um die Einstellungen

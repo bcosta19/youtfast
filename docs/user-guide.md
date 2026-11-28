@@ -472,7 +472,9 @@ history so one watched channel does not crowd out your chosen topics. Open
 title terms (up to 300 characters per field) and press Enter or select
 **Apply**. Matching ignores case: preset topics and custom interests boost
 matching titles or channel names, and muted terms hide matching titles. A
-duration filter excludes videos with unknown length.
+duration filter excludes videos with unknown length. Duration only filters
+existing history-based candidates. Select a topic (or opt in to a custom-interest
+search) to fetch new candidates matching the selected duration.
 
 When signed in, YouTube's recommendations remain the default; enable **Use
 local ranking instead of YouTube recommendations** to apply these settings to

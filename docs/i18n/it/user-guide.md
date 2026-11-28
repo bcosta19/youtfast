@@ -533,7 +533,9 @@ virgole (fino a 300 caratteri per campo) e premi Invio o seleziona **Applica**.
 Maiuscole e minuscole sono equivalenti: argomenti selezionati e interessi
 personalizzati favoriscono i titoli o i nomi dei canali corrispondenti, e i
 termini silenziati nascondono i titoli corrispondenti. Il filtro per durata
-esclude i video di durata sconosciuta.
+esclude i video di durata sconosciuta. La durata filtra solo i video già suggeriti
+in base alla cronologia. Scegli un argomento (o attiva la ricerca di interessi
+personalizzati) per trovare nuovi video della durata selezionata.
 
 Dopo l’accesso, i consigli di YouTube rimangono la scelta predefinita. Attiva
 **Usa la classifica locale invece dei consigli di YouTube** per applicare le
