@@ -195,7 +195,7 @@ pub fn rank_combined(
         rank_topics(topics, taste, preferences, &muted, &interests, now);
 
     if topic_ranked.is_empty() {
-        return history_ranked.into_iter().take(KEPT).collect();
+        return history_ranked;
     }
     if history_ranked.is_empty() {
         return finish_lane(topic_ranked, preferences.channels);
@@ -245,7 +245,7 @@ fn rank_history(
                 .or_insert((score, 0.0, video.clone()));
         }
     }
-    let mut ranked: Vec<(f64, Video)> = scores
+    let ranked: Vec<(f64, Video)> = scores
         .into_values()
         .map(|(best, extra, video)| {
             let base = best + 0.35 * extra;
@@ -255,11 +255,7 @@ fn rank_history(
             (base * mult, video)
         })
         .collect();
-    ranked.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.id.cmp(&b.1.id)));
-    finish_lane(
-        ranked.into_iter().map(|(_, video)| video).collect(),
-        preferences.channels,
-    )
+    finish_scored_lane(ranked, preferences.channels)
 }
 
 fn rank_topics(
@@ -274,7 +270,7 @@ fn rank_topics(
         .iter()
         .map(|videos| {
             let mut seen = HashSet::new();
-            let mut ranked: Vec<(f64, Video)> = videos
+            let ranked: Vec<(f64, Video)> = videos
                 .iter()
                 .enumerate()
                 .filter(|(_, video)| {
@@ -289,12 +285,7 @@ fn rank_topics(
                     (base * mult, video.clone())
                 })
                 .collect();
-            ranked.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.id.cmp(&b.1.id)));
-            finish_lane(
-                ranked.into_iter().map(|(_, video)| video).collect(),
-                preferences.channels,
-            )
-            .into()
+            finish_scored_lane(ranked, preferences.channels).into()
         })
         .collect();
     let active_topics = lanes.iter().filter(|lane| !lane.is_empty()).count();
@@ -317,6 +308,17 @@ fn rank_topics(
         }
     }
     (out, active_topics)
+}
+
+fn finish_scored_lane(
+    mut ranked: Vec<(f64, Video)>,
+    channels: RecommendationChannels,
+) -> Vec<Video> {
+    ranked.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.id.cmp(&b.1.id)));
+    finish_lane(
+        ranked.into_iter().map(|(_, video)| video).collect(),
+        channels,
+    )
 }
 
 fn finish_lane(mut ranked: Vec<Video>, channels: RecommendationChannels) -> Vec<Video> {
