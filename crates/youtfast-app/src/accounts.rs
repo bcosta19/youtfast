@@ -55,7 +55,7 @@ impl State {
         self.for_you = Listing::Idle;
         self.for_you_more = None;
         self.for_you_more_state = Fetch::Idle;
-        self.for_you_from_account = false;
+        self.for_you_source = None;
         self.page_playlists = Listing::Idle;
         self.channel_header = None;
         self.channel_about = Fetch::Idle;
@@ -122,6 +122,7 @@ impl App {
         self.set_playback_cookies(None);
         self.state.forget_account_data(self.backend.context());
         self.revoke_topic_search();
+        self.for_you_refresh = loading::ForYouRefresh::default();
         self.generations.clear();
         self.generation += 1;
         self.details_generation = self.generation;
@@ -327,7 +328,7 @@ mod tests {
             account_watch_later: Listing::Ready(vec![private.clone()]),
             liked: Listing::Ready(vec![private.clone()]),
             for_you: Listing::Ready(vec![private.clone()]),
-            for_you_from_account: true,
+            for_you_source: Some(Source::Account),
             page: Some(Page::Playlist {
                 id: "private-playlist".into(),
                 name: "Private".into(),
@@ -368,7 +369,7 @@ mod tests {
         assert!(matches!(state.account_watch_later, Listing::Idle));
         assert!(matches!(state.liked, Listing::Idle));
         assert!(matches!(state.for_you, Listing::Idle));
-        assert!(!state.for_you_from_account);
+        assert_eq!(state.for_you_source, None);
         assert!(state.page.is_none());
         assert!(matches!(state.page_videos, Listing::Idle));
         assert!(matches!(state.save_targets, Fetch::Idle));

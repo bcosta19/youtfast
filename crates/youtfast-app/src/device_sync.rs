@@ -167,7 +167,7 @@ impl App {
         }
         if outcome.subscriptions_changed
             || outcome.filters_changed
-            || (outcome.history_changed && !self.state.for_you_from_account)
+            || (outcome.history_changed && self.state.for_you_source != Some(Source::Account))
         {
             self.state.invalidate_local_for_you(&mut self.generations);
             self.load_visible_for_you();

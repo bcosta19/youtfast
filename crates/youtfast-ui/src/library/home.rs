@@ -9,7 +9,7 @@ use crate::{notifications, results, widgets};
 use youtfast_app::{AccountState, Action, State};
 use youtfast_appearance::icons::Icon;
 use youtfast_appearance::theme::{self, RADIUS};
-use youtfast_core::model::{FeedFilter, Fetch, Listing, Video, View};
+use youtfast_core::model::{FeedFilter, Fetch, Listing, Source, Video, View};
 use youtfast_core::util;
 use youtfast_storage::settings::{
     RecommendationChannels as Channels, RecommendationDuration as Duration,
@@ -232,7 +232,7 @@ fn for_you(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
             .as_ref(),
         ),
         Listing::Ready(_) => {
-            let source = if state.for_you_from_account {
+            let source = if state.for_you_source == Some(Source::Account) {
                 "Recommended by YouTube for your account"
             } else {
                 "Ranked on this device"
@@ -313,8 +313,7 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                     actions.push(Action::SetRecommendations(next));
                 }
             }
-            let local_fallback =
-                matches!(state.for_you, Listing::Ready(_)) && !state.for_you_from_account;
+            let local_fallback = state.for_you_source == Some(Source::Device);
             let local_active = !state.signed_in() || saved.prefer_local || local_fallback;
             let text_id = ui.id().with("recommendation text draft");
             let saved_text = (saved.interests.clone(), saved.muted.clone());
@@ -1034,11 +1033,32 @@ mod tests {
     }
 
     #[test]
+    fn signed_in_loading_device_fallback_keeps_local_topic_chips_enabled() {
+        let state = State {
+            account: AccountState::SignedIn(1),
+            for_you: Listing::Loading,
+            for_you_source: Some(Source::Device),
+            ..State::default()
+        };
+        let mut driver = RecommendationControlsDriver::new(&state);
+        let output = driver.open();
+        let chip =
+            find_text_center(&output.shapes, "Computing & Tech").expect("Computing & Tech chip");
+        driver.click(chip, 2.1);
+        assert_eq!(
+            driver.actions,
+            [Action::SetRecommendations(Recommendations {
+                topics: vec![RecommendationTopic::Computing],
+                ..Recommendations::default()
+            })]
+        );
+    }
+
+    #[test]
     fn signed_in_loading_account_feed_keeps_local_topic_chips_disabled() {
         let state = State {
             account: AccountState::SignedIn(1),
             for_you: Listing::Loading,
-            for_you_from_account: false,
             ..State::default()
         };
         let mut driver = RecommendationControlsDriver::new(&state);

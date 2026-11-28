@@ -183,8 +183,8 @@ pub struct State {
     pub for_you: Listing<Video>,
     pub for_you_more: Option<innertube::More>,
     pub for_you_more_state: Fetch<()>,
-    /// For you came from the account, not from this computer's history.
-    pub for_you_from_account: bool,
+    /// Source of the last For you result, retained during a local reload.
+    pub for_you_source: Option<Source>,
     /// When the feed last landed; one fresh enough already is the
     /// alerts check's answer.
     pub feed_loaded_at: Option<i64>,

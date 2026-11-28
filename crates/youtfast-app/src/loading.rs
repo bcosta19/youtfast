@@ -248,16 +248,22 @@ impl State {
             && previous.topic_queries(has_history) == preferences.topic_queries(has_history)
     }
 
+    fn should_request_account_for_you(&self, force: bool) -> bool {
+        self.signed_in()
+            && !self.settings.recommendations.prefer_local
+            && (force || self.for_you_source != Some(Source::Device))
+    }
+
     /// Account recommendations are filtered at display time. Keep their
     /// rows and generation together so an in-flight continuation can land.
     pub(super) fn invalidate_local_for_you(&mut self, generations: &mut HashMap<Slot, u64>) {
-        if self.for_you_from_account && matches!(self.for_you, Listing::Ready(_)) {
+        if self.for_you_source == Some(Source::Account) && matches!(self.for_you, Listing::Ready(_))
+        {
             return;
         }
         self.for_you = Listing::Idle;
         self.for_you_more = None;
         self.for_you_more_state = Fetch::Idle;
-        self.for_you_from_account = false;
         generations.remove(&Slot::ForYou);
     }
 
@@ -516,17 +522,17 @@ impl App {
     /// Asks for Home's For you: the account's when signed in, with this
     /// computer's history as the seeds either way, in case it has none.
     fn load_for_you(&mut self, force: bool) {
-        let cache_only =
-            !force && std::mem::take(&mut self.for_you_refresh).cache_only == Some(true);
-        self.for_you_refresh = ForYouRefresh::default();
+        let refresh = std::mem::take(&mut self.for_you_refresh);
+        let cache_only = !force && refresh.cache_only == Some(true);
         self.revoke_topic_search();
         let state = &self.state;
         let preferences = state.settings.recommendations.clone();
-        let account = state.signed_in() && !preferences.prefer_local;
+        let account = !cache_only && state.should_request_account_for_you(force);
         let seeds = youtfast_logic::recommend::seeds_for_library(&state.library);
         if seeds.is_empty() && !account && preferences.topic_queries(false).is_empty() {
             self.generations.remove(&Slot::ForYou);
             self.state.for_you = Listing::Ready(Vec::new());
+            self.state.for_you_source = Some(Source::Device);
             return;
         }
         let taste = youtfast_logic::recommend::taste_for_library(&state.library);
@@ -563,15 +569,23 @@ impl App {
         if self.state.settings.recommendations == preferences {
             return;
         }
+        let source_changed =
+            self.state.settings.recommendations.prefer_local != preferences.prefer_local;
         let cache_only = (self.for_you_refresh.cache_only.is_some()
-            || !matches!(self.state.for_you, Listing::Idle))
+            || self.state.for_you_source.is_some())
             && self.state.recommendation_edit_is_ranking_only(&preferences);
         self.revoke_topic_search();
         self.state.settings.recommendations = preferences;
         self.save_settings();
-        // A source switch must discard even a ready account feed.
-        self.state.for_you_from_account = false;
+        // A source switch must discard even a ready account feed. Other edits
+        // only affect device candidates, not the account's rows or continuation.
+        if source_changed {
+            self.state.for_you_source = None;
+        }
         self.state.invalidate_local_for_you(&mut self.generations);
+        if matches!(self.state.for_you, Listing::Ready(_)) {
+            return;
+        }
         self.for_you_refresh
             .schedule(ctx.input(|input| input.time), cache_only);
         ctx.request_repaint_after(ForYouRefresh::DELAY);
@@ -1012,7 +1026,11 @@ impl App {
             ) => {
                 state.for_you_more = more;
                 state.for_you_more_state = Fetch::Idle;
-                state.for_you_from_account = from_account;
+                state.for_you_source = Some(if from_account {
+                    Source::Account
+                } else {
+                    Source::Device
+                });
                 put(&mut state.for_you, Ok(videos));
             }
             (Slot::ForYou, Ok(Payload::More { items, more, .. })) => {
@@ -1243,6 +1261,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn signed_in_device_fallback_is_retained_until_an_explicit_account_probe() {
+        let mut state = State {
+            account: AccountState::SignedIn(1),
+            for_you: Listing::Ready(vec![Video::from_id("device-fallback".into())]),
+            for_you_source: Some(Source::Device),
+            ..State::default()
+        };
+        let mut preferences = state.settings.recommendations.clone();
+        preferences.muted = "promo".into();
+        assert!(state.recommendation_edit_is_ranking_only(&preferences));
+        let mut generations = HashMap::from([(Slot::ForYou, 1)]);
+        state.invalidate_local_for_you(&mut generations);
+        assert!(matches!(state.for_you, Listing::Idle));
+        assert!(!state.should_request_account_for_you(false));
+        assert!(state.should_request_account_for_you(true));
+
+        state.settings.recommendations.prefer_local = true;
+        assert!(!state.should_request_account_for_you(true));
+        state.settings.recommendations.prefer_local = false;
+        state.for_you_source = None;
+        assert!(state.should_request_account_for_you(false));
+    }
+
+    #[test]
     fn filter_changes_reset_local_and_pending_for_you_with_their_generation() {
         let mut state = State {
             for_you: Listing::Ready(vec![Video::from_id("old-ranking".into())]),
@@ -1254,11 +1296,11 @@ mod tests {
         assert!(!generations.contains_key(&Slot::ForYou));
 
         state.for_you = Listing::Loading;
-        state.for_you_from_account = true; // the previous result was from the account
+        state.for_you_source = Some(Source::Account); // the previous result was from the account
         generations.insert(Slot::ForYou, 2);
         state.invalidate_local_for_you(&mut generations);
         assert!(matches!(state.for_you, Listing::Idle));
-        assert!(!state.for_you_from_account);
+        assert_eq!(state.for_you_source, Some(Source::Account));
         assert!(!generations.contains_key(&Slot::ForYou));
     }
 
@@ -1266,7 +1308,7 @@ mod tests {
     fn accepted_import_preserves_account_pagination_but_invalidates_pending_local_loads() {
         let mut state = State {
             for_you: Listing::Ready(vec![Video::from_id("account".into())]),
-            for_you_from_account: true,
+            for_you_source: Some(Source::Account),
             for_you_more: Some(more("account-continuation")),
             for_you_more_state: Fetch::Loading,
             ..State::default()
@@ -1284,7 +1326,7 @@ mod tests {
         assert_eq!(generations.get(&Slot::ForYou), Some(&1));
 
         state.for_you = Listing::Loading;
-        state.for_you_from_account = false;
+        state.for_you_source = Some(Source::Device);
         generations.insert(Slot::ForYou, 2);
         assert!(state.accept_import(imported, (0, 1, 0), 2, 2, &mut generations));
         assert!(matches!(state.for_you, Listing::Idle));
