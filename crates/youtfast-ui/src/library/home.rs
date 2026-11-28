@@ -322,7 +322,6 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                 .data_mut(|data| data.get_temp::<((String, String), (String, String))>(text_id))
                 .filter(|(last_saved, _)| last_saved == &saved_text)
                 .map_or_else(|| saved_text.clone(), |(_, draft)| draft);
-            let mut reset_draft = false;
 
             ui.add_enabled_ui(local_active, |ui| {
                 ui.label(
@@ -365,9 +364,8 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                 ui.add_space(8.0);
 
                 let mut next_choices = saved.clone();
-                let mut choices_changed = false;
                 ui.horizontal_wrapped(|ui| {
-                    choices_changed |= recommendation_choice(
+                    recommendation_choice(
                         ui,
                         locale,
                         "Duration",
@@ -379,7 +377,7 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                             (Duration::Long, "Over 20 minutes"),
                         ],
                     );
-                    choices_changed |= recommendation_choice(
+                    recommendation_choice(
                         ui,
                         locale,
                         "Channels",
@@ -390,7 +388,7 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                             (Channels::Familiar, "Favor familiar channels"),
                         ],
                     );
-                    choices_changed |= recommendation_choice(
+                    recommendation_choice(
                         ui,
                         locale,
                         "Ranking priority",
@@ -402,7 +400,7 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                         ],
                     );
                 });
-                if choices_changed {
+                if &next_choices != saved {
                     actions.push(Action::SetRecommendations(next_choices));
                 }
                 ui.label(
@@ -478,12 +476,9 @@ fn recommendation_controls(ui: &mut Ui, state: &State, actions: &mut Vec<Action>
                 )
                 .clicked()
             {
-                reset_draft = true;
-                actions.push(Action::SetRecommendations(defaults));
-            }
-            if reset_draft {
                 interests_draft.clear();
                 muted_draft.clear();
+                actions.push(Action::SetRecommendations(defaults));
             }
             ui.data_mut(|data| {
                 data.insert_temp(text_id, (saved_text, (interests_draft, muted_draft)));
@@ -498,8 +493,7 @@ fn recommendation_choice<T: Copy + PartialEq>(
     label: &'static str,
     current: &mut T,
     choices: &[(T, &'static str)],
-) -> bool {
-    let before = *current;
+) {
     let selected = choices
         .iter()
         .find(|(value, _)| value == current)
@@ -511,7 +505,6 @@ fn recommendation_choice<T: Copy + PartialEq>(
                 ui.selectable_value(current, value, tr(locale, label));
             }
         });
-    *current != before
 }
 
 /// One card of the feed's grid.
