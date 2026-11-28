@@ -432,6 +432,20 @@ fn matches_keyword_boundary(text_lower: &str, keyword: &str) -> bool {
     false
 }
 
+/// Whether this search page can contribute any candidates to the ranker.
+pub fn has_eligible_candidates(
+    videos: &[Video],
+    taste: &Taste,
+    preferences: &Recommendations,
+) -> bool {
+    let muted: Vec<_> = recommendation_terms(&preferences.muted)
+        .map(str::to_lowercase)
+        .collect();
+    videos
+        .iter()
+        .any(|video| is_candidate(video, taste, preferences.duration, &muted))
+}
+
 fn is_candidate(
     video: &Video,
     taste: &Taste,
