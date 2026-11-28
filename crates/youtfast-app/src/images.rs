@@ -72,16 +72,17 @@ impl Cache {
             Err(reason) => {
                 let attempt = self.failed.get(url).map_or(0, |f| f.attempt)
                     + u32::from(*reason != Failure::Paused);
+                let retry_delay = reason.retry_delay(attempt);
                 self.failed.insert(
                     url.to_owned(),
                     Failed {
                         reason: *reason,
                         attempt,
-                        retry_at: reason.retry_delay(attempt).map(|delay| now + delay),
+                        retry_at: retry_delay.map(|delay| now + delay),
                         manual_after: now
                             + match reason {
                                 Failure::RateLimited(seconds) => (*seconds).max(30) as f64,
-                                Failure::Paused => reason.retry_delay(attempt).unwrap_or_default(),
+                                Failure::Paused => retry_delay.unwrap_or_default(),
                                 _ => 0.0,
                             },
                     },
