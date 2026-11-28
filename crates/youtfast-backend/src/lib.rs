@@ -22,6 +22,8 @@ use youtfast_storage::{account, backup, paths, takeout};
 use youtfast_youtube::innertube::{self, Client};
 
 mod protocol;
+mod recommendation_requests;
+use recommendation_requests::RecommendationRequests;
 mod sync;
 pub use protocol::{
     Command, CommentsKey, DeArrowConsent, Event, Payload, Request, SignInMethod, Slot,
@@ -84,6 +86,7 @@ struct Context {
     loads: Arc<std::sync::Mutex<HashMap<Slot, tokio::task::JoinHandle<()>>>>,
     /// Channel RSS answers kept a while (see `innertube::RssCache`).
     rss: Arc<innertube::RssCache>,
+    recommendation_requests: Arc<RecommendationRequests>,
     /// Thumbnails being downloaded to the disk cache; a URL goes in while
     /// its fetch runs so it is not fetched twice at once.
     thumb_pending: Arc<std::sync::Mutex<HashSet<String>>>,
@@ -140,6 +143,7 @@ impl Backend {
             account_writes: Arc::new(tokio::sync::Mutex::new(())),
             loads: Arc::new(std::sync::Mutex::new(HashMap::new())),
             rss: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            recommendation_requests: Arc::default(),
             thumb_pending: Arc::new(std::sync::Mutex::new(HashSet::new())),
             thumb_sem: Arc::new(tokio::sync::Semaphore::new(
                 youtfast_youtube::thumbs::DOWNLOADS,
@@ -1051,6 +1055,7 @@ fn relaxed_topic_search_options(
 
 async fn fetch_topic_videos(
     public: &Client,
+    requests: &RecommendationRequests,
     query: &str,
     options: innertube::SearchOptions,
     consent: &TopicSearchConsent,
@@ -1069,7 +1074,8 @@ async fn fetch_topic_videos(
         consent,
         |videos| youtfast_logic::recommend::has_eligible_candidates(videos, taste, preferences),
         |options| async move {
-            innertube::search_filtered(public, query, options)
+            requests
+                .fetch(innertube::search_filtered(public, query, options))
                 .await
                 .map(extract)
         },
@@ -1104,10 +1110,11 @@ enum LocalCandidateBatch {
     Topic(usize, Result<Vec<Video>, String>),
 }
 
-/// The seeds' related videos and any active topic searches, asked for together
-/// and ranked/interleaved. A failing source is skipped if any usable videos remain.
+/// The seeds' related videos and any active topic searches share a paced request
+/// budget. A failing source is skipped if any usable videos remain.
 async fn local_recommendations(
     rp: &Client,
+    requests: &Arc<RecommendationRequests>,
     seeds: Vec<youtfast_logic::recommend::Seed>,
     taste: youtfast_logic::recommend::Taste,
     preferences: &youtfast_storage::settings::Recommendations,
@@ -1134,12 +1141,14 @@ async fn local_recommendations(
                 let search_options = topic_search_options(preferences);
                 for (index, query) in queries.into_iter().enumerate() {
                     let public = public.clone();
+                    let requests = requests.clone();
                     let consent = topic_search_consent.clone();
                     let taste = taste.clone();
                     let preferences = preferences.clone();
                     tasks.spawn(async move {
                         let videos = fetch_topic_videos(
                             &public,
+                            &requests,
                             &query,
                             search_options,
                             &consent,
@@ -1158,8 +1167,10 @@ async fn local_recommendations(
     }
     for seed in seeds {
         let rp = rp.clone();
+        let requests = requests.clone();
         tasks.spawn(async move {
-            let related = innertube::details(&rp, &seed.id)
+            let related = requests
+                .fetch(innertube::details(&rp, &seed.id))
                 .await
                 .map(|details| details.related);
             LocalCandidateBatch::History(seed.weight, related)
@@ -1279,6 +1290,7 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
             Payload::ForYou {
                 videos: local_recommendations(
                     rp,
+                    &context.recommendation_requests,
                     seeds,
                     taste,
                     &preferences,
@@ -2168,6 +2180,7 @@ mod tests {
             account_writes: Arc::default(),
             loads: Arc::default(),
             rss: Arc::default(),
+            recommendation_requests: Arc::default(),
             thumb_pending: Arc::default(),
             thumb_sem: Arc::new(tokio::sync::Semaphore::new(
                 youtfast_youtube::thumbs::DOWNLOADS,

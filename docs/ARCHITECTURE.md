@@ -250,7 +250,10 @@ recommendations and their pagination. The backend supplies history-related
 candidates, public topic-search candidates (when preset topics are selected or
 custom-interest search is opted in, using a separate signed-out client and
 forwarding duration and recency options to YouTube search), and the current
-time; `youtfast-logic::recommend` filters, scores and interleaves history and
+time. Seed lookups, topic searches and their date fallbacks share a backend
+budget of three concurrent requests, with starts spaced by 200 ms. The existing
+account-feed request is separate from this local candidate budget.
+The pure `youtfast-logic::recommend` filters, scores and interleaves history and
 topic lanes without I/O or metadata lookups. The editor, settings sanitization
 and term parsing share the same character limit, and selected preset topics are
 deduplicated and bounded per refresh. Custom-interest searches require a separate
