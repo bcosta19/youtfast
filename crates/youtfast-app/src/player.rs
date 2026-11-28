@@ -392,7 +392,14 @@ impl App {
             player.reload(&video.url(), player.status().position.max(0.0), false)
         };
         self.state.player_error = result.err().map(|error| error.to_string());
-        self.playback_request = self.state.player_error.is_none().then_some(request);
+        self.playback_request = self.state.player_error.is_none().then(|| {
+            watch::PlaybackRequest::new(
+                player.load_id(),
+                request,
+                Instant::now(),
+                self.backend.context(),
+            )
+        });
     }
 
     pub(super) fn toggle_loop(&mut self) {

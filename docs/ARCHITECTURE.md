@@ -257,7 +257,8 @@ Once the deadline expires, an explicit search or listing refresh, video open
 or playback retry can claim the single probe. Autoplay, automatic refreshes,
 suggestions, prefetch and auto-loaded watch panes never probe. A successful
 probe closes the circuit; an inconclusive or cancelled probe releases the
-slot for another deliberate attempt, not for background traffic. A probe
+slot for another deliberate attempt, not for background traffic. A playback
+probe cancels its own mpv load after 45 seconds without a terminal result. A probe
 that hits the limit opens the circuit for the longer delay. The backend
 sends account-independent status events to the app; the views only render the
 notice, countdown and Retry availability from that state.

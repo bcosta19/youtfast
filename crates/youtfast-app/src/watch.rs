@@ -1,6 +1,55 @@
 //! The watch page: the video playing, its details and its comments.
 
 use super::*;
+use youtfast_youtube::backoff::RequestPermit;
+
+const PLAYBACK_PROBE_TIMEOUT: Duration = Duration::from_secs(45);
+
+pub(super) struct PlaybackRequest {
+    load: mpv::LoadId,
+    permit: RequestPermit,
+    deadline: Option<Instant>,
+}
+
+impl PlaybackRequest {
+    pub(super) fn new(
+        load: mpv::LoadId,
+        permit: RequestPermit,
+        now: Instant,
+        ctx: &egui::Context,
+    ) -> Self {
+        let deadline = permit.is_probe().then(|| {
+            ctx.request_repaint_after(PLAYBACK_PROBE_TIMEOUT);
+            now + PLAYBACK_PROBE_TIMEOUT
+        });
+        Self {
+            load,
+            permit,
+            deadline,
+        }
+    }
+
+    fn cancel_if_expired(request: &mut Option<Self>, player: &mut Mpv, now: Instant) -> bool {
+        let expired = request.as_ref().is_some_and(|request| {
+            request.load == player.load_id()
+                && request.deadline.is_some_and(|deadline| deadline <= now)
+        });
+        if expired {
+            if let Err(error) = player.stop() {
+                log::warn!("mpv: {error}");
+            }
+            *request = None;
+        }
+        expired
+    }
+
+    fn loaded(&mut self, load: mpv::LoadId) {
+        if self.load == load {
+            self.permit.mark_success();
+            self.deadline = None;
+        }
+    }
+}
 
 impl State {
     /// Hands over what the playing video plays from, leaving nothing.
@@ -149,12 +198,30 @@ impl App {
         let Some(player) = &mut self.player else {
             return;
         };
-        let elapsed = self.playback_tick.elapsed();
-        self.playback_tick = Instant::now();
+        let now = Instant::now();
+        if PlaybackRequest::cancel_if_expired(&mut self.playback_request, player, now) {
+            self.playback_deferred = true;
+            self.playback_report.cancel();
+            self.state.player_error = Some("The request timed out. Retry.".into());
+            if let Some(surface) = &self.surface {
+                surface.forget();
+            }
+        } else if let Some(deadline) = self
+            .playback_request
+            .as_ref()
+            .and_then(|request| request.deadline)
+        {
+            self.backend
+                .context()
+                .request_repaint_after(deadline.saturating_duration_since(now));
+        }
+        let elapsed = now.saturating_duration_since(self.playback_tick);
+        self.playback_tick = now;
         let events = player.poll();
         // yt-dlp's answer is there once a video has loaded.
         let json = events
-            .contains(&mpv::Event::Loaded)
+            .iter()
+            .any(|event| matches!(event, mpv::Event::Loaded(_)))
             .then(|| player.ytdl_json())
             .flatten();
         for event in events {
@@ -166,9 +233,9 @@ impl App {
                         self.state.settings.history_sync,
                     );
                 }
-                mpv::Event::Loaded => {
+                mpv::Event::Loaded(load) => {
                     if let Some(request) = &mut self.playback_request {
-                        request.mark_success();
+                        request.loaded(load);
                     }
                     self.state.player_error = None;
                     self.captions_pending = self.state.settings.captions.is_some();
@@ -176,11 +243,18 @@ impl App {
                         surface.allow_frames();
                     }
                 }
-                mpv::Event::Failed(failure) => {
+                mpv::Event::Failed(load, failure) => {
+                    if self
+                        .playback_request
+                        .as_ref()
+                        .is_some_and(|request| request.load != load)
+                    {
+                        continue;
+                    }
                     if let Some(request) = self.playback_request.take()
                         && playback_was_limited(failure)
                     {
-                        request.limited(None);
+                        request.permit.limited(None);
                     }
                     // A connection limit must not trigger another extraction.
                     let retried = matches!(
@@ -431,7 +505,14 @@ impl App {
                         .load(&video.url(), start)
                         .err()
                         .map(|error| error.to_string());
-                    self.playback_request = self.state.player_error.is_none().then_some(request);
+                    self.playback_request = self.state.player_error.is_none().then(|| {
+                        PlaybackRequest::new(
+                            player.load_id(),
+                            request,
+                            Instant::now(),
+                            self.backend.context(),
+                        )
+                    });
                 }
                 Err(message) => {
                     if let Err(error) = player.stop() {
@@ -679,13 +760,21 @@ impl App {
         let Ok(request) = self.backend.begin_playback(false) else {
             return false;
         };
-        let retried = self.player.as_mut().is_some_and(|player| {
-            player.retry_signed_in().unwrap_or_else(|error| {
-                log::warn!("mpv: {error}");
-                false
-            })
+        let Some(player) = &mut self.player else {
+            return false;
+        };
+        let retried = player.retry_signed_in().unwrap_or_else(|error| {
+            log::warn!("mpv: {error}");
+            false
         });
-        self.playback_request = retried.then_some(request);
+        self.playback_request = retried.then(|| {
+            PlaybackRequest::new(
+                player.load_id(),
+                request,
+                Instant::now(),
+                self.backend.context(),
+            )
+        });
         retried
     }
 
@@ -701,7 +790,12 @@ impl App {
             return;
         };
         self.playback_request = match player.reload(&video.url(), status.position, status.paused) {
-            Ok(()) => Some(request),
+            Ok(()) => Some(PlaybackRequest::new(
+                player.load_id(),
+                request,
+                Instant::now(),
+                self.backend.context(),
+            )),
             Err(error) => {
                 log::warn!("mpv: {error}");
                 None
@@ -928,6 +1022,50 @@ fn visible_videos(state: &State, opening: &Video) -> Vec<Video> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn playback_probe_timeout_cancels_its_load_without_resolving_a_newer_probe() {
+        use youtfast_youtube::backoff::{RequestGate, RequestIntent, Status};
+
+        let ctx = egui::Context::default();
+        let mut player = Mpv::new(&ctx, 1080, 0.0, Vec::new()).unwrap();
+        let gate = RequestGate::default();
+        gate.begin(RequestIntent::Background).unwrap().limited(None);
+        let pause = gate.status();
+        let Status::PausedUntil(now) = pause else {
+            panic!("expected pause")
+        };
+        let start_probe = |load, now| {
+            let permit = gate.begin_at(RequestIntent::UserInitiated, now).unwrap();
+            Some(PlaybackRequest::new(load, permit, now, &ctx))
+        };
+        let stale = player.load_id();
+        let mut first = start_probe(stale, now);
+        let deadline = now + PLAYBACK_PROBE_TIMEOUT;
+        assert!(!PlaybackRequest::cancel_if_expired(
+            &mut first,
+            &mut player,
+            now
+        ));
+        assert!(PlaybackRequest::cancel_if_expired(
+            &mut first,
+            &mut player,
+            deadline
+        ));
+        assert_ne!(player.load_id(), stale);
+        assert_eq!(gate.status(), pause);
+
+        let current = player.load_id();
+        let mut second = start_probe(current, deadline);
+        second.as_mut().unwrap().loaded(stale);
+        assert!(gate.status() == Status::Probing);
+        second.as_mut().unwrap().loaded(current);
+        assert_eq!(gate.status(), Status::Ready);
+        assert!(!PlaybackRequest::cancel_if_expired(
+            &mut second,
+            &mut player,
+            deadline + PLAYBACK_PROBE_TIMEOUT
+        ));
+    }
 
     #[test]
     fn mpv_bot_check_and_429_are_connection_limits_not_generic_playback_failures() {

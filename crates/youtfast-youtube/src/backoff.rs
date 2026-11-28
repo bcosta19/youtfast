@@ -110,11 +110,19 @@ impl RequestGate {
     }
 
     pub fn begin(&self, intent: RequestIntent) -> Result<RequestPermit, Paused> {
-        let generation = self.update(|circuit| circuit.begin(Instant::now(), intent))?;
+        self.begin_at(intent, Instant::now())
+    }
+
+    pub fn begin_at(&self, intent: RequestIntent, now: Instant) -> Result<RequestPermit, Paused> {
+        let (generation, probe) = self.update(|circuit| {
+            let generation = circuit.begin(now, intent)?;
+            Ok((generation, circuit.status == Status::Probing))
+        })?;
         Ok(RequestPermit {
             gate: self.clone(),
             generation,
             pending: true,
+            probe,
         })
     }
 }
@@ -125,9 +133,14 @@ pub struct RequestPermit {
     gate: RequestGate,
     generation: u64,
     pending: bool,
+    probe: bool,
 }
 
 impl RequestPermit {
+    pub fn is_probe(&self) -> bool {
+        self.probe
+    }
+
     pub fn success(mut self) {
         self.mark_success();
     }

@@ -211,11 +211,14 @@ impl Tracks {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LoadId(u64);
+
 /// Something the app acts on after [`Mpv::poll`].
 #[derive(Debug, PartialEq)]
 pub enum Event {
     /// The file loaded; playback may still be buffering.
-    Loaded,
+    Loaded(LoadId),
     /// Decoding started or resumed after a seek.
     Started,
     /// The video reached its end.
@@ -223,7 +226,7 @@ pub enum Event {
     /// Playback finished unloading to idle after [`Mpv::stop`].
     Idle,
     /// The video could not be opened or stopped with an error.
-    Failed(Failure),
+    Failed(LoadId, Failure),
 }
 
 /// Controlled categories from yt-dlp diagnostics and libmpv error codes.
@@ -360,6 +363,7 @@ pub struct Mpv {
     ytdl_failure: Option<Failure>,
     /// The identity and lifecycle of the current requested file.
     playback_events: PlaybackEvents,
+    load_id: LoadId,
     /// What [`Mpv::set_max_resolution`] last set.
     max_resolution: u32,
     /// The captions' languages yt-dlp is asked for (see [`raw_options`]).
@@ -533,6 +537,7 @@ impl Mpv {
             wakeup,
             ytdl_failure: None,
             playback_events: PlaybackEvents::default(),
+            load_id: LoadId::default(),
             max_resolution,
             captions,
             cookies_from_browser: None,
@@ -638,11 +643,16 @@ impl Mpv {
         }
     }
 
+    pub fn load_id(&self) -> LoadId {
+        self.load_id
+    }
+
     fn replace(&mut self, args: &[&str]) -> Result<(), Error> {
         // Consume earlier observations before changing the file. Later queued
         // events still have to pass the playlist-id gate below.
         let _ = self.poll();
         self.playback_events = PlaybackEvents::default();
+        self.load_id.0 += 1;
         self.ytdl_failure = None;
         self.at_end = false;
         self.status.idle = true;
@@ -907,7 +917,7 @@ impl Mpv {
                 ffi::MPV_EVENT_FILE_LOADED if self.playback_events.loaded() => {
                     self.status.idle = false;
                     self.ytdl_failure = None;
-                    events.push(Event::Loaded);
+                    events.push(Event::Loaded(self.load_id));
                 }
                 ffi::MPV_EVENT_PLAYBACK_RESTART
                     if self.playback_events.active && self.playback_events.loaded =>
@@ -935,7 +945,7 @@ impl Mpv {
                                 self.playback_events.loaded,
                                 self.ytdl_failure.take(),
                             );
-                            events.push(Event::Failed(failure));
+                            events.push(Event::Failed(self.load_id, failure));
                         }
                         _ => self.ytdl_failure = None,
                     }
@@ -1577,8 +1587,8 @@ mod tests {
         let outcome = 'wait: loop {
             for event in player.poll() {
                 match event {
-                    Event::Loaded => break 'wait Ok(()),
-                    Event::Failed(failure) => break 'wait Err(format!("{failure:?}")),
+                    Event::Loaded(_) => break 'wait Ok(()),
+                    Event::Failed(_, failure) => break 'wait Err(format!("{failure:?}")),
                     _ => {}
                 }
             }
@@ -1771,7 +1781,11 @@ mod tests {
             let deadline = Instant::now() + Duration::from_secs(10);
             let mut loaded = false;
             while Instant::now() < deadline {
-                if player.poll().contains(&Event::Loaded) {
+                if player
+                    .poll()
+                    .iter()
+                    .any(|event| matches!(event, Event::Loaded(_)))
+                {
                     loaded = true;
                 }
                 if loaded

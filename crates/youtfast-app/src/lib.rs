@@ -1254,7 +1254,7 @@ pub struct App {
     dirs: Dirs,
     /// `None` when mpv could not start; `state.player_error` says why.
     player: Option<Mpv>,
-    playback_request: Option<youtfast_youtube::backoff::RequestPermit>,
+    playback_request: Option<watch::PlaybackRequest>,
     playback_deferred: bool,
     surface: Option<VideoSurface>,
     /// Bumped by every request; each slot remembers its latest, so a late
