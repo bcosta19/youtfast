@@ -915,95 +915,6 @@ mod tests {
         assert_eq!(actions, [Action::SetHideWatched(false)]);
     }
 
-    #[test]
-    fn clicking_a_preset_topic_chip_applies_recommendations_immediately() {
-        let ctx = egui::Context::default();
-        youtfast_appearance::theme::install_fonts(&ctx);
-        let state = State::default();
-
-        // First expand the Local recommendation settings header.
-        let mut header_pos = None;
-        let mut output = ctx.run_ui(
-            egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
-                ..Default::default()
-            },
-            |ui| recommendation_controls(ui, &state, &mut Vec::new()),
-        );
-        for shape in &output.shapes {
-            if let egui::Shape::Text(text) = &shape.shape
-                && text.galley.text() == "Local recommendation settings"
-            {
-                header_pos = Some(Rect::from_min_size(text.pos, text.galley.size()).center());
-            }
-        }
-        output.textures_delta.clear();
-        let header_pos = header_pos.expect("Local recommendation settings header");
-        for pressed in [true, false] {
-            let mut out = ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
-                    events: vec![
-                        egui::Event::PointerMoved(header_pos),
-                        egui::Event::PointerButton {
-                            pos: header_pos,
-                            button: egui::PointerButton::Primary,
-                            pressed,
-                            modifiers: egui::Modifiers::NONE,
-                        },
-                    ],
-                    ..Default::default()
-                },
-                |ui| recommendation_controls(ui, &state, &mut Vec::new()),
-            );
-            out.textures_delta.clear();
-        }
-
-        // Locate the "Computing & Tech" topic chip and click it.
-        let mut chip_pos = None;
-        let mut output = ctx.run_ui(
-            egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
-                ..Default::default()
-            },
-            |ui| recommendation_controls(ui, &state, &mut Vec::new()),
-        );
-        for shape in &output.shapes {
-            if let egui::Shape::Text(text) = &shape.shape
-                && text.galley.text() == "Computing & Tech"
-            {
-                chip_pos = Some(Rect::from_min_size(text.pos, text.galley.size()).center());
-            }
-        }
-        output.textures_delta.clear();
-        let pos = chip_pos.expect("Computing & Tech topic chip");
-        let mut actions = Vec::new();
-        for pressed in [true, false] {
-            let mut out = ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
-                    events: vec![
-                        egui::Event::PointerMoved(pos),
-                        egui::Event::PointerButton {
-                            pos,
-                            button: egui::PointerButton::Primary,
-                            pressed,
-                            modifiers: egui::Modifiers::NONE,
-                        },
-                    ],
-                    ..Default::default()
-                },
-                |ui| recommendation_controls(ui, &state, &mut actions),
-            );
-            out.textures_delta.clear();
-        }
-        let expected = Recommendations {
-            topics: vec![RecommendationTopic::Computing],
-            ..Recommendations::default()
-        };
-        assert_eq!(actions, [Action::SetRecommendations(expected)]);
-    }
-
     fn find_text_center(shapes: &[egui::epaint::ClippedShape], needle: &str) -> Option<egui::Pos2> {
         fn visit(shape: &egui::Shape, needle: &str) -> Option<egui::Pos2> {
             match shape {
@@ -1021,193 +932,42 @@ mod tests {
             .find_map(|clipped| visit(&clipped.shape, needle))
     }
 
-    #[test]
-    fn enter_in_custom_interests_submits_and_keeps_apply_button_rendered() {
-        let ctx = egui::Context::default();
-        youtfast_appearance::theme::install_fonts(&ctx);
-        let mut state = State::default();
-        state.settings.recommendations.interests = "rust".into();
-
-        // Expand Local recommendation settings (Custom interests opens by default because interests is nonempty).
-        let mut out = ctx.run_ui(
-            egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
-                time: Some(0.0),
-                ..Default::default()
-            },
-            |ui| recommendation_controls(ui, &state, &mut Vec::new()),
-        );
-        let header_pos =
-            find_text_center(&out.shapes, "Local recommendation settings").expect("header");
-        out.textures_delta.clear();
-        for (step, pressed) in [true, false].into_iter().enumerate() {
-            let mut out = ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
-                    time: Some(0.1 * (step as f64 + 1.0)),
-                    events: vec![
-                        egui::Event::PointerMoved(header_pos),
-                        egui::Event::PointerButton {
-                            pos: header_pos,
-                            button: egui::PointerButton::Primary,
-                            pressed,
-                            modifiers: egui::Modifiers::NONE,
-                        },
-                    ],
-                    ..Default::default()
-                },
-                |ui| recommendation_controls(ui, &state, &mut Vec::new()),
-            );
-            out.textures_delta.clear();
-        }
-
-        // Let the collapsing animation settle so the nested custom-filters TextEdit is fully open.
-        let mut out = ctx.run_ui(
-            egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
-                time: Some(2.0),
-                ..Default::default()
-            },
-            |ui| recommendation_controls(ui, &state, &mut Vec::new()),
-        );
-        assert!(find_text_center(
-            &out.shapes,
-            "Select a topic to fetch new videos that match this duration. History-based results are only filtered.",
-        )
-        .is_some());
-        let input_pos = find_text_center(&out.shapes, "rust").expect("interests text input");
-        out.textures_delta.clear();
-        for (step, pressed) in [true, false].into_iter().enumerate() {
-            let mut out = ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
-                    time: Some(2.1 + 0.1 * step as f64),
-                    events: vec![
-                        egui::Event::PointerMoved(input_pos),
-                        egui::Event::PointerButton {
-                            pos: input_pos,
-                            button: egui::PointerButton::Primary,
-                            pressed,
-                            modifiers: egui::Modifiers::NONE,
-                        },
-                    ],
-                    ..Default::default()
-                },
-                |ui| recommendation_controls(ui, &state, &mut Vec::new()),
-            );
-            out.textures_delta.clear();
-        }
-        let mut out = ctx.run_ui(
-            egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
-                time: Some(2.4),
-                events: vec![egui::Event::Text(", linux".into())],
-                ..Default::default()
-            },
-            |ui| recommendation_controls(ui, &state, &mut Vec::new()),
-        );
-        out.textures_delta.clear();
-
-        let mut actions = Vec::new();
-        let mut out = ctx.run_ui(
-            egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
-                time: Some(2.5),
-                events: vec![egui::Event::Key {
-                    key: egui::Key::Enter,
-                    physical_key: None,
-                    pressed: true,
-                    repeat: false,
-                    modifiers: egui::Modifiers::NONE,
-                }],
-                ..Default::default()
-            },
-            |ui| recommendation_controls(ui, &state, &mut actions),
-        );
-        let has_apply = find_text_center(&out.shapes, "Apply").is_some();
-        out.textures_delta.clear();
-        assert!(
-            has_apply,
-            "Apply button must still render on the Enter frame"
-        );
-        assert_eq!(actions.len(), 1);
-        let Action::SetRecommendations(updated) = &actions[0] else {
-            panic!("expected SetRecommendations");
-        };
-        assert!(updated.interests.contains("linux"));
+    struct RecommendationControlsDriver<'a> {
+        ctx: egui::Context,
+        state: &'a State,
+        actions: Vec<Action>,
     }
 
-    #[test]
-    fn signed_in_loading_account_feed_keeps_local_topic_chips_disabled() {
-        let ctx = egui::Context::default();
-        youtfast_appearance::theme::install_fonts(&ctx);
-        let state = State {
-            account: AccountState::SignedIn(1),
-            for_you: Listing::Loading,
-            for_you_from_account: false,
-            ..State::default()
-        };
-
-        let mut header_pos = None;
-        let mut out = ctx.run_ui(
-            egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
-                ..Default::default()
-            },
-            |ui| recommendation_controls(ui, &state, &mut Vec::new()),
-        );
-        for shape in &out.shapes {
-            if let egui::Shape::Text(text) = &shape.shape
-                && text.galley.text() == "Local recommendation settings"
-            {
-                header_pos = Some(Rect::from_min_size(text.pos, text.galley.size()).center());
+    impl<'a> RecommendationControlsDriver<'a> {
+        fn new(state: &'a State) -> Self {
+            let ctx = egui::Context::default();
+            youtfast_appearance::theme::install_fonts(&ctx);
+            Self {
+                ctx,
+                state,
+                actions: Vec::new(),
             }
         }
-        out.textures_delta.clear();
-        let header_pos = header_pos.expect("header");
-        for pressed in [true, false] {
-            let mut out = ctx.run_ui(
+
+        fn frame(&mut self, time: f64, events: Vec<egui::Event>) -> egui::FullOutput {
+            let mut output = self.ctx.run_ui(
                 egui::RawInput {
                     screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
-                    events: vec![
-                        egui::Event::PointerMoved(header_pos),
-                        egui::Event::PointerButton {
-                            pos: header_pos,
-                            button: egui::PointerButton::Primary,
-                            pressed,
-                            modifiers: egui::Modifiers::NONE,
-                        },
-                    ],
+                    time: Some(time),
+                    events,
                     ..Default::default()
                 },
-                |ui| recommendation_controls(ui, &state, &mut Vec::new()),
+                |ui| recommendation_controls(ui, self.state, &mut self.actions),
             );
-            out.textures_delta.clear();
+            output.textures_delta.clear();
+            output
         }
 
-        let mut chip_pos = None;
-        let mut out = ctx.run_ui(
-            egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
-                ..Default::default()
-            },
-            |ui| recommendation_controls(ui, &state, &mut Vec::new()),
-        );
-        for shape in &out.shapes {
-            if let egui::Shape::Text(text) = &shape.shape
-                && text.galley.text() == "Computing & Tech"
-            {
-                chip_pos = Some(Rect::from_min_size(text.pos, text.galley.size()).center());
-            }
-        }
-        out.textures_delta.clear();
-        let pos = chip_pos.expect("Computing & Tech chip");
-        let mut actions = Vec::new();
-        for pressed in [true, false] {
-            let mut out = ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))),
-                    events: vec![
+        fn click(&mut self, pos: egui::Pos2, time: f64) {
+            for (step, pressed) in [true, false].into_iter().enumerate() {
+                self.frame(
+                    time + step as f64 * 0.1,
+                    vec![
                         egui::Event::PointerMoved(pos),
                         egui::Event::PointerButton {
                             pos,
@@ -1216,14 +976,85 @@ mod tests {
                             modifiers: egui::Modifiers::NONE,
                         },
                     ],
-                    ..Default::default()
-                },
-                |ui| recommendation_controls(ui, &state, &mut actions),
-            );
-            out.textures_delta.clear();
+                );
+            }
         }
+
+        fn open(&mut self) -> egui::FullOutput {
+            let output = self.frame(0.0, vec![]);
+            let header = find_text_center(&output.shapes, "Local recommendation settings")
+                .expect("Local recommendation settings header");
+            self.click(header, 0.1);
+            // Let both headers settle, including Custom interests when open by default.
+            self.frame(2.0, vec![])
+        }
+    }
+
+    #[test]
+    fn clicking_a_preset_topic_chip_applies_recommendations_immediately() {
+        let state = State::default();
+        let mut driver = RecommendationControlsDriver::new(&state);
+        let output = driver.open();
+        let chip =
+            find_text_center(&output.shapes, "Computing & Tech").expect("Computing & Tech chip");
+        driver.click(chip, 2.1);
+        let expected = Recommendations {
+            topics: vec![RecommendationTopic::Computing],
+            ..Recommendations::default()
+        };
+        assert_eq!(driver.actions, [Action::SetRecommendations(expected)]);
+    }
+
+    #[test]
+    fn enter_in_custom_interests_submits_and_keeps_apply_button_rendered() {
+        let mut state = State::default();
+        state.settings.recommendations.interests = "rust".into();
+        let mut driver = RecommendationControlsDriver::new(&state);
+        let output = driver.open();
+        assert!(find_text_center(
+            &output.shapes,
+            "Select a topic to fetch new videos that match this duration. History-based results are only filtered.",
+        )
+        .is_some());
+        let input = find_text_center(&output.shapes, "rust").expect("interests text input");
+        driver.click(input, 2.1);
+        driver.frame(2.4, vec![egui::Event::Text(", linux".into())]);
+        let output = driver.frame(
+            2.5,
+            vec![egui::Event::Key {
+                key: egui::Key::Enter,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
         assert!(
-            actions.is_empty(),
+            find_text_center(&output.shapes, "Apply").is_some(),
+            "Apply button must still render on the Enter frame"
+        );
+        assert_eq!(driver.actions.len(), 1);
+        let Action::SetRecommendations(updated) = &driver.actions[0] else {
+            panic!("expected SetRecommendations");
+        };
+        assert!(updated.interests.contains("linux"));
+    }
+
+    #[test]
+    fn signed_in_loading_account_feed_keeps_local_topic_chips_disabled() {
+        let state = State {
+            account: AccountState::SignedIn(1),
+            for_you: Listing::Loading,
+            for_you_from_account: false,
+            ..State::default()
+        };
+        let mut driver = RecommendationControlsDriver::new(&state);
+        let output = driver.open();
+        let chip =
+            find_text_center(&output.shapes, "Computing & Tech").expect("Computing & Tech chip");
+        driver.click(chip, 2.1);
+        assert!(
+            driver.actions.is_empty(),
             "disabled chip must not emit SetRecommendations while account feed is loading"
         );
     }
