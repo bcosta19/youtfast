@@ -257,10 +257,10 @@ The backend keeps up to 64 successful, unranked candidate pages in memory
 for 30 minutes, evicting the oldest first. Seed pages are keyed by video ID
 and session epoch and cleared on account changes. Signed-out topic pages are
 keyed by query and search options (including duration and date), and are only
-used for currently authorized queries. With fresh cached candidates, local
-ranking changes do not start network requests; adding a topic fetches only its
-missing pages. A cached Month page that local filters reject can use a cached
-Any-time page, but cannot trigger a network fallback. The account-feed request
+used for currently authorized queries. Local ranking changes use cached candidates only. Explicit loads, including
+Retry and topic changes, can fetch missing pages. If local filters reject a
+cached Month page, a ranking-only load can use a cached Any-time page, and
+an explicit load can fetch that fallback if it is missing. The account-feed request
 still runs first in account mode, independently of the local budget and cache.
 The pure `youtfast-logic::recommend` filters, scores and interleaves history and
 topic lanes without I/O or metadata lookups. The editor, settings sanitization

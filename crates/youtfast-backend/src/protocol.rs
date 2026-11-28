@@ -146,6 +146,8 @@ pub enum Request {
     /// it has some, else the seeds' related videos ranked by the taste.
     ForYou {
         account: bool,
+        /// Local ranking edits must not fetch any missing candidate pages.
+        cache_only: bool,
         seeds: Vec<youtfast_logic::recommend::Seed>,
         taste: youtfast_logic::recommend::Taste,
         preferences: youtfast_storage::settings::Recommendations,

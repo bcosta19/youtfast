@@ -45,7 +45,7 @@ mod tests {
 
     #[tokio::test]
     async fn revoked_topic_search_waiting_for_a_turn_never_starts() {
-        use crate::{RecommendationCache, TopicSearchConsent, search_topic_pages};
+        use crate::{CandidateLookup, TopicSearchConsent, search_topic_pages};
         use youtfast_youtube::innertube::SearchOptions;
 
         let requests = RecommendationRequests::default();
@@ -55,9 +55,9 @@ mod tests {
             .await
             .unwrap();
         let consent = TopicSearchConsent::granted();
-        let cache = RecommendationCache::default();
+        let candidates = CandidateLookup::default();
         let search = search_topic_pages(
-            &cache,
+            &candidates,
             "synthetic",
             SearchOptions::default(),
             &consent,

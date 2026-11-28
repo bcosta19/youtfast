@@ -233,6 +233,21 @@ impl State {
         true
     }
 
+    fn recommendation_edit_is_ranking_only(
+        &self,
+        preferences: &youtfast_storage::settings::Recommendations,
+    ) -> bool {
+        use youtfast_storage::settings::RecommendationPriority::Recent;
+
+        let previous = &self.settings.recommendations;
+        let has_history = youtfast_logic::recommend::has_eligible_history(&self.library);
+        previous.prefer_local == preferences.prefer_local
+            && previous.duration == preferences.duration
+            && (previous.priority == Recent) == (preferences.priority == Recent)
+            && previous.topics == preferences.topics
+            && previous.topic_queries(has_history) == preferences.topic_queries(has_history)
+    }
+
     /// Account recommendations are filtered at display time. Keep their
     /// rows and generation together so an in-flight continuation can land.
     pub(super) fn invalidate_local_for_you(&mut self, generations: &mut HashMap<Slot, u64>) {
@@ -297,23 +312,27 @@ impl ForYouTopicSearch {
 }
 
 #[derive(Default)]
-pub(super) struct ForYouRefresh(Option<f64>);
+pub(super) struct ForYouRefresh {
+    deadline: Option<f64>,
+    cache_only: Option<bool>,
+}
 
 impl ForYouRefresh {
     const DELAY: Duration = Duration::from_millis(600);
 
-    fn schedule(&mut self, now: f64) {
-        self.0 = Some(now + Self::DELAY.as_secs_f64());
+    fn schedule(&mut self, now: f64, cache_only: bool) {
+        self.deadline = Some(now + Self::DELAY.as_secs_f64());
+        self.cache_only = Some(self.cache_only.unwrap_or(true) && cache_only);
     }
 
     fn pending(&self) -> bool {
-        self.0.is_some()
+        self.deadline.is_some()
     }
 
     fn remaining(&mut self, now: f64) -> Option<Duration> {
-        let seconds = self.0? - now;
+        let seconds = self.deadline? - now;
         if seconds <= 0.0 {
-            self.0 = None;
+            self.deadline = None;
             return Some(Duration::ZERO);
         }
         Some(Duration::from_secs_f64(seconds))
@@ -347,7 +366,7 @@ impl App {
             }
             View::Home if force || stale(&state.feed) || stale(&state.for_you) => {
                 if force || (!self.for_you_refresh.pending() && stale(&state.for_you)) {
-                    self.load_for_you();
+                    self.load_for_you(force);
                 }
                 if !force && !stale(&self.state.feed) {
                     self.ask_shelf();
@@ -496,7 +515,9 @@ impl App {
 
     /// Asks for Home's For you: the account's when signed in, with this
     /// computer's history as the seeds either way, in case it has none.
-    fn load_for_you(&mut self) {
+    fn load_for_you(&mut self, force: bool) {
+        let cache_only =
+            !force && std::mem::take(&mut self.for_you_refresh).cache_only == Some(true);
         self.for_you_refresh = ForYouRefresh::default();
         self.revoke_topic_search();
         let state = &self.state;
@@ -514,6 +535,7 @@ impl App {
             Slot::ForYou,
             Request::ForYou {
                 account,
+                cache_only,
                 seeds,
                 taste,
                 preferences,
@@ -541,13 +563,17 @@ impl App {
         if self.state.settings.recommendations == preferences {
             return;
         }
+        let cache_only = (self.for_you_refresh.cache_only.is_some()
+            || !matches!(self.state.for_you, Listing::Idle))
+            && self.state.recommendation_edit_is_ranking_only(&preferences);
         self.revoke_topic_search();
         self.state.settings.recommendations = preferences;
         self.save_settings();
         // A source switch must discard even a ready account feed.
         self.state.for_you_from_account = false;
         self.state.invalidate_local_for_you(&mut self.generations);
-        self.for_you_refresh.schedule(ctx.input(|input| input.time));
+        self.for_you_refresh
+            .schedule(ctx.input(|input| input.time), cache_only);
         ctx.request_repaint_after(ForYouRefresh::DELAY);
     }
 
@@ -575,7 +601,7 @@ impl App {
             && self.state.feed_filter == FeedFilter::ForYou
             && matches!(self.state.for_you, Listing::Idle)
         {
-            self.load_for_you();
+            self.load_for_you(false);
         }
     }
 
@@ -1319,16 +1345,62 @@ mod tests {
     }
 
     #[test]
+    fn recommendation_ranking_edits_do_not_change_candidate_requests() {
+        use youtfast_storage::settings::{
+            RecommendationDuration, RecommendationPriority, RecommendationTopic, Recommendations,
+        };
+
+        let state = State::default();
+        let baseline = state.settings.recommendations.clone();
+        assert!(state.recommendation_edit_is_ranking_only(&Recommendations {
+            priority: RecommendationPriority::FewerViews,
+            interests: "local boost".into(),
+            muted: "promo".into(),
+            ..baseline.clone()
+        }));
+        for edit in [
+            Recommendations {
+                prefer_local: true,
+                ..baseline.clone()
+            },
+            Recommendations {
+                duration: RecommendationDuration::Long,
+                ..baseline.clone()
+            },
+            Recommendations {
+                priority: RecommendationPriority::Recent,
+                ..baseline.clone()
+            },
+            Recommendations {
+                topics: vec![RecommendationTopic::Science],
+                ..baseline.clone()
+            },
+            Recommendations {
+                search_interests: true,
+                interests: "public query".into(),
+                ..baseline
+            },
+        ] {
+            assert!(!state.recommendation_edit_is_ranking_only(&edit));
+        }
+    }
+
+    #[test]
     fn for_you_refresh_waits_for_a_pause_and_fires_once() {
         let mut refresh = ForYouRefresh::default();
         assert_eq!(refresh.remaining(0.0), None);
-        refresh.schedule(0.0);
+        refresh.schedule(0.0, false);
         assert_eq!(refresh.remaining(0.0), Some(ForYouRefresh::DELAY));
-        refresh.schedule(0.4);
+        refresh.schedule(0.4, true);
         assert!(refresh.remaining(0.6).is_some_and(|delay| !delay.is_zero()));
         assert!(refresh.pending());
         assert_eq!(refresh.remaining(1.0), Some(Duration::ZERO));
         assert!(!refresh.pending());
+        assert_eq!(
+            refresh.cache_only,
+            Some(false),
+            "explicit intent survives the debounce"
+        );
         assert_eq!(refresh.remaining(2.0), None);
     }
 
