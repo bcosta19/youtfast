@@ -4,10 +4,10 @@
 //! losing them only costs a fetch.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
-use crate::backoff::{RequestGate, RequestIntent, Status};
+use crate::backoff::{RequestGate, RequestIntent};
 
 /// How many thumbnails stay before the oldest are pruned at startup.
 const KEEP: usize = 2000;
@@ -69,11 +69,11 @@ impl Failure {
     }
 }
 
-/// Regular thumbnails have separate per-image retries. Only a 429 from
-/// their own CDN makes them share a pause; storyboard sprites always do.
+/// CDN throttling pauses image misses without turning an image-only error
+/// into a pause of playback or the data API.
 #[derive(Default)]
 pub struct YouTubeDownloads {
-    cdn_limited: AtomicBool,
+    cdn_deadline: Mutex<Option<Instant>>,
 }
 
 impl YouTubeDownloads {
@@ -83,33 +83,53 @@ impl YouTubeDownloads {
         url: &str,
         download: impl FnOnce() -> Result<T, Failure>,
     ) -> Result<T, Failure> {
+        self.fetch_with_clock(gate, url, Instant::now, download)
+    }
+
+    fn fetch_with_clock<T>(
+        &self,
+        gate: &RequestGate,
+        url: &str,
+        now: impl Fn() -> Instant,
+        download: impl FnOnce() -> Result<T, Failure>,
+    ) -> Result<T, Failure> {
         let parsed = url::Url::parse(url).ok();
-        let cdn = parsed.as_ref().and_then(url::Url::host_str) == Some("i.ytimg.com");
-        let storyboard = parsed.as_ref().is_some_and(|url| {
-            matches!(url.host_str(), Some("i.ytimg.com" | "i9.ytimg.com"))
-                && url.path().starts_with("/sb/")
-        });
-        let permit = if storyboard {
-            Some(
-                gate.begin(RequestIntent::Background)
-                    .map_err(|_| Failure::Paused)?,
-            )
-        } else {
-            if cdn && self.cdn_limited.load(Ordering::Relaxed) && gate.status() != Status::Ready {
-                return Err(Failure::Paused);
-            }
-            None
-        };
+        let cdn = parsed
+            .as_ref()
+            .and_then(url::Url::host_str)
+            .is_some_and(|host| {
+                host == "ytimg.com"
+                    || host.ends_with(".ytimg.com")
+                    || matches!(
+                        host,
+                        "yt3.ggpht.com"
+                            | "yt3.googleusercontent.com"
+                            | "yt4.ggpht.com"
+                            | "yt4.googleusercontent.com"
+                    )
+            });
+        if !cdn {
+            return download();
+        }
+        if self
+            .cdn_deadline
+            .lock()
+            .unwrap()
+            .is_some_and(|deadline| deadline > now())
+        {
+            return Err(Failure::Paused);
+        }
+        let _permit = gate
+            .begin(RequestIntent::Background)
+            .map_err(|_| Failure::Paused)?;
         let result = download();
         if let Err(Failure::RateLimited(seconds)) = result {
-            if cdn {
-                self.cdn_limited.store(true, Ordering::Relaxed);
-            }
-            if let Some(permit) = permit {
-                permit.limited(Some(Duration::from_secs(seconds)));
-            }
-        } else if result.is_ok() && cdn && gate.status() == Status::Ready {
-            self.cdn_limited.store(false, Ordering::Relaxed);
+            let now = now();
+            let until = now
+                .checked_add(Duration::from_secs(seconds.max(30)))
+                .unwrap_or(now + Duration::from_secs(30));
+            let mut deadline = self.cdn_deadline.lock().unwrap();
+            *deadline = (*deadline).max(Some(until));
         }
         result
     }
@@ -360,31 +380,58 @@ mod tests {
     }
 
     #[test]
-    fn a_paused_circuit_blocks_storyboard_sprites_and_a_cdn_that_also_returned_429() {
-        let thumbnails = YouTubeDownloads::default();
+    fn a_paused_circuit_blocks_uncached_youtube_images_but_not_other_images() {
+        let downloads = YouTubeDownloads::default();
         let gate = RequestGate::default();
-        let thumb = "https://i.ytimg.com/vi/synthetic/mqdefault.jpg";
-        let sprite = "https://i.ytimg.com/sb/synthetic/M1.jpg";
-        let avatar = "https://yt3.ggpht.com/synthetic";
         gate.begin(RequestIntent::Background).unwrap().limited(None);
+        for url in [
+            "https://i.ytimg.com/vi/synthetic/mqdefault.jpg",
+            "https://i9.ytimg.com/sb/synthetic/M1.jpg",
+            "https://yt3.ggpht.com/synthetic",
+            "https://yt3.googleusercontent.com/synthetic",
+        ] {
+            assert_eq!(
+                downloads.fetch::<()>(&gate, url, || panic!("CDN request during pause")),
+                Err(Failure::Paused)
+            );
+        }
         assert_eq!(
-            thumbnails.fetch(&gate, sprite, || -> Result<(), Failure> {
-                panic!("sprite downloaded during cooldown")
-            }),
-            Err(Failure::Paused)
+            downloads.fetch(&gate, "https://example.invalid/image", || Ok(())),
+            Ok(())
         );
+        assert_eq!(Failure::Paused.retry_delay(3), Some(30.0));
+    }
+
+    #[test]
+    fn a_cdn_429_shares_its_retry_after_without_opening_the_main_circuit() {
+        let downloads = YouTubeDownloads::default();
+        let gate = RequestGate::default();
+        let now = Instant::now();
+        let thumbnail = "https://i.ytimg.com/vi/synthetic/mqdefault.jpg";
+        let avatar = "https://yt3.ggpht.com/synthetic";
         assert_eq!(
-            thumbnails.fetch::<()>(&gate, thumb, || Err(Failure::RateLimited(180))),
+            downloads.fetch_with_clock::<()>(
+                &gate,
+                thumbnail,
+                || now,
+                || Err(Failure::RateLimited(180))
+            ),
             Err(Failure::RateLimited(180))
         );
+        assert!(gate.begin(RequestIntent::Background).is_ok());
         assert_eq!(
-            thumbnails.fetch(&gate, thumb, || -> Result<(), Failure> {
-                panic!("limited CDN downloaded during cooldown")
-            }),
+            downloads.fetch_with_clock::<()>(
+                &gate,
+                avatar,
+                || now + Duration::from_secs(179),
+                || panic!("CDN deadline ignored")
+            ),
             Err(Failure::Paused)
         );
-        assert_eq!(thumbnails.fetch(&gate, avatar, || Ok(())), Ok(()));
-        assert_eq!(Failure::Paused.retry_delay(3), Some(30.0));
+        assert_eq!(
+            downloads.fetch_with_clock(&gate, avatar, || now + Duration::from_secs(180), || Ok(())),
+            Ok(())
+        );
     }
 
     #[test]

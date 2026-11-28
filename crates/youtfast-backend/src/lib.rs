@@ -267,6 +267,10 @@ impl Backend {
             .map_err(|_| youtfast_core::privacy::YOUTUBE_RATE_LIMITED)
     }
 
+    pub fn youtube_gate(&self) -> &RequestGate {
+        &self.youtube_gate
+    }
+
     pub fn context(&self) -> &egui::Context {
         &self.waker
     }
@@ -2063,7 +2067,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn kept_thumbnails_answer_while_downloads_hold_every_turn() {
+    async fn kept_thumbnails_answer_during_a_pause_while_downloads_hold_every_turn() {
         let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("kept-thumbnail-turns-{}", std::process::id()));
@@ -2108,6 +2112,12 @@ mod tests {
             dearrow_sem: Arc::new(tokio::sync::Semaphore::new(DEARROW_LOOKUPS)),
             sync: sync::SyncManager::default(),
         };
+        context
+            .rp
+            .gate()
+            .begin(RequestIntent::Background)
+            .unwrap()
+            .limited(None);
         // Slow downloads hold every turn.
         let _turns = context
             .thumb_sem

@@ -263,10 +263,12 @@ that hits the limit opens the circuit for the longer delay. The backend
 sends account-independent status events to the app; the views only render the
 notice, countdown and Retry availability from that state.
 
-Storyboard sprite downloads obey the same pause. Ordinary thumbnails keep
-their own backoff; `i.ytimg.com` cache misses also pause if that CDN has
-returned a 429 and the shared circuit is not ready. Cache hits are never
-paused, and unrelated services such as GitHub release checks are unaffected.
+Thumbnails, avatars and storyboard sprites on YouTube's CDN obey the main
+pause on cache misses. A CDN 429 starts a separate shared deadline for CDN
+misses, honoring `Retry-After`, so an image-only throttle doesn't stop video
+or listing requests. Cache hits are never paused. Lounge HTTP requests use the
+main gate without probing; local DIAL and Google Cast controls and unrelated
+services such as GitHub release checks are unaffected.
 
 ## Local recommendations
 

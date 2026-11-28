@@ -152,6 +152,10 @@ impl RequestPermit {
         self.pending = false;
     }
 
+    pub fn limited_from_header(self, value: Option<&str>) {
+        self.limited(value.and_then(|value| retry_after(value, jiff::Timestamp::now())));
+    }
+
     pub fn limited(mut self, retry_after: Option<Duration>) {
         self.gate.update(|circuit| {
             circuit.limited(self.generation, Instant::now(), retry_after);

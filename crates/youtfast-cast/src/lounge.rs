@@ -6,6 +6,7 @@
 use std::time::Duration;
 
 use serde_json::Value;
+use youtfast_youtube::backoff::{RequestGate, RequestIntent};
 
 use super::{Control, Error, Sponsor};
 
@@ -40,6 +41,7 @@ impl Status {
 }
 
 pub struct Session {
+    gate: RequestGate,
     client: reqwest::Client,
     screen: String,
     token: String,
@@ -53,7 +55,7 @@ pub struct Session {
 }
 
 impl Session {
-    pub async fn connect(screen: &str) -> Result<Self, Error> {
+    pub async fn connect(screen: &str, gate: &RequestGate) -> Result<Self, Error> {
         let client = youtfast_youtube::innertube::http()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(5))
@@ -61,6 +63,7 @@ impl Session {
             .build()
             .map_err(|_| Error::Unavailable)?;
         let mut session = Self {
+            gate: gate.clone(),
             client,
             screen: screen.to_owned(),
             token: String::new(),
@@ -80,6 +83,7 @@ impl Session {
     /// on YouTube's side; the TV keeps playing meanwhile.
     async fn bind(&mut self) -> Result<(), Error> {
         let data = fetch(
+            &self.gate,
             self.client
                 .post(format!("{BASE}/pairing/get_lounge_token_batch"))
                 .form(&[("screen_ids", self.screen.as_str())]),
@@ -107,6 +111,7 @@ impl Session {
             ("loungeIdToken", self.token.clone()),
         ];
         let data = fetch(
+            &self.gate,
             self.client
                 .post(format!("{BASE}/bc/bind"))
                 .query(&query)
@@ -160,6 +165,7 @@ impl Session {
                 .map(|(key, value)| (format!("req0_{key}"), value.clone())),
         );
         let data = fetch(
+            &self.gate,
             self.client
                 .post(format!("{BASE}/bc/bind"))
                 .query(&self.query())
@@ -190,6 +196,7 @@ impl Session {
             ("v", "2".into()),
         ]);
         let data = fetch(
+            &self.gate,
             self.client
                 .post(format!("{BASE}/bc/bind"))
                 .query(&query)
@@ -396,7 +403,7 @@ impl Session {
 
 /// Exchanges the code shown under the TV's "Link with TV code" for its screen
 /// and name. Neither is saved; the code itself is used once.
-pub async fn link(code: &str) -> Result<(String, String), Error> {
+pub async fn link(code: &str, gate: &RequestGate) -> Result<(String, String), Error> {
     let code: String = code
         .chars()
         .filter(|c| !c.is_whitespace() && *c != '-')
@@ -411,6 +418,7 @@ pub async fn link(code: &str) -> Result<(String, String), Error> {
         .build()
         .map_err(|_| Error::Unavailable)?;
     let data = fetch(
+        gate,
         client
             .post(format!("{BASE}/pairing/get_screen"))
             .form(&[("pairing_code", code.as_str())]),
@@ -486,7 +494,10 @@ fn packets(mut bytes: &[u8]) -> Result<Vec<Value>, Error> {
     Ok(packets)
 }
 
-async fn fetch(request: reqwest::RequestBuilder) -> Result<Vec<u8>, Error> {
+async fn fetch(gate: &RequestGate, request: reqwest::RequestBuilder) -> Result<Vec<u8>, Error> {
+    let permit = gate
+        .begin(RequestIntent::Background)
+        .map_err(|_| Error::YouTubePaused)?;
     let mut response = request
         .header("Origin", "https://www.youtube.com")
         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36")
@@ -504,6 +515,15 @@ async fn fetch(request: reqwest::RequestBuilder) -> Result<Vec<u8>, Error> {
         })?;
     #[cfg(test)]
     eprintln!("Lounge response status: {}", response.status().as_u16());
+    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        permit.limited_from_header(
+            response
+                .headers()
+                .get("retry-after")
+                .and_then(|value| value.to_str().ok()),
+        );
+        return Err(Error::YouTubePaused);
+    }
     if matches!(response.status().as_u16(), 400 | 401 | 403 | 404) {
         return Err(Error::ConnectionExpired);
     }
@@ -531,6 +551,42 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn lounge_429_honors_retry_after_and_subsequent_requests_do_not_connect() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use youtfast_youtube::backoff::Status as GateStatus;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let gate = RequestGate::default();
+        let client = youtfast_youtube::innertube::http()
+            .no_proxy()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .unwrap();
+        let started = std::time::Instant::now();
+        let serve = async {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut data = [0; 1024];
+            assert_ne!(socket.read(&mut data).await.unwrap(), 0);
+            socket.write_all(b"HTTP/1.1 429 Too Many Requests\r\nRetry-After: 180\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
+        };
+        let (first, ()) = tokio::join!(fetch(&gate, client.post(&url)), serve);
+        assert_eq!(first, Err(Error::YouTubePaused));
+        assert!(
+            matches!(gate.status(), GateStatus::PausedUntil(until) if until >= started + Duration::from_secs(180))
+        );
+        assert_eq!(
+            fetch(&gate, client.post(&url)).await,
+            Err(Error::YouTubePaused)
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), listener.accept())
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
     async fn tv_codes_are_checked_before_any_request() {
         for code in [
             "",
@@ -539,7 +595,11 @@ mod tests {
             "abcd efgh ijkl",
             "1234-5678-901x",
         ] {
-            assert_eq!(link(code).await.err(), Some(Error::InvalidCode), "{code}");
+            assert_eq!(
+                link(code, &RequestGate::default()).await.err(),
+                Some(Error::InvalidCode),
+                "{code}"
+            );
         }
     }
 
@@ -615,6 +675,7 @@ mod tests {
     fn playback_confirmation_requires_an_actual_tv_event_not_just_a_successful_post() {
         let client = youtfast_youtube::innertube::http().build().unwrap();
         let mut session = Session {
+            gate: RequestGate::default(),
             client,
             screen: String::new(),
             token: String::new(),

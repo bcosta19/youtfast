@@ -351,7 +351,7 @@ impl super::App {
             return;
         };
         if self.cast_worker.is_none() {
-            match Worker::start(ctx.clone()) {
+            match Worker::start(ctx.clone(), self.backend.youtube_gate().clone()) {
                 Ok(worker) => self.cast_worker = Some(worker),
                 Err(error) => {
                     self.state.cast.failed_to_send(error);
