@@ -274,7 +274,7 @@ impl App {
         self.load(self.state.view, true);
         self.forget_account_marks();
         if let Some(video) = self.state.watching.clone() {
-            self.refresh_details(video);
+            self.refresh_details(video, false);
         }
     }
 
@@ -306,7 +306,7 @@ impl App {
         self.load(self.state.view, true);
         self.forget_account_marks();
         if let Some(video) = self.state.watching.clone() {
-            self.refresh_details(video);
+            self.refresh_details(video, false);
         }
     }
 }

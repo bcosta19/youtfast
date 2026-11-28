@@ -1762,7 +1762,7 @@ impl App {
                 self.state.search_query = text.to_owned();
                 self.state.record_recent_search(text);
                 self.state.view = View::Results;
-                self.load(View::Results, true);
+                self.load_explicitly(View::Results);
             }
             Action::Open(video) => self.open(video),
             Action::OpenVideoTab(video) => self.state.video_tabs.add(video),
@@ -1864,17 +1864,17 @@ impl App {
                 self.open_page(ctx, View::Playlist, Page::Playlist { id, name });
             }
             Action::Refresh => {
-                self.load(self.state.view, true);
+                self.load_explicitly(self.state.view);
                 // On the watch page, Refresh also re-requests the details.
                 if self.state.view == View::Watch
                     && let Some(video) = self.state.watching.clone()
                 {
-                    self.refresh_details(video);
+                    self.refresh_details(video, true);
                 }
             }
             Action::SetSearchOptions(options) => {
                 self.state.search_options = options;
-                self.load(View::Results, true);
+                self.load_explicitly(View::Results);
             }
             Action::SetChannelOrder(order) => {
                 self.state.channel_order = order;

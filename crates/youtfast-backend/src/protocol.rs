@@ -224,12 +224,14 @@ pub enum Command {
         slot: Slot,
         generation: u64,
         request: Request,
+        allow_probe: bool,
     },
     /// The watch page's metadata, description, chapters and the comments'
     /// first token.
     LoadDetails {
         generation: u64,
         id: String,
+        allow_probe: bool,
     },
     /// The alerts timer: 0 turns it off, a number of minutes restarts it.
     SetAlertsEvery(u32),

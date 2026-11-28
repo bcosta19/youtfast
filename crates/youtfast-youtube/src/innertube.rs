@@ -64,7 +64,15 @@ pub fn client() -> Result<Client, Error> {
 /// reached Google, every request failed. Without the platform verifier,
 /// reqwest's own (the native roots) is kept.
 pub fn http() -> reqwest::ClientBuilder {
-    let builder = reqwest::ClientBuilder::new();
+    let default_redirects = reqwest::redirect::Policy::default();
+    let builder =
+        reqwest::ClientBuilder::new().redirect(reqwest::redirect::Policy::custom(move |attempt| {
+            if client::is_sorry(attempt.url()) {
+                attempt.stop()
+            } else {
+                default_redirects.redirect(attempt)
+            }
+        }));
     match platform_tls() {
         Some(config) => builder.use_preconfigured_tls(config),
         None => builder,
@@ -92,10 +100,7 @@ fn platform_tls() -> Option<rustls::ClientConfig> {
 pub fn is_signed_out(error: &Error) -> bool {
     match error {
         Error::Auth(_) | Error::HttpStatus(401, _) => true,
-        Error::HttpStatus(403, message) => {
-            let message = message.to_lowercase();
-            !(message.contains("bot") || message.contains("rate") || message.contains("quota"))
-        }
+        Error::HttpStatus(403, message) => !client::limiting_status(403, message),
         _ => false,
     }
 }

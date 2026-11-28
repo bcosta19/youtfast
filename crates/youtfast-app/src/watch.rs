@@ -430,6 +430,7 @@ impl App {
             None => self.backend.send(Command::LoadDetails {
                 generation: self.details_generation,
                 id,
+                allow_probe: false,
             }),
         }
     }
@@ -444,11 +445,12 @@ impl App {
     }
 
     /// Asks again for the details of the video being watched.
-    pub(super) fn refresh_details(&mut self, video: Video) {
+    pub(super) fn refresh_details(&mut self, video: Video, allow_probe: bool) {
         self.reset_watch_panes();
         self.backend.send(Command::LoadDetails {
             generation: self.details_generation,
             id: video.id,
+            allow_probe,
         });
     }
 

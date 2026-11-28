@@ -201,7 +201,7 @@ impl Backend {
                             for (_, task) in context.loads.lock().unwrap().drain() {
                                 task.abort();
                             }
-                            match innertube::client() {
+                            match Client::with_gate(innertube::http(), context.rp.gate().clone()) {
                                 Ok(client) => context.rp = client,
                                 Err(_) => {
                                     innertube::sign_out(&context.rp).await;
@@ -446,9 +446,13 @@ async fn handle(command: Command, context: Context) {
             slot,
             generation,
             request,
+            allow_probe,
         } => {
             let worker = context.clone();
-            let loader = context.clone();
+            let mut loader = context.clone();
+            if allow_probe {
+                loader.rp = loader.rp.for_user_request();
+            }
             log::debug!("loading {slot:?} started");
             let deadline = deadline_of(&request);
             let task = tokio::spawn(async move {
@@ -482,8 +486,17 @@ async fn handle(command: Command, context: Context) {
                 result,
             });
         }
-        Command::LoadDetails { generation, id } => {
-            let result = innertube::details(&context.rp, &id).await;
+        Command::LoadDetails {
+            generation,
+            id,
+            allow_probe,
+        } => {
+            let rp = if allow_probe {
+                context.rp.for_user_request()
+            } else {
+                context.rp.clone()
+            };
+            let result = innertube::details(&rp, &id).await;
             if let Err(error) = &result {
                 log::warn!("loading the details of {id} failed: {error}");
             }
@@ -1029,8 +1042,8 @@ async fn local_recommendations(
             return Ok(Vec::new());
         }
         // The opted-in topics are public searches, even when an account is active.
-        let public =
-            Client::default_client().map_err(|_| "Could not start topic search".to_owned())?;
+        rp.check_paused().map_err(innertube::text)?;
+        let public = rp.public_client();
         for (index, query) in queries.enumerate() {
             let public = public.clone();
             let query = query.to_owned();
@@ -1053,6 +1066,7 @@ async fn local_recommendations(
             });
         }
     } else {
+        rp.check_paused().map_err(innertube::text)?;
         for seed in seeds {
             let rp = rp.clone();
             tasks.spawn(async move {
@@ -1141,6 +1155,9 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
                         });
                     }
                     Ok(_) => log::info!("the account has no recommendations; making some here"),
+                    Err(error) if error == youtfast_core::privacy::YOUTUBE_RATE_LIMITED => {
+                        return Err(error);
+                    }
                     Err(error) => log::warn!("the account's recommendations failed: {error}"),
                 }
             }
@@ -1164,6 +1181,7 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
             }
         }
         Request::Shorts { channels } => {
+            rp.check_paused().map_err(text)?;
             Payload::Videos(innertube::channel_shorts(rp, channels, 6).await)
         }
         Request::Alerts { channels, account } => {
@@ -1498,6 +1516,7 @@ mod tests {
             backend.send(Command::Load {
                 slot: Slot::Search,
                 generation: 42,
+                allow_probe: true,
                 request: Request::Search {
                     query: "Consulta sintética".into(),
                     options,
@@ -1508,6 +1527,7 @@ mod tests {
                 Command::Load {
                     slot,
                     generation,
+                    allow_probe: true,
                     request:
                         Request::Search {
                             query,

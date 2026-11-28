@@ -151,6 +151,19 @@ impl Drop for RequestPermit {
     }
 }
 
+/// Accepts delta seconds or an HTTP-date (IMF-fixdate).
+pub(crate) fn retry_after(value: &str, now: jiff::Timestamp) -> Option<Duration> {
+    let value = value.trim();
+    if let Ok(seconds) = value.parse() {
+        return Some(Duration::from_secs(seconds));
+    }
+    let date = jiff::civil::DateTime::strptime("%a, %d %b %Y %H:%M:%S GMT", value).ok()?;
+    let at = date.to_zoned(jiff::tz::TimeZone::UTC).ok()?.timestamp();
+    Some(Duration::from_secs(
+        (at.as_second() - now.as_second()).max(0) as u64,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
