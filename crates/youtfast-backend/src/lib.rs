@@ -1180,13 +1180,16 @@ async fn local_recommendations(
     rank_local_candidates(tasks, failure, &taste, preferences, now).await
 }
 
-async fn rank_local_candidates(
+struct LocalCandidates {
+    history_related: Vec<(f64, Vec<Video>)>,
+    topics: Vec<Vec<Video>>,
+    failure: Option<String>,
+}
+
+async fn collect_local_candidates(
     mut tasks: tokio::task::JoinSet<LocalCandidateBatch>,
     mut failure: Option<String>,
-    taste: &youtfast_logic::recommend::Taste,
-    preferences: &youtfast_storage::settings::Recommendations,
-    now: i64,
-) -> Result<Vec<Video>, String> {
+) -> LocalCandidates {
     let mut history_related = Vec::new();
     let mut topic_batches = Vec::new();
     while let Some(done) = tasks.join_next().await {
@@ -1210,19 +1213,33 @@ async fn rank_local_candidates(
     // The order the answers came in is not the seeds' or topics': keep both stable.
     history_related.sort_by(|a, b| b.0.total_cmp(&a.0));
     topic_batches.sort_by_key(|(index, _)| *index);
-    let topic_lists: Vec<Vec<Video>> = topic_batches
-        .into_iter()
-        .map(|(_, videos)| videos)
-        .collect();
+    LocalCandidates {
+        history_related,
+        topics: topic_batches
+            .into_iter()
+            .map(|(_, videos)| videos)
+            .collect(),
+        failure,
+    }
+}
+
+async fn rank_local_candidates(
+    tasks: tokio::task::JoinSet<LocalCandidateBatch>,
+    failure: Option<String>,
+    taste: &youtfast_logic::recommend::Taste,
+    preferences: &youtfast_storage::settings::Recommendations,
+    now: i64,
+) -> Result<Vec<Video>, String> {
+    let candidates = collect_local_candidates(tasks, failure).await;
     let videos = youtfast_logic::recommend::rank_combined(
-        &history_related,
-        &topic_lists,
+        &candidates.history_related,
+        &candidates.topics,
         taste,
         preferences,
         now,
     );
     if videos.is_empty()
-        && let Some(error) = failure
+        && let Some(error) = candidates.failure
     {
         return Err(error);
     }
