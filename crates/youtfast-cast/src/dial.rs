@@ -600,7 +600,12 @@ mod tests {
             unreachable!()
         };
         let screen = launch(&endpoint, host).await.unwrap();
-        let mut lounge = crate::lounge::Session::connect(&screen).await.unwrap();
+        let mut lounge = crate::lounge::Session::connect(
+            &screen,
+            &youtfast_youtube::backoff::RequestGate::default(),
+        )
+        .await
+        .unwrap();
         lounge.play("jNQXAC9IVRw", 0).await.unwrap();
         eprintln!("Requested video confirmed playing");
         lounge.control(super::super::Control::Pause).await.unwrap();

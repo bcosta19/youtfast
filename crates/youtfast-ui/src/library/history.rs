@@ -171,11 +171,10 @@ pub fn history(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                     ui.add_space(12.0);
                     widgets::more_row(
                         ui,
-                        palette,
+                        state,
                         &state.history_more_state,
                         state.history_more.is_some(),
                         actions,
-                        locale,
                     );
                 }
             });

@@ -28,6 +28,7 @@ mod settings;
 mod video_tabs;
 mod watch;
 mod widgets;
+mod youtube_pause;
 
 use egui::{
     Align, CornerRadius, Frame, Key, Layout, Margin, RichText, Sense, Stroke, UiBuilder, vec2,
@@ -87,6 +88,7 @@ pub fn show(
         return;
     }
     top_bar(ui, state, actions);
+    youtube_pause::show(ui, state);
     video_tabs::show(ui, state, actions);
     if !(state.view == View::Watch && state.settings.theater) {
         sidebar(ui, state, actions);

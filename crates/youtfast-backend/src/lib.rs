@@ -21,6 +21,7 @@ use youtfast_storage::library::Library;
 use youtfast_storage::paths::Dirs;
 use youtfast_storage::settings::Settings;
 use youtfast_storage::{account, backup, paths, takeout};
+use youtfast_youtube::backoff::{RequestGate, RequestIntent, RequestPermit};
 use youtfast_youtube::innertube::{self, Client};
 
 mod protocol;
@@ -33,6 +34,7 @@ pub use protocol::{
 };
 use recommendation_cache::{CandidateKey, RecommendationCache};
 use recommendation_requests::RecommendationRequests;
+pub use youtfast_youtube::backoff::Status as YouTubeRequestStatus;
 
 #[derive(Default)]
 struct SaveGate(std::sync::Mutex<bool>);
@@ -59,6 +61,7 @@ pub struct Backend {
     commands: async_mpsc::UnboundedSender<(u64, Command)>,
     events: mpsc::Receiver<(u64, Event)>,
     epoch: std::cell::Cell<u64>,
+    youtube_gate: RequestGate,
     waker: egui::Context,
     library_saves: Arc<watch::Sender<Option<Library>>>,
     settings_saves: Arc<watch::Sender<Option<Settings>>>,
@@ -97,6 +100,7 @@ struct Context {
     thumb_pending: Arc<std::sync::Mutex<HashSet<String>>>,
     /// At most this many thumbnail downloads at a time.
     thumb_sem: Arc<tokio::sync::Semaphore>,
+    thumb_youtube: Arc<youtfast_youtube::thumbs::YouTubeDownloads>,
     /// At most this many cache files are read at a time, so a page of
     /// thumbnails does not queue hundreds of blocking reads at once.
     thumb_disk_sem: Arc<tokio::sync::Semaphore>,
@@ -154,6 +158,7 @@ impl Backend {
             thumb_sem: Arc::new(tokio::sync::Semaphore::new(
                 youtfast_youtube::thumbs::DOWNLOADS,
             )),
+            thumb_youtube: Arc::default(),
             thumb_disk_sem: Arc::new(tokio::sync::Semaphore::new(THUMB_DISK_READS)),
             dearrow_sem: Arc::new(tokio::sync::Semaphore::new(DEARROW_LOOKUPS)),
             sync: sync::SyncManager::default(),
@@ -162,6 +167,7 @@ impl Backend {
             commands,
             events,
             epoch: std::cell::Cell::new(0),
+            youtube_gate: context.rp.gate().clone(),
             waker: context.waker.clone(),
             library_saves: context.library_saves.clone(),
             settings_saves: context.settings_saves.clone(),
@@ -201,6 +207,17 @@ impl Backend {
                         writer_settings_gate,
                         Settings::save,
                     ));
+                    let mut youtube_status = context.rp.gate().subscribe();
+                    let youtube_context = context.clone();
+                    tokio::spawn(async move {
+                        loop {
+                            let status = *youtube_status.borrow_and_update();
+                            youtube_context.send(Event::YouTubeRequests(status));
+                            if youtube_status.changed().await.is_err() {
+                                break;
+                            }
+                        }
+                    });
                     let mut writes = AccountWrites::default();
                     while let Some((epoch, command)) = incoming.recv().await {
                         if command.changes_session() || matches!(command, Command::RemoveAccount(_))
@@ -213,7 +230,7 @@ impl Backend {
                             for (_, task) in context.loads.lock().unwrap().drain() {
                                 task.abort();
                             }
-                            match innertube::client() {
+                            match context.rp.fresh_session() {
                                 Ok(client) => context.rp = client,
                                 Err(_) => {
                                     innertube::sign_out(&context.rp).await;
@@ -247,6 +264,23 @@ impl Backend {
 
     pub fn session_epoch(&self) -> u64 {
         self.epoch.get()
+    }
+
+    /// mpv starts on the interface thread; admission must be synchronous
+    /// with the other transports, without waiting for the runtime.
+    pub fn begin_playback(&self, allow_probe: bool) -> Result<RequestPermit, &'static str> {
+        let intent = if allow_probe {
+            RequestIntent::UserInitiated
+        } else {
+            RequestIntent::Background
+        };
+        self.youtube_gate
+            .begin(intent)
+            .map_err(|_| youtfast_core::privacy::YOUTUBE_RATE_LIMITED)
+    }
+
+    pub fn youtube_gate(&self) -> &RequestGate {
+        &self.youtube_gate
     }
 
     pub fn context(&self) -> &egui::Context {
@@ -460,9 +494,13 @@ async fn handle(command: Command, context: Context) {
             slot,
             generation,
             request,
+            allow_probe,
         } => {
             let worker = context.clone();
-            let loader = context.clone();
+            let mut loader = context.clone();
+            if allow_probe {
+                loader.rp = loader.rp.for_user_request();
+            }
             log::debug!("loading {slot:?} started");
             let deadline = deadline_of(&request).map(|duration| Instant::now() + duration);
             let task = tokio::spawn(async move {
@@ -500,8 +538,17 @@ async fn handle(command: Command, context: Context) {
                 result,
             });
         }
-        Command::LoadDetails { generation, id } => {
-            let result = innertube::details(&context.rp, &id).await;
+        Command::LoadDetails {
+            generation,
+            id,
+            allow_probe,
+        } => {
+            let rp = if allow_probe {
+                context.rp.for_user_request()
+            } else {
+                context.rp.clone()
+            };
+            let result = innertube::details(&rp, &id).await;
             if let Err(error) = &result {
                 log::warn!("loading the details of {id} failed: {error}");
             }
@@ -523,10 +570,15 @@ async fn handle(command: Command, context: Context) {
             key,
             video_id,
             token,
+            allow_probe,
             visitor_data,
         } => {
-            let result =
-                innertube::comments(&context.rp, &token, visitor_data.as_deref(), &video_id).await;
+            let rp = if allow_probe {
+                context.rp.for_user_request()
+            } else {
+                context.rp.clone()
+            };
+            let result = innertube::comments(&rp, &token, visitor_data.as_deref(), &video_id).await;
             if let Err(error) = &result {
                 log::warn!("loading comments failed: {error}");
             }
@@ -973,9 +1025,13 @@ async fn handle(command: Command, context: Context) {
                         None => {
                             let _permit = context.thumb_sem.acquire().await;
                             let task = url.clone();
+                            let gate = context.rp.gate().clone();
+                            let thumb_youtube = context.thumb_youtube.clone();
                             tokio::task::spawn_blocking(move || {
-                                let _ = std::fs::create_dir_all(&dir);
-                                youtfast_youtube::thumbs::load_or_fetch(&task, &path, refresh)
+                                thumb_youtube.fetch(&gate, &task, || {
+                                    let _ = std::fs::create_dir_all(&dir);
+                                    youtfast_youtube::thumbs::load_or_fetch(&task, &path, refresh)
+                                })
                             })
                             .await
                             .unwrap_or(Err(youtfast_youtube::thumbs::Failure::Network))
@@ -1068,7 +1124,7 @@ fn relaxed_topic_search_options(
 
 async fn fetch_recommendation_candidate(
     rp: Client,
-    public: Arc<std::sync::OnceLock<Result<Client, String>>>,
+    public: Client,
     requests: Arc<RecommendationRequests>,
     consent: TopicSearchConsent,
     key: CandidateKey,
@@ -1080,20 +1136,15 @@ async fn fetch_recommendation_candidate(
             .await
             .map(|details| details.related),
         CandidateKey::Topic { query, options } => {
-            // Presets and opted-in interests always use a signed-out client.
-            let public = public
-                .get_or_init(|| {
-                    Client::default_client().map_err(|_| "Could not start topic search".into())
-                })
-                .as_ref()
-                .map_err(Clone::clone)?;
+            // Presets and opted-in interests always use a signed-out client derived from the
+            // shared YouTube request gate.
             let (items, _) = requests
                 .fetch(latest_start, async {
                     // Waiting for the limiter does not authorize a search.
                     if !consent.is_current() {
                         return Err("Topic search authorization was revoked".to_owned());
                     }
-                    innertube::search_filtered(public, &query, options).await
+                    innertube::search_filtered(&public, &query, options).await
                 })
                 .await?;
             Ok(match items {
@@ -1167,6 +1218,7 @@ enum LocalCandidateBatch {
 
 /// The seeds' related videos and any active topic searches share a paced request
 /// budget. A failing source is skipped if any usable videos remain.
+#[cfg(test)]
 async fn local_recommendations<F, Fut>(
     candidates: &CandidateLookup,
     seeds: Vec<youtfast_logic::recommend::Seed>,
@@ -1180,14 +1232,133 @@ where
     F: Fn(CandidateKey) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Result<Vec<Video>, String>> + Send,
 {
+    local_recommendations_gated(
+        None,
+        candidates,
+        seeds,
+        taste,
+        preferences,
+        topic_search_consent,
+        deadline,
+        fetch,
+    )
+    .await
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "internal helper separating optional YouTube circuit probing from unit-tested recommendation ranking"
+)]
+async fn local_recommendations_gated<F, Fut>(
+    rp: Option<&Client>,
+    candidates: &CandidateLookup,
+    seeds: Vec<youtfast_logic::recommend::Seed>,
+    taste: youtfast_logic::recommend::Taste,
+    preferences: &youtfast_storage::settings::Recommendations,
+    topic_search_consent: &TopicSearchConsent,
+    deadline: Instant,
+    fetch: F,
+) -> Result<Vec<Video>, String>
+where
+    F: Fn(CandidateKey) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = Result<Vec<Video>, String>> + Send,
+{
     let now = youtfast_core::util::now();
-    let queries = preferences.topic_queries(!seeds.is_empty());
+    let queries: Vec<String> = preferences
+        .topic_queries(!seeds.is_empty())
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    if seeds.is_empty() && queries.is_empty() {
+        return Ok(Vec::new());
+    }
+    let options = topic_search_options(preferences);
     let taste = Arc::new(taste);
     let fetch = Arc::new(fetch);
+
+    let mut topic_work: Vec<(usize, String)> = queries.into_iter().enumerate().collect();
+    let mut seed_work = seeds;
+    let mut precollected = Vec::new();
+
+    if !candidates.cache_only
+        && let Some(rp) = rp
+    {
+        let needs_network = topic_work.iter().any(|(_, query)| {
+            candidates
+                .cache
+                .get(&CandidateKey::Topic {
+                    query: query.clone(),
+                    options,
+                })
+                .is_none()
+        }) || seed_work.iter().any(|seed| {
+            candidates
+                .cache
+                .get(&CandidateKey::Seed {
+                    epoch: candidates.epoch,
+                    id: seed.id.clone(),
+                })
+                .is_none()
+        });
+        if needs_network {
+            rp.check_paused().map_err(innertube::text)?;
+            // When the circuit is half-open, probe with one uncached candidate
+            // first and fan out the rest only if the probe succeeds.
+            if rp.gate().status() != YouTubeRequestStatus::Ready {
+                if let Some(pos) = topic_work.iter().position(|(_, query)| {
+                    candidates
+                        .cache
+                        .get(&CandidateKey::Topic {
+                            query: query.clone(),
+                            options,
+                        })
+                        .is_none()
+                }) {
+                    let (index, query) = topic_work.remove(pos);
+                    let videos = search_topic_pages(
+                        candidates,
+                        &query,
+                        options,
+                        topic_search_consent,
+                        |videos| {
+                            youtfast_logic::recommend::has_eligible_candidates(
+                                videos,
+                                &taste,
+                                preferences,
+                            )
+                        },
+                        |key| fetch(key),
+                    )
+                    .await;
+                    rp.check_paused().map_err(innertube::text)?;
+                    precollected.push(LocalCandidateBatch::Topic(index, videos));
+                } else if let Some(pos) = seed_work.iter().position(|seed| {
+                    candidates
+                        .cache
+                        .get(&CandidateKey::Seed {
+                            epoch: candidates.epoch,
+                            id: seed.id.clone(),
+                        })
+                        .is_none()
+                }) {
+                    let seed = seed_work.remove(pos);
+                    let key = CandidateKey::Seed {
+                        epoch: candidates.epoch,
+                        id: seed.id,
+                    };
+                    let related = candidates.get_or_fetch(key, |key| fetch(key)).await;
+                    rp.check_paused().map_err(innertube::text)?;
+                    precollected.push(LocalCandidateBatch::History(seed.weight, related));
+                }
+            }
+        }
+    }
+
     let mut tasks = tokio::task::JoinSet::new();
-    let options = topic_search_options(preferences);
-    for (index, query) in queries.into_iter().enumerate() {
-        let query = query.to_owned();
+    for batch in precollected {
+        tasks.spawn(std::future::ready(batch));
+    }
+    for (index, query) in topic_work {
         let candidates = candidates.clone();
         let fetch = fetch.clone();
         let consent = topic_search_consent.clone();
@@ -1208,7 +1379,7 @@ where
             LocalCandidateBatch::Topic(index, videos)
         });
     }
-    for seed in seeds {
+    for seed in seed_work {
         let candidates = candidates.clone();
         let fetch = fetch.clone();
         tasks.spawn(async move {
@@ -1376,18 +1547,23 @@ async fn load(
                         });
                     }
                     Ok(_) => log::info!("the account has no recommendations; making some here"),
+                    Err(error) if error == youtfast_core::privacy::YOUTUBE_RATE_LIMITED => {
+                        return Err(error);
+                    }
                     Err(error) => log::warn!("the account's recommendations failed: {error}"),
                 }
             }
             let rp = rp.clone();
+            let public = rp.public_client();
             let requests = context.recommendation_requests.clone();
-            let public = Arc::default();
             let consent = topic_search_consent.clone();
             let candidate_deadline =
                 deadline.expect("For you has a deadline") - RECOMMENDATION_RANK_BUDGET;
             let latest_start = candidate_deadline - innertube::client::REQUEST_TIMEOUT;
+            let rp_for_fetch = rp.clone();
             Payload::ForYou {
-                videos: local_recommendations(
+                videos: local_recommendations_gated(
+                    Some(&rp),
                     &CandidateLookup {
                         cache: context.recommendation_cache.clone(),
                         epoch: context.epoch,
@@ -1400,8 +1576,8 @@ async fn load(
                     candidate_deadline,
                     move |key| {
                         fetch_recommendation_candidate(
-                            rp.clone(),
-                            Arc::clone(&public),
+                            rp_for_fetch.clone(),
+                            public.clone(),
                             requests.clone(),
                             consent.clone(),
                             key,
@@ -1428,6 +1604,7 @@ async fn load(
             }
         }
         Request::Shorts { channels } => {
+            rp.check_paused().map_err(text)?;
             Payload::Videos(innertube::channel_shorts(rp, channels, 6).await)
         }
         Request::Alerts { channels, account } => {
@@ -1762,6 +1939,7 @@ mod tests {
             backend.send(Command::Load {
                 slot: Slot::Search,
                 generation: 42,
+                allow_probe: true,
                 request: Request::Search {
                     query: "Consulta sintética".into(),
                     options,
@@ -1772,6 +1950,7 @@ mod tests {
                 Command::Load {
                     slot,
                     generation,
+                    allow_probe: true,
                     request:
                         Request::Search {
                             query,
@@ -1927,6 +2106,7 @@ mod tests {
                 commands,
                 events,
                 epoch: std::cell::Cell::new(epoch),
+                youtube_gate: RequestGate::default(),
                 waker: egui::Context::default(),
                 library_saves: Arc::new(watch::channel(None).0),
                 settings_saves: Arc::new(watch::channel(None).0),
@@ -1936,6 +2116,21 @@ mod tests {
             outgoing,
             incoming,
         )
+    }
+
+    #[test]
+    fn a_playback_limit_pauses_inner_tube_even_across_session_epochs() {
+        let (backend, outgoing, _) = scoped_backend(7);
+        let rp = Client::with_gate(innertube::http(), backend.youtube_gate.clone()).unwrap();
+        backend.begin_playback(true).unwrap().limited(None);
+        let status = backend.youtube_gate.status();
+        outgoing.send((6, Event::YouTubeRequests(status))).unwrap();
+        assert!(matches!(
+            backend.poll().as_slice(),
+            [Event::YouTubeRequests(YouTubeRequestStatus::PausedUntil(_))]
+        ));
+        assert!(backend.begin_playback(true).is_err());
+        assert_eq!(rp.check_paused(), Err(innertube::Error::RateLimited));
     }
 
     #[test]
@@ -2257,7 +2452,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn kept_thumbnails_answer_while_downloads_hold_every_turn() {
+    async fn kept_thumbnails_answer_during_a_pause_while_downloads_hold_every_turn() {
         let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("target")
             .join(format!("kept-thumbnail-turns-{}", std::process::id()));
@@ -2299,10 +2494,17 @@ mod tests {
             thumb_sem: Arc::new(tokio::sync::Semaphore::new(
                 youtfast_youtube::thumbs::DOWNLOADS,
             )),
+            thumb_youtube: Arc::default(),
             thumb_disk_sem: Arc::new(tokio::sync::Semaphore::new(THUMB_DISK_READS)),
             dearrow_sem: Arc::new(tokio::sync::Semaphore::new(DEARROW_LOOKUPS)),
             sync: sync::SyncManager::default(),
         };
+        context
+            .rp
+            .gate()
+            .begin(RequestIntent::Background)
+            .unwrap()
+            .limited(None);
         // Slow downloads hold every turn.
         let _turns = context
             .thumb_sem

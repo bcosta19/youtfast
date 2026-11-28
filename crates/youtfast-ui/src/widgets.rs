@@ -29,7 +29,7 @@ use youtfast_i18n::{Locale, format as trf, gettext as tr};
 use egui::text::LayoutJob;
 use egui::{Color32, CornerRadius, CursorIcon, Rect, Response, Sense, Stroke, Ui, pos2, vec2};
 
-use youtfast_app::Action;
+use youtfast_app::{Action, State};
 use youtfast_appearance::theme::{self, Palette, RADIUS};
 use youtfast_core::model::{Channel, Fetch};
 use youtfast_core::util;
@@ -474,42 +474,27 @@ pub fn grid_columns(available: f32, min: f32, gap: f32, most: usize) -> (usize, 
 /// or `Load more`.
 pub fn more_row(
     ui: &mut Ui,
-    palette: &Palette,
-    state: &Fetch<()>,
+    state: &State,
+    fetch: &Fetch<()>,
     has_more: bool,
     actions: &mut Vec<Action>,
-    locale: Locale,
 ) {
-    match state {
-        Fetch::Loading => loading(ui, palette, "more", locale),
+    let locale = state.settings.language;
+    match fetch {
+        Fetch::Loading => loading(ui, &state.palette, "more", locale),
         Fetch::Failed(error) => {
             ui.horizontal(|ui| {
                 ui.label(
                     egui::RichText::new(youtfast_i18n::message(locale, error).as_ref())
-                        .color(palette.red),
+                        .color(state.palette.red),
                 );
-                if button(
-                    ui,
-                    palette,
-                    tr(locale, "Retry").as_ref(),
-                    ButtonStyle::Normal,
-                )
-                .clicked()
-                {
+                if super::youtube_pause::request_button(ui, state, "Retry") {
                     actions.push(Action::LoadMore);
                 }
             });
         }
         _ => {
-            if has_more
-                && button(
-                    ui,
-                    palette,
-                    tr(locale, "Load more").as_ref(),
-                    ButtonStyle::Normal,
-                )
-                .clicked()
-            {
+            if has_more && super::youtube_pause::request_button(ui, state, "Load more") {
                 actions.push(Action::LoadMore);
             }
         }

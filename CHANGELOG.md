@@ -17,6 +17,10 @@ are the distribution record.
 
 - **Local recommendations** space out YouTube lookups and reuse recent candidates in memory, so changing local ranking preferences uses cached candidates only. Retry and manual refresh can fetch missing candidates, including a previously failed date fallback. Slow sources no longer discard usable recommendations that have already loaded. Signed-in users can adjust the device fallback without reloading their account feed.
 
+### Fixed
+
+- Pause new YouTube requests after rate limits or bot checks instead of repeatedly retrying. The app shows the cooldown, and one deliberate request can check the connection after it ends.
+
 ## [0.11.0] - 2026-11-24
 
 ### Added

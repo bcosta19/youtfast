@@ -4,6 +4,10 @@
 //! losing them only costs a fetch.
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+use crate::backoff::{RequestGate, RequestIntent};
 
 /// How many thumbnails stay before the oldest are pruned at startup.
 const KEEP: usize = 2000;
@@ -28,6 +32,7 @@ pub enum Failure {
     Access,
     Unavailable,
     RateLimited(u64),
+    Paused,
     Pending,
     Server,
     TooLarge,
@@ -40,6 +45,7 @@ impl Failure {
             Self::Access => "image: HTTP access denied",
             Self::Unavailable => "image: unavailable",
             Self::RateLimited(_) => "image: rate limited",
+            Self::Paused => "image: YouTube requests paused",
             Self::Pending => "image: not generated yet",
             Self::Server => "image: server error",
             Self::TooLarge => "image: response too large",
@@ -47,6 +53,9 @@ impl Failure {
         }
     }
     pub fn retry_delay(self, attempt: u32) -> Option<f64> {
+        if self == Self::Paused {
+            return Some(30.0);
+        }
         if attempt >= 3 {
             return None;
         }
@@ -57,6 +66,72 @@ impl Failure {
             Self::RateLimited(seconds) => Some(seconds.max(30) as f64),
             _ => None,
         }
+    }
+}
+
+/// CDN throttling pauses image misses without turning an image-only error
+/// into a pause of playback or the data API.
+#[derive(Default)]
+pub struct YouTubeDownloads {
+    cdn_deadline: Mutex<Option<Instant>>,
+}
+
+impl YouTubeDownloads {
+    pub fn fetch<T>(
+        &self,
+        gate: &RequestGate,
+        url: &str,
+        download: impl FnOnce() -> Result<T, Failure>,
+    ) -> Result<T, Failure> {
+        self.fetch_with_clock(gate, url, Instant::now, download)
+    }
+
+    fn fetch_with_clock<T>(
+        &self,
+        gate: &RequestGate,
+        url: &str,
+        now: impl Fn() -> Instant,
+        download: impl FnOnce() -> Result<T, Failure>,
+    ) -> Result<T, Failure> {
+        let parsed = url::Url::parse(url).ok();
+        let cdn = parsed
+            .as_ref()
+            .and_then(url::Url::host_str)
+            .is_some_and(|host| {
+                host == "ytimg.com"
+                    || host.ends_with(".ytimg.com")
+                    || matches!(
+                        host,
+                        "yt3.ggpht.com"
+                            | "yt3.googleusercontent.com"
+                            | "yt4.ggpht.com"
+                            | "yt4.googleusercontent.com"
+                    )
+            });
+        if !cdn {
+            return download();
+        }
+        if self
+            .cdn_deadline
+            .lock()
+            .unwrap()
+            .is_some_and(|deadline| deadline > now())
+        {
+            return Err(Failure::Paused);
+        }
+        let _permit = gate
+            .begin(RequestIntent::Background)
+            .map_err(|_| Failure::Paused)?;
+        let result = download();
+        if let Err(Failure::RateLimited(seconds)) = result {
+            let now = now();
+            let until = now
+                .checked_add(Duration::from_secs(seconds.max(30)))
+                .unwrap_or(now + Duration::from_secs(30));
+            let mut deadline = self.cdn_deadline.lock().unwrap();
+            *deadline = (*deadline).max(Some(until));
+        }
+        result
     }
 }
 
@@ -134,20 +209,9 @@ pub fn fetch(url: &str, path: &Path) -> Result<std::sync::Arc<[u8]>, Failure> {
 }
 
 fn retry_after(value: Option<&str>) -> u64 {
-    let Some(value) = value else {
-        return 30;
-    };
-    if let Ok(seconds) = value.trim().parse::<u64>() {
-        return seconds;
-    }
-    // HTTP-date (IMF-fixdate); an invalid header falls back to backoff.
-    jiff::civil::DateTime::strptime("%a, %d %b %Y %H:%M:%S GMT", value)
-        .ok()
-        .and_then(|date| date.to_zoned(jiff::tz::TimeZone::UTC).ok())
-        .map(|date| {
-            (date.timestamp().as_second() - jiff::Timestamp::now().as_second()).max(0) as u64
-        })
-        .unwrap_or(30)
+    value
+        .and_then(|value| crate::backoff::retry_after(value, jiff::Timestamp::now()))
+        .map_or(30, |delay| delay.as_secs())
 }
 /// One HTTP client for every thumbnail: its connections stay open between
 /// downloads, so a page of thumbnails does not pay a TLS handshake each.
@@ -313,6 +377,61 @@ mod tests {
             .write_image(&[0, 0, 0, 0], 1, 1, image::ExtendedColorType::Rgba8)
             .unwrap();
         bytes
+    }
+
+    #[test]
+    fn a_paused_circuit_blocks_uncached_youtube_images_but_not_other_images() {
+        let downloads = YouTubeDownloads::default();
+        let gate = RequestGate::default();
+        gate.begin(RequestIntent::Background).unwrap().limited(None);
+        for url in [
+            "https://i.ytimg.com/vi/synthetic/mqdefault.jpg",
+            "https://i9.ytimg.com/sb/synthetic/M1.jpg",
+            "https://yt3.ggpht.com/synthetic",
+            "https://yt3.googleusercontent.com/synthetic",
+        ] {
+            assert_eq!(
+                downloads.fetch::<()>(&gate, url, || panic!("CDN request during pause")),
+                Err(Failure::Paused)
+            );
+        }
+        assert_eq!(
+            downloads.fetch(&gate, "https://example.invalid/image", || Ok(())),
+            Ok(())
+        );
+        assert_eq!(Failure::Paused.retry_delay(3), Some(30.0));
+    }
+
+    #[test]
+    fn a_cdn_429_shares_its_retry_after_without_opening_the_main_circuit() {
+        let downloads = YouTubeDownloads::default();
+        let gate = RequestGate::default();
+        let now = Instant::now();
+        let thumbnail = "https://i.ytimg.com/vi/synthetic/mqdefault.jpg";
+        let avatar = "https://yt3.ggpht.com/synthetic";
+        assert_eq!(
+            downloads.fetch_with_clock::<()>(
+                &gate,
+                thumbnail,
+                || now,
+                || Err(Failure::RateLimited(180))
+            ),
+            Err(Failure::RateLimited(180))
+        );
+        assert!(gate.begin(RequestIntent::Background).is_ok());
+        assert_eq!(
+            downloads.fetch_with_clock::<()>(
+                &gate,
+                avatar,
+                || now + Duration::from_secs(179),
+                || panic!("CDN deadline ignored")
+            ),
+            Err(Failure::Paused)
+        );
+        assert_eq!(
+            downloads.fetch_with_clock(&gate, avatar, || now + Duration::from_secs(180), || Ok(())),
+            Ok(())
+        );
     }
 
     #[test]

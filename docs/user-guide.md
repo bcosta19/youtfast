@@ -575,6 +575,19 @@ every 12 hours while open:
 
 ## Help
 
+If YouTube limits requests or asks you to prove you are not a bot, YouTFast
+pauses new YouTube requests to avoid a longer block. The notice shows how much
+time is left. **Retry** and **Load more** are disabled where they would
+contact YouTube, but you can still reveal rows already loaded. When the
+countdown ends, retry playback or a listing, open a video, or submit a search so one
+request can check whether YouTube is accepting requests again. Background
+requests resume only after a successful check. This starts with a two-minute
+wait and gets longer if YouTube still refuses the check.
+
+Waiting gives YouTube time to lift the temporary limit. If the next try is
+still blocked, using a different network can help: the limit can apply to a
+shared public IP address. Changing networks does not skip the app's countdown.
+
 YouTube refuses a video's streams for a few seconds after handing them out
 (until their `available_at` time). libmpv 0.42+ (with Lua) waits for that time;
 with older libmpv, YouTFast retries a refused stream after 0, 1, 3 and 7

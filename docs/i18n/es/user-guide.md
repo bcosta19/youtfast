@@ -656,6 +656,21 @@ nuevas al iniciar y cada 12 horas mientras esté abierto:
 
 ## Ayuda
 
+Si YouTube limita las solicitudes o te pide que demuestres que no eres un bot,
+YouTFast pone en pausa las nuevas solicitudes a YouTube para evitar un bloqueo
+más largo. El aviso muestra cuánto tiempo queda. **Reintentar** y **Cargar más**
+se desactivan cuando necesitan contactar con YouTube, pero puedes mostrar las
+filas ya cargadas. Cuando termine la cuenta atrás, reintenta la reproducción o
+una lista, abre un vídeo o envía una búsqueda para que
+una solicitud compruebe si YouTube vuelve a aceptarlas. Las solicitudes en
+segundo plano solo se reanudan si la comprobación tiene éxito. La espera
+empieza en dos minutos y aumenta si YouTube sigue rechazando la comprobación.
+
+Esperar da tiempo a YouTube para retirar el límite temporal. Si el siguiente
+intento sigue bloqueado, usar otra red puede ayudar: el límite puede afectar a
+una dirección IP pública compartida. Cambiar de red no salta la cuenta atrás
+de la aplicación.
+
 YouTube rechaza los streams de un vídeo durante unos segundos después de
 entregarlos (hasta su hora `available_at`). libmpv 0.42+ (con Lua) espera esa
 hora; con una libmpv anterior, YouTFast vuelve a intentar abrir el stream

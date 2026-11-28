@@ -257,6 +257,28 @@ public endpoints.
   @SamayRainaOfficial's Videos tab reads 11 of the first 30 cards as
   members-only, each with its age and without a view count.
 
+### YT-11: bot checks in InnerTube error and playability messages (2026-11-27)
+
+- **Symptom:** a listing can fail with a generic request error, or watch
+  metadata falls through as if YouTube accepted the request. New requests
+  keep going even though YouTube is asking the user to prove they are not a bot.
+- **Old format:** the HTTP status and, on a refusal, `error.message` described
+  the failure. The client could distinguish an authentication rejection
+  from a bot-check 403, but HTTP 200 was treated as acceptance.
+- **New format:** the bot-check wording can appear in `/error/message` on
+  HTTP 403 or `/playabilityStatus/reason` on HTTP 200 (with a status such as
+  `LOGIN_REQUIRED`). That status alone also occurs for ordinary age checks.
+- **Fix:** `response_reports_limit` in
+  `crates/youtfast-youtube/src/innertube/client.rs` checks the wording in
+  both fields. The HTTP reader maps a bot check to a controlled rate-limit
+  error and opens the shared circuit, without reporting an expired session.
+- **Tests:** `yt11_a_bot_check_in_http_200_playability_reason_is_a_request_limit`,
+  `yt11_a_bot_check_in_http_403_error_message_is_not_an_account_rejection`,
+  and `yt11_a_sign_in_reason_without_bot_check_wording_is_not_a_request_limit`
+  in `crates/youtfast-youtube/tests/youtube_api.rs`; the client module's
+  loopback HTTP test also checks that the 200 and 403 cases open the circuit.
+  No live check was run for this change.
+
 ## Adding an entry
 
 Copy this outline. Number entries in order, and never reuse a number.

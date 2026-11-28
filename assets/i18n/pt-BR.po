@@ -2402,3 +2402,15 @@ msgstr "Tons quentes de papel e tinta de baixo estímulo visual, pensados para s
 
 msgid "Select a topic to fetch new videos that match this duration. History-based results are only filtered."
 msgstr "Selecione um tópico para buscar novos vídeos com essa duração. Os resultados baseados no histórico são apenas filtrados."
+
+msgid "YouTube requests are paused to avoid a longer block."
+msgstr "As solicitações ao YouTube foram pausadas para evitar um bloqueio mais longo."
+
+msgid "Try again in {minutes} min"
+msgstr "Tente novamente em {minutes} min"
+
+msgid "Retry to check the connection."
+msgstr "Tente novamente para verificar a conexão."
+
+msgid "Checking whether YouTube requests can resume…"
+msgstr "Verificando se as solicitações ao YouTube podem ser retomadas…"

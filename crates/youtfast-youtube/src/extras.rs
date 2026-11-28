@@ -1,6 +1,6 @@
 //! Optional, signed-out metadata. Captions stay in memory; no credentials or
 //! response bodies are logged. Network and parsing run on the backend.
-use std::io::Read;
+use crate::innertube::{Client, Error};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Extras {
@@ -54,18 +54,14 @@ impl Preview {
     }
 }
 
-pub async fn load(
-    rp: &crate::innertube::Client,
-    id: &str,
-    language: &str,
-) -> Result<Extras, String> {
+pub async fn load(rp: &Client, id: &str, language: &str) -> Result<Extras, String> {
     let (preview_frames, subtitles) = tokio::time::timeout(
         std::time::Duration::from_secs(25),
         crate::innertube::watch::player_extras(rp, id),
     )
     .await
     .map_err(|_| "The request timed out. Retry.".to_owned())?
-    .map_err(|_| "Could not complete the YouTube request. Retry.".to_owned())?;
+    .map_err(crate::innertube::text)?;
     let preview = preview_frames
         .iter()
         .filter(|p| {
@@ -109,9 +105,7 @@ pub async fn load(
     };
     let url = subtitle.url.clone();
     let language = subtitle.lang_name.clone();
-    let transcript = tokio::task::spawn_blocking(move || download(&url))
-        .await
-        .unwrap_or_else(|_| Err("Could not load the transcript. Try again.".into()));
+    let transcript = download(rp, &url).await;
     Ok(Extras {
         preview,
         language,
@@ -119,8 +113,8 @@ pub async fn load(
     })
 }
 
-fn download(url: &str) -> Result<Vec<Cue>, String> {
-    const MAX: u64 = 2 * 1024 * 1024;
+async fn download(rp: &Client, url: &str) -> Result<Vec<Cue>, String> {
+    const MAX: usize = 2 * 1024 * 1024;
     if !url.starts_with("https://www.youtube.com/api/timedtext?") {
         return Err("Transcript source unavailable.".into());
     }
@@ -130,24 +124,24 @@ fn download(url: &str) -> Result<Vec<Cue>, String> {
         .collect::<Vec<_>>()
         .join("&")
         + "&fmt=json3";
-    let mut response = ehttp::Request::get(url)
-        .with_timeout(Some(std::time::Duration::from_secs(20)))
-        .fetch_raw_native(true)
-        .map_err(|_| "Could not load the transcript. Try again.")?;
-    if !response.status().is_success() {
-        return Err("The transcript is unavailable. Try again.".into());
-    }
+    let (mut response, permit) = rp.get(&url).await.map_err(|error| match error {
+        Error::RateLimited => error.to_string(),
+        _ => "Could not load the transcript. Try again.".into(),
+    })?;
     let mut data = Vec::new();
-    response
-        .body_mut()
-        .as_reader()
-        .take(MAX + 1)
-        .read_to_end(&mut data)
-        .map_err(|_| "Could not read the transcript.")?;
-    if data.len() as u64 > MAX {
-        return Err("The transcript exceeds the allowed size.".into());
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| "Could not read the transcript.")?
+    {
+        if chunk.len() > MAX - data.len() {
+            return Err("The transcript exceeds the allowed size.".into());
+        }
+        data.extend_from_slice(&chunk);
     }
-    parse(&data)
+    let cues = parse(&data)?;
+    permit.success();
+    Ok(cues)
 }
 
 fn parse(data: &[u8]) -> Result<Vec<Cue>, String> {

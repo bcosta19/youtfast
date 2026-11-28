@@ -959,6 +959,36 @@ fn shorts_accessibility_counts_keep_spelled_out_multipliers() {
     }
 }
 
+#[test]
+fn yt11_a_bot_check_in_http_200_playability_reason_is_a_request_limit() {
+    let value = serde_json::json!({
+        "playabilityStatus": {
+            "status": "LOGIN_REQUIRED",
+            "reason": "Sign in to confirm you're not a bot"
+        }
+    });
+    assert!(innertube::client::response_reports_limit(200, &value));
+}
+
+#[test]
+fn yt11_a_bot_check_in_http_403_error_message_is_not_an_account_rejection() {
+    let value = serde_json::json!({"error": {"message": "Sign in to confirm you're not a bot"}});
+    assert!(innertube::client::response_reports_limit(403, &value));
+    let value = serde_json::json!({"error": {"message": "Invalid credentials"}});
+    assert!(!innertube::client::response_reports_limit(403, &value));
+}
+
+#[test]
+fn yt11_a_sign_in_reason_without_bot_check_wording_is_not_a_request_limit() {
+    let value = serde_json::json!({
+        "playabilityStatus": {
+            "status": "LOGIN_REQUIRED",
+            "reason": "Sign in to confirm your age"
+        }
+    });
+    assert!(!innertube::client::response_reports_limit(200, &value));
+}
+
 #[tokio::test]
 #[ignore = "manual public network check against YouTube"]
 async fn live_public_endpoints_round_trip() {

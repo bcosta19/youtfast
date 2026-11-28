@@ -250,12 +250,14 @@ pub enum Command {
         slot: Slot,
         generation: u64,
         request: Request,
+        allow_probe: bool,
     },
     /// The watch page's metadata, description, chapters and the comments'
     /// first token.
     LoadDetails {
         generation: u64,
         id: String,
+        allow_probe: bool,
     },
     /// The alerts timer: 0 turns it off, a number of minutes restarts it.
     SetAlertsEvery(u32),
@@ -270,6 +272,7 @@ pub enum Command {
         key: CommentsKey,
         video_id: String,
         token: String,
+        allow_probe: bool,
         visitor_data: Option<String>,
     },
     ImportTakeout {
@@ -377,6 +380,7 @@ pub enum SignInMethod {
 }
 
 pub enum Event {
+    YouTubeRequests(super::YouTubeRequestStatus),
     HistoryMarked,
     PlayingPlaylist {
         generation: u64,
@@ -601,7 +605,8 @@ impl Event {
         epoch == current
             || matches!(
                 self,
-                Self::Imported { .. }
+                Self::YouTubeRequests(_)
+                    | Self::Imported { .. }
                     | Self::ImportMerged { .. }
                     | Self::Notice(_)
                     | Self::CheckAlerts

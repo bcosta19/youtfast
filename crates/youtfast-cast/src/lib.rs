@@ -20,6 +20,8 @@ const DEADLINE: Duration = Duration::from_secs(75);
 const START_DEADLINE: Duration = Duration::from_secs(150);
 const CONFIRM_WAIT: Duration = Duration::from_secs(60);
 
+use youtfast_youtube::backoff::RequestGate;
+
 mod dial;
 pub mod lounge;
 
@@ -79,11 +81,13 @@ pub enum Error {
     Unsupported,
     InvalidCode,
     VolumeUnavailable,
+    YouTubePaused,
 }
 
 impl Error {
     pub fn message(self) -> &'static str {
         match self {
+            Self::YouTubePaused => youtfast_core::privacy::YOUTUBE_RATE_LIMITED,
             Self::MissingHelper => "Install catt to use Google Cast, then search again.",
             Self::Unavailable => "Could not start the TV connection. Try again.",
             Self::Failed => "The TV command failed. Check the TV and your network, then retry.",
@@ -165,14 +169,15 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn start(ctx: egui::Context) -> Result<Self, Error> {
-        Self::start_program(ctx, "catt".into(), true)
+    pub fn start(ctx: egui::Context, gate: RequestGate) -> Result<Self, Error> {
+        Self::start_program(ctx, "catt".into(), true, gate)
     }
 
     fn start_program(
         ctx: egui::Context,
         program: std::path::PathBuf,
         native_discovery: bool,
+        gate: RequestGate,
     ) -> Result<Self, Error> {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -209,10 +214,10 @@ impl Worker {
                                             next = Some(request);
                                             continue;
                                         }
-                                        reply = execute_with_session(&program, request, &mut lounge, native_discovery) => reply,
+                                        reply = execute_with_session(&program, request, &mut lounge, native_discovery, &gate) => reply,
                                     }
                                 } else {
-                                    execute_with_session(&program, request, &mut lounge, native_discovery).await
+                                    execute_with_session(&program, request, &mut lounge, native_discovery, &gate).await
                                 };
                                 if outgoing.send(reply).is_err() {
                                     break;
@@ -260,7 +265,7 @@ impl Drop for Worker {
 /// a timed-out/cancelled future kills its helper through `kill_on_drop`.
 #[cfg(test)]
 async fn execute(program: &Path, request: Request) -> Reply {
-    execute_with_session(program, request, &mut None, false).await
+    execute_with_session(program, request, &mut None, false, &RequestGate::default()).await
 }
 
 async fn execute_with_session(
@@ -268,6 +273,7 @@ async fn execute_with_session(
     request: Request,
     lounge: &mut Option<(Device, lounge::Session)>,
     native_discovery: bool,
+    gate: &RequestGate,
 ) -> Reply {
     match request {
         Request::CheckSponsor {
@@ -351,7 +357,7 @@ async fn execute_with_session(
             Reply::Devices(dial::find(host).await.map(|device| vec![device]))
         }
         Request::Link(code) => Reply::Devices(
-            tokio::time::timeout(DEADLINE, lounge::link(&code))
+            tokio::time::timeout(DEADLINE, lounge::link(&code, gate))
                 .await
                 .unwrap_or(Err(Error::TimedOut))
                 .map(|(screen, name)| {
@@ -371,7 +377,7 @@ async fn execute_with_session(
                 let args = start_args(&device, &video, seconds)?;
                 if !matches!(device.protocol, Protocol::GoogleCast) {
                     *lounge = None;
-                    let session = lounge_session(&device).await?;
+                    let session = lounge_session(&device, gate).await?;
                     *lounge = Some((device.clone(), session));
                     return lounge.as_mut().unwrap().1.play(&video, seconds).await;
                 }
@@ -439,21 +445,23 @@ async fn execute_with_session(
 
 /// Joins a YouTube app already on screen, so the TV keeps what it shows;
 /// otherwise (or when that screen refuses a session) launches it fresh.
-async fn lounge_session(device: &Device) -> Result<lounge::Session, Error> {
+async fn lounge_session(device: &Device, gate: &RequestGate) -> Result<lounge::Session, Error> {
     let endpoint = match &device.protocol {
         Protocol::Linked { screen } => {
-            return lounge::Session::connect(screen).await;
+            return lounge::Session::connect(screen, gate).await;
         }
         Protocol::YouTube { endpoint } => endpoint,
         Protocol::GoogleCast => return Err(Error::InvalidRequest),
     };
-    if let Some(screen) = dial::running_screen(endpoint, device.host).await?
-        && let Ok(session) = lounge::Session::connect(&screen).await
-    {
-        return Ok(session);
+    if let Some(screen) = dial::running_screen(endpoint, device.host).await? {
+        match lounge::Session::connect(&screen, gate).await {
+            Ok(session) => return Ok(session),
+            Err(Error::YouTubePaused) => return Err(Error::YouTubePaused),
+            Err(_) => (),
+        }
     }
     let screen = dial::launch(endpoint, device.host).await?;
-    lounge::Session::connect(&screen).await
+    lounge::Session::connect(&screen, gate).await
 }
 
 /// The playing position of the requested video, if the TV reports one.
@@ -1304,7 +1312,7 @@ else:
         }
 
         #[test]
-        fn interactive_commands_cancel_slow_sponsor_checks() {
+        fn lan_cast_control_cancels_sponsor_checks_even_during_youtube_pause() {
             let fixture = Fixture::new(
                 r#"
 import sys, json, time
@@ -1320,8 +1328,13 @@ else:
     raise AssertionError('unexpected command')
 "#,
             );
+            let gate = RequestGate::default();
+            gate.begin(youtfast_youtube::backoff::RequestIntent::Background)
+                .unwrap()
+                .limited(None);
             let worker =
-                Worker::start_program(egui::Context::default(), fixture.helper(), false).unwrap();
+                Worker::start_program(egui::Context::default(), fixture.helper(), false, gate)
+                    .unwrap();
             worker
                 .send(Request::CheckSponsor {
                     device: device(),
@@ -1394,8 +1407,13 @@ else:
             let fixture = Fixture::new(
                 "import pathlib, time\npathlib.Path(__file__).with_name('started').touch()\ntime.sleep(0.5)\npathlib.Path(__file__).with_name('late').touch()",
             );
-            let worker =
-                Worker::start_program(egui::Context::default(), fixture.helper(), false).unwrap();
+            let worker = Worker::start_program(
+                egui::Context::default(),
+                fixture.helper(),
+                false,
+                RequestGate::default(),
+            )
+            .unwrap();
             assert!(worker.send(Request::Scan).is_ok());
             let deadline = std::time::Instant::now() + Duration::from_secs(2);
             while !fixture.0.join("started").exists() {

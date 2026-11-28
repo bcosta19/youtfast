@@ -675,14 +675,7 @@ fn channel_line(
                     .font(theme::regular(14.0))
                     .color(palette.red),
             );
-            if widgets::button(
-                ui,
-                palette,
-                &tr(locale, "Retry"),
-                widgets::ButtonStyle::Normal,
-            )
-            .clicked()
-            {
+            if super::youtube_pause::request_button(ui, state, "Retry") {
                 actions.push(Action::Refresh);
             }
         });
@@ -1312,26 +1305,13 @@ fn comments(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                                 .font(theme::regular(14.0))
                                 .color(state.palette.red),
                         );
-                        if widgets::button(
-                            ui,
-                            &state.palette,
-                            &tr(locale, "Retry"),
-                            widgets::ButtonStyle::Normal,
-                        )
-                        .clicked()
-                        {
+                        if super::youtube_pause::request_button(ui, state, "Retry") {
                             actions.push(Action::LoadMoreComments);
                         }
                     }
                     _ => {
                         if state.comments_next.is_some()
-                            && widgets::button(
-                                ui,
-                                &state.palette,
-                                &tr(locale, "Load more"),
-                                widgets::ButtonStyle::Normal,
-                            )
-                            .clicked()
+                            && super::youtube_pause::request_button(ui, state, "Load more")
                         {
                             actions.push(Action::LoadMoreComments);
                         }

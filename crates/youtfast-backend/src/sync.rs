@@ -777,6 +777,7 @@ mod tests {
             thumb_sem: Arc::new(tokio::sync::Semaphore::new(
                 youtfast_youtube::thumbs::DOWNLOADS,
             )),
+            thumb_youtube: Arc::default(),
             thumb_disk_sem: Arc::new(tokio::sync::Semaphore::new(THUMB_DISK_READS)),
             dearrow_sem: Arc::new(tokio::sync::Semaphore::new(DEARROW_LOOKUPS)),
             sync: SyncManager::default(),

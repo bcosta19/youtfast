@@ -30,6 +30,7 @@ use youtfast_youtube::ytdlp;
 
 pub use action::Action;
 pub use watch::failure_message;
+pub use youtfast_backend::YouTubeRequestStatus;
 
 /// Draws one frame of the views and collects the actions they push: the
 /// interface's `ui::frame`. The application calls it without depending on
@@ -240,6 +241,7 @@ pub struct State {
     pub up_next: Vec<Video>,
     /// Shown over the video in place of the picture.
     pub player_error: Option<String>,
+    pub youtube_requests: YouTubeRequestStatus,
     pub fullscreen: bool,
     /// Whether only audio is being streamed and decoded. Kept only for the
     /// current playback, not between runs.
@@ -1251,6 +1253,9 @@ pub struct App {
     dirs: Dirs,
     /// `None` when mpv could not start; `state.player_error` says why.
     player: Option<Mpv>,
+    playback_request: Option<watch::PlaybackRequest>,
+    playback_deferred: bool,
+    bot_checked_videos: HashSet<String>,
     surface: Option<VideoSurface>,
     /// Bumped by every request; each slot remembers its latest, so a late
     /// answer to an older request is dropped.
@@ -1434,6 +1439,9 @@ impl App {
             for_you_refresh: loading::ForYouRefresh::default(),
             details_generation: 0,
             playing_generation: 0,
+            playback_request: None,
+            playback_deferred: false,
+            bot_checked_videos: HashSet::new(),
             playback_report: history_sync::PlaybackReport::default(),
             playback_tick: Instant::now(),
             details_cache: util::Recent::new(DETAILS_KEPT),
@@ -1526,6 +1534,7 @@ impl App {
 
     fn handle(&mut self, event: Event) {
         match event {
+            Event::YouTubeRequests(status) => self.state.youtube_requests = status,
             Event::HistoryMarked => {
                 self.state.history_needs_refresh = true;
             }
@@ -1766,7 +1775,7 @@ impl App {
                 self.state.search_query = text.to_owned();
                 self.state.record_recent_search(text);
                 self.state.view = View::Results;
-                self.load(View::Results, true);
+                self.load_explicitly(View::Results);
             }
             Action::Open(video) => self.open(video),
             Action::OpenVideoTab(video) => self.state.video_tabs.add(video),
@@ -1868,17 +1877,17 @@ impl App {
                 self.open_page(ctx, View::Playlist, Page::Playlist { id, name });
             }
             Action::Refresh => {
-                self.load(self.state.view, true);
+                self.load_explicitly(self.state.view);
                 // On the watch page, Refresh also re-requests the details.
                 if self.state.view == View::Watch
                     && let Some(video) = self.state.watching.clone()
                 {
-                    self.refresh_details(video);
+                    self.refresh_details(video, true);
                 }
             }
             Action::SetSearchOptions(options) => {
                 self.state.search_options = options;
-                self.load(View::Results, true);
+                self.load_explicitly(View::Results);
             }
             Action::SetChannelOrder(order) => {
                 self.state.channel_order = order;
@@ -2274,7 +2283,8 @@ impl App {
             }
             Action::SetAlertsEvery(minutes) => self.set_alerts_every(minutes),
             Action::SetChannelQuery(text) => self.state.channel_query = text,
-            Action::LoadMore => self.load_more(),
+            Action::LoadMore => self.load_more(true),
+            Action::PrefetchMore => self.load_more(false),
             Action::SetSpeed(speed) => self.set_speed(speed),
             Action::SetTemporarySpeed(speed) => self.set_temporary_speed(speed),
             Action::SetRememberChannelSpeed(remember) => self.set_remember_channel_speed(remember),

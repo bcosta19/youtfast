@@ -349,6 +349,14 @@ impl App {
     /// Loads what a view shows: always when `force`d (Refresh, a new
     /// sign-in), otherwise only what is not there yet or failed.
     pub(super) fn load(&mut self, view: View, force: bool) {
+        self.load_with_intent(view, force, false);
+    }
+
+    pub(super) fn load_explicitly(&mut self, view: View) {
+        self.load_with_intent(view, true, true);
+    }
+
+    fn load_with_intent(&mut self, view: View, force: bool, allow_probe: bool) {
         fn stale<T>(listing: &Listing<T>) -> bool {
             matches!(listing, Listing::Idle | Listing::Failed(_))
         }
@@ -367,25 +375,32 @@ impl App {
                     } =>
             {
                 if let Some(request) = state.search_request() {
-                    self.request(Slot::Search, request);
+                    self.request_with_intent(allow_probe, Slot::Search, request);
                 }
             }
             View::Home if force || stale(&state.feed) || stale(&state.for_you) => {
                 if force || (!self.for_you_refresh.pending() && stale(&state.for_you)) {
-                    self.load_for_you(force);
+                    self.load_for_you(
+                        force,
+                        allow_probe && self.state.feed_filter == FeedFilter::ForYou,
+                    );
                 }
                 if !force && !stale(&self.state.feed) {
                     self.ask_shelf();
                     return;
                 }
-                self.load_feed();
+                self.load_feed(allow_probe && self.state.feed_filter != FeedFilter::ForYou);
             }
             View::Subscriptions => {
                 if account && (force || stale(&state.account_subscriptions)) {
-                    self.request(Slot::Subscriptions, Request::Subscriptions);
+                    self.request_with_intent(
+                        allow_probe,
+                        Slot::Subscriptions,
+                        Request::Subscriptions,
+                    );
                 }
                 if force || stale(&self.state.feed) {
-                    self.load_feed();
+                    self.load_feed(allow_probe && !account);
                 }
             }
             View::History
@@ -394,16 +409,16 @@ impl App {
             {
                 self.state.history_needs_refresh = false;
                 self.state.history_requested_at = Some(util::now());
-                self.request(Slot::History, Request::History);
+                self.request_with_intent(allow_probe, Slot::History, Request::History);
             }
             View::WatchLater if account && (force || stale(&state.account_watch_later)) => {
-                self.request(Slot::WatchLater, Request::WatchLater);
+                self.request_with_intent(allow_probe, Slot::WatchLater, Request::WatchLater);
             }
             View::Liked if force || stale(&state.liked) => {
-                self.request(Slot::Liked, Request::Liked)
+                self.request_with_intent(allow_probe, Slot::Liked, Request::Liked)
             }
             View::Playlists if self.state.signed_in() && (force || stale(&state.playlists)) => {
-                self.request(Slot::Playlists, Request::Playlists);
+                self.request_with_intent(allow_probe, Slot::Playlists, Request::Playlists);
             }
             View::Playlist => {
                 if let Some(Page::Playlist { id, .. }) = &state.page {
@@ -412,7 +427,7 @@ impl App {
                         self.sync_local_playlist_page(&id);
                     } else if force || stale(&state.page_videos) {
                         let request = Request::Playlist(id.clone());
-                        self.request(Slot::Page, request);
+                        self.request_with_intent(allow_probe, Slot::Page, request);
                     }
                 }
             }
@@ -427,13 +442,14 @@ impl App {
                         if force || stale_fetch(&self.state.channel_about) {
                             self.state.channel_about = Fetch::Loading;
                             let request = self.state.channel_about_request(id);
-                            self.send_request(Slot::Page, request);
+                            self.send_request_with_intent(allow_probe, Slot::Page, request);
                         }
                     }
                     ChannelTab::Playlists => {
                         if force || stale(&self.state.page_playlists) {
                             self.state.page_playlists = Listing::Loading;
-                            self.send_request(
+                            self.send_request_with_intent(
+                                allow_probe,
                                 Slot::Page,
                                 Request::ChannelTab {
                                     id,
@@ -444,7 +460,8 @@ impl App {
                         }
                     }
                     tab if force || stale(&self.state.page_videos) => {
-                        self.request(
+                        self.request_with_intent(
+                            allow_probe,
                             Slot::Page,
                             Request::ChannelTab {
                                 id,
@@ -498,7 +515,7 @@ impl App {
     }
 
     /// Loads the combined account + RSS feed for Home and Subscriptions activity.
-    fn load_feed(&mut self) {
+    fn load_feed(&mut self, allow_probe: bool) {
         let state = &self.state;
         let signed_in = state.signed_in();
         let channels = state.device_only_subscriptions();
@@ -509,7 +526,8 @@ impl App {
         if channels.is_empty() && !signed_in {
             self.state.feed = Listing::Ready(Vec::new());
         } else {
-            self.request(
+            self.request_with_intent(
+                allow_probe,
                 Slot::Feed,
                 Request::Feed {
                     channels,
@@ -521,7 +539,7 @@ impl App {
 
     /// Asks for Home's For you: the account's when signed in, with this
     /// computer's history as the seeds either way, in case it has none.
-    fn load_for_you(&mut self, force: bool) {
+    fn load_for_you(&mut self, force: bool, allow_probe: bool) {
         let refresh = std::mem::take(&mut self.for_you_refresh);
         let cache_only = !force && refresh.cache_only == Some(true);
         self.revoke_topic_search();
@@ -537,7 +555,8 @@ impl App {
         }
         let taste = youtfast_logic::recommend::taste_for_library(&state.library);
         let topic_search_consent = self.topic_search.grant(!seeds.is_empty());
-        self.request(
+        self.request_with_intent(
+            allow_probe,
             Slot::ForYou,
             Request::ForYou {
                 account,
@@ -615,12 +634,16 @@ impl App {
             && self.state.feed_filter == FeedFilter::ForYou
             && matches!(self.state.for_you, Listing::Idle)
         {
-            self.load_for_you(false);
+            self.load_for_you(false, false);
         }
     }
 
     /// Asks the backend for a list, marking it loading.
     pub(super) fn request(&mut self, slot: Slot, request: Request) {
+        self.request_with_intent(false, slot, request);
+    }
+
+    fn request_with_intent(&mut self, allow_probe: bool, slot: Slot, request: Request) {
         let state = &mut self.state;
         // A fresh first page drops the list's continuation too.
         match slot {
@@ -670,23 +693,28 @@ impl App {
                 state.for_you_more_state = Fetch::Idle;
             }
         }
-        self.send_request(slot, request);
+        self.send_request_with_intent(allow_probe, slot, request);
     }
 
     /// `request` without touching the listing: a request whose answer
     /// augments what is already shown (the shelf's shorts).
     pub(super) fn send_request(&mut self, slot: Slot, request: Request) {
+        self.send_request_with_intent(false, slot, request);
+    }
+
+    fn send_request_with_intent(&mut self, allow_probe: bool, slot: Slot, request: Request) {
         self.generation += 1;
         self.generations.insert(slot, self.generation);
         self.backend.send(Command::Load {
             slot,
             generation: self.generation,
             request,
+            allow_probe,
         });
     }
 
     /// Asks for the next page of what a slot shows.
-    fn send_continuation(&mut self, slot: Slot, request: Request) {
+    fn send_continuation(&mut self, slot: Slot, request: Request, allow_probe: bool) {
         // The slot's generation, not the latest anywhere: a request on
         // another slot must not strand this one.
         let generation = self.generations.get(&slot).copied().unwrap_or(0);
@@ -694,18 +722,25 @@ impl App {
             slot,
             generation,
             request,
+            allow_probe,
         });
     }
 
     /// Shows more of Home's feed or of the page's list, asking for the
     /// next page when the rows here run out.
-    pub(super) fn load_more(&mut self) {
+    pub(super) fn load_more(&mut self, allow_probe: bool) {
+        let can_request = allow_probe
+            || self.backend.youtube_gate().status().allows(
+                youtfast_youtube::backoff::RequestIntent::Background,
+                Instant::now(),
+            );
         if self.state.view == View::Home && self.state.feed_filter == FeedFilter::ForYou {
-            if !matches!(self.state.for_you_more_state, Fetch::Loading)
+            if can_request
+                && !matches!(self.state.for_you_more_state, Fetch::Loading)
                 && let Some(more) = self.state.for_you_more.clone()
             {
                 self.state.for_you_more_state = Fetch::Loading;
-                self.send_continuation(Slot::ForYou, Request::MoreVideos(more));
+                self.send_continuation(Slot::ForYou, Request::MoreVideos(more), allow_probe);
             }
             return;
         }
@@ -714,12 +749,16 @@ impl App {
             if self.state.feed_shown < len {
                 // More rows are already here; draw them.
                 self.state.feed_shown += 40;
-            } else if !matches!(self.state.feed_more_state, Fetch::Loading)
+            } else if can_request
+                && !matches!(self.state.feed_more_state, Fetch::Loading)
                 && let Some(more) = self.state.feed_more.clone()
             {
                 self.state.feed_more_state = Fetch::Loading;
-                self.send_continuation(Slot::Feed, Request::MoreFeed(more));
+                self.send_continuation(Slot::Feed, Request::MoreFeed(more), allow_probe);
             }
+            return;
+        }
+        if !can_request {
             return;
         }
         let Some((slot, request)) = self.continuation() else {
@@ -738,7 +777,7 @@ impl App {
             _ => return,
         };
         *state = Fetch::Loading;
-        self.send_continuation(slot, request);
+        self.send_continuation(slot, request, allow_probe);
     }
 
     /// The continuation of the list the page on screen shows: the slot

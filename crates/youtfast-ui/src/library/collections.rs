@@ -173,25 +173,17 @@ pub fn playlists(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                                         )
                                         .color(palette.red),
                                     );
-                                    if widgets::button(
-                                        ui,
-                                        palette,
-                                        tr(locale, "Retry").as_ref(),
-                                        widgets::ButtonStyle::Normal,
-                                    )
-                                    .clicked()
-                                    {
+                                    if crate::youtube_pause::request_button(ui, state, "Retry") {
                                         actions.push(Action::Refresh);
                                     }
                                 });
                             }
                             _ => widgets::more_row(
                                 ui,
-                                palette,
+                                state,
                                 &state.playlists_more_state,
                                 state.playlists_more.is_some(),
                                 actions,
-                                locale,
                             ),
                         }
                     }
@@ -708,11 +700,10 @@ pub fn page(ui: &mut Ui, state: &State, actions: &mut Vec<Action>) {
                         );
                         widgets::more_row(
                             ui,
-                            &state.palette,
+                            state,
                             &state.page_more_state,
                             state.page_more.is_some(),
                             actions,
-                            locale,
                         );
                     });
             }

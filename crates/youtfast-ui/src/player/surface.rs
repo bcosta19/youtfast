@@ -85,6 +85,7 @@ pub(super) struct PictureContent<'a> {
     pub audio_only: bool,
     pub thumbnail: Option<&'a str>,
     pub player_error: Option<&'a str>,
+    pub retry_hint: Option<&'a str>,
     pub demo_synthetic_images: bool,
 }
 
@@ -115,6 +116,10 @@ pub(super) fn picture_rounded(
             .ctx()
             .data(|d| d.get_temp::<bool>(egui::Id::new("synthetic-images")))
             .unwrap_or(false);
+    let retry_hint = state
+        .player_error
+        .as_ref()
+        .and_then(|_| crate::youtube_pause::retry_hint(ui.ctx(), state, std::time::Instant::now()));
     picture_content(
         ui,
         rect,
@@ -124,6 +129,7 @@ pub(super) fn picture_rounded(
             audio_only: state.audio_only,
             thumbnail: thumbnail.as_deref(),
             player_error: state.player_error.as_deref(),
+            retry_hint: retry_hint.as_deref(),
             demo_synthetic_images,
         },
         status.map(PictureStatus::from).as_ref(),
@@ -182,8 +188,13 @@ pub(super) fn picture_content(
         }
     }
     if let Some(error) = content.player_error {
+        let mut message = youtfast_i18n::message(locale, error).into_owned();
+        if let Some(hint) = content.retry_hint {
+            message.push('\n');
+            message.push_str(hint);
+        }
         let galley = ui.painter().layout(
-            youtfast_i18n::message(locale, error).into_owned(),
+            message,
             theme::regular(16.0),
             Color32::WHITE,
             (rect.width() - 32.0).max(1.0),

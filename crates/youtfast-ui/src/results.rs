@@ -142,11 +142,10 @@ fn rows<'a>(
             if more {
                 widgets::more_row(
                     ui,
-                    &state.palette,
+                    state,
                     &state.results_more_state,
                     state.results_more.is_some(),
                     actions,
-                    locale,
                 );
             }
         });
@@ -471,14 +470,7 @@ pub fn failed(ui: &mut Ui, state: &State, error: &str, actions: &mut Vec<Action>
                 .color(state.palette.red),
         );
         ui.add_space(8.0);
-        if widgets::button(
-            ui,
-            &state.palette,
-            tr(locale, "Retry").as_ref(),
-            widgets::ButtonStyle::Normal,
-        )
-        .clicked()
-        {
+        if super::youtube_pause::request_button(ui, state, "Retry") {
             actions.push(Action::Refresh);
         }
     });
@@ -555,6 +547,7 @@ mod tests {
     fn click_label(
         state: &State,
         label: &str,
+        hint: Option<&str>,
         render: fn(&mut Ui, &State, &mut Vec<Action>),
     ) -> Vec<Action> {
         let ctx = egui::Context::default();
@@ -567,6 +560,14 @@ mod tests {
             },
             |ui| render(ui, state, &mut Vec::new()),
         );
+        if let Some(hint) = hint {
+            assert!(
+                first.shapes.iter().any(|shape| matches!(&shape.shape,
+                    egui::epaint::Shape::Text(text) if text.galley.text() == hint
+                )),
+                "missing {hint}"
+            );
+        }
         let position = first
             .shapes
             .iter()
@@ -610,7 +611,52 @@ mod tests {
         };
         state.search_options.kind = youtfast_youtube::innertube::SearchKind::Channels;
         state.results_channels = Listing::Failed("Falha temporária".into());
-        assert_eq!(click_label(&state, "Retry", show), [Action::Refresh]);
+        assert_eq!(click_label(&state, "Retry", None, show), [Action::Refresh]);
+    }
+
+    #[test]
+    fn a_youtube_pause_disables_listing_retry_and_pagination_but_not_local_rows() {
+        use std::time::{Duration, Instant};
+        use youtfast_app::YouTubeRequestStatus;
+        use youtfast_core::model::{Channel, FeedFilter, Fetch, View};
+
+        let mut state = State {
+            view: View::Results,
+            results: Listing::Failed("Synthetic failure".into()),
+            youtube_requests: YouTubeRequestStatus::PausedUntil(
+                Instant::now() + Duration::from_secs(120),
+            ),
+            ..Default::default()
+        };
+        let countdown = Some("Try again in 2 min");
+        assert!(click_label(&state, "Retry", countdown, show).is_empty());
+        assert!(
+            click_label(&state, "Load more", countdown, |ui, state, actions| {
+                widgets::more_row(ui, state, &Fetch::Idle, true, actions);
+            })
+            .is_empty()
+        );
+        assert!(
+            click_label(&state, "Retry", countdown, |ui, state, actions| {
+                widgets::more_row(
+                    ui,
+                    state,
+                    &Fetch::Failed("Synthetic failure".into()),
+                    true,
+                    actions,
+                );
+            })
+            .is_empty()
+        );
+        state.view = View::Home;
+        state.feed_filter = FeedFilter::All;
+        state.feed = Listing::Ready(vec![Video::from_id("synthetic00".into())]);
+        state.feed_shown = 0;
+        state.library.subscriptions.push(Channel::default());
+        assert_eq!(
+            click_label(&state, "Load more", None, super::super::library::home),
+            [Action::LoadMore]
+        );
     }
 
     #[test]
@@ -632,7 +678,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            click_label(&state, "Play all", super::super::library::page),
+            click_label(&state, "Play all", None, super::super::library::page),
             [Action::PlayPlaylist]
         );
     }

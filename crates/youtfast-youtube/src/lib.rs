@@ -2,6 +2,7 @@
 //! (`innertube`), playback extraction through yt-dlp, SponsorBlock, captions
 //! and storyboards, and the thumbnails' disk cache.
 
+pub mod backoff;
 pub mod dearrow;
 pub mod extras;
 pub mod innertube;

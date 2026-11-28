@@ -5,6 +5,8 @@
 /// TLS refused YouTube's certificate.
 pub const UNTRUSTED_CERTIFICATE: &str = "Could not verify YouTube's certificate. Check the system date and any proxy or antivirus inspecting HTTPS, then retry.";
 
+pub const YOUTUBE_RATE_LIMITED: &str = "YouTube is limiting requests. Retry later.";
+
 pub fn safe_error(error: &str) -> String {
     if [
         UNTRUSTED_CERTIFICATE,
@@ -17,7 +19,7 @@ pub fn safe_error(error: &str) -> String {
         "yt-dlp is not installed for Python, so the browser cannot be read.",
         "Install python-secretstorage, unlock the desktop keyring, and retry browser sign-in.",
         "YouTube refused the request from this connection. Retry later.",
-        "YouTube is limiting requests. Retry later.",
+        YOUTUBE_RATE_LIMITED,
         "YouTube needs a valid session. Sign in again.",
         "The request timed out. Retry.",
         "YouTube returned an unreadable response. Retry.",
@@ -56,7 +58,7 @@ pub fn safe_error(error: &str) -> String {
     } else if error.contains("bot") || error.contains("unusual traffic") {
         "YouTube refused the request from this connection. Retry later."
     } else if error.contains("rate limit") || error.contains("429") {
-        "YouTube is limiting requests. Retry later."
+        YOUTUBE_RATE_LIMITED
     } else if error.contains("cookie")
         || error.contains("session")
         || error.contains("sign in")

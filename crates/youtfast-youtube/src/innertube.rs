@@ -13,7 +13,7 @@ use tokio::task::JoinSet;
 use youtfast_core::model::{
     Channel, ChannelHeader, ChannelMeta, ChannelTab, HistoryRow, PlaylistSummary, Video,
 };
-use youtfast_core::util;
+use youtfast_core::{privacy::YOUTUBE_RATE_LIMITED, util};
 
 pub mod channel;
 pub mod client;
@@ -64,7 +64,15 @@ pub fn client() -> Result<Client, Error> {
 /// reached Google, every request failed. Without the platform verifier,
 /// reqwest's own (the native roots) is kept.
 pub fn http() -> reqwest::ClientBuilder {
-    let builder = reqwest::ClientBuilder::new();
+    let default_redirects = reqwest::redirect::Policy::default();
+    let builder =
+        reqwest::ClientBuilder::new().redirect(reqwest::redirect::Policy::custom(move |attempt| {
+            if client::is_sorry(attempt.url()) {
+                attempt.stop()
+            } else {
+                default_redirects.redirect(attempt)
+            }
+        }));
     match platform_tls() {
         Some(config) => builder.use_preconfigured_tls(config),
         None => builder,
@@ -92,10 +100,7 @@ fn platform_tls() -> Option<rustls::ClientConfig> {
 pub fn is_signed_out(error: &Error) -> bool {
     match error {
         Error::Auth(_) | Error::HttpStatus(401, _) => true,
-        Error::HttpStatus(403, message) => {
-            let message = message.to_lowercase();
-            !(message.contains("bot") || message.contains("rate") || message.contains("quota"))
-        }
+        Error::HttpStatus(403, message) => !client::limiting_status(403, message),
         _ => false,
     }
 }
@@ -125,6 +130,24 @@ pub async fn feed(
     account: bool,
     cache: &RssCache,
 ) -> Result<(Vec<Video>, Option<More>), String> {
+    feed_with_rss(rp, channels, account, cache, |client, id| async move {
+        rss::fetch(&client, &id).await
+    })
+    .await
+}
+
+async fn feed_with_rss<F, Fut>(
+    rp: &Client,
+    channels: Vec<Channel>,
+    account: bool,
+    cache: &RssCache,
+    fetch: F,
+) -> Result<(Vec<Video>, Option<More>), String>
+where
+    F: Fn(Client, String) -> Fut,
+    Fut: Future<Output = Result<Vec<Video>, Error>> + Send + 'static,
+{
+    rp.check_paused().map_err(text)?;
     let mut videos = Vec::new();
     let mut problems = Vec::new();
     let mut more = None;
@@ -154,6 +177,7 @@ pub async fn feed(
                 });
                 videos.extend(sub_videos);
             }
+            Err(Error::RateLimited) => return Err(YOUTUBE_RATE_LIMITED.into()),
             Err(error) => problems.push(format!("your account's feed: {}", text(error))),
         }
     }
@@ -171,23 +195,33 @@ pub async fn feed(
             }
         }
     }
+    let mut fresh = fresh.into_iter();
+    let mut keep = |channel: Channel, channel_videos: Vec<Video>| {
+        cache
+            .lock()
+            .unwrap()
+            .insert(channel.id, (now, channel_videos.clone()));
+        videos.extend(channel_videos);
+    };
+    // Let one request finish the probe before starting any other channel.
+    // After an inconclusive answer, the original click cannot probe again.
+    if rp.gate().status() != crate::backoff::Status::Ready
+        && let Some(channel) = fresh.next()
+    {
+        let result = fetch(rp.clone(), channel.id.clone()).await;
+        rp.check_paused().map_err(text)?;
+        keep(channel, result.map_err(text)?);
+    }
     let mut tasks = spawn_limited(fresh, |channel| {
-        let rp = rp.clone();
-        async move {
-            let result = rss::fetch(&rp, &channel.id).await;
-            (channel, result)
-        }
+        let request = fetch(rp.clone(), channel.id.clone());
+        async move { (channel, request.await) }
     });
     let mut failed_channels = 0;
+    let mut limited = false;
     while let Some(joined) = tasks.join_next().await {
         match joined {
-            Ok((channel, Ok(videos_of_channel))) => {
-                cache
-                    .lock()
-                    .unwrap()
-                    .insert(channel.id, (now, videos_of_channel.clone()));
-                videos.extend(videos_of_channel);
-            }
+            Ok((channel, Ok(videos_of_channel))) => keep(channel, videos_of_channel),
+            Ok((_, Err(Error::RateLimited))) => limited = true,
             Ok((channel, Err(error))) => {
                 log::warn!(
                     "could not read the feed of {}: {}",
@@ -201,6 +235,9 @@ pub async fn feed(
                 failed_channels += 1;
             }
         }
+    }
+    if limited && videos.is_empty() {
+        return Err(YOUTUBE_RATE_LIMITED.into());
     }
     if failed_channels > 0 {
         problems.push(format!("{failed_channels} channels could not be read"));
@@ -266,7 +303,7 @@ pub async fn channel_shorts(rp: &Client, channels: Vec<String>, per: usize) -> V
 }
 
 /// Spawns `fetch` for every item, [`RSS_CONCURRENCY`] at a time.
-fn spawn_limited<T, F, R>(items: Vec<T>, fetch: impl Fn(T) -> F) -> JoinSet<R>
+fn spawn_limited<T, F, R>(items: impl IntoIterator<Item = T>, fetch: impl Fn(T) -> F) -> JoinSet<R>
 where
     F: Future<Output = R> + Send + 'static,
     R: Send + 'static,
@@ -543,6 +580,86 @@ pub async fn playlists(rp: &Client) -> Result<(Vec<PlaylistSummary>, Option<More
 mod tests {
     use super::*;
     use youtfast_core::model::Span;
+
+    #[tokio::test]
+    async fn rss_refresh_finishes_one_probe_before_fanning_out() {
+        use crate::backoff::{RequestGate, RequestIntent, Status};
+        use std::time::Duration;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        for succeeds in [false, true] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            let gate = RequestGate::default();
+            gate.begin(RequestIntent::Background).unwrap().limited(None);
+            gate.elapse_pause();
+            // A broken gate must not send the fallback channel browse to YouTube.
+            let fallback_proxy = reqwest::Proxy::custom(move |url| {
+                (url.host_str() != Some("127.0.0.1")).then(|| format!("http://{addr}"))
+            });
+            let rp = Client::with_gate(http().proxy(fallback_proxy), gate.clone())
+                .unwrap()
+                .for_user_request();
+            let channels: Vec<_> = (0..4)
+                .map(|n| Channel {
+                    id: format!("UC{n}"),
+                    ..Channel::default()
+                })
+                .collect();
+            let cache = RssCache::default();
+            let serve = async {
+                let mut requested = Vec::new();
+                for n in 0..if succeeds { 4 } else { 1 } {
+                    let (mut socket, _) = listener.accept().await.unwrap();
+                    let mut request = Vec::new();
+                    while !request.ends_with(b"\r\n\r\n") {
+                        request.push(socket.read_u8().await.unwrap());
+                    }
+                    let head = String::from_utf8(request).unwrap();
+                    requested.push(head.split_whitespace().nth(1).unwrap().to_owned());
+                    if n == 0 {
+                        assert!(gate.status() != Status::Ready);
+                        assert!(
+                            tokio::time::timeout(Duration::from_millis(20), listener.accept())
+                                .await
+                                .is_err()
+                        );
+                    }
+                    let (status, body) = if succeeds {
+                        ("200 OK", "<feed/>")
+                    } else {
+                        ("503 Service Unavailable", "")
+                    };
+                    socket.write_all(format!("HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+                }
+                requested.sort();
+                requested
+            };
+            let refresh = feed_with_rss(&rp, channels, false, &cache, |client, id| async move {
+                let url = format!("http://{addr}/{id}");
+                rss::fetch_url(&client, &id, url).await
+            });
+            let (result, requested) = tokio::time::timeout(Duration::from_secs(3), async {
+                tokio::join!(refresh, serve)
+            })
+            .await
+            .unwrap();
+            if succeeds {
+                assert!(result.is_ok());
+                assert_eq!(requested, ["/UC0", "/UC1", "/UC2", "/UC3"]);
+                assert_eq!(cache.lock().unwrap().len(), 4);
+                assert_eq!(gate.status(), Status::Ready);
+            } else {
+                assert_eq!(result.unwrap_err(), YOUTUBE_RATE_LIMITED);
+                assert_eq!(requested, ["/UC0"]);
+                assert!(
+                    tokio::time::timeout(Duration::from_millis(20), listener.accept())
+                        .await
+                        .is_err()
+                );
+            }
+        }
+    }
 
     #[test]
     fn a_channel_tab_fills_its_own_videos_but_not_a_collaborators() {
