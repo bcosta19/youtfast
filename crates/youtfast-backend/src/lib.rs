@@ -1097,7 +1097,7 @@ enum LocalCandidateBatch {
 }
 
 /// The seeds' related videos and any active topic searches, asked for together
-/// and ranked/interleaved. A failing source is skipped unless every lookup fails.
+/// and ranked/interleaved. A failing source is skipped if any usable videos remain.
 async fn local_recommendations(
     rp: &Client,
     seeds: Vec<youtfast_logic::recommend::Seed>,
@@ -1105,8 +1105,6 @@ async fn local_recommendations(
     preferences: &youtfast_storage::settings::Recommendations,
     topic_search_consent: &TopicSearchConsent,
 ) -> Result<Vec<Video>, String> {
-    use youtfast_logic::recommend::rank_combined;
-
     let now = youtfast_core::util::now();
     let queries: Vec<String> = preferences
         .topic_queries(!seeds.is_empty())
@@ -1150,6 +1148,16 @@ async fn local_recommendations(
         });
     }
 
+    rank_local_candidates(tasks, failure, taste, preferences, now).await
+}
+
+async fn rank_local_candidates(
+    mut tasks: tokio::task::JoinSet<LocalCandidateBatch>,
+    mut failure: Option<String>,
+    taste: &youtfast_logic::recommend::Taste,
+    preferences: &youtfast_storage::settings::Recommendations,
+    now: i64,
+) -> Result<Vec<Video>, String> {
     let mut history_related = Vec::new();
     let mut topic_batches = Vec::new();
     while let Some(done) = tasks.join_next().await {
@@ -1170,12 +1178,6 @@ async fn local_recommendations(
             Err(error) => log::warn!("a seed's lookup stopped: {error}"),
         }
     }
-    if history_related.is_empty()
-        && topic_batches.is_empty()
-        && let Some(error) = failure
-    {
-        return Err(error);
-    }
     // The order the answers came in is not the seeds' or topics': keep both stable.
     history_related.sort_by(|a, b| b.0.total_cmp(&a.0));
     topic_batches.sort_by_key(|(index, _)| *index);
@@ -1183,13 +1185,19 @@ async fn local_recommendations(
         .into_iter()
         .map(|(_, videos)| videos)
         .collect();
-    Ok(rank_combined(
+    let videos = youtfast_logic::recommend::rank_combined(
         &history_related,
         &topic_lists,
         taste,
         preferences,
         now,
-    ))
+    );
+    if videos.is_empty()
+        && let Some(error) = failure
+    {
+        return Err(error);
+    }
+    Ok(videos)
 }
 
 async fn load(context: &Context, request: Request) -> Result<Payload, String> {
@@ -2178,6 +2186,33 @@ mod tests {
                 if answered == url && bytes.as_ref() == png.as_slice()
         ));
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn failed_topic_is_retryable_unless_some_candidates_can_be_ranked() {
+        use youtfast_logic::recommend::Taste;
+        use youtfast_storage::settings::Recommendations;
+
+        const ERROR: &str = "YouTube is limiting requests. Retry later.";
+        let taste = Taste::default();
+        let preferences = Recommendations {
+            muted: "promo".into(),
+            ..Recommendations::default()
+        };
+        let mut muted = Video::from_id("muted".into());
+        muted.title = "Promo".into();
+        for videos in [vec![], vec![muted], vec![Video::from_id("usable".into())]] {
+            let usable = videos.iter().any(|video| video.id == "usable");
+            let mut tasks = tokio::task::JoinSet::new();
+            tasks.spawn(async { LocalCandidateBatch::Topic(0, Err(ERROR.into())) });
+            tasks.spawn(async { LocalCandidateBatch::Topic(1, Ok(videos)) });
+            let result = rank_local_candidates(tasks, None, &taste, &preferences, 0).await;
+            if usable {
+                assert_eq!(result.unwrap()[0].id, "usable");
+            } else {
+                assert_eq!(result.unwrap_err(), ERROR);
+            }
+        }
     }
 
     #[tokio::test]
