@@ -9,7 +9,7 @@ use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 
 use youtfast_appearance::theme::{self, Palette};
 use youtfast_backend::{
-    Backend, Command, CommentsKey, Event, Payload, Request, SignInMethod, Slot,
+    Backend, Command, CommentsKey, Event, Payload, Request, SignInMethod, Slot, TopicSearchConsent,
 };
 use youtfast_core::model::{
     AccountSource, Channel, ChannelAbout, ChannelHeader, ChannelMeta, ChannelTab, CommentRow,
@@ -1256,6 +1256,7 @@ pub struct App {
     /// answer to an older request is dropped.
     generation: u64,
     generations: HashMap<Slot, u64>,
+    topic_search_consent: Option<TopicSearchConsent>,
     /// The generation the details/comments requests of the video being
     /// watched were sent with; a later `open` drops their answers.
     details_generation: u64,
@@ -1428,6 +1429,7 @@ impl App {
             cast_worker: None,
             local_playback_generation: 0,
             generations: HashMap::new(),
+            topic_search_consent: None,
             details_generation: 0,
             playing_generation: 0,
             playback_report: history_sync::PlaybackReport::default(),

@@ -446,15 +446,19 @@ impl App {
     /// Asks for Home's For you: the account's when signed in, with this
     /// computer's history as the seeds either way, in case it has none.
     fn load_for_you(&mut self) {
+        self.revoke_topic_search();
         let state = &self.state;
         let preferences = state.settings.recommendations.clone();
         let account = state.signed_in() && !preferences.prefer_local;
         let seeds = youtfast_logic::recommend::seeds_for_library(&state.library);
         if seeds.is_empty() && !account && preferences.topic_queries(false).is_empty() {
+            self.generations.remove(&Slot::ForYou);
             self.state.for_you = Listing::Ready(Vec::new());
             return;
         }
         let taste = youtfast_logic::recommend::taste_for_library(&state.library);
+        let topic_search_consent = TopicSearchConsent::granted();
+        self.topic_search_consent = Some(topic_search_consent.clone());
         self.request(
             Slot::ForYou,
             Request::ForYou {
@@ -462,8 +466,15 @@ impl App {
                 seeds,
                 taste,
                 preferences,
+                topic_search_consent,
             },
         );
+    }
+
+    pub(super) fn revoke_topic_search(&mut self) {
+        if let Some(consent) = self.topic_search_consent.take() {
+            consent.revoke();
+        }
     }
 
     pub(super) fn set_recommendations(
@@ -474,6 +485,7 @@ impl App {
         if self.state.settings.recommendations == preferences {
             return;
         }
+        self.revoke_topic_search();
         self.state.settings.recommendations = preferences;
         self.save_settings();
         // A source switch must discard even a ready account feed.

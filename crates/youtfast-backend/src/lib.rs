@@ -25,6 +25,7 @@ mod protocol;
 mod sync;
 pub use protocol::{
     Command, CommentsKey, DeArrowConsent, Event, Payload, Request, SignInMethod, Slot,
+    TopicSearchConsent,
 };
 
 #[derive(Default)]
@@ -1052,6 +1053,7 @@ async fn fetch_topic_videos(
     public: &Client,
     query: &str,
     options: innertube::SearchOptions,
+    consent: &TopicSearchConsent,
 ) -> Result<Vec<Video>, String> {
     let extract = |(items, _): (PageItems, Option<innertube::More>)| match items {
         PageItems::Videos(mut videos) => {
@@ -1060,15 +1062,31 @@ async fn fetch_topic_videos(
         }
         _ => Vec::new(),
     };
-    let videos = innertube::search_filtered(public, query, options)
-        .await
-        .map(extract)?;
+    search_topic_pages(options, consent, |options| async move {
+        innertube::search_filtered(public, query, options)
+            .await
+            .map(extract)
+    })
+    .await
+}
+
+async fn search_topic_pages<F: Future<Output = Result<Vec<Video>, String>>>(
+    options: innertube::SearchOptions,
+    consent: &TopicSearchConsent,
+    search: impl Fn(innertube::SearchOptions) -> F,
+) -> Result<Vec<Video>, String> {
+    let request = async |options| {
+        tokio::select! {
+            biased;
+            () = consent.revoked() => Ok(Vec::new()),
+            result = async { search(options).await } => result,
+        }
+    };
+    let videos = request(options).await?;
     if videos.is_empty()
         && let Some(fallback) = relaxed_topic_search_options(options)
     {
-        return innertube::search_filtered(public, query, fallback)
-            .await
-            .map(extract);
+        return request(fallback).await;
     }
     Ok(videos)
 }
@@ -1085,6 +1103,7 @@ async fn local_recommendations(
     seeds: Vec<youtfast_logic::recommend::Seed>,
     taste: &youtfast_logic::recommend::Taste,
     preferences: &youtfast_storage::settings::Recommendations,
+    topic_search_consent: &TopicSearchConsent,
 ) -> Result<Vec<Video>, String> {
     use youtfast_logic::recommend::rank_combined;
 
@@ -1108,8 +1127,10 @@ async fn local_recommendations(
                 let search_options = topic_search_options(preferences);
                 for (index, query) in queries.into_iter().enumerate() {
                     let public = public.clone();
+                    let consent = topic_search_consent.clone();
                     tasks.spawn(async move {
-                        let videos = fetch_topic_videos(&public, &query, search_options).await;
+                        let videos =
+                            fetch_topic_videos(&public, &query, search_options, &consent).await;
                         LocalCandidateBatch::Topic(index, videos)
                     });
                 }
@@ -1214,6 +1235,7 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
             seeds,
             taste,
             preferences,
+            topic_search_consent,
         } => {
             if account {
                 match innertube::recommended(rp).await {
@@ -1229,7 +1251,14 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
                 }
             }
             Payload::ForYou {
-                videos: local_recommendations(rp, seeds, &taste, &preferences).await?,
+                videos: local_recommendations(
+                    rp,
+                    seeds,
+                    &taste,
+                    &preferences,
+                    &topic_search_consent,
+                )
+                .await?,
                 more: None,
                 from_account: false,
             }
@@ -2149,6 +2178,35 @@ mod tests {
                 if answered == url && bytes.as_ref() == png.as_slice()
         ));
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn revoked_topic_search_cannot_retry_a_pending_month_request() {
+        use innertube::{SearchDate, SearchOptions};
+        let consent = TopicSearchConsent::granted();
+        let revoke = consent.clone();
+        let options = SearchOptions {
+            date: SearchDate::Month,
+            ..SearchOptions::default()
+        };
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let (finish, answer) = tokio::sync::oneshot::channel();
+        let started = std::cell::RefCell::new(Some((started, answer)));
+        let request = search_topic_pages(options, &consent, |options| {
+            assert_eq!(options.date, SearchDate::Month, "revoked search retried");
+            let (started, answer) = started.borrow_mut().take().unwrap();
+            async move {
+                started.send(()).unwrap();
+                answer.await.unwrap();
+                Ok(Vec::new())
+            }
+        });
+        let (videos, ()) = tokio::join!(request, async {
+            ready.await.unwrap();
+            revoke.revoke();
+            finish.send(()).unwrap();
+        });
+        assert!(videos.unwrap().is_empty());
     }
 
     #[test]

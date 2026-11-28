@@ -121,6 +121,7 @@ impl App {
         self.state.playing_waiting = None;
         self.set_playback_cookies(None);
         self.state.forget_account_data(self.backend.context());
+        self.revoke_topic_search();
         self.generations.clear();
         self.generation += 1;
         self.details_generation = self.generation;
