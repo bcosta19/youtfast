@@ -4,6 +4,10 @@
 //! losing them only costs a fetch.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+
+use crate::backoff::{RequestGate, RequestIntent, Status};
 
 /// How many thumbnails stay before the oldest are pruned at startup.
 const KEEP: usize = 2000;
@@ -28,6 +32,7 @@ pub enum Failure {
     Access,
     Unavailable,
     RateLimited(u64),
+    Paused,
     Pending,
     Server,
     TooLarge,
@@ -40,6 +45,7 @@ impl Failure {
             Self::Access => "image: HTTP access denied",
             Self::Unavailable => "image: unavailable",
             Self::RateLimited(_) => "image: rate limited",
+            Self::Paused => "image: YouTube requests paused",
             Self::Pending => "image: not generated yet",
             Self::Server => "image: server error",
             Self::TooLarge => "image: response too large",
@@ -47,6 +53,9 @@ impl Failure {
         }
     }
     pub fn retry_delay(self, attempt: u32) -> Option<f64> {
+        if self == Self::Paused {
+            return Some(30.0);
+        }
         if attempt >= 3 {
             return None;
         }
@@ -57,6 +66,52 @@ impl Failure {
             Self::RateLimited(seconds) => Some(seconds.max(30) as f64),
             _ => None,
         }
+    }
+}
+
+/// Regular thumbnails have separate per-image retries. Only a 429 from
+/// their own CDN makes them share a pause; storyboard sprites always do.
+#[derive(Default)]
+pub struct YouTubeDownloads {
+    cdn_limited: AtomicBool,
+}
+
+impl YouTubeDownloads {
+    pub fn fetch<T>(
+        &self,
+        gate: &RequestGate,
+        url: &str,
+        download: impl FnOnce() -> Result<T, Failure>,
+    ) -> Result<T, Failure> {
+        let parsed = url::Url::parse(url).ok();
+        let cdn = parsed.as_ref().and_then(url::Url::host_str) == Some("i.ytimg.com");
+        let storyboard = parsed.as_ref().is_some_and(|url| {
+            matches!(url.host_str(), Some("i.ytimg.com" | "i9.ytimg.com"))
+                && url.path().starts_with("/sb/")
+        });
+        let permit = if storyboard {
+            Some(
+                gate.begin(RequestIntent::Background)
+                    .map_err(|_| Failure::Paused)?,
+            )
+        } else {
+            if cdn && self.cdn_limited.load(Ordering::Relaxed) && gate.status() != Status::Ready {
+                return Err(Failure::Paused);
+            }
+            None
+        };
+        let result = download();
+        if let Err(Failure::RateLimited(seconds)) = result {
+            if cdn {
+                self.cdn_limited.store(true, Ordering::Relaxed);
+            }
+            if let Some(permit) = permit {
+                permit.limited(Some(Duration::from_secs(seconds)));
+            }
+        } else if result.is_ok() && cdn && gate.status() == Status::Ready {
+            self.cdn_limited.store(false, Ordering::Relaxed);
+        }
+        result
     }
 }
 
@@ -134,20 +189,9 @@ pub fn fetch(url: &str, path: &Path) -> Result<std::sync::Arc<[u8]>, Failure> {
 }
 
 fn retry_after(value: Option<&str>) -> u64 {
-    let Some(value) = value else {
-        return 30;
-    };
-    if let Ok(seconds) = value.trim().parse::<u64>() {
-        return seconds;
-    }
-    // HTTP-date (IMF-fixdate); an invalid header falls back to backoff.
-    jiff::civil::DateTime::strptime("%a, %d %b %Y %H:%M:%S GMT", value)
-        .ok()
-        .and_then(|date| date.to_zoned(jiff::tz::TimeZone::UTC).ok())
-        .map(|date| {
-            (date.timestamp().as_second() - jiff::Timestamp::now().as_second()).max(0) as u64
-        })
-        .unwrap_or(30)
+    value
+        .and_then(|value| crate::backoff::retry_after(value, jiff::Timestamp::now()))
+        .map_or(30, |delay| delay.as_secs())
 }
 /// One HTTP client for every thumbnail: its connections stay open between
 /// downloads, so a page of thumbnails does not pay a TLS handshake each.
@@ -313,6 +357,34 @@ mod tests {
             .write_image(&[0, 0, 0, 0], 1, 1, image::ExtendedColorType::Rgba8)
             .unwrap();
         bytes
+    }
+
+    #[test]
+    fn a_paused_circuit_blocks_storyboard_sprites_and_a_cdn_that_also_returned_429() {
+        let thumbnails = YouTubeDownloads::default();
+        let gate = RequestGate::default();
+        let thumb = "https://i.ytimg.com/vi/synthetic/mqdefault.jpg";
+        let sprite = "https://i.ytimg.com/sb/synthetic/M1.jpg";
+        let avatar = "https://yt3.ggpht.com/synthetic";
+        gate.begin(RequestIntent::Background).unwrap().limited(None);
+        assert_eq!(
+            thumbnails.fetch(&gate, sprite, || -> Result<(), Failure> {
+                panic!("sprite downloaded during cooldown")
+            }),
+            Err(Failure::Paused)
+        );
+        assert_eq!(
+            thumbnails.fetch::<()>(&gate, thumb, || Err(Failure::RateLimited(180))),
+            Err(Failure::RateLimited(180))
+        );
+        assert_eq!(
+            thumbnails.fetch(&gate, thumb, || -> Result<(), Failure> {
+                panic!("limited CDN downloaded during cooldown")
+            }),
+            Err(Failure::Paused)
+        );
+        assert_eq!(thumbnails.fetch(&gate, avatar, || Ok(())), Ok(()));
+        assert_eq!(Failure::Paused.retry_delay(3), Some(30.0));
     }
 
     #[test]

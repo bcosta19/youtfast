@@ -91,6 +91,7 @@ struct Context {
     thumb_pending: Arc<std::sync::Mutex<HashSet<String>>>,
     /// At most this many thumbnail downloads at a time.
     thumb_sem: Arc<tokio::sync::Semaphore>,
+    thumb_youtube: Arc<youtfast_youtube::thumbs::YouTubeDownloads>,
     /// At most this many cache files are read at a time, so a page of
     /// thumbnails does not queue hundreds of blocking reads at once.
     thumb_disk_sem: Arc<tokio::sync::Semaphore>,
@@ -146,6 +147,7 @@ impl Backend {
             thumb_sem: Arc::new(tokio::sync::Semaphore::new(
                 youtfast_youtube::thumbs::DOWNLOADS,
             )),
+            thumb_youtube: Arc::default(),
             thumb_disk_sem: Arc::new(tokio::sync::Semaphore::new(THUMB_DISK_READS)),
             dearrow_sem: Arc::new(tokio::sync::Semaphore::new(DEARROW_LOOKUPS)),
             sync: sync::SyncManager::default(),
@@ -996,9 +998,13 @@ async fn handle(command: Command, context: Context) {
                         None => {
                             let _permit = context.thumb_sem.acquire().await;
                             let task = url.clone();
+                            let gate = context.rp.gate().clone();
+                            let thumb_youtube = context.thumb_youtube.clone();
                             tokio::task::spawn_blocking(move || {
-                                let _ = std::fs::create_dir_all(&dir);
-                                youtfast_youtube::thumbs::load_or_fetch(&task, &path, refresh)
+                                thumb_youtube.fetch(&gate, &task, || {
+                                    let _ = std::fs::create_dir_all(&dir);
+                                    youtfast_youtube::thumbs::load_or_fetch(&task, &path, refresh)
+                                })
                             })
                             .await
                             .unwrap_or(Err(youtfast_youtube::thumbs::Failure::Network))
@@ -2097,6 +2103,7 @@ mod tests {
             thumb_sem: Arc::new(tokio::sync::Semaphore::new(
                 youtfast_youtube::thumbs::DOWNLOADS,
             )),
+            thumb_youtube: Arc::default(),
             thumb_disk_sem: Arc::new(tokio::sync::Semaphore::new(THUMB_DISK_READS)),
             dearrow_sem: Arc::new(tokio::sync::Semaphore::new(DEARROW_LOOKUPS)),
             sync: sync::SyncManager::default(),

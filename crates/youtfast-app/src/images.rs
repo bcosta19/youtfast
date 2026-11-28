@@ -70,18 +70,20 @@ impl Cache {
                 self.failed.remove(url);
             }
             Err(reason) => {
-                let attempt = self.failed.get(url).map_or(1, |f| f.attempt + 1);
+                let attempt = self.failed.get(url).map_or(0, |f| f.attempt)
+                    + u32::from(*reason != Failure::Paused);
                 self.failed.insert(
                     url.to_owned(),
                     Failed {
                         reason: *reason,
                         attempt,
                         retry_at: reason.retry_delay(attempt).map(|delay| now + delay),
-                        manual_after: if let Failure::RateLimited(seconds) = reason {
-                            now + (*seconds).max(30) as f64
-                        } else {
-                            now
-                        },
+                        manual_after: now
+                            + match reason {
+                                Failure::RateLimited(seconds) => (*seconds).max(30) as f64,
+                                Failure::Paused => reason.retry_delay(attempt).unwrap_or_default(),
+                                _ => 0.0,
+                            },
                     },
                 );
                 if *reason == Failure::Access && self.refreshed.insert(url.to_owned()) {
@@ -321,7 +323,9 @@ pub fn attachment(ui: &mut Ui, url: &str, rect: egui::Rect, locale: Locale) {
             let label = match reason {
                 Failure::Access => "Image unavailable · Retry source",
                 Failure::Unavailable => "Image removed or unavailable · Retry",
-                Failure::RateLimited(_) => "Image temporarily limited · Retry later",
+                Failure::RateLimited(_) | Failure::Paused => {
+                    "Image temporarily limited · Retry later"
+                }
                 Failure::TooLarge => "Image exceeds safety limits · Retry",
                 Failure::Invalid => "Image data invalid · Retry",
                 _ => "Could not load image · Retry",
