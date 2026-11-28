@@ -772,6 +772,7 @@ mod tests {
             loads: Arc::default(),
             rss: Arc::default(),
             recommendation_requests: Arc::default(),
+            recommendation_cache: Arc::default(),
             thumb_pending: Arc::default(),
             thumb_sem: Arc::new(tokio::sync::Semaphore::new(
                 youtfast_youtube::thumbs::DOWNLOADS,

@@ -53,6 +53,10 @@ impl TopicSearchConsent {
         self.0.send_replace(false);
     }
 
+    pub(super) fn is_current(&self) -> bool {
+        *self.0.borrow()
+    }
+
     pub(super) async fn revoked(&self) {
         let _ = self.0.subscribe().wait_for(|&current| !current).await;
     }

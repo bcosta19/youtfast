@@ -22,13 +22,15 @@ use youtfast_storage::{account, backup, paths, takeout};
 use youtfast_youtube::innertube::{self, Client};
 
 mod protocol;
+mod recommendation_cache;
 mod recommendation_requests;
-use recommendation_requests::RecommendationRequests;
 mod sync;
 pub use protocol::{
     Command, CommentsKey, DeArrowConsent, Event, Payload, Request, SignInMethod, Slot,
     TopicSearchConsent,
 };
+use recommendation_cache::{CandidateKey, RecommendationCache};
+use recommendation_requests::RecommendationRequests;
 
 #[derive(Default)]
 struct SaveGate(std::sync::Mutex<bool>);
@@ -87,6 +89,7 @@ struct Context {
     /// Channel RSS answers kept a while (see `innertube::RssCache`).
     rss: Arc<innertube::RssCache>,
     recommendation_requests: Arc<RecommendationRequests>,
+    recommendation_cache: Arc<RecommendationCache>,
     /// Thumbnails being downloaded to the disk cache; a URL goes in while
     /// its fetch runs so it is not fetched twice at once.
     thumb_pending: Arc<std::sync::Mutex<HashSet<String>>>,
@@ -144,6 +147,7 @@ impl Backend {
             loads: Arc::new(std::sync::Mutex::new(HashMap::new())),
             rss: Arc::new(std::sync::Mutex::new(HashMap::new())),
             recommendation_requests: Arc::default(),
+            recommendation_cache: Arc::default(),
             thumb_pending: Arc::new(std::sync::Mutex::new(HashSet::new())),
             thumb_sem: Arc::new(tokio::sync::Semaphore::new(
                 youtfast_youtube::thumbs::DOWNLOADS,
@@ -203,6 +207,7 @@ impl Backend {
                         }
                         if command.changes_session() {
                             context.epoch = epoch;
+                            context.recommendation_cache.advance_session(epoch);
                             for (_, task) in context.loads.lock().unwrap().drain() {
                                 task.abort();
                             }
@@ -1053,54 +1058,76 @@ fn relaxed_topic_search_options(
     })
 }
 
-async fn fetch_topic_videos(
-    public: &Client,
-    requests: &RecommendationRequests,
-    query: &str,
-    options: innertube::SearchOptions,
-    consent: &TopicSearchConsent,
-    taste: &youtfast_logic::recommend::Taste,
-    preferences: &youtfast_storage::settings::Recommendations,
+async fn fetch_recommendation_candidate(
+    rp: Client,
+    public: Arc<std::sync::OnceLock<Result<Client, String>>>,
+    requests: Arc<RecommendationRequests>,
+    key: CandidateKey,
 ) -> Result<Vec<Video>, String> {
-    let extract = |(items, _): (PageItems, Option<innertube::More>)| match items {
-        PageItems::Videos(mut videos) => {
-            videos.truncate(25);
-            videos
+    match key {
+        CandidateKey::Seed { id, .. } => requests
+            .fetch(innertube::details(&rp, &id))
+            .await
+            .map(|details| details.related),
+        CandidateKey::Topic { query, options } => {
+            // Presets and opted-in interests always use a signed-out client.
+            let public = public
+                .get_or_init(|| {
+                    Client::default_client().map_err(|_| "Could not start topic search".into())
+                })
+                .as_ref()
+                .map_err(Clone::clone)?;
+            let (items, _) = requests
+                .fetch(innertube::search_filtered(public, &query, options))
+                .await?;
+            Ok(match items {
+                PageItems::Videos(mut videos) => {
+                    videos.truncate(25);
+                    videos
+                }
+                _ => Vec::new(),
+            })
         }
-        _ => Vec::new(),
-    };
-    search_topic_pages(
-        options,
-        consent,
-        |videos| youtfast_logic::recommend::has_eligible_candidates(videos, taste, preferences),
-        |options| async move {
-            requests
-                .fetch(innertube::search_filtered(public, query, options))
-                .await
-                .map(extract)
-        },
-    )
-    .await
+    }
 }
 
 async fn search_topic_pages<F: Future<Output = Result<Vec<Video>, String>>>(
+    cache: &RecommendationCache,
+    query: &str,
     options: innertube::SearchOptions,
     consent: &TopicSearchConsent,
     has_eligible: impl Fn(&[Video]) -> bool,
-    search: impl Fn(innertube::SearchOptions) -> F,
+    fetch: impl Fn(CandidateKey) -> F,
 ) -> Result<Vec<Video>, String> {
-    let request = async |options| {
+    let key = |options| CandidateKey::Topic {
+        query: query.to_owned(),
+        options,
+    };
+    let request = async |options, allow_fetch| {
         tokio::select! {
             biased;
-            () = consent.revoked() => Ok(Vec::new()),
-            result = async { search(options).await } => result,
+            () = consent.revoked() => Ok((Vec::new(), false)),
+            result = async {
+                let key = key(options);
+                if let Some(videos) = cache.get(&key) {
+                    Ok((videos, true))
+                } else if allow_fetch {
+                    cache.fetch_and_store(key, &fetch).await.map(|videos| (videos, false))
+                } else {
+                    Ok((Vec::new(), false))
+                }
+            } => result,
         }
     };
-    let videos = request(options).await?;
+    let (videos, cache_hit) = request(options, true).await?;
     if let Some(fallback) = relaxed_topic_search_options(options)
         && !has_eligible(&videos)
     {
-        return request(fallback).await;
+        // New local filters can reject the cached Month page. Don't turn a
+        // cache hit into a network request for a previously unused Any page.
+        return request(fallback, !cache_hit)
+            .await
+            .map(|(videos, _)| videos);
     }
     Ok(videos)
 }
@@ -1112,84 +1139,75 @@ enum LocalCandidateBatch {
 
 /// The seeds' related videos and any active topic searches share a paced request
 /// budget. A failing source is skipped if any usable videos remain.
-async fn local_recommendations(
-    rp: &Client,
-    requests: &Arc<RecommendationRequests>,
+async fn local_recommendations<F, Fut>(
+    cache: &Arc<RecommendationCache>,
+    epoch: u64,
     seeds: Vec<youtfast_logic::recommend::Seed>,
     taste: youtfast_logic::recommend::Taste,
     preferences: &youtfast_storage::settings::Recommendations,
     topic_search_consent: &TopicSearchConsent,
-) -> Result<Vec<Video>, String> {
+    fetch: F,
+) -> Result<Vec<Video>, String>
+where
+    F: Fn(CandidateKey) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = Result<Vec<Video>, String>> + Send,
+{
     let now = youtfast_core::util::now();
-    let queries: Vec<String> = preferences
-        .topic_queries(!seeds.is_empty())
-        .into_iter()
-        .map(str::to_owned)
-        .collect();
-    if seeds.is_empty() && queries.is_empty() {
-        return Ok(Vec::new());
-    }
-
+    let queries = preferences.topic_queries(!seeds.is_empty());
     let taste = Arc::new(taste);
+    let fetch = Arc::new(fetch);
     let mut tasks = tokio::task::JoinSet::new();
-    let mut failure = None;
-    if !queries.is_empty() {
-        // Selected preset topics and opted-in custom terms always use a
-        // separate signed-out client, even when an account is active.
-        match Client::default_client() {
-            Ok(public) => {
-                let search_options = topic_search_options(preferences);
-                for (index, query) in queries.into_iter().enumerate() {
-                    let public = public.clone();
-                    let requests = requests.clone();
-                    let consent = topic_search_consent.clone();
-                    let taste = taste.clone();
-                    let preferences = preferences.clone();
-                    tasks.spawn(async move {
-                        let videos = fetch_topic_videos(
-                            &public,
-                            &requests,
-                            &query,
-                            search_options,
-                            &consent,
-                            &taste,
-                            &preferences,
-                        )
-                        .await;
-                        LocalCandidateBatch::Topic(index, videos)
-                    });
-                }
-            }
-            Err(_) => {
-                failure = Some("Could not start topic search".to_owned());
-            }
-        }
+    let options = topic_search_options(preferences);
+    for (index, query) in queries.into_iter().enumerate() {
+        let query = query.to_owned();
+        let cache = cache.clone();
+        let fetch = fetch.clone();
+        let consent = topic_search_consent.clone();
+        let taste = taste.clone();
+        let preferences = preferences.clone();
+        tasks.spawn(async move {
+            let videos = search_topic_pages(
+                &cache,
+                &query,
+                options,
+                &consent,
+                |videos| {
+                    youtfast_logic::recommend::has_eligible_candidates(videos, &taste, &preferences)
+                },
+                |key| fetch(key),
+            )
+            .await;
+            LocalCandidateBatch::Topic(index, videos)
+        });
     }
     for seed in seeds {
-        let rp = rp.clone();
-        let requests = requests.clone();
+        let cache = cache.clone();
+        let fetch = fetch.clone();
         tasks.spawn(async move {
-            let related = requests
-                .fetch(innertube::details(&rp, &seed.id))
-                .await
-                .map(|details| details.related);
+            let key = CandidateKey::Seed { epoch, id: seed.id };
+            let related = match cache.get(&key) {
+                Some(videos) => Ok(videos),
+                None => cache.fetch_and_store(key, |key| fetch(key)).await,
+            };
             LocalCandidateBatch::History(seed.weight, related)
         });
     }
 
-    rank_local_candidates(tasks, failure, &taste, preferences, now).await
+    rank_local_candidates(tasks, &taste, preferences, now, topic_search_consent).await
 }
 
 struct LocalCandidates {
     history_related: Vec<(f64, Vec<Video>)>,
     topics: Vec<Vec<Video>>,
     failure: Option<String>,
+    topic_failure: Option<String>,
 }
 
 async fn collect_local_candidates(
     mut tasks: tokio::task::JoinSet<LocalCandidateBatch>,
-    mut failure: Option<String>,
 ) -> LocalCandidates {
+    let mut failure = None;
+    let mut topic_failure = None;
     let mut history_related = Vec::new();
     let mut topic_batches = Vec::new();
     while let Some(done) = tasks.join_next().await {
@@ -1205,7 +1223,7 @@ async fn collect_local_candidates(
                 topic_batches.push((index, videos));
             }
             Ok(LocalCandidateBatch::Topic(_, Err(error))) => {
-                failure = Some(error);
+                topic_failure = Some(error);
             }
             Err(error) => log::warn!("a seed's lookup stopped: {error}"),
         }
@@ -1220,17 +1238,23 @@ async fn collect_local_candidates(
             .map(|(_, videos)| videos)
             .collect(),
         failure,
+        topic_failure,
     }
 }
 
 async fn rank_local_candidates(
     tasks: tokio::task::JoinSet<LocalCandidateBatch>,
-    failure: Option<String>,
     taste: &youtfast_logic::recommend::Taste,
     preferences: &youtfast_storage::settings::Recommendations,
     now: i64,
+    topic_search_consent: &TopicSearchConsent,
 ) -> Result<Vec<Video>, String> {
-    let candidates = collect_local_candidates(tasks, failure).await;
+    let mut candidates = collect_local_candidates(tasks).await;
+    if !topic_search_consent.is_current() {
+        candidates.topics.clear();
+    } else if candidates.topic_failure.is_some() {
+        candidates.failure = candidates.topic_failure;
+    }
     let videos = youtfast_logic::recommend::rank_combined(
         &candidates.history_related,
         &candidates.topics,
@@ -1304,14 +1328,25 @@ async fn load(context: &Context, request: Request) -> Result<Payload, String> {
                     Err(error) => log::warn!("the account's recommendations failed: {error}"),
                 }
             }
+            let rp = rp.clone();
+            let requests = context.recommendation_requests.clone();
+            let public = Arc::default();
             Payload::ForYou {
                 videos: local_recommendations(
-                    rp,
-                    &context.recommendation_requests,
+                    &context.recommendation_cache,
+                    context.epoch,
                     seeds,
                     taste,
                     &preferences,
                     &topic_search_consent,
+                    move |key| {
+                        fetch_recommendation_candidate(
+                            rp.clone(),
+                            Arc::clone(&public),
+                            requests.clone(),
+                            key,
+                        )
+                    },
                 )
                 .await?,
                 more: None,
@@ -2198,6 +2233,7 @@ mod tests {
             loads: Arc::default(),
             rss: Arc::default(),
             recommendation_requests: Arc::default(),
+            recommendation_cache: Arc::default(),
             thumb_pending: Arc::default(),
             thumb_sem: Arc::new(tokio::sync::Semaphore::new(
                 youtfast_youtube::thumbs::DOWNLOADS,
@@ -2254,7 +2290,14 @@ mod tests {
             let mut tasks = tokio::task::JoinSet::new();
             tasks.spawn(async { LocalCandidateBatch::Topic(0, Err(ERROR.into())) });
             tasks.spawn(async { LocalCandidateBatch::Topic(1, Ok(videos)) });
-            let result = rank_local_candidates(tasks, None, &taste, &preferences, 0).await;
+            let result = rank_local_candidates(
+                tasks,
+                &taste,
+                &preferences,
+                0,
+                &TopicSearchConsent::granted(),
+            )
+            .await;
             if usable {
                 assert_eq!(result.unwrap()[0].id, "usable");
             } else {
@@ -2275,11 +2318,17 @@ mod tests {
         let (started, ready) = tokio::sync::oneshot::channel();
         let (finish, answer) = tokio::sync::oneshot::channel();
         let started = std::cell::RefCell::new(Some((started, answer)));
+        let cache = RecommendationCache::default();
         let request = search_topic_pages(
+            &cache,
+            "synthetic",
             options,
             &consent,
             |videos| !videos.is_empty(),
-            |options| {
+            |key| {
+                let CandidateKey::Topic { options, .. } = key else {
+                    unreachable!()
+                };
                 assert_eq!(options.date, SearchDate::Month, "revoked search retried");
                 let (started, answer) = started.borrow_mut().take().unwrap();
                 async move {
@@ -2317,10 +2366,15 @@ mod tests {
         };
         let searches = std::cell::RefCell::new(Vec::new());
         let videos = search_topic_pages(
+            &RecommendationCache::default(),
+            "synthetic",
             options,
             &consent,
             |videos| has_eligible_candidates(videos, &taste, &preferences),
-            |options| {
+            |key| {
+                let CandidateKey::Topic { options, .. } = key else {
+                    unreachable!()
+                };
                 searches.borrow_mut().push(options);
                 let mut video = Video::from_id("synthetic".into());
                 video.duration = Some(270.0);
@@ -2345,6 +2399,235 @@ mod tests {
                 }
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn local_recommendations_rerank_seed_and_topic_cache_without_fetching() {
+        use youtfast_logic::recommend::{Seed, Taste};
+        use youtfast_storage::settings::{
+            RecommendationChannels, RecommendationPriority, RecommendationTopic, Recommendations,
+        };
+
+        let cache = Arc::new(RecommendationCache::default());
+        let seeds = vec![Seed {
+            id: "seed".into(),
+            weight: 1.0,
+        }];
+        let mut preferences = Recommendations {
+            topics: vec![RecommendationTopic::Science],
+            ..Recommendations::default()
+        };
+        let fetches = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let fetch = {
+            let count = fetches.clone();
+            move |key| {
+                count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let mut video = match key {
+                    CandidateKey::Seed { .. } => Video::from_id("related".into()),
+                    CandidateKey::Topic { .. } => Video::from_id("topic".into()),
+                };
+                video.title = if video.id == "topic" {
+                    "Promo"
+                } else {
+                    "Useful"
+                }
+                .into();
+                std::future::ready(Ok(vec![video]))
+            }
+        };
+        let videos = local_recommendations(
+            &cache,
+            0,
+            seeds.clone(),
+            Taste::default(),
+            &preferences,
+            &TopicSearchConsent::granted(),
+            fetch.clone(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(fetches.load(std::sync::atomic::Ordering::Relaxed), 2);
+        assert_eq!(videos.len(), 2);
+        preferences.channels = RecommendationChannels::Discover;
+        preferences.priority = RecommendationPriority::FewerViews;
+        preferences.interests = "useful".into(); // Local boost only; search is not opted in.
+        preferences.muted = "promo".into();
+        let videos = local_recommendations(
+            &cache,
+            0,
+            seeds,
+            Taste::default(),
+            &preferences,
+            &TopicSearchConsent::granted(),
+            fetch,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            fetches.load(std::sync::atomic::Ordering::Relaxed),
+            2,
+            "local ranking must not fetch candidates"
+        );
+        assert_eq!(
+            videos
+                .iter()
+                .map(|video| video.id.as_str())
+                .collect::<Vec<_>>(),
+            ["related"]
+        );
+    }
+
+    #[tokio::test]
+    async fn local_recommendations_fetch_only_new_topics_and_ignore_deselected_pages() {
+        use youtfast_logic::recommend::Taste;
+        use youtfast_storage::settings::{RecommendationTopic, Recommendations};
+
+        let cache = Arc::new(RecommendationCache::default());
+        let mut preferences = Recommendations {
+            topics: vec![RecommendationTopic::Science, RecommendationTopic::Music],
+            ..Recommendations::default()
+        };
+        let fetched_queries = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let fetch = {
+            let fetched_queries = fetched_queries.clone();
+            move |key| {
+                let CandidateKey::Topic { query, .. } = key else {
+                    unreachable!()
+                };
+                fetched_queries.lock().unwrap().push(query.clone());
+                std::future::ready(Ok(vec![Video::from_id(query)]))
+            }
+        };
+        let initial = local_recommendations(
+            &cache,
+            0,
+            Vec::new(),
+            Taste::default(),
+            &preferences,
+            &TopicSearchConsent::granted(),
+            fetch.clone(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(initial.len(), 2);
+        fetched_queries.lock().unwrap().clear();
+        preferences.topics = vec![RecommendationTopic::Music, RecommendationTopic::Gaming];
+        let updated = local_recommendations(
+            &cache,
+            0,
+            Vec::new(),
+            Taste::default(),
+            &preferences,
+            &TopicSearchConsent::granted(),
+            fetch.clone(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            *fetched_queries.lock().unwrap(),
+            [RecommendationTopic::Gaming.search_query()]
+        );
+        assert_eq!(updated.len(), 2);
+        assert!(
+            updated
+                .iter()
+                .any(|video| video.id == RecommendationTopic::Gaming.search_query())
+        );
+        assert!(
+            updated
+                .iter()
+                .any(|video| video.id == RecommendationTopic::Music.search_query())
+        );
+        assert!(
+            updated
+                .iter()
+                .all(|video| video.id != RecommendationTopic::Science.search_query())
+        );
+
+        preferences.topics.push(RecommendationTopic::History);
+        fetched_queries.lock().unwrap().clear();
+        let revoked = TopicSearchConsent::granted();
+        revoked.clone().revoke();
+        let videos = local_recommendations(
+            &cache,
+            0,
+            Vec::new(),
+            Taste::default(),
+            &preferences,
+            &revoked,
+            fetch,
+        )
+        .await
+        .unwrap();
+        assert!(videos.is_empty(), "revoked topic must not use cached pages");
+        assert!(
+            fetched_queries.lock().unwrap().is_empty(),
+            "revoked topic must not fetch"
+        );
+    }
+
+    #[tokio::test]
+    async fn cached_month_page_uses_only_cached_fallback_after_ranking_change() {
+        use youtfast_logic::recommend::Taste;
+        use youtfast_storage::settings::{
+            RecommendationPriority, RecommendationTopic, Recommendations,
+        };
+
+        let cache = Arc::new(RecommendationCache::default());
+        let mut preferences = Recommendations {
+            topics: vec![RecommendationTopic::Science],
+            priority: RecommendationPriority::Recent,
+            ..Recommendations::default()
+        };
+        let consent = TopicSearchConsent::granted();
+        let initial = local_recommendations(
+            &cache, 0, Vec::new(), Taste::default(), &preferences, &consent, |key| {
+                assert!(matches!(key, CandidateKey::Topic { options, .. } if options.date == innertube::SearchDate::Month));
+                let mut promo = Video::from_id("promo".into());
+                promo.title = "Promo".into();
+                std::future::ready(Ok(vec![promo]))
+            },
+        ).await.unwrap();
+        assert_eq!(initial[0].id, "promo");
+
+        preferences.muted = "promo".into();
+        let ranking_only =
+            |_| std::future::ready(Err("cached Month page must not fetch an Any page".into()));
+        let reranked = local_recommendations(
+            &cache,
+            0,
+            Vec::new(),
+            Taste::default(),
+            &preferences,
+            &consent,
+            ranking_only,
+        )
+        .await
+        .unwrap();
+        assert!(reranked.is_empty());
+
+        let fallback = CandidateKey::Topic {
+            query: RecommendationTopic::Science.search_query().into(),
+            options: relaxed_topic_search_options(topic_search_options(&preferences)).unwrap(),
+        };
+        cache
+            .fetch_and_store(fallback, |_| {
+                std::future::ready(Ok(vec![Video::from_id("cached_any".into())]))
+            })
+            .await
+            .unwrap();
+        let reranked = local_recommendations(
+            &cache,
+            0,
+            Vec::new(),
+            Taste::default(),
+            &preferences,
+            &consent,
+            ranking_only,
+        )
+        .await
+        .unwrap();
+        assert_eq!(reranked[0].id, "cached_any");
     }
 
     #[test]
